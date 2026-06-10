@@ -67,10 +67,13 @@ insert into storage.buckets (id, name, public)
 values ('quote-uploads', 'quote-uploads', false)
 on conflict (id) do update set public = false;
 
--- Cap uploads at 100MB (room for high-res iPhone photos and short clips) and only
--- allow photo/video types, including the HEIC/HEIF and .mov formats iPhones use.
+-- Cap uploads at 250MB (room for high-res iPhone photos, ProRAW and longer
+-- clips) and only allow photo/video types, including HEIC/HEIF and .mov.
+-- NOTE: Supabase also has a project-wide "Global file size limit" under
+-- Storage → Settings that overrides this. On the free plan it maxes at 50MB —
+-- raise it there too if larger uploads get rejected with a 413.
 update storage.buckets
-set file_size_limit = 104857600,
+set file_size_limit = 262144000,
     allowed_mime_types = array[
       'image/jpeg','image/png','image/webp','image/heic','image/heif','image/heic-sequence','image/heif-sequence','image/gif',
       'video/mp4','video/quicktime','video/webm','video/3gpp'
