@@ -3,7 +3,6 @@ import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { GalleryCarousel } from "@/components/gallery-carousel";
-import { QuoteForm } from "@/components/quote-form";
 import { SiteHeader } from "@/components/site-header";
 import {
   businessName,
@@ -108,8 +107,10 @@ export function LocationPage({ locationKey }: LocationPageProps) {
             <div className="flex flex-wrap gap-4">
               {valueProps.map((point) => (
                 <span key={point} className="flex items-center gap-2 text-sm font-semibold text-ivory">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-accent text-[10px] font-black text-black">
-                    ✓
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-accent text-black">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3" aria-hidden="true">
+                      <path d="m5 12.5 4.5 4.5L19 6.5" />
+                    </svg>
                   </span>
                   {point}
                 </span>
@@ -200,24 +201,26 @@ export function LocationPage({ locationKey }: LocationPageProps) {
         </section>
 
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8" id="quote">
-          <div className="rounded-3xl bg-ivory p-6 text-[#2b1a12] md:p-10">
-            <h2 className="mb-2 font-headline text-4xl text-[#2b1a12] md:text-5xl">
+          <div className="rounded-3xl bg-ivory p-8 text-center text-[#2b1a12] md:p-12">
+            <h2 className="mb-3 font-headline text-4xl text-[#2b1a12] md:text-5xl">
               Get Your Free {location.city} Quote
             </h2>
-            <p className="mb-6 max-w-2xl text-[#2b1a12]/80">
+            <p className="mx-auto mb-7 max-w-2xl text-[#2b1a12]/80">
               Tell us a little about your project and we&apos;ll get you a price, usually the same
               day. For driveways and slabs we can often quote without coming out. Just add your
               address.
             </p>
-            <div className="mb-6 flex flex-wrap gap-2">
-              <a href={links.call} className="rounded-full bg-[#2b1a12] px-5 py-2.5 text-sm font-bold text-white">
+            <div className="flex flex-wrap justify-center gap-3">
+              <a href="#quote" className="rounded-full bg-[#2b1a12] px-7 py-3.5 text-base font-bold text-white transition hover:bg-[#3a241a]">
+                Get My Free Quote
+              </a>
+              <a href={links.call} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
                 Call Now
               </a>
-              <a href={links.text} className="rounded-full border-2 border-[#2b1a12] px-5 py-2.5 text-sm font-bold text-[#2b1a12]">
+              <a href={links.text} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
                 Text Now
               </a>
             </div>
-            <QuoteForm defaultCity={location.city} />
           </div>
         </section>
 

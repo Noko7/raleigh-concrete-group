@@ -532,10 +532,13 @@ body {
   border: none;
   background: rgba(43, 26, 18, 0.08);
   color: #2b1a12;
-  font-size: 0.9rem;
   cursor: pointer;
   transition: background 140ms;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.qm-close svg { width: 18px; height: 18px; }
 .qm-close:hover { background: rgba(43, 26, 18, 0.16); }
 
 .qm-progress {
@@ -624,7 +627,8 @@ body {
   padding: 0.2rem 0.55rem;
   border-radius: 999px;
 }
-.qm-choice-icon { font-size: 1.6rem; }
+.qm-choice-icon { display: inline-flex; color: var(--amber); }
+.qm-choice-icon svg { width: 30px; height: 30px; }
 .qm-choice-title {
   font-family: var(--font-headline), sans-serif;
   font-size: 1.5rem;
@@ -678,7 +682,8 @@ body {
 }
 .qm-suggestions button:hover { background: rgba(194, 104, 42, 0.1); }
 .qm-ac-status { display: block; margin-top: 0.4rem; font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); }
-.qm-ac-ok { color: #2f6b46; font-weight: 700; }
+.qm-ac-ok { display: flex; align-items: center; gap: 0.3rem; color: #2f6b46; font-weight: 700; }
+.qm-ac-check { width: 14px; height: 14px; }
 
 /* Upload dropzone */
 .qm-dropzone {
@@ -695,7 +700,8 @@ body {
   transition: border-color 140ms, background 140ms;
 }
 .qm-dropzone:hover { border-color: var(--amber); background: rgba(194, 104, 42, 0.06); }
-.qm-dropzone-icon { font-size: 1.8rem; }
+.qm-dropzone-icon { display: inline-flex; color: var(--amber); }
+.qm-dropzone-icon svg { width: 32px; height: 32px; }
 .qm-dropzone-title { font-weight: 700; color: #2b1a12; }
 .qm-dropzone-hint { font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); }
 
@@ -711,7 +717,8 @@ body {
   font-size: 0.85rem;
 }
 .qm-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.qm-filelist button { background: none; border: none; color: #b3402f; cursor: pointer; font-size: 0.85rem; }
+.qm-filelist button { background: none; border: none; color: #b3402f; cursor: pointer; display: inline-flex; align-items: center; }
+.qm-filelist button svg { width: 16px; height: 16px; }
 
 /* Schedule chips */
 .qm-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
@@ -766,11 +773,11 @@ body {
   border-radius: 50%;
   background: #2f6b46;
   color: #fff;
-  font-size: 1.6rem;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+.qm-check svg { width: 30px; height: 30px; stroke-width: 2.4; }
 .qm-full { width: 100%; justify-content: center; margin-bottom: 0.5rem; }
 .qm-text-btn { background: none; border: none; color: rgba(43, 26, 18, 0.6); font-weight: 600; cursor: pointer; padding: 0.5rem; }
 .qm-demo { font-size: 0.78rem; color: rgba(43, 26, 18, 0.5); margin-top: 0.6rem; }

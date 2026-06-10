@@ -57,6 +57,56 @@ function isAllowedFile(file: File): boolean {
   return file.type.startsWith("image/") || file.type.startsWith("video/");
 }
 
+/* ── Icons (inline SVG, inherit currentColor) ─────────────────────────────── */
+const svgBase = {
+  width: 24,
+  height: 24,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+};
+function IconBolt() {
+  return (
+    <svg {...svgBase}>
+      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
+    </svg>
+  );
+}
+function IconCalendar() {
+  return (
+    <svg {...svgBase}>
+      <rect x="3" y="4.5" width="18" height="16" rx="2" />
+      <path d="M3 9h18M8 2.5v4M16 2.5v4" />
+    </svg>
+  );
+}
+function IconCamera() {
+  return (
+    <svg {...svgBase}>
+      <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2L8 5h8l1.5 2h2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-9Z" />
+      <circle cx="12" cy="12.5" r="3.2" />
+    </svg>
+  );
+}
+function IconCheck({ className }: { className?: string }) {
+  return (
+    <svg {...svgBase} className={className}>
+      <path d="m5 12.5 4.5 4.5L19 6.5" />
+    </svg>
+  );
+}
+function IconClose() {
+  return (
+    <svg {...svgBase}>
+      <path d="M6 6 18 18M18 6 6 18" />
+    </svg>
+  );
+}
+
 /* ── Address autocomplete (free US Census geocoder, proxied via /api/address) ─ */
 function AddressAutocomplete({
   value,
@@ -127,7 +177,11 @@ function AddressAutocomplete({
         inputMode="text"
       />
       {loading && <span className="qm-ac-status">Looking up addresses…</span>}
-      {!loading && verified && <span className="qm-ac-status qm-ac-ok">✓ Verified address</span>}
+      {!loading && verified && (
+        <span className="qm-ac-status qm-ac-ok">
+          <IconCheck className="qm-ac-check" /> Verified address
+        </span>
+      )}
       {!loading && !verified && searchedEmpty && (
         <span className="qm-ac-status">No exact match yet — keep typing your full street, city and state.</span>
       )}
@@ -298,12 +352,14 @@ function Modal({ onClose }: { onClose: () => void }) {
     <div className="qm-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Request a quote">
       <div className="qm-card" onClick={(e) => e.stopPropagation()}>
         <button className="qm-close" onClick={onClose} aria-label="Close">
-          ✕
+          <IconClose />
         </button>
 
         {status === "success" ? (
           <div className="qm-body qm-success">
-            <div className="qm-check">✓</div>
+            <div className="qm-check">
+              <IconCheck />
+            </div>
             <h2 className="qm-title">You&apos;re all set!</h2>
             <p className="qm-sub">
               We got your request and we&apos;ll reach out the same day with your quote. Want to talk
@@ -334,7 +390,9 @@ function Modal({ onClose }: { onClose: () => void }) {
                 <div className="qm-choices">
                   <button className="qm-choice" onClick={() => pickMode("online")}>
                     <span className="qm-choice-badge">Fastest</span>
-                    <span className="qm-choice-icon">⚡</span>
+                    <span className="qm-choice-icon">
+                      <IconBolt />
+                    </span>
                     <span className="qm-choice-title">Online Quote</span>
                     <span className="qm-choice-desc">
                       Send a few photos and your address. We quote most concrete jobs from satellite
@@ -342,7 +400,9 @@ function Modal({ onClose }: { onClose: () => void }) {
                     </span>
                   </button>
                   <button className="qm-choice" onClick={() => pickMode("inperson")}>
-                    <span className="qm-choice-icon">📅</span>
+                    <span className="qm-choice-icon">
+                      <IconCalendar />
+                    </span>
                     <span className="qm-choice-title">In-Person Quote</span>
                     <span className="qm-choice-desc">
                       Prefer we come out? Tell us where and when, and we&apos;ll measure on site and
@@ -400,7 +460,9 @@ function Modal({ onClose }: { onClose: () => void }) {
                     onChange={(e) => addFiles(e.target.files)}
                     hidden
                   />
-                  <span className="qm-dropzone-icon">📷</span>
+                  <span className="qm-dropzone-icon">
+                    <IconCamera />
+                  </span>
                   <span className="qm-dropzone-title">Tap to add photos or video</span>
                   <span className="qm-dropzone-hint">Up to 8 files, {MAX_FILE_MB}MB each</span>
                 </label>
@@ -415,7 +477,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                           onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
                           aria-label={`Remove ${f.name}`}
                         >
-                          ✕
+                          <IconClose />
                         </button>
                       </li>
                     ))}
@@ -521,7 +583,7 @@ function Modal({ onClose }: { onClose: () => void }) {
             {current !== "choice" && (
               <div className="qm-footer">
                 <button className="qm-back" onClick={back} disabled={busy}>
-                  ← Back
+                  Back
                 </button>
                 <button className="cta-primary qm-next" onClick={next} disabled={!canProceed() || busy}>
                   {status === "uploading"
