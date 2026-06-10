@@ -37,7 +37,7 @@ Everything lives in `src/lib/site-data.ts`:
 - **`galleryImages`**, **`sharedBeforeAfter`**, **`testimonials`**.
 
 ## Before launch — final touches
-1. **Phone** — set to `(919) 420-3146` in `site-data.ts`. ✅
+1. **Phone** — set to `(919) 897-7695` in `site-data.ts`. ✅
 2. **Photos** — real project photos + logos are in `public/images/`. ✅ (They're large PNGs;
    Vercel's image optimization handles resizing automatically, but you can compress them for
    faster builds.)

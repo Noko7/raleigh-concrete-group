@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { services } from "@/lib/site-data";
+import { phoneDisplay, phoneHref, services } from "@/lib/site-data";
 
 // Supabase via REST (no SDK). Set these in Vercel → Settings → Environment Variables:
 //   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -309,8 +309,8 @@ function Modal({ onClose }: { onClose: () => void }) {
               We got your request and we&apos;ll reach out the same day with your quote. Want to talk
               now? Give us a call.
             </p>
-            <a href="tel:+19194203146" className="cta-primary qm-full">
-              Call (919) 420-3146
+            <a href={phoneHref} className="cta-primary qm-full">
+              Call {phoneDisplay}
             </a>
             <button className="qm-text-btn" onClick={onClose}>
               Close
@@ -512,7 +512,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 </div>
 
                 {status === "error" && (
-                  <p className="qm-err">Something went wrong. Please call us at (919) 420-3146 instead.</p>
+                  <p className="qm-err">Something went wrong. Please call us at {phoneDisplay} instead.</p>
                 )}
               </div>
             )}
