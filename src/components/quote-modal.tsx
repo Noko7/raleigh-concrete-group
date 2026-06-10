@@ -45,45 +45,51 @@ function cityFromAddress(address: string): string {
   return parts.length >= 2 ? parts[1] : "";
 }
 
-/* ── Address autocomplete (free Photon API, biased to Raleigh) ────────────── */
+/* ── Address autocomplete (free US Census geocoder, proxied via /api/address) ─ */
 function AddressAutocomplete({
   value,
+  verified,
   onChange,
+  onVerifiedChange,
 }: {
   value: string;
+  verified: boolean;
   onChange: (next: string) => void;
+  onVerifiedChange: (v: boolean) => void;
 }) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showList, setShowList] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [searchedEmpty, setSearchedEmpty] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reqId = useRef(0);
   const boxRef = useRef<HTMLDivElement>(null);
 
   const lookup = useCallback((q: string) => {
     if (debounce.current) clearTimeout(debounce.current);
-    if (q.trim().length < 4) {
+    setSearchedEmpty(false);
+    if (q.trim().length < 6) {
       setSuggestions([]);
+      setLoading(false);
       return;
     }
+    setLoading(true);
     debounce.current = setTimeout(async () => {
+      const myId = ++reqId.current;
       try {
-        const res = await fetch(
-          `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=5&lang=en&lat=35.7796&lon=-78.6382`,
-        );
+        const res = await fetch(`/api/address?q=${encodeURIComponent(q)}`);
         const data = await res.json();
-        const labels: string[] = (data.features ?? [])
-          .map((f: { properties: Record<string, string> }) => {
-            const p = f.properties;
-            const line1 = [p.housenumber, p.street || p.name].filter(Boolean).join(" ");
-            const line2 = [p.city || p.county, p.state, p.postcode].filter(Boolean).join(", ");
-            return [line1, line2].filter(Boolean).join(", ");
-          })
-          .filter((s: string) => s.length > 0);
-        setSuggestions(Array.from(new Set(labels)));
+        if (myId !== reqId.current) return; // a newer request superseded this one
+        const list: string[] = Array.isArray(data.suggestions) ? data.suggestions : [];
+        setSuggestions(list);
         setShowList(true);
+        setSearchedEmpty(list.length === 0);
       } catch {
-        setSuggestions([]);
+        if (myId === reqId.current) setSuggestions([]);
+      } finally {
+        if (myId === reqId.current) setLoading(false);
       }
-    }, 250);
+    }, 350);
   }, []);
 
   useEffect(() => {
@@ -100,13 +106,19 @@ function AddressAutocomplete({
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
+          onVerifiedChange(false);
           lookup(e.target.value);
         }}
         onFocus={() => suggestions.length && setShowList(true)}
-        placeholder="Start typing your address…"
+        placeholder="123 Main St, Raleigh, NC"
         autoComplete="off"
         inputMode="text"
       />
+      {loading && <span className="qm-ac-status">Looking up addresses…</span>}
+      {!loading && verified && <span className="qm-ac-status qm-ac-ok">✓ Verified address</span>}
+      {!loading && !verified && searchedEmpty && (
+        <span className="qm-ac-status">No exact match yet — keep typing your full street, city and state.</span>
+      )}
       {showList && suggestions.length > 0 && (
         <ul className="qm-suggestions">
           {suggestions.map((s) => (
@@ -115,7 +127,9 @@ function AddressAutocomplete({
                 type="button"
                 onClick={() => {
                   onChange(s);
+                  onVerifiedChange(true);
                   setShowList(false);
+                  setSuggestions([]);
                 }}
               >
                 {s}
@@ -133,6 +147,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   const [mode, setMode] = useState<Mode | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [data, setData] = useState<FormState>(EMPTY);
+  const [addressVerified, setAddressVerified] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [fileError, setFileError] = useState("");
@@ -172,7 +187,10 @@ function Modal({ onClose }: { onClose: () => void }) {
   }
 
   function canProceed(): boolean {
-    if (current === "address") return data.address.trim().length > 3 && data.service !== "";
+    if (current === "address") {
+      const hasHouseNumber = /^\s*\d+\s+\S/.test(data.address);
+      return (addressVerified || hasHouseNumber) && data.address.trim().length > 8 && data.service !== "";
+    }
     if (current === "media") return files.length >= 1;
     if (current === "schedule") return data.preferredTime !== "";
     if (current === "contact") return data.name.trim() !== "" && data.phone.trim() !== "";
@@ -328,7 +346,12 @@ function Modal({ onClose }: { onClose: () => void }) {
                     : "We'll come measure on site."}
                 </p>
                 <label className="qm-label">Project address</label>
-                <AddressAutocomplete value={data.address} onChange={(v) => set({ address: v })} />
+                <AddressAutocomplete
+                  value={data.address}
+                  verified={addressVerified}
+                  onChange={(v) => set({ address: v })}
+                  onVerifiedChange={setAddressVerified}
+                />
                 <label className="qm-label qm-mt">What do you need?</label>
                 <select className="qm-input" value={data.service} onChange={(e) => set({ service: e.target.value })}>
                   <option value="" disabled>

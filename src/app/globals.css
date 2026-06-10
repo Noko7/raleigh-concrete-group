@@ -677,6 +677,8 @@ body {
   cursor: pointer;
 }
 .qm-suggestions button:hover { background: rgba(194, 104, 42, 0.1); }
+.qm-ac-status { display: block; margin-top: 0.4rem; font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); }
+.qm-ac-ok { color: #2f6b46; font-weight: 700; }
 
 /* Upload dropzone */
 .qm-dropzone {
