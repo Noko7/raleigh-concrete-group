@@ -587,7 +587,9 @@ body {
   font-size: 1rem;
   color: #2b1a12;
   font-family: inherit;
+  color-scheme: light;
 }
+.qm-input option { background-color: #fff; color: #2b1a12; }
 .qm-input:focus {
   outline: none;
   border-color: var(--amber);
@@ -858,8 +860,9 @@ body {
 .crm-input {
   width: 100%; border: 1px solid var(--crm-border); border-radius: 0.55rem;
   padding: 0.55rem 0.7rem; font-size: 0.92rem; background: var(--crm-surface-solid); color: var(--crm-text);
+  color-scheme: dark;
 }
-.crm-input option { color: #1f2329; }
+.crm-input option, .crm-input optgroup { background-color: #20262e; color: #f7f5f1; }
 .crm-input:focus { outline: 2px solid color-mix(in srgb, var(--crm-accent) 45%, transparent); border-color: var(--crm-accent); }
 
 .crm-filters { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1.25rem; }
@@ -1048,8 +1051,8 @@ body {
 .kb-card-actions { display: flex; gap: 0.5rem; margin-top: 0.55rem; }
 .kb-move { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .kb-move > span { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--crm-muted); }
-.kb-move select { width: 100%; background: #1a1f24; color: var(--crm-text); border: 1px solid var(--crm-border); border-radius: 0.4rem; padding: 0.4rem; font-size: 0.8rem; }
-.kb-move select option { color: #1f2329; }
+.kb-move select { width: 100%; background: #1a1f24; color: var(--crm-text); border: 1px solid var(--crm-border); border-radius: 0.4rem; padding: 0.4rem; font-size: 0.8rem; color-scheme: dark; }
+.kb-move select option { background-color: #20262e; color: #f7f5f1; }
 .kb-toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: #2b1416; border: 1px solid #f87171; color: #fecaca; padding: 0.7rem 1.1rem; border-radius: 0.6rem; z-index: 50; font-weight: 600; font-size: 0.85rem; }
 
 /* Mobile: stack the pipeline vertically, hide empty stages, fatten tap targets */
