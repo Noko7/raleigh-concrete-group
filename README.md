@@ -44,19 +44,33 @@ Everything lives in `src/lib/site-data.ts`:
 3. **Domain** — `https://www.raleighconcrete.net` in `src/app/layout.tsx` (`metadataBase`).
 4. **Reviews** — swap the testimonials for real Google reviews (never fabricate).
 
-## Quote form → Supabase
-The form saves submissions straight into Supabase via its REST API (no SDK to install). Runs in
-**demo mode** (shows success, saves nothing) until you set the keys below.
+## Quote funnel → Supabase
+Clicking any **Get Free Quote** button opens a multi-step modal (`src/components/quote-modal.tsx`):
 
-**Setup:**
-1. Create a Supabase project at [supabase.com](https://supabase.com).
-2. In **SQL Editor**, paste & run `supabase/schema.sql` (creates the `quote_requests` table and a
-   policy that lets the public site insert leads but not read them).
-3. In **Project Settings → API**, copy the **Project URL** and the **anon public** key.
-4. In Vercel → your project → **Settings → Environment Variables**, add:
+1. **Choose a path** — Online quote (fastest) or In-person visit.
+2. **Address** — with free autocomplete (Photon/OpenStreetMap, no API key needed), biased to Raleigh.
+3a. **Online:** upload photos/video (saved to Supabase Storage) so we can quote from satellite + pics.
+3b. **In-person:** pick a scheduling window.
+4. **Contact** — name, phone, email → saved as a lead.
+
+Everything is captured early and the form is split into small steps, which converts far better than a
+single long form. Submissions save to Supabase via its REST API (no SDK installed). Runs in
+**demo mode** (shows success, saves nothing) until the keys below are set.
+
+**One-time setup:**
+1. In Supabase → **SQL Editor**, paste & run `supabase/schema.sql`. This creates the
+   `quote_requests` table, the `quote-uploads` storage bucket, and policies that let the public site
+   insert leads + upload files but not read them.
+2. In Supabase → **Project Settings → API**, copy the **Project URL** and **anon public** key.
+3. In Vercel → **Settings → Environment Variables**, make sure these two exist (the Supabase
+   integration may have added them already — confirm the `NEXT_PUBLIC_` prefix, the browser needs it):
    - `NEXT_PUBLIC_SUPABASE_URL` = your Project URL
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = your anon public key
-5. Redeploy. New quote requests now appear in **Supabase → Table Editor → quote_requests**.
+4. Redeploy. Leads land in **Table Editor → quote_requests**; uploaded photos in
+   **Storage → quote-uploads** (their URLs are saved in the lead's `file_urls`).
+
+To swap the address autocomplete to Google Places later, replace `AddressAutocomplete` in
+`quote-modal.tsx` (needs a Google Maps API key + billing). Photon is free and zero-config.
 
 ## Deploy to Vercel
 This is a standard Next.js app — Vercel builds it in the cloud (no local build needed).

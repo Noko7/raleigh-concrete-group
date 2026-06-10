@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bebas_Neue, Sora } from "next/font/google";
 
+import { QuoteModalRoot } from "@/components/quote-modal";
 import "./globals.css";
 
 const headline = Bebas_Neue({
@@ -45,7 +46,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${headline.variable} ${body.variable} h-full antialiased`}>
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        {children}
+        <QuoteModalRoot />
+      </body>
     </html>
   );
 }

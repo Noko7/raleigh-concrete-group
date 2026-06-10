@@ -1,22 +1,33 @@
 -- Raleigh Concrete Group — quote request storage
 -- Run this once in your Supabase project: Dashboard → SQL Editor → New query → paste → Run.
+-- Safe to re-run: every statement is idempotent.
 
+-- ── 1. Leads table ──────────────────────────────────────────────────────────
 create table if not exists public.quote_requests (
-  id          uuid primary key default gen_random_uuid(),
-  created_at  timestamptz not null default now(),
-  name        text not null,
-  phone       text not null,
-  service     text,
-  address     text,
-  city        text,
-  details     text,
-  source_path text
+  id             uuid primary key default gen_random_uuid(),
+  created_at     timestamptz not null default now(),
+  name           text not null,
+  phone          text not null,
+  email          text,
+  service        text,
+  address        text,
+  city           text,
+  details        text,
+  quote_type     text,        -- 'online' or 'inperson'
+  preferred_time text,        -- in-person scheduling preference
+  file_urls      jsonb,       -- array of uploaded photo/video URLs (online quotes)
+  source_path    text
 );
 
--- Row Level Security: lock the table down, then allow ONLY anonymous inserts.
--- The public website uses the anon key to add new leads, but cannot read,
--- edit, or delete them. You read your leads from the Supabase dashboard
--- (or with the service-role key on a server you control).
+-- If the table already existed from an earlier version, add the new columns.
+alter table public.quote_requests add column if not exists email text;
+alter table public.quote_requests add column if not exists quote_type text;
+alter table public.quote_requests add column if not exists preferred_time text;
+alter table public.quote_requests add column if not exists file_urls jsonb;
+
+-- Row Level Security: lock the table, then allow ONLY anonymous inserts.
+-- The public site adds leads with the anon key but cannot read, edit or delete
+-- them. You read leads in the Supabase dashboard (or with the service-role key).
 alter table public.quote_requests enable row level security;
 
 drop policy if exists "anon can insert quote requests" on public.quote_requests;
@@ -25,3 +36,19 @@ create policy "anon can insert quote requests"
   for insert
   to anon
   with check (true);
+
+-- ── 2. Storage bucket for customer photos / videos ──────────────────────────
+-- Public bucket: uploaded files get an unguessable random path and a public URL
+-- so you can click them straight from the lead row. (Switch public to false and
+-- use signed URLs if you'd rather keep them fully private.)
+insert into storage.buckets (id, name, public)
+values ('quote-uploads', 'quote-uploads', true)
+on conflict (id) do nothing;
+
+-- Let anonymous visitors upload into (only) the quote-uploads bucket.
+drop policy if exists "anon can upload quote files" on storage.objects;
+create policy "anon can upload quote files"
+  on storage.objects
+  for insert
+  to anon
+  with check (bucket_id = 'quote-uploads');
