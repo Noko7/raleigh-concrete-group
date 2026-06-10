@@ -404,13 +404,13 @@ function Modal({ onClose }: { onClose: () => void }) {
                     ))}
                   </ul>
                 )}
-                <label className="qm-label qm-mt">Anything else? (optional)</label>
+                <label className="qm-label qm-mt">Tell us a bit more about your project</label>
                 <textarea
                   className="qm-input"
                   rows={2}
                   value={data.details}
                   onChange={(e) => set({ details: e.target.value })}
-                  placeholder="Rough size, timeline, anything helpful…"
+                  placeholder="Roughly how much space (e.g. 600 sq ft or 20x30), your timeline, and anything else that helps…"
                 />
               </div>
             )}
@@ -432,13 +432,13 @@ function Modal({ onClose }: { onClose: () => void }) {
                     </button>
                   ))}
                 </div>
-                <label className="qm-label qm-mt">Anything else? (optional)</label>
+                <label className="qm-label qm-mt">Tell us a bit more about your project</label>
                 <textarea
                   className="qm-input"
                   rows={2}
                   value={data.details}
                   onChange={(e) => set({ details: e.target.value })}
-                  placeholder="Rough size, timeline, anything helpful…"
+                  placeholder="Roughly how much space (e.g. 600 sq ft or 20x30), your timeline, and anything else that helps…"
                 />
               </div>
             )}
