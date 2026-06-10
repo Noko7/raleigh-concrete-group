@@ -9,6 +9,7 @@ export type Staff = {
   phone: string | null;
   role: Role;
   active: boolean;
+  must_reset_password: boolean;
   created_at: string;
 };
 

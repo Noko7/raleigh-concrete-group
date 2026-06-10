@@ -91,12 +91,19 @@ export function QuoteEditor({ id, isOwner, contractors, initial }: Props) {
       </label>
 
       <div className="crm-editor-foot">
-        <button type="submit" className="crm-btn crm-btn-primary" disabled={pending}>
+        <button type="submit" name="intent" value="save" className="crm-btn crm-btn-ghost" disabled={pending}>
           {pending ? "Saving…" : "Save changes"}
         </button>
-        {state.ok && !pending && !state.error && <span className="crm-saved">Saved</span>}
+        <button type="submit" name="intent" value="send" className="crm-btn crm-btn-send" disabled={pending}>
+          {pending ? "Working…" : "Send Quote"}
+        </button>
+        {state.sent && !pending && !state.error && <span className="crm-saved">Quote sent to customer</span>}
+        {state.ok && !state.sent && !pending && !state.error && <span className="crm-saved">Saved</span>}
         {state.error && <span className="crm-auth-error">{state.error}</span>}
       </div>
+      <p className="crm-muted crm-sm crm-editor-hint">
+        Send Quote texts the customer their branded quote link and marks this Sent. Save changes just stores your edits.
+      </p>
     </form>
   );
 }

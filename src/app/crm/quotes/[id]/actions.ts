@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/env";
-import { alertAssigned, alertOwner } from "@/lib/crm/notify";
+import { SITE_ORIGIN, STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/env";
+import { alertAssigned, alertOwner, sendSms } from "@/lib/crm/notify";
 import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
 import type { SaveState } from "./types";
@@ -20,6 +20,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   if (!current) return { ok: false, error: "You don't have access to this quote." };
 
   const isOwner = session.staff.role === "owner";
+  const sending = String(formData.get("intent") ?? "") === "send";
   const patch: Partial<Quote> = {};
   const events: { type: string; meta?: Record<string, unknown> }[] = [];
 
@@ -68,10 +69,24 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     patch.internal_notes = v || null;
   }
 
-  if (Object.keys(patch).length === 0) return { ok: true };
+  // "Send Quote": make the customer link live and text it to them.
+  if (sending) {
+    const effectiveAmount = patch.quote_amount !== undefined ? patch.quote_amount : current.quote_amount;
+    if (effectiveAmount == null) return { ok: false, error: "Set a quote amount before sending." };
+    if (current.status !== "sent" && patch.status !== "sent") {
+      patch.status = "sent";
+      events.push({ type: "status_changed", meta: { from: current.status, to: "sent" } });
+    }
+    if (!current.quote_sent_at) patch.quote_sent_at = new Date().toISOString();
+    events.push({ type: "quote_sent" });
+  }
 
-  const updated = await updateQuote(session, id, patch);
-  if (!updated) return { ok: false, error: "Could not save. Check your access and try again." };
+  if (!sending && Object.keys(patch).length === 0) return { ok: true };
+
+  if (Object.keys(patch).length > 0) {
+    const updated = await updateQuote(session, id, patch);
+    if (!updated) return { ok: false, error: "Could not save. Check your access and try again." };
+  }
 
   for (const e of events) await addEvent(session, id, e.type, e.meta);
 
@@ -97,7 +112,14 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     ).catch(() => {});
   }
 
+  if (sending) {
+    const first = current.name.split(" ")[0] || "there";
+    const link = `${SITE_ORIGIN}/q/${current.public_token}`;
+    await sendSms(current.phone, `Hi ${first}, your Raleigh Concrete Group quote is ready: ${link}`).catch(() => {});
+    await alertOwner(`Quote sent to ${current.name}.`, session.staff.phone).catch(() => {});
+  }
+
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
-  return { ok: true };
+  return { ok: true, sent: sending };
 }

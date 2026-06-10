@@ -86,18 +86,18 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
         {/* Decision: show the recorded outcome, or the accept/decline flow */}
         {responded === "accepted" ? (
           <div className="cq-result cq-result-ok">
-            <h3>You&apos;re booked! 🎉</h3>
-            <p>
-              {quote.scheduled_date
-                ? `We've got you down for ${prettyDate(quote.scheduled_date)}. `
-                : "Thanks for accepting your quote. "}
-              We&apos;ll reach out to confirm the details.
+            <p className="cq-result-eyebrow">Booking confirmed</p>
+            <h3>{quote.scheduled_date ? `You're all set for ${prettyDate(quote.scheduled_date)}` : "You're all set"}</h3>
+            <p className="cq-result-note">
+              We&apos;ll reach out to confirm the details and timing.
+              {quote.discount_accepted ? " Your 10% discount is locked in." : ""}
             </p>
           </div>
         ) : responded === "declined" ? (
           <div className="cq-result">
-            <h3>Thanks for letting us know.</h3>
-            <p>Changed your mind? Give us a call or text and we&apos;ll take care of you.</p>
+            <p className="cq-result-eyebrow">Quote declined</p>
+            <h3>Thanks for letting us know</h3>
+            <p className="cq-result-note">Changed your mind? Give us a call or text and we&apos;ll take care of you.</p>
           </div>
         ) : hasPrice ? (
           <QuoteActions token={token} amount={Number(quote.quote_amount)} />

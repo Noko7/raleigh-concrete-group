@@ -19,6 +19,7 @@ function fmt(iso: string) {
 const EVENT_LABELS: Record<string, string> = {
   status_changed: "Status changed",
   assigned: "Assigned",
+  quote_sent: "Quote sent to customer",
   customer_viewed: "Customer viewed their quote",
   customer_accepted: "Customer ACCEPTED their quote",
   customer_declined: "Customer declined their quote",

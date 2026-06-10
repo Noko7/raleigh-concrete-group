@@ -59,12 +59,19 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
   }
 
   if (mode === "accepted") {
+    const finalPrice = discount && discounted != null ? discounted : amount;
     return (
       <div className="cq-result cq-result-ok">
-        <h3>You&apos;re booked! 🎉</h3>
-        <p>
-          We&apos;ve got you down for <strong>{pretty(booked)}</strong>. We&apos;ll reach out to confirm the details.
-          {discount ? " Your 10% discount is locked in." : ""}
+        <p className="cq-result-eyebrow">Booking confirmed</p>
+        <h3>You&apos;re all set for {pretty(booked)}</h3>
+        {finalPrice != null && (
+          <p className="cq-result-price">
+            {discount && <span className="cq-result-save">10% off applied</span>}
+            <strong>{usd(finalPrice)}</strong>
+          </p>
+        )}
+        <p className="cq-result-note">
+          We&apos;ll reach out to confirm the details and timing. Thanks for choosing Raleigh Concrete Group.
         </p>
       </div>
     );
@@ -73,8 +80,9 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
   if (mode === "declined") {
     return (
       <div className="cq-result">
-        <h3>Thanks for letting us know.</h3>
-        <p>No hard feelings. If anything changes, we&apos;re just a call or text away.</p>
+        <p className="cq-result-eyebrow">Quote declined</p>
+        <h3>Thanks for letting us know</h3>
+        <p className="cq-result-note">No hard feelings. If anything changes, we&apos;re just a call or text away.</p>
       </div>
     );
   }

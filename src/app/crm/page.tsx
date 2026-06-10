@@ -27,6 +27,7 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
     phone: q.phone,
     service: q.service,
     city: q.city,
+    address: q.address,
     status: q.status,
     assigned_to: q.assigned_to,
     quote_amount: q.quote_amount,

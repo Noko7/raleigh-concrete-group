@@ -117,6 +117,16 @@ export async function getOwnerPhones(): Promise<string[]> {
   return rows.map((r) => r.phone).filter((p): p is string => typeof p === "string" && p.trim() !== "");
 }
 
+// Service-role phone lookup for one staff member (used by token-gated server code
+// that has no session, e.g. notifying an assigned contractor on customer accept).
+export async function getStaffPhoneById(id: string): Promise<string | null> {
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) return null;
+  const res = await pgAdmin(`staff?id=eq.${id}&select=phone&limit=1`);
+  if (!res.ok) return null;
+  const rows = (await res.json()) as { phone: string | null }[];
+  return rows[0]?.phone ?? null;
+}
+
 export async function updateStaff(session: Session, id: string, patch: Partial<Staff>): Promise<boolean> {
   const res = await pgUser(`staff?id=eq.${encodeURIComponent(id)}`, session.accessToken, {
     method: "PATCH",

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 
 import { crmBase } from "@/lib/crm/nav";
 import { LoginForm } from "./login-form";
@@ -13,7 +14,7 @@ export default async function CrmLoginPage() {
   return (
     <main className="crm-auth">
       <div className="crm-auth-card">
-        <p className="crm-auth-brand">Raleigh Concrete Group</p>
+        <Image src="/images/logo_horizontal.png" alt="Raleigh Concrete Group" width={967} height={243} className="crm-auth-logo" priority />
         <h1 className="crm-auth-title">Team Login</h1>
         <p className="crm-auth-sub">Sign in to manage quotes, customers and contractors.</p>
         <LoginForm base={base} />

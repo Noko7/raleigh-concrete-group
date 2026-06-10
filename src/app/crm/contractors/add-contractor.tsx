@@ -22,10 +22,14 @@ export function AddContractor() {
             <input name="email" type="email" className="crm-input" required />
           </label>
           <label className="crm-field">
-            <span>Phone (optional)</span>
+            <span>Phone (for texting their login)</span>
             <input name="phone" type="tel" className="crm-input" />
           </label>
         </div>
+        <label className="crm-check">
+          <input type="checkbox" name="notify" defaultChecked />
+          <span>Text the contractor their login and temporary password</span>
+        </label>
         <div className="crm-editor-foot">
           <button type="submit" className="crm-btn crm-btn-primary" disabled={pending}>
             {pending ? "Creating…" : "Create contractor"}
@@ -37,10 +41,15 @@ export function AddContractor() {
       {state.ok && state.password && (
         <div className="crm-tempcreds">
           <p>
-            Account created for <strong>{state.email}</strong>. Share this temporary password with them (shown once):
+            Account created for <strong>{state.email}</strong>.
+            {state.smsSent ? " We texted them their login and temporary password." : " Share this temporary password (shown once):"}
           </p>
           <code className="crm-code">{state.password}</code>
-          <p className="crm-muted crm-sm">They sign in at this CRM and should change it from Supabase if needed.</p>
+          <p className="crm-muted crm-sm">
+            {state.smsNote
+              ? state.smsNote
+              : "They'll be asked to set their own password the first time they sign in."}
+          </p>
         </div>
       )}
     </div>

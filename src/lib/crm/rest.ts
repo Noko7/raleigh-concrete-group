@@ -86,3 +86,15 @@ export async function adminCreateUser(
   if (!res.ok || !json.id) return { error: json.msg || json.message || "Could not create user." };
   return { id: json.id };
 }
+
+// Set a user's password with the service-role key (used for the forced
+// first-login reset, after we've verified the caller's own session).
+export async function adminUpdatePassword(userId: string, password: string): Promise<boolean> {
+  const res = await fetch(`${AUTH}/admin/users/${userId}`, {
+    method: "PUT",
+    cache: "no-store",
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  return res.ok;
+}

@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 
 import { getSession } from "@/lib/crm/auth";
 import { crmBase } from "@/lib/crm/nav";
 import { LogoutButton } from "./logout-button";
+import { ForceReset } from "./force-reset";
 
 export const metadata: Metadata = {
   title: { absolute: "CRM | Raleigh Concrete Group" },
@@ -20,8 +22,11 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
       {session && (
         <header className="crm-topbar">
           <div className="crm-topbar-inner">
-            <Link href={`${base}/`} className="crm-logo">
-              RCG <span>CRM</span>
+            <Link href={`${base}/`} className="crm-logo" aria-label="Raleigh Concrete Group CRM">
+              <span className="crm-logo-badge">
+                <Image src="/images/logo_horizontal.png" alt="Raleigh Concrete Group" width={967} height={243} priority />
+              </span>
+              <span className="crm-logo-tag">CRM</span>
             </Link>
             <nav className="crm-nav">
               <Link href={`${base}/`}>Pipeline</Link>
@@ -40,7 +45,9 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
           </div>
         </header>
       )}
-      <div className="crm-main">{children}</div>
+      <div className="crm-main">
+        {session?.staff.must_reset_password ? <ForceReset /> : children}
+      </div>
     </div>
   );
 }

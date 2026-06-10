@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/constants";
@@ -12,6 +12,7 @@ export type BoardQuote = {
   phone: string;
   service: string | null;
   city: string | null;
+  address: string | null;
   status: Status;
   assigned_to: string | null;
   quote_amount: number | null;
@@ -19,6 +20,16 @@ export type BoardQuote = {
   quote_type: string | null;
   created_at: string;
 };
+
+function telHref(phone: string): string {
+  return `tel:${phone.replace(/[^0-9+]/g, "")}`;
+}
+function smsHref(phone: string): string {
+  return `sms:${phone.replace(/[^0-9+]/g, "")}`;
+}
+function mapsHref(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
 
 type ContractorOption = { id: string; label: string };
 
@@ -40,7 +51,27 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<Status | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
+
+  // Adopt fresh server data (e.g. a customer just accepted) without clobbering
+  // in-flight optimistic edits: only re-sync when the server snapshot changes.
+  const initialSig = useMemo(
+    () => initialQuotes.map((q) => `${q.id}:${q.status}:${q.assigned_to ?? ""}:${q.quote_amount ?? ""}`).join("|"),
+    [initialQuotes],
+  );
+  useEffect(() => {
+    setQuotes(initialQuotes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSig]);
+
+  // Auto-sync: pull the latest pipeline every 20s so booked/accepted quotes move
+  // on their own. Pause while dragging or while a change is saving.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (!dragId && !isPending) router.refresh();
+    }, 20000);
+    return () => clearInterval(t);
+  }, [dragId, isPending, router]);
 
   const byStatus = useMemo(() => {
     const map: Record<Status, BoardQuote[]> = {
@@ -152,6 +183,20 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
                       </span>
                       {q.view_count > 0 && <span className="kb-pill kb-pill-view">Viewed ×{q.view_count}</span>}
                       {q.assigned_to && <span className="kb-pill kb-pill-assigned">{nameMap[q.assigned_to] ?? "Assigned"}</span>}
+                    </div>
+
+                    <div className="kb-quick" onClick={(e) => e.stopPropagation()}>
+                      <a href={telHref(q.phone)} className="kb-quick-btn" aria-label={`Call ${q.name}`}>
+                        Call
+                      </a>
+                      <a href={smsHref(q.phone)} className="kb-quick-btn" aria-label={`Text ${q.name}`}>
+                        Text
+                      </a>
+                      {q.address && (
+                        <a href={mapsHref(q.address)} target="_blank" rel="noreferrer" className="kb-quick-btn">
+                          Map
+                        </a>
+                      )}
                     </div>
 
                     <div className="kb-card-actions" onClick={(e) => e.stopPropagation()}>

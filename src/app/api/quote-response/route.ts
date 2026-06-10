@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { alertOwner } from "@/lib/crm/notify";
-import { getQuoteByToken, recordCustomerResponse } from "@/lib/crm/queries";
+import { alertOwner, jobLink, sendSms } from "@/lib/crm/notify";
+import { getQuoteByToken, getStaffPhoneById, recordCustomerResponse } from "@/lib/crm/queries";
 
 // Customer-facing endpoint behind the unguessable public_token. Records accept
 // (with a scheduled date, optionally the 10% save offer) or decline, then texts
@@ -25,17 +25,29 @@ export async function POST(request: Request) {
   });
   if (!result.ok) return NextResponse.json(result, { status: 400 });
 
-  // Best-effort owner text.
+  // Best-effort texts to BOTH owner and the assigned contractor. Never let a
+  // texting outage fail the customer's action.
   try {
     const q = await getQuoteByToken("public_token", token);
     if (q) {
-      const msg =
-        action === "accept"
-          ? `${q.name} ACCEPTED their quote${q.scheduled_date ? `, booked ${q.scheduled_date}` : ""}${
-              q.discount_accepted ? " (10% off)" : ""
-            }. ${q.phone}`
-          : `${q.name} declined their quote. ${q.phone}`;
-      await alertOwner(msg);
+      const price = q.quote_amount != null ? ` ($${Number(q.quote_amount).toLocaleString("en-US")})` : "";
+      if (action === "accept") {
+        const when = q.scheduled_date ? ` for ${q.scheduled_date}` : "";
+        const disc = q.discount_accepted ? " (10% off)" : "";
+        await alertOwner(`Booked: ${q.name}${when}${price}${disc}. ${q.phone}`);
+        if (q.assigned_to) {
+          const phone = await getStaffPhoneById(q.assigned_to);
+          if (phone) {
+            await sendSms(phone, `Job booked: ${q.name}${when}${price}. Details: ${jobLink(q.job_token)}`).catch(() => {});
+          }
+        }
+      } else {
+        await alertOwner(`Declined: ${q.name}. ${q.phone}`);
+        if (q.assigned_to) {
+          const phone = await getStaffPhoneById(q.assigned_to);
+          if (phone) await sendSms(phone, `Heads up: ${q.name} declined their quote.`).catch(() => {});
+        }
+      }
     }
   } catch {
     // ignore — texting must never fail the customer's action

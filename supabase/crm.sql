@@ -18,6 +18,9 @@ create table if not exists public.staff (
   created_at timestamptz not null default now()
 );
 
+-- New contractors get a temporary password and must set their own on first login.
+alter table public.staff add column if not exists must_reset_password boolean not null default false;
+
 alter table public.staff enable row level security;
 
 -- Is the current logged-in user an active owner? SECURITY DEFINER so the policy
