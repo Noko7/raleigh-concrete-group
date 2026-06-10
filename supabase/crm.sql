@@ -93,6 +93,18 @@ alter table public.quote_requests add column if not exists customer_responded_at
 alter table public.quote_requests add column if not exists scheduled_date        date;
 alter table public.quote_requests add column if not exists discount_accepted     boolean not null default false;
 
+-- In-person quote appointment the customer picked (so the crew can calendar it).
+-- scheduled_date = the booked WORK day (max 1/day); visit_date = an in-person
+-- quote visit (max 5/day). Both are enforced in server code.
+alter table public.quote_requests add column if not exists visit_date  date;
+alter table public.quote_requests add column if not exists visit_time  text;
+create index if not exists qr_scheduled_date_idx on public.quote_requests(scheduled_date);
+create index if not exists qr_visit_date_idx      on public.quote_requests(visit_date);
+-- Hard guarantee: at most one accepted/booked job per calendar day.
+create unique index if not exists qr_one_job_per_day
+  on public.quote_requests (scheduled_date)
+  where customer_response = 'accepted';
+
 alter table public.quote_requests drop constraint if exists qr_customer_response_chk;
 alter table public.quote_requests add constraint qr_customer_response_chk
   check (customer_response is null or customer_response in ('accepted', 'declined'));

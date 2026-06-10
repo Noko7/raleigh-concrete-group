@@ -55,24 +55,34 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       }
       patch.quote_amount = Math.round(amt * 100) / 100;
     }
+    if (patch.quote_amount !== current.quote_amount) {
+      events.push({ type: "amount_changed", meta: { from: current.quote_amount, to: patch.quote_amount } });
+    }
   }
 
   // Customer-facing summary
   if (formData.has("quote_summary")) {
     const v = String(formData.get("quote_summary") ?? "").trim().slice(0, 4000);
     patch.quote_summary = v || null;
+    if (patch.quote_summary !== current.quote_summary) events.push({ type: "summary_changed" });
   }
 
   // Internal notes
   if (formData.has("internal_notes")) {
     const v = String(formData.get("internal_notes") ?? "").trim().slice(0, 4000);
     patch.internal_notes = v || null;
+    if (patch.internal_notes !== current.internal_notes) events.push({ type: "notes_changed" });
   }
 
-  // "Send Quote": make the customer link live and text it to them.
+  // "Send Quote": make the customer link live and text it to them. Price and a
+  // customer-facing description are both required.
   if (sending) {
     const effectiveAmount = patch.quote_amount !== undefined ? patch.quote_amount : current.quote_amount;
+    const effectiveSummary = patch.quote_summary !== undefined ? patch.quote_summary : current.quote_summary;
     if (effectiveAmount == null) return { ok: false, error: "Set a quote amount before sending." };
+    if (!effectiveSummary || !effectiveSummary.trim()) {
+      return { ok: false, error: "Add a customer-facing description before sending." };
+    }
     if (current.status !== "sent" && patch.status !== "sent") {
       patch.status = "sent";
       events.push({ type: "status_changed", meta: { from: current.status, to: "sent" } });

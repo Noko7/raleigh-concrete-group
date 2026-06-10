@@ -5,7 +5,8 @@ import { requireSession } from "@/lib/crm/auth";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { STATUS_LABELS } from "@/lib/crm/constants";
 import { crmBase } from "@/lib/crm/nav";
-import { getQuote, listContractors, listEvents } from "@/lib/crm/queries";
+import type { QuoteEvent } from "@/lib/crm/types";
+import { getQuote, listContractors, listEvents, listStaff } from "@/lib/crm/queries";
 import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
 import { QuoteEditor } from "./quote-editor";
@@ -16,18 +17,44 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
-const EVENT_LABELS: Record<string, string> = {
-  status_changed: "Status changed",
-  assigned: "Assigned",
-  quote_sent: "Quote sent to customer",
-  customer_viewed: "Customer viewed their quote",
-  customer_accepted: "Customer ACCEPTED their quote",
-  customer_declined: "Customer declined their quote",
-  updated: "Updated",
-};
-
 function prettyDate(s: string) {
   return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" });
+}
+
+const statusLabel = (v: unknown) => STATUS_LABELS[String(v) as keyof typeof STATUS_LABELS] ?? String(v ?? "—");
+
+// Who triggered the event: a named teammate, the customer, or an automatic change.
+function eventActor(e: QuoteEvent, names: Map<string, string>): string {
+  if (e.actor) return names.get(e.actor) ?? "A teammate";
+  if (e.type.startsWith("customer_")) return "Customer";
+  return "Automatic";
+}
+
+// Plain-English, audit-friendly description of what happened.
+function eventText(e: QuoteEvent, names: Map<string, string>): string {
+  const m = (e.meta ?? {}) as Record<string, unknown>;
+  switch (e.type) {
+    case "status_changed":
+      return `Status: ${statusLabel(m.from)} → ${statusLabel(m.to)}`;
+    case "assigned":
+      return m.to ? `Assigned to ${names.get(String(m.to)) ?? "a contractor"}` : "Unassigned";
+    case "amount_changed":
+      return `Price set to ${m.to != null ? `$${Number(m.to).toLocaleString("en-US")}` : "(cleared)"}`;
+    case "summary_changed":
+      return "Customer description updated";
+    case "notes_changed":
+      return "Internal notes updated";
+    case "quote_sent":
+      return "Quote sent to the customer";
+    case "customer_viewed":
+      return "Customer opened their quote";
+    case "customer_accepted":
+      return `Customer accepted${m.scheduled_date ? ` — booked ${String(m.scheduled_date)}` : ""}${m.discount ? " (10% off)" : ""}`;
+    case "customer_declined":
+      return "Customer declined the quote";
+    default:
+      return e.type.replace(/_/g, " ");
+  }
 }
 
 export default async function QuoteDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -39,7 +66,9 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   if (!quote) notFound();
 
   const isOwner = session.staff.role === "owner";
-  const contractors = isOwner ? await listContractors(session) : [];
+  const allStaff = await listStaff(session);
+  const contractors = (isOwner ? allStaff : await listContractors(session)).filter((s) => s.role === "contractor");
+  const nameMap = new Map(allStaff.map((s) => [s.id, s.full_name || s.email || "Staff"]));
   const events = await listEvents(session, id);
   const photoUrls = (quote.file_urls ?? []).map((p) => `${base}/api/file?p=${encodeURIComponent(p)}`);
 
@@ -87,7 +116,16 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 <dt>Type</dt>
                 <dd>{quote.quote_type === "online" ? "Online (photos)" : quote.quote_type === "inperson" ? "In-person" : "—"}</dd>
               </div>
-              {quote.preferred_time && (
+              {quote.visit_date && (
+                <div>
+                  <dt>Requested visit</dt>
+                  <dd>
+                    <strong className="crm-link-strong">{prettyDate(quote.visit_date)}</strong>
+                    {quote.visit_time ? ` at ${quote.visit_time}` : ""}
+                  </dd>
+                </div>
+              )}
+              {!quote.visit_date && quote.preferred_time && (
                 <div>
                   <dt>Preferred time</dt>
                   <dd>{quote.preferred_time}</dd>
@@ -162,8 +200,10 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   <li key={e.id}>
                     <span className="crm-timeline-dot" />
                     <div>
-                      <strong>{EVENT_LABELS[e.type] ?? e.type}</strong>
-                      <div className="crm-muted crm-sm">{fmt(e.created_at)}</div>
+                      <strong>{eventText(e, nameMap)}</strong>
+                      <div className="crm-muted crm-sm">
+                        {eventActor(e, nameMap)} · {fmt(e.created_at)}
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -176,6 +216,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
           <QuoteEditor
             id={quote.id}
             isOwner={isOwner}
+            customerName={quote.name}
             contractors={contractors.map((c) => ({ id: c.id, label: c.full_name || c.email || "Contractor" }))}
             initial={{
               status: quote.status,

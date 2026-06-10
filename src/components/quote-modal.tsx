@@ -22,7 +22,8 @@ type FormState = {
   name: string;
   phone: string;
   email: string;
-  preferredTime: string;
+  visitDate: string;
+  visitTime: string;
 };
 
 const EMPTY: FormState = {
@@ -32,13 +33,27 @@ const EMPTY: FormState = {
   name: "",
   phone: "",
   email: "",
-  preferredTime: "",
+  visitDate: "",
+  visitTime: "",
 };
 
 const ONLINE_STEPS = ["address", "media", "contact"] as const;
 const INPERSON_STEPS = ["address", "schedule", "contact"] as const;
 
-const TIME_CHOICES = ["Weekday mornings", "Weekday afternoons", "Evenings", "Weekends", "I'm flexible"];
+const TIME_SLOTS = ["8:00 AM", "10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM"];
+
+// Soonest an in-person visit can be requested: two days out, as YYYY-MM-DD.
+function minVisitDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 2);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+function prettyDay(s: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "";
+  return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+}
 
 function cityFromAddress(address: string): string {
   const parts = address.split(",").map((p) => p.trim());
@@ -241,6 +256,24 @@ function Modal({ onClose }: { onClose: () => void }) {
   const [fileError, setFileError] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [honeypot, setHoneypot] = useState("");
+  const [dateChecking, setDateChecking] = useState(false);
+  const [dateFull, setDateFull] = useState(false);
+  const minDate = useRef(minVisitDate()).current;
+
+  async function checkVisitDate(date: string) {
+    setDateFull(false);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    setDateChecking(true);
+    try {
+      const res = await fetch(`/api/availability?type=quote&date=${date}`);
+      const json = (await res.json()) as { available?: boolean };
+      setDateFull(json.available === false);
+    } catch {
+      setDateFull(false); // don't block on a network hiccup; server re-checks
+    } finally {
+      setDateChecking(false);
+    }
+  }
 
   const steps = mode === "online" ? ONLINE_STEPS : mode === "inperson" ? INPERSON_STEPS : [];
   const current = mode ? steps[stepIndex] : "choice";
@@ -287,7 +320,8 @@ function Modal({ onClose }: { onClose: () => void }) {
       return (addressVerified || hasHouseNumber) && data.address.trim().length > 8 && data.service !== "";
     }
     if (current === "media") return files.length >= 1;
-    if (current === "schedule") return data.preferredTime !== "";
+    if (current === "schedule")
+      return /^\d{4}-\d{2}-\d{2}$/.test(data.visitDate) && data.visitTime !== "" && !dateFull && !dateChecking;
     if (current === "contact")
       return data.name.trim().length >= 2 && isValidPhone(data.phone) && isValidEmail(data.email);
     return false;
@@ -365,7 +399,9 @@ function Modal({ onClose }: { onClose: () => void }) {
         city: cityFromAddress(data.address),
         details: data.details,
         quote_type: mode,
-        preferred_time: mode === "inperson" ? data.preferredTime : "",
+        preferred_time: mode === "inperson" ? data.visitTime : "",
+        visit_date: mode === "inperson" ? data.visitDate : "",
+        visit_time: mode === "inperson" ? data.visitTime : "",
         file_urls: fileUrls,
         source_path: typeof window !== "undefined" ? window.location.pathname : "",
         company: honeypot, // honeypot, validated server-side
@@ -375,11 +411,17 @@ function Modal({ onClose }: { onClose: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+      const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string; fields?: string[] };
       if (res.ok && json.ok) {
         setStatus("success");
+      } else if (res.status === 409 || json.fields?.includes("visit_date")) {
+        // That day filled up between picking it and submitting — send them back.
+        setDateFull(true);
+        setStatus("idle");
+        if (mode === "inperson") setStepIndex(INPERSON_STEPS.indexOf("schedule"));
+        setErrorMsg("");
       } else {
-        setErrorMsg(`Something went wrong saving your request. Please call us at ${phoneDisplay}.`);
+        setErrorMsg(json.error || `Something went wrong saving your request. Please call us at ${phoneDisplay}.`);
         setStatus("error");
       }
     } catch {
@@ -539,15 +581,36 @@ function Modal({ onClose }: { onClose: () => void }) {
             {/* Step: schedule (in-person) */}
             {current === "schedule" && (
               <div className="qm-body">
-                <h2 className="qm-title">When works for you?</h2>
-                <p className="qm-sub">Pick a window and we&apos;ll confirm a time that fits.</p>
+                <h2 className="qm-title">Pick a day and time</h2>
+                <p className="qm-sub">Choose when we&apos;ll come measure on site. We&apos;ll confirm by text.</p>
+                <label className="qm-label">Visit date</label>
+                <input
+                  className="qm-input"
+                  type="date"
+                  min={minDate}
+                  value={data.visitDate}
+                  onChange={(e) => {
+                    set({ visitDate: e.target.value });
+                    checkVisitDate(e.target.value);
+                  }}
+                />
+                {dateChecking && <span className="qm-ac-status">Checking that day…</span>}
+                {!dateChecking && dateFull && (
+                  <span className="qm-ac-status qm-ac-full">That day is fully booked — please pick another.</span>
+                )}
+                {!dateChecking && !dateFull && data.visitDate && (
+                  <span className="qm-ac-status qm-ac-ok">
+                    <IconCheck className="qm-ac-check" /> {prettyDay(data.visitDate)} is open
+                  </span>
+                )}
+                <label className="qm-label qm-mt">Time</label>
                 <div className="qm-chips">
-                  {TIME_CHOICES.map((t) => (
+                  {TIME_SLOTS.map((t) => (
                     <button
                       key={t}
                       type="button"
-                      className={`qm-chip${data.preferredTime === t ? " qm-chip--active" : ""}`}
-                      onClick={() => set({ preferredTime: t })}
+                      className={`qm-chip${data.visitTime === t ? " qm-chip--active" : ""}`}
+                      onClick={() => set({ visitTime: t })}
                     >
                       {t}
                     </button>

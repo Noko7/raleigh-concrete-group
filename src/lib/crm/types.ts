@@ -42,6 +42,8 @@ export type Quote = {
   customer_responded_at: string | null;
   scheduled_date: string | null;
   discount_accepted: boolean;
+  visit_date: string | null;
+  visit_time: string | null;
 };
 
 export type QuoteEvent = {

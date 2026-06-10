@@ -18,6 +18,20 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   if (!quote) notFound();
 
   const photos = quote.file_urls?.length ? await signFiles(quote.file_urls, 7200) : [];
+  const prettyVisit = quote.visit_date
+    ? new Date(`${quote.visit_date}T00:00:00`).toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      })
+    : null;
+  const prettyJob = quote.scheduled_date
+    ? new Date(`${quote.scheduled_date}T00:00:00`).toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      })
+    : null;
   const mapsLink = quote.address
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(quote.address)}`
     : null;
@@ -61,7 +75,24 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               </dd>
             </div>
           )}
-          {quote.preferred_time && (
+          {prettyJob && (
+            <div>
+              <dt>Scheduled job</dt>
+              <dd>
+                <strong>{prettyJob}</strong>
+              </dd>
+            </div>
+          )}
+          {prettyVisit && (
+            <div>
+              <dt>Quote visit</dt>
+              <dd>
+                <strong>{prettyVisit}</strong>
+                {quote.visit_time ? ` at ${quote.visit_time}` : ""}
+              </dd>
+            </div>
+          )}
+          {!prettyVisit && quote.preferred_time && (
             <div>
               <dt>Preferred time</dt>
               <dd>{quote.preferred_time}</dd>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { alertNewLead } from "@/lib/crm/notify";
+import { MAX_VISITS_PER_DAY, countVisitsOn } from "@/lib/crm/queries";
 
 // All quote submissions go through this server-side endpoint. The browser never
 // writes to the database directly: we validate everything here and insert with
@@ -83,6 +84,8 @@ export async function POST(request: Request) {
   const details = asString(body.details, LIMITS.details);
   const quoteType = asString(body.quote_type, 16);
   const preferredTime = asString(body.preferred_time, LIMITS.preferred_time);
+  const visitDate = asString(body.visit_date, 10);
+  const visitTime = asString(body.visit_time, 40);
   const sourcePath = asString(body.source_path, LIMITS.source_path);
 
   const errors: string[] = [];
@@ -91,6 +94,11 @@ export async function POST(request: Request) {
   if (email && !EMAIL_RE.test(email)) errors.push("email");
   if (address.length < 5 || !/\d/.test(address)) errors.push("address");
   if (quoteType && !QUOTE_TYPES.has(quoteType)) errors.push("quote_type");
+  // In-person quotes must pick a real date + time so the crew can calendar it.
+  if (quoteType === "inperson") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) errors.push("visit_date");
+    if (visitTime.length < 1) errors.push("visit_time");
+  }
 
   // file_urls: only accept paths we created in our own bucket.
   let fileUrls: string[] | null = null;
@@ -112,6 +120,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, demo: true });
   }
 
+  // Don't overbook in-person quote visits (max per day).
+  if (quoteType === "inperson") {
+    const used = await countVisitsOn(visitDate);
+    if (used >= MAX_VISITS_PER_DAY) {
+      return NextResponse.json(
+        { ok: false, error: "That day is fully booked for visits. Please choose another date.", fields: ["visit_date"] },
+        { status: 409 },
+      );
+    }
+  }
+
   const row = {
     name,
     phone: phoneRaw,
@@ -122,6 +141,8 @@ export async function POST(request: Request) {
     details: details || null,
     quote_type: QUOTE_TYPES.has(quoteType) ? quoteType : null,
     preferred_time: quoteType === "inperson" ? preferredTime || null : null,
+    visit_date: quoteType === "inperson" ? visitDate || null : null,
+    visit_time: quoteType === "inperson" ? visitTime || null : null,
     file_urls: fileUrls,
     source_path: sourcePath || null,
   };

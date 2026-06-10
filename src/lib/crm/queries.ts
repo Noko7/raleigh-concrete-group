@@ -117,6 +117,31 @@ export async function getOwnerPhones(): Promise<string[]> {
   return rows.map((r) => r.phone).filter((p): p is string => typeof p === "string" && p.trim() !== "");
 }
 
+// ── Booking capacity ────────────────────────────────────────────────────────
+// One booked job per day; up to five in-person quote visits per day.
+export const MAX_JOBS_PER_DAY = 1;
+export const MAX_VISITS_PER_DAY = 5;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// How many work jobs are already booked on a date (accepted quotes). Optionally
+// ignore one quote id (so re-accepting the same quote doesn't count against it).
+export async function countJobsOn(date: string, excludeId?: string): Promise<number> {
+  if (!ISO_DATE.test(date)) return 0;
+  let path = `quote_requests?scheduled_date=eq.${date}&customer_response=eq.accepted&select=id`;
+  if (excludeId && /^[0-9a-fA-F-]{36}$/.test(excludeId)) path += `&id=neq.${excludeId}`;
+  const res = await pgAdmin(path);
+  if (!res.ok) return 0;
+  return ((await res.json()) as unknown[]).length;
+}
+
+// How many in-person quote visits are already scheduled on a date.
+export async function countVisitsOn(date: string): Promise<number> {
+  if (!ISO_DATE.test(date)) return 0;
+  const res = await pgAdmin(`quote_requests?visit_date=eq.${date}&select=id`);
+  if (!res.ok) return 0;
+  return ((await res.json()) as unknown[]).length;
+}
+
 // Service-role phone lookup for one staff member (used by token-gated server code
 // that has no session, e.g. notifying an assigned contractor on customer accept).
 export async function getStaffPhoneById(id: string): Promise<string | null> {
@@ -207,6 +232,11 @@ export async function recordCustomerResponse(
     const min = Date.now() + 10 * 24 * 60 * 60 * 1000; // ~1.5 weeks (lenient by a day for time zones)
     if (!Number.isFinite(picked) || picked < min) {
       return { ok: false, error: "Please choose a date at least 1.5 weeks out." };
+    }
+    // One job per day. Don't let two customers book the same date.
+    const alreadyBooked = await countJobsOn(date, q.id);
+    if (alreadyBooked >= MAX_JOBS_PER_DAY) {
+      return { ok: false, error: "That day is already booked. Please choose another date." };
     }
     patch.customer_response = "accepted";
     patch.status = "won";

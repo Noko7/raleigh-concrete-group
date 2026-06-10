@@ -21,12 +21,29 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
   const [date, setDate] = useState("");
   const [booked, setBooked] = useState("");
   const [error, setError] = useState("");
+  const [dateChecking, setDateChecking] = useState(false);
+  const [dateFull, setDateFull] = useState(false);
 
   const minDate = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + 11); // ~1.5 weeks out
     return ymd(d);
   }, []);
+
+  async function checkDate(d: string) {
+    setDateFull(false);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+    setDateChecking(true);
+    try {
+      const res = await fetch(`/api/availability?type=job&date=${d}`);
+      const json = (await res.json()) as { available?: boolean };
+      setDateFull(json.available === false);
+    } catch {
+      setDateFull(false);
+    } finally {
+      setDateChecking(false);
+    }
+  }
 
   const discounted = amount != null ? Math.round(amount * 0.9 * 100) / 100 : null;
 
@@ -130,11 +147,21 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
           className="cq-date"
           min={minDate}
           value={date}
-          onChange={(e) => setDate(e.target.value)}
+          onChange={(e) => {
+            setDate(e.target.value);
+            checkDate(e.target.value);
+          }}
           disabled={busy}
         />
+        {dateChecking && <p className="cq-fine">Checking that day…</p>}
+        {!dateChecking && dateFull && <p className="cq-err">That day is already booked. Please pick another.</p>}
         {error && <p className="cq-err">{error}</p>}
-        <button type="button" className="cq-btn cq-btn-accept" disabled={!date || busy} onClick={() => submit("accept")}>
+        <button
+          type="button"
+          className="cq-btn cq-btn-accept"
+          disabled={!date || busy || dateChecking || dateFull}
+          onClick={() => submit("accept")}
+        >
           {busy ? "Booking…" : "Confirm booking"}
         </button>
         <button type="button" className="cq-textlink" disabled={busy} onClick={() => setMode("choose")}>

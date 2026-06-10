@@ -685,6 +685,7 @@ body {
 .qm-suggestions button:hover { background: rgba(194, 104, 42, 0.1); }
 .qm-ac-status { display: block; margin-top: 0.4rem; font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); }
 .qm-ac-ok { display: flex; align-items: center; gap: 0.3rem; color: #2f6b46; font-weight: 700; }
+.qm-ac-full { color: #b91c1c; font-weight: 700; }
 .qm-ac-check { width: 14px; height: 14px; }
 
 /* Upload dropzone */
@@ -856,6 +857,11 @@ body {
 .crm-btn-send:hover { background: #15803d; }
 .crm-btn-send:disabled { opacity: 0.6; cursor: default; }
 .crm-editor-hint { margin-top: 0.6rem; }
+.crm-confirm { border-top: 1px solid var(--crm-border); margin-top: 0.4rem; padding-top: 1rem; }
+.crm-confirm h3 { font-family: var(--font-headline), sans-serif; font-size: 1.25rem; margin-bottom: 0.2rem; }
+.crm-confirm-row { display: flex; align-items: baseline; justify-content: space-between; margin: 0.8rem 0 0.4rem; padding: 0.6rem 0.8rem; background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.5rem; }
+.crm-confirm-row strong { font-size: 1.3rem; color: var(--amber); }
+.crm-confirm-summary { white-space: pre-wrap; background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.5rem; padding: 0.6rem 0.8rem; font-size: 0.9rem; color: var(--crm-text); margin-bottom: 0.9rem; max-height: 160px; overflow-y: auto; }
 
 .crm-input {
   width: 100%; border: 1px solid var(--crm-border); border-radius: 0.55rem;
