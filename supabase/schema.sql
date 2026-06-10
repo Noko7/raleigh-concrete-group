@@ -37,6 +37,11 @@ alter table public.quote_requests enable row level security;
 drop policy if exists "anon can insert quote requests" on public.quote_requests;
 revoke all on public.quote_requests from anon;
 
+-- The trusted server role (used ONLY by /api/quote with the secret service_role
+-- key, never exposed to the browser) needs table privileges to write/read leads.
+-- This is required because the project's default grants didn't cover this table.
+grant insert, select on public.quote_requests to service_role;
+
 -- Defense in depth: even a privileged writer must pass these checks, so junk
 -- or oversized data can never land in the table.
 alter table public.quote_requests drop constraint if exists qr_chk;
