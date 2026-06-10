@@ -37,15 +37,22 @@ create policy "anon can insert quote requests"
   to anon
   with check (true);
 
--- ── 2. Storage bucket for customer photos / videos ──────────────────────────
--- Public bucket: uploaded files get an unguessable random path and a public URL
--- so you can click them straight from the lead row. (Switch public to false and
--- use signed URLs if you'd rather keep them fully private.)
-insert into storage.buckets (id, name, public)
-values ('quote-uploads', 'quote-uploads', true)
-on conflict (id) do nothing;
+-- RLS decides WHICH rows are allowed; the GRANT decides whether the role may
+-- touch the table at all. You need BOTH. Without this grant, inserts fail with
+-- "permission denied for table quote_requests" (42501).
+grant insert on public.quote_requests to anon;
 
--- Let anonymous visitors upload into (only) the quote-uploads bucket.
+-- ── 2. Storage bucket for customer photos / videos (PRIVATE) ─────────────────
+-- Private bucket: files are NOT publicly accessible. The site stores each file's
+-- path on the lead row (file_urls); you view the photos in the Supabase
+-- dashboard (Storage → quote-uploads) or via a signed URL. The `do update`
+-- flips an already-created bucket to private.
+insert into storage.buckets (id, name, public)
+values ('quote-uploads', 'quote-uploads', false)
+on conflict (id) do update set public = false;
+
+-- Let anonymous visitors upload into (only) the quote-uploads bucket. They can
+-- write but not read, so customer photos stay private.
 drop policy if exists "anon can upload quote files" on storage.objects;
 create policy "anon can upload quote files"
   on storage.objects

@@ -193,8 +193,10 @@ function Modal({ onClose }: { onClose: () => void }) {
     else submit();
   }
 
+  // Private bucket: we store the object path (not a public URL). View the files
+  // in Supabase → Storage → quote-uploads, or generate a signed URL.
   async function uploadFiles(): Promise<string[]> {
-    const urls: string[] = [];
+    const paths: string[] = [];
     for (const file of files) {
       const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
       const path = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
@@ -209,9 +211,9 @@ function Modal({ onClose }: { onClose: () => void }) {
         body: file,
       });
       if (!res.ok) throw new Error("upload failed");
-      urls.push(`${SUPABASE_URL}/storage/v1/object/public/${UPLOAD_BUCKET}/${path}`);
+      paths.push(`${UPLOAD_BUCKET}/${path}`);
     }
-    return urls;
+    return paths;
   }
 
   async function submit() {
