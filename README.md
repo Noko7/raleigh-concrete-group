@@ -102,9 +102,14 @@ The app texts you and your crew automatically: a **new lead** texts the owner; *
 texts that contractor their job link; and when a contractor advances a job the owner gets a heads-up.
 Add these Vercel env vars (no SQL needed):
 - `OWNER_PHONE` — your number for owner alerts (e.g. `+19198977695`).
-- `SMS_PROVIDER` — `twilio` (default) or `custom`.
+- **Quo (OpenPhone)** — the default when `QUO_API_KEY` is set:
+  - `QUO_API_KEY` — from Quo → Settings → API (used as the `Authorization` header).
+  - `QUO_FROM` — your Quo number in E.164 (e.g. `+19198977695`).
+  - `QUO_USER_ID` *(optional)* — send as a specific workspace member.
+  - Note: Quo requires completed **US carrier (A2P) registration** to text US numbers.
+- `SMS_PROVIDER` *(optional override)* — `quo`, `twilio`, or `custom`.
 - Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`.
-- Custom provider: `SMS_API_URL`, `SMS_API_KEY`, `SMS_FROM` (the app POSTs `{ to, from, message }` with a `Bearer` key).
+- Custom provider: `SMS_API_URL`, `SMS_API_KEY`, `SMS_FROM` (POSTs `{ to, from, message }` with a `Bearer` key).
 
 Contractor alerts use each contractor's `phone` in the `staff` table, so fill that in when you add a crew member. SMS is best-effort — a texting outage never blocks a quote from saving.
 

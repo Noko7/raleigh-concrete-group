@@ -1,16 +1,33 @@
 // Server-only SMS notifications. Never import from a client component.
 //
-// Provider is selected with SMS_PROVIDER ("twilio" by default, or "custom").
-//   Twilio:  TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM
-//   Custom:  SMS_API_URL, SMS_API_KEY, SMS_FROM  (POSTs JSON { to, from, message })
+// Provider is chosen with SMS_PROVIDER; if unset we default to "quo" when a
+// QUO_API_KEY is present, otherwise "twilio".
+//   Quo (OpenPhone):  QUO_API_KEY, QUO_FROM (E.164), optional QUO_USER_ID
+//   Twilio:           TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM
+//   Custom:           SMS_API_URL, SMS_API_KEY, SMS_FROM  (POSTs { to, from, message })
 // OWNER_PHONE receives the owner alerts ("my number").
 //
 // Every send is best-effort: it is wrapped so a texting outage can never break a
 // quote submission or a CRM save.
 import { SITE_ORIGIN } from "./env";
 
-const PROVIDER = (process.env.SMS_PROVIDER || "twilio").toLowerCase();
+const PROVIDER = (process.env.SMS_PROVIDER || (process.env.QUO_API_KEY ? "quo" : "twilio")).toLowerCase();
 const OWNER_PHONE = process.env.OWNER_PHONE || "";
+
+// Quo / OpenPhone: POST https://api.openphone.com/v1/messages with the API key
+// in the Authorization header (no "Bearer" prefix). Returns 202 on success.
+async function sendQuo(to: string, message: string): Promise<boolean> {
+  const key = process.env.QUO_API_KEY || "";
+  const from = process.env.QUO_FROM || "";
+  const userId = process.env.QUO_USER_ID || "";
+  if (!key || !from) return false;
+  const res = await fetch("https://api.openphone.com/v1/messages", {
+    method: "POST",
+    headers: { Authorization: key, "Content-Type": "application/json" },
+    body: JSON.stringify({ content: message, from, to: [to], ...(userId ? { userId } : {}) }),
+  });
+  return res.ok;
+}
 
 function toE164(raw: string): string | null {
   const trimmed = (raw || "").trim();
@@ -57,7 +74,9 @@ export async function sendSms(toRaw: string, message: string): Promise<boolean> 
   const to = toE164(toRaw);
   if (!to || !message) return false;
   try {
-    return PROVIDER === "custom" ? await sendCustom(to, message) : await sendTwilio(to, message);
+    if (PROVIDER === "quo" || PROVIDER === "openphone") return await sendQuo(to, message);
+    if (PROVIDER === "custom") return await sendCustom(to, message);
+    return await sendTwilio(to, message);
   } catch {
     return false;
   }
