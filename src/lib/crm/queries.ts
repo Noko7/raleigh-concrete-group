@@ -89,6 +89,34 @@ export async function getStaffById(session: Session, id: string): Promise<Staff 
   return rows[0] ?? null;
 }
 
+// Self-service profile update. Uses the service role so a contractor can edit
+// their own row, but the server restricts the write to their own id and to the
+// name/phone columns only — role and active can never be changed here.
+export async function updateOwnProfile(
+  session: Session,
+  patch: { full_name?: string | null; phone?: string | null },
+): Promise<boolean> {
+  const body: Record<string, unknown> = {};
+  if (patch.full_name !== undefined) body.full_name = patch.full_name;
+  if (patch.phone !== undefined) body.phone = patch.phone;
+  if (Object.keys(body).length === 0) return true;
+  const res = await pgAdmin(`staff?id=eq.${encodeURIComponent(session.staff.id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(body),
+  });
+  return res.ok;
+}
+
+// Phones of every active owner — they receive all notifications. Service role so
+// this works from /api/quote (no user session) too.
+export async function getOwnerPhones(): Promise<string[]> {
+  const res = await pgAdmin("staff?role=eq.owner&active=eq.true&select=phone");
+  if (!res.ok) return [];
+  const rows = (await res.json()) as { phone: string | null }[];
+  return rows.map((r) => r.phone).filter((p): p is string => typeof p === "string" && p.trim() !== "");
+}
+
 export async function updateStaff(session: Session, id: string, patch: Partial<Staff>): Promise<boolean> {
   const res = await pgUser(`staff?id=eq.${encodeURIComponent(id)}`, session.accessToken, {
     method: "PATCH",

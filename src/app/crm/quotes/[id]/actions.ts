@@ -75,7 +75,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
 
   for (const e of events) await addEvent(session, id, e.type, e.meta);
 
-  // Texts: alert a newly-assigned contractor, and the owner on contractor moves.
+  // Texts: alert a newly-assigned contractor, and owners on every change (the
+  // acting user is excluded so they aren't texted about their own edits).
   if (patch.assigned_to) {
     const contractor = await getStaffById(session, patch.assigned_to);
     await alertAssigned(contractor?.phone, {
@@ -84,10 +85,15 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       service: current.service,
       job_token: current.job_token,
     }).catch(() => {});
+    await alertOwner(
+      `${current.name} assigned to ${contractor?.full_name || "a contractor"}.`,
+      session.staff.phone,
+    ).catch(() => {});
   }
-  if (patch.status && session.staff.role !== "owner") {
+  if (patch.status) {
     await alertOwner(
       `${current.name}: moved to ${STATUS_LABELS[patch.status]} by ${session.staff.full_name || "crew"}.`,
+      session.staff.phone,
     ).catch(() => {});
   }
 

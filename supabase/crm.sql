@@ -176,9 +176,15 @@ create policy "staff insert events" on public.quote_events
   );
 
 -- ── 4. One-time: make yourself the owner ────────────────────────────────────
--- 1) Supabase → Authentication → Users → "Add user" (set your email + password).
--- 2) Then run (replace the email):
+-- Passwords live in Supabase Auth (auth.users), NOT in this table — never add a
+-- password column here.
+-- 1) Supabase → Authentication → Users → "Add user" → set your email + password
+--    and CHECK "Auto Confirm User" (an unconfirmed email can't sign in).
+-- 2) Then run this (replace the email + your name). It links your auth user to a
+--    staff row and flips it to owner:
 --
 insert into public.staff (id, email, full_name, role, active)
-select id, email, 'Your Name', 'owner', true from auth.users where email = 'noah@raleighconcrete.net'
+select id, email, 'Noah', 'owner', true
+from auth.users
+where email = 'noah@raleighconcrete.net'
 on conflict (id) do update set role = 'owner', active = true;

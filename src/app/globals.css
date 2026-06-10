@@ -818,6 +818,11 @@ body {
 .crm-main { max-width: 1100px; margin: 0 auto; }
 .crm-page { padding: 1.5rem 1.25rem 4rem; }
 .crm-page-wide { max-width: 100%; }
+.crm-page-narrow { max-width: 560px; }
+.crm-sm { font-size: 0.8rem; }
+.crm-settings { display: flex; flex-direction: column; gap: 1rem; }
+.crm-settings-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 0.75rem; border-bottom: 1px solid var(--crm-border); }
+.crm-settings-email { font-weight: 700; margin-bottom: 0.4rem; }
 .crm-page-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
 .crm-page-head h1 { font-family: var(--font-headline), sans-serif; font-size: 2.4rem; line-height: 1; letter-spacing: 0.01em; }
 .crm-muted { color: var(--crm-muted); }

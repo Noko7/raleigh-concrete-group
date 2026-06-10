@@ -111,7 +111,9 @@ Add these Vercel env vars (no SQL needed):
 - Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`.
 - Custom provider: `SMS_API_URL`, `SMS_API_KEY`, `SMS_FROM` (POSTs `{ to, from, message }` with a `Bearer` key).
 
-Contractor alerts use each contractor's `phone` in the `staff` table, so fill that in when you add a crew member. SMS is best-effort — a texting outage never blocks a quote from saving.
+Each person sets their own alert number under **CRM → Settings** (`/crm/settings`). Owner alerts go to every active owner's number **plus** `OWNER_PHONE`; contractor alerts use that contractor's saved number. The person who performs an action isn't texted about their own click. SMS is best-effort — a texting outage never blocks a quote from saving.
+
+> If you also send texts from a Make.com scenario, disable that scenario (or the SMS step) to avoid sending duplicate messages, since the app now texts directly through Quo.
 
 ## Deploy to Vercel
 This is a standard Next.js app — Vercel builds it in the cloud (no local build needed).

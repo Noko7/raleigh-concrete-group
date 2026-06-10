@@ -10,6 +10,7 @@
 // Every send is best-effort: it is wrapped so a texting outage can never break a
 // quote submission or a CRM save.
 import { SITE_ORIGIN } from "./env";
+import { getOwnerPhones } from "./queries";
 
 const PROVIDER = (process.env.SMS_PROVIDER || (process.env.QUO_API_KEY ? "quo" : "twilio")).toLowerCase();
 const OWNER_PHONE = process.env.OWNER_PHONE || "";
@@ -82,8 +83,23 @@ export async function sendSms(toRaw: string, message: string): Promise<boolean> 
   }
 }
 
-export async function alertOwner(message: string): Promise<void> {
-  if (OWNER_PHONE) await sendSms(OWNER_PHONE, message).catch(() => {});
+// Every active owner gets a copy (their staff phone + the OWNER_PHONE env), with
+// the acting user excluded so they aren't texted about their own clicks.
+export async function alertOwner(message: string, excludeRaw?: string | null): Promise<void> {
+  const recipients = new Map<string, string>();
+  const add = (raw?: string | null) => {
+    const e = raw ? toE164(raw) : null;
+    if (e) recipients.set(e, e);
+  };
+  add(OWNER_PHONE);
+  try {
+    for (const p of await getOwnerPhones()) add(p);
+  } catch {
+    // ignore — fall back to whatever we already have (OWNER_PHONE)
+  }
+  const exclude = excludeRaw ? toE164(excludeRaw) : null;
+  if (exclude) recipients.delete(exclude);
+  await Promise.all([...recipients.values()].map((p) => sendSms(p, message).catch(() => {})));
 }
 
 export function jobLink(token: string): string {

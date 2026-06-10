@@ -28,12 +28,12 @@ export async function moveQuote(id: string, status: string): Promise<MoveResult>
   if (!updated) return { ok: false, error: "Could not move this quote." };
 
   await addEvent(session, id, "status_changed", { from: current.status, to: status });
-  // Keep the owner in the loop when a contractor advances a job (no self-spam).
-  if (session.staff.role !== "owner") {
-    await alertOwner(
-      `${current.name}: moved to ${STATUS_LABELS[status as Status]} by ${session.staff.full_name || "crew"}.`,
-    ).catch(() => {});
-  }
+  // Owners get every status change; the actor is excluded so they aren't texted
+  // about their own click.
+  await alertOwner(
+    `${current.name}: moved to ${STATUS_LABELS[status as Status]} by ${session.staff.full_name || "crew"}.`,
+    session.staff.phone,
+  ).catch(() => {});
   revalidatePath("/crm");
   return { ok: true };
 }
@@ -62,6 +62,10 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
       service: current.service,
       job_token: current.job_token,
     }).catch(() => {});
+    await alertOwner(
+      `${current.name} assigned to ${contractor?.full_name || "a contractor"}.`,
+      session.staff.phone,
+    ).catch(() => {});
   }
   revalidatePath("/crm");
   return { ok: true };
