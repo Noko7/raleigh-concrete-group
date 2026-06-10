@@ -179,6 +179,6 @@ create policy "staff insert events" on public.quote_events
 -- 1) Supabase → Authentication → Users → "Add user" (set your email + password).
 -- 2) Then run (replace the email):
 --
--- insert into public.staff (id, email, full_name, role, active)
--- select id, email, 'Your Name', 'owner', true from auth.users where email = 'you@example.com'
--- on conflict (id) do update set role = 'owner', active = true;
+insert into public.staff (id, email, full_name, role, active)
+select id, email, 'Your Name', 'owner', true from auth.users where email = 'noah@raleighconcrete.net'
+on conflict (id) do update set role = 'owner', active = true;

@@ -5,8 +5,9 @@ import { requireSession } from "@/lib/crm/auth";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { STATUS_LABELS } from "@/lib/crm/constants";
 import { crmBase } from "@/lib/crm/nav";
-import { getQuote, listContractors, listEvents, signFiles } from "@/lib/crm/queries";
+import { getQuote, listContractors, listEvents } from "@/lib/crm/queries";
 import { CopyField } from "../../copy-field";
+import { PhotoGrid } from "../../photo-grid";
 import { QuoteEditor } from "./quote-editor";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const isOwner = session.staff.role === "owner";
   const contractors = isOwner ? await listContractors(session) : [];
   const events = await listEvents(session, id);
-  const photos = quote.file_urls?.length ? await signFiles(quote.file_urls) : [];
+  const photoUrls = (quote.file_urls ?? []).map((p) => `${base}/api/file?p=${encodeURIComponent(p)}`);
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
   const jobLink = `${SITE_ORIGIN}/job/${quote.job_token}`;
@@ -118,29 +119,18 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             )}
           </div>
 
-          {quote.quote_type === "online" && (
-            <div className="crm-card">
-              <h2 className="crm-card-title">Photos &amp; video ({photos.length})</h2>
-              {photos.length === 0 ? (
-                <p className="crm-muted">No files were uploaded with this request.</p>
-              ) : (
-                <div className="crm-photos">
-                  {photos.map((p) =>
-                    p.url ? (
-                      <a key={p.path} href={p.url} target="_blank" rel="noreferrer" className="crm-photo">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={p.url} alt="Job upload" loading="lazy" />
-                      </a>
-                    ) : (
-                      <span key={p.path} className="crm-photo crm-photo-missing">
-                        Unavailable
-                      </span>
-                    ),
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          <div className="crm-card">
+            <h2 className="crm-card-title">Photos &amp; video ({photoUrls.length})</h2>
+            {photoUrls.length === 0 ? (
+              <p className="crm-muted">
+                {quote.quote_type === "online"
+                  ? "No files were uploaded with this request."
+                  : "This was an in-person request, so no photos were uploaded."}
+              </p>
+            ) : (
+              <PhotoGrid urls={photoUrls} />
+            )}
+          </div>
 
           {events.length > 0 && (
             <div className="crm-card">

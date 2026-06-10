@@ -24,8 +24,9 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
               RCG <span>CRM</span>
             </Link>
             <nav className="crm-nav">
-              <Link href={`${base}/`}>Quotes</Link>
+              <Link href={`${base}/`}>Pipeline</Link>
               <Link href={`${base}/customers`}>Customers</Link>
+              <Link href={`${base}/calculator`}>Calculator</Link>
               {isOwner && <Link href={`${base}/contractors`}>Contractors</Link>}
             </nav>
             <div className="crm-topbar-right">
