@@ -72,6 +72,31 @@ single long form. Submissions save to Supabase via its REST API (no SDK installe
 To swap the address autocomplete to Google Places later, replace `AddressAutocomplete` in
 `quote-modal.tsx` (needs a Google Maps API key + billing). Photon is free and zero-config.
 
+## CRM (crm.raleighconcrete.net)
+A login-protected back office for managing quotes, plus two public token links you text out.
+All of it runs over Supabase's REST/Auth APIs (no extra packages).
+
+**What's included**
+- **Login + roles** (`/crm/login`): owners see everything; contractors see only jobs assigned to them (enforced by Postgres Row-Level Security).
+- **Quotes dashboard** (`/crm`): filter by status / assignee / search; pipeline `New → Assigned → Quoted → Sent → Viewed → Won/Lost`.
+- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos via short-lived signed URLs**, status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, and copyable share links.
+- **Contractors** (`/crm/contractors`, owner only): create a crew login (returns a one-time temp password), deactivate/reactivate.
+- **Customers** (`/crm/customers`): quotes auto-grouped by phone/email with won-value totals.
+- **Customer quote link** (`https://raleighconcrete.net/q/<public_token>`): branded, no-login page showing the price + summary; opening it records a view (count + first-viewed) and flips status `Sent → Viewed`.
+- **Contractor job link** (`https://raleighconcrete.net/job/<job_token>`): no-login page with the photos, address (Maps link) and customer contact — safe to paste into your text-to-contractor automation.
+
+**One-time setup**
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql` in the SQL Editor.
+2. Confirm Vercel env vars exist: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (the CRM needs the service-role key).
+3. Create your owner login: Supabase → **Authentication → Users → Add user** (email + password), then run the promote snippet at the bottom of `supabase/crm.sql`.
+4. **Subdomain:** in Vercel → Project → **Domains**, add `crm.raleighconcrete.net`; in your DNS registrar add the **CNAME** Vercel shows (typically `crm` → `cname.vercel-dns.com`). Routing to the CRM is already wired in `src/middleware.ts`. (Until DNS is live you can also reach it at `raleighconcrete.net/crm`.)
+
+**Hook your text automation up to the links**
+Your Supabase automation already fires on new `quote_requests` rows. Each row now also has
+`public_token` and `job_token` columns — build the URLs in your message template:
+- Contractor text (with photos): `https://raleighconcrete.net/job/{{ job_token }}`
+- Customer text (their quote): `https://raleighconcrete.net/q/{{ public_token }}`
+
 ## Deploy to Vercel
 This is a standard Next.js app — Vercel builds it in the cloud (no local build needed).
 

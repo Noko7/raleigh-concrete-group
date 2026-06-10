@@ -1,0 +1,55 @@
+import type { Status } from "./env";
+
+export type Role = "owner" | "contractor";
+
+export type Staff = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  phone: string | null;
+  role: Role;
+  active: boolean;
+  created_at: string;
+};
+
+export type Quote = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  service: string | null;
+  address: string | null;
+  city: string | null;
+  details: string | null;
+  quote_type: string | null;
+  preferred_time: string | null;
+  file_urls: string[] | null;
+  source_path: string | null;
+  status: Status;
+  assigned_to: string | null;
+  quote_amount: number | null;
+  quote_summary: string | null;
+  internal_notes: string | null;
+  public_token: string;
+  job_token: string;
+  viewed_at: string | null;
+  view_count: number;
+  quote_sent_at: string | null;
+};
+
+export type QuoteEvent = {
+  id: string;
+  quote_id: string;
+  type: string;
+  meta: Record<string, unknown> | null;
+  actor: string | null;
+  created_at: string;
+};
+
+export type Session = {
+  accessToken: string;
+  user: { id: string; email?: string };
+  staff: Staff;
+};
