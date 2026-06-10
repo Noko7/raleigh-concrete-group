@@ -168,6 +168,65 @@ export async function recordCustomerView(token: string): Promise<void> {
   });
 }
 
+// Customer accepts (with a scheduled date, optionally taking the 10% save offer)
+// or declines, straight from the branded quote page. Service role; token-gated.
+export async function recordCustomerResponse(
+  token: string,
+  input: { action: "accept" | "decline"; discount?: boolean; scheduledDate?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
+  const res = await pgAdmin(
+    `quote_requests?public_token=eq.${token}&select=id,quote_amount,customer_response,discount_accepted&limit=1`,
+  );
+  if (!res.ok) return { ok: false, error: "Could not load your quote." };
+  const rows = (await res.json()) as Pick<Quote, "id" | "quote_amount" | "customer_response" | "discount_accepted">[];
+  const q = rows[0];
+  if (!q) return { ok: false, error: "Quote not found." };
+
+  const patch: Partial<Quote> = { customer_responded_at: new Date().toISOString() };
+  let eventType: string;
+
+  if (input.action === "decline") {
+    patch.customer_response = "declined";
+    patch.status = "lost";
+    eventType = "customer_declined";
+  } else {
+    const date = (input.scheduledDate || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "Please pick a valid date." };
+    const picked = new Date(`${date}T00:00:00Z`).getTime();
+    const min = Date.now() + 10 * 24 * 60 * 60 * 1000; // ~1.5 weeks (lenient by a day for time zones)
+    if (!Number.isFinite(picked) || picked < min) {
+      return { ok: false, error: "Please choose a date at least 1.5 weeks out." };
+    }
+    patch.customer_response = "accepted";
+    patch.status = "won";
+    patch.scheduled_date = date;
+    if (input.discount && !q.discount_accepted) {
+      patch.discount_accepted = true;
+      if (q.quote_amount != null) patch.quote_amount = Math.round(Number(q.quote_amount) * 0.9 * 100) / 100;
+    }
+    eventType = "customer_accepted";
+  }
+
+  const upd = await pgAdmin(`quote_requests?id=eq.${q.id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(patch),
+  });
+  if (!upd.ok) return { ok: false, error: "Could not save your response. Please call us." };
+
+  await pgAdmin("quote_events", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      quote_id: q.id,
+      type: eventType,
+      meta: { discount: Boolean(input.discount), scheduled_date: patch.scheduled_date ?? null },
+    }),
+  });
+  return { ok: true };
+}
+
 // Short-lived signed URL for one private storage object (path = "bucket/obj").
 export async function signFile(storagePath: string, expiresIn = 3600): Promise<string | null> {
   const prefix = `${UPLOAD_BUCKET}/`;

@@ -29,15 +29,24 @@ export const metadata: Metadata = {
     description:
       "Driveways, patios, retaining walls and pavers across the Triangle, built to last. Get a free quote, usually the same day.",
     url: "https://www.raleighconcrete.net",
+    siteName: "Raleigh Concrete Group",
     type: "website",
-    images: ["/images/after_driveway.png"],
+    images: [
+      {
+        url: "/images/imessage-preview.jpg",
+        width: 1200,
+        height: 1200,
+        type: "image/jpeg",
+        alt: "Raleigh Concrete Group — concrete driveways, patios and pavers in the Triangle",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Raleigh Concrete Group",
     description:
       "Driveways, patios, retaining walls and pavers across the Triangle, built to last.",
-    images: ["/images/after_driveway.png"],
+    images: ["/images/imessage-preview.jpg"],
   },
 };
 

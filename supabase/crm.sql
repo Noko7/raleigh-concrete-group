@@ -83,6 +83,17 @@ alter table public.quote_requests add column if not exists view_count     intege
 alter table public.quote_requests add column if not exists quote_sent_at  timestamptz;
 alter table public.quote_requests add column if not exists updated_at     timestamptz not null default now();
 
+-- Customer self-service from the branded quote page: accept (with a scheduled
+-- date) or decline, plus whether they took the 10%-off save offer.
+alter table public.quote_requests add column if not exists customer_response     text;
+alter table public.quote_requests add column if not exists customer_responded_at timestamptz;
+alter table public.quote_requests add column if not exists scheduled_date        date;
+alter table public.quote_requests add column if not exists discount_accepted     boolean not null default false;
+
+alter table public.quote_requests drop constraint if exists qr_customer_response_chk;
+alter table public.quote_requests add constraint qr_customer_response_chk
+  check (customer_response is null or customer_response in ('accepted', 'declined'));
+
 alter table public.quote_requests drop constraint if exists qr_status_chk;
 alter table public.quote_requests add constraint qr_status_chk
   check (status in ('new', 'assigned', 'quoted', 'sent', 'viewed', 'won', 'lost'));

@@ -1,0 +1,157 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
+type Mode = "choose" | "save" | "schedule" | "submitting" | "accepted" | "declined";
+
+function ymd(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+function pretty(s: string): string {
+  const d = new Date(`${s}T00:00:00`);
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+}
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+
+export function QuoteActions({ token, amount }: { token: string; amount: number | null }) {
+  const [mode, setMode] = useState<Mode>("choose");
+  const [discount, setDiscount] = useState(false);
+  const [date, setDate] = useState("");
+  const [booked, setBooked] = useState("");
+  const [error, setError] = useState("");
+
+  const minDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 11); // ~1.5 weeks out
+    return ymd(d);
+  }, []);
+
+  const discounted = amount != null ? Math.round(amount * 0.9 * 100) / 100 : null;
+
+  async function submit(action: "accept" | "decline") {
+    setError("");
+    const fallback: Mode = action === "accept" ? "schedule" : "save";
+    setMode("submitting");
+    try {
+      const res = await fetch("/api/quote-response", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, action, discount, scheduled_date: action === "accept" ? date : undefined }),
+      });
+      const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
+      if (res.ok && json.ok) {
+        if (action === "accept") {
+          setBooked(date);
+          setMode("accepted");
+        } else {
+          setMode("declined");
+        }
+      } else {
+        setError(json.error || "Something went wrong. Please call us.");
+        setMode(fallback);
+      }
+    } catch {
+      setError("Something went wrong. Please call us.");
+      setMode(fallback);
+    }
+  }
+
+  if (mode === "accepted") {
+    return (
+      <div className="cq-result cq-result-ok">
+        <h3>You&apos;re booked! 🎉</h3>
+        <p>
+          We&apos;ve got you down for <strong>{pretty(booked)}</strong>. We&apos;ll reach out to confirm the details.
+          {discount ? " Your 10% discount is locked in." : ""}
+        </p>
+      </div>
+    );
+  }
+
+  if (mode === "declined") {
+    return (
+      <div className="cq-result">
+        <h3>Thanks for letting us know.</h3>
+        <p>No hard feelings. If anything changes, we&apos;re just a call or text away.</p>
+      </div>
+    );
+  }
+
+  if (mode === "save") {
+    return (
+      <div className="cq-offer">
+        <p className="cq-offer-eyebrow">Wait — before you go</p>
+        <h3>Here&apos;s 10% off to earn your business.</h3>
+        {discounted != null && (
+          <p className="cq-offer-price">
+            <s>{usd(amount as number)}</s> <strong>{usd(discounted)}</strong>
+          </p>
+        )}
+        <button
+          type="button"
+          className="cq-btn cq-btn-accept"
+          onClick={() => {
+            setDiscount(true);
+            setMode("schedule");
+          }}
+        >
+          Take 10% off &amp; schedule
+        </button>
+        <button type="button" className="cq-textlink" onClick={() => submit("decline")}>
+          No thanks, decline
+        </button>
+      </div>
+    );
+  }
+
+  if (mode === "schedule" || mode === "submitting") {
+    const busy = mode === "submitting";
+    return (
+      <div className="cq-schedule">
+        <h3>Pick your start date</h3>
+        <p className="cq-fine">Our earliest opening is about 1.5 weeks out. Pick any date from there.</p>
+        {discount && discounted != null && (
+          <p className="cq-offer-price">
+            With 10% off: <strong>{usd(discounted)}</strong>
+          </p>
+        )}
+        <input
+          type="date"
+          className="cq-date"
+          min={minDate}
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          disabled={busy}
+        />
+        {error && <p className="cq-err">{error}</p>}
+        <button type="button" className="cq-btn cq-btn-accept" disabled={!date || busy} onClick={() => submit("accept")}>
+          {busy ? "Booking…" : "Confirm booking"}
+        </button>
+        <button type="button" className="cq-textlink" disabled={busy} onClick={() => setMode("choose")}>
+          Back
+        </button>
+      </div>
+    );
+  }
+
+  // choose
+  return (
+    <div className="cq-actions">
+      <button
+        type="button"
+        className="cq-btn cq-btn-accept"
+        onClick={() => {
+          setDiscount(false);
+          setMode("schedule");
+        }}
+      >
+        Accept &amp; schedule
+      </button>
+      <button type="button" className="cq-btn cq-btn-decline" onClick={() => setMode("save")}>
+        Decline
+      </button>
+    </div>
+  );
+}

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 
 import { getQuoteByToken } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay } from "@/lib/site-data";
+import { QuoteActions } from "./quote-actions";
 import { ViewBeacon } from "./view-beacon";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +14,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+function prettyDate(s: string): string {
+  const d = new Date(`${s}T00:00:00`);
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+}
+
 export default async function CustomerQuotePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const quote = await getQuoteByToken("public_token", token);
@@ -19,13 +26,14 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
 
   const hasPrice = quote.quote_amount != null;
   const amount = hasPrice ? `$${Number(quote.quote_amount).toLocaleString("en-US")}` : null;
+  const responded = quote.customer_response;
 
   return (
     <main className="cq-wrap">
       <ViewBeacon token={token} />
       <div className="cq-card">
         <header className="cq-head">
-          <p className="cq-brand">{businessName}</p>
+          <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="cq-logo" priority />
           <p className="cq-eyebrow">Your Concrete Quote</p>
         </header>
 
@@ -33,14 +41,18 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
 
         {hasPrice ? (
           <>
-            <p className="cq-lead">Here&apos;s your quote{quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We&apos;d love to do the work for you.</p>
+            <p className="cq-lead">
+              Here&apos;s your quote{quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We&apos;d love to do the work for you.
+            </p>
             <div className="cq-price">
               <span className="cq-price-label">Your price</span>
               <span className="cq-price-value">{amount}</span>
             </div>
           </>
         ) : (
-          <p className="cq-lead">Thanks for reaching out. We&apos;re putting your quote together and will have your price here shortly.</p>
+          <p className="cq-lead">
+            Thanks for reaching out. We&apos;re putting your quote together and will have your price here shortly.
+          </p>
         )}
 
         <dl className="cq-meta">
@@ -56,6 +68,12 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               <dd>{quote.address}</dd>
             </div>
           )}
+          {responded === "accepted" && quote.scheduled_date && (
+            <div>
+              <dt>Start date</dt>
+              <dd>{prettyDate(quote.scheduled_date)}</dd>
+            </div>
+          )}
         </dl>
 
         {quote.quote_summary && (
@@ -64,6 +82,26 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             <p>{quote.quote_summary}</p>
           </div>
         )}
+
+        {/* Decision: show the recorded outcome, or the accept/decline flow */}
+        {responded === "accepted" ? (
+          <div className="cq-result cq-result-ok">
+            <h3>You&apos;re booked! 🎉</h3>
+            <p>
+              {quote.scheduled_date
+                ? `We've got you down for ${prettyDate(quote.scheduled_date)}. `
+                : "Thanks for accepting your quote. "}
+              We&apos;ll reach out to confirm the details.
+            </p>
+          </div>
+        ) : responded === "declined" ? (
+          <div className="cq-result">
+            <h3>Thanks for letting us know.</h3>
+            <p>Changed your mind? Give us a call or text and we&apos;ll take care of you.</p>
+          </div>
+        ) : hasPrice ? (
+          <QuoteActions token={token} amount={Number(quote.quote_amount)} />
+        ) : null}
 
         <div className="cq-cta">
           <a href={links.call} className="cq-btn cq-btn-primary">

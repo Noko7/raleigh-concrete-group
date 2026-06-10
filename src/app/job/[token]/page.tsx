@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 
 import { getQuoteByToken, signFiles } from "@/lib/crm/queries";
@@ -24,7 +25,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   return (
     <main className="job-wrap">
       <div className="job-card">
-        <p className="job-brand">{businessName}</p>
+        <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="job-logo" priority />
         <h1 className="job-title">Job Details</h1>
 
         <dl className="job-meta">

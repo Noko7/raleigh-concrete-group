@@ -20,8 +20,14 @@ const EVENT_LABELS: Record<string, string> = {
   status_changed: "Status changed",
   assigned: "Assigned",
   customer_viewed: "Customer viewed their quote",
+  customer_accepted: "Customer ACCEPTED their quote",
+  customer_declined: "Customer declined their quote",
   updated: "Updated",
 };
+
+function prettyDate(s: string) {
+  return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" });
+}
 
 export default async function QuoteDetail({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
@@ -110,6 +116,21 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   {quote.view_count} {quote.viewed_at ? `· first ${fmt(quote.viewed_at)}` : "· not opened yet"}
                 </dd>
               </div>
+              {quote.customer_response && (
+                <div>
+                  <dt>Customer response</dt>
+                  <dd>
+                    {quote.customer_response === "accepted" ? (
+                      <strong className="crm-link-strong">
+                        Accepted{quote.discount_accepted ? " (10% off)" : ""}
+                        {quote.scheduled_date ? ` · ${prettyDate(quote.scheduled_date)}` : ""}
+                      </strong>
+                    ) : (
+                      "Declined"
+                    )}
+                  </dd>
+                </div>
+              )}
             </dl>
             {quote.details && (
               <div className="crm-details-block">

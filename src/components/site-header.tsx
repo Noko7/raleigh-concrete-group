@@ -27,10 +27,10 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
         {/* ── Logo (horizontal) ── */}
         <Link href="/" className="logo-lockup" onClick={() => setMenuOpen(false)} aria-label={businessName}>
           <Image
-            src="/images/logo_sideways_w_phrase.png"
+            src="/images/logo_horizontal.png"
             alt={businessName}
-            width={320}
-            height={72}
+            width={967}
+            height={243}
             className="h-11 w-auto md:h-12"
             priority
           />

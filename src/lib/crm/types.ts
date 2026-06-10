@@ -37,6 +37,10 @@ export type Quote = {
   viewed_at: string | null;
   view_count: number;
   quote_sent_at: string | null;
+  customer_response: "accepted" | "declined" | null;
+  customer_responded_at: string | null;
+  scheduled_date: string | null;
+  discount_accepted: boolean;
 };
 
 export type QuoteEvent = {
