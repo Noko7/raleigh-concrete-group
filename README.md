@@ -97,6 +97,17 @@ Your Supabase automation already fires on new `quote_requests` rows. Each row no
 - Contractor text (with photos): `https://raleighconcrete.net/job/{{ job_token }}`
 - Customer text (their quote): `https://raleighconcrete.net/q/{{ public_token }}`
 
+**Built-in SMS alerts (owner + contractor)**
+The app texts you and your crew automatically: a **new lead** texts the owner; **assigning** a job
+texts that contractor their job link; and when a contractor advances a job the owner gets a heads-up.
+Add these Vercel env vars (no SQL needed):
+- `OWNER_PHONE` — your number for owner alerts (e.g. `+19198977695`).
+- `SMS_PROVIDER` — `twilio` (default) or `custom`.
+- Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`.
+- Custom provider: `SMS_API_URL`, `SMS_API_KEY`, `SMS_FROM` (the app POSTs `{ to, from, message }` with a `Bearer` key).
+
+Contractor alerts use each contractor's `phone` in the `staff` table, so fill that in when you add a crew member. SMS is best-effort — a texting outage never blocks a quote from saving.
+
 ## Deploy to Vercel
 This is a standard Next.js app — Vercel builds it in the cloud (no local build needed).
 

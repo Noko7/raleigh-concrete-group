@@ -82,6 +82,13 @@ export async function listContractors(session: Session): Promise<Staff[]> {
   return all.filter((s) => s.role === "contractor");
 }
 
+export async function getStaffById(session: Session, id: string): Promise<Staff | null> {
+  const res = await pgUser(`staff?id=eq.${encodeURIComponent(id)}&select=*&limit=1`, session.accessToken);
+  if (!res.ok) return null;
+  const rows = (await res.json()) as Staff[];
+  return rows[0] ?? null;
+}
+
 export async function updateStaff(session: Session, id: string, patch: Partial<Staff>): Promise<boolean> {
   const res = await pgUser(`staff?id=eq.${encodeURIComponent(id)}`, session.accessToken, {
     method: "PATCH",

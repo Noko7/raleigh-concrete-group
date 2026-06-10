@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { STATUSES, type Status } from "@/lib/crm/constants";
-import { addEvent, getQuote, updateQuote } from "@/lib/crm/queries";
+import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/constants";
+import { alertAssigned, alertOwner } from "@/lib/crm/notify";
+import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
 
 export type MoveResult = { ok: boolean; error?: string };
@@ -27,6 +28,12 @@ export async function moveQuote(id: string, status: string): Promise<MoveResult>
   if (!updated) return { ok: false, error: "Could not move this quote." };
 
   await addEvent(session, id, "status_changed", { from: current.status, to: status });
+  // Keep the owner in the loop when a contractor advances a job (no self-spam).
+  if (session.staff.role !== "owner") {
+    await alertOwner(
+      `${current.name}: moved to ${STATUS_LABELS[status as Status]} by ${session.staff.full_name || "crew"}.`,
+    ).catch(() => {});
+  }
   revalidatePath("/crm");
   return { ok: true };
 }
@@ -47,6 +54,15 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
   if (!updated) return { ok: false, error: "Could not assign." };
 
   await addEvent(session, id, "assigned", { to: next });
+  if (next) {
+    const contractor = await getStaffById(session, next);
+    await alertAssigned(contractor?.phone, {
+      name: current.name,
+      phone: current.phone,
+      service: current.service,
+      job_token: current.job_token,
+    }).catch(() => {});
+  }
   revalidatePath("/crm");
   return { ok: true };
 }

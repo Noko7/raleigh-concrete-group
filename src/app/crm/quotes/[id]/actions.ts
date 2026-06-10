@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { STATUSES, type Status } from "@/lib/crm/env";
-import { addEvent, getQuote, updateQuote } from "@/lib/crm/queries";
+import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/env";
+import { alertAssigned, alertOwner } from "@/lib/crm/notify";
+import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
 import type { SaveState } from "./types";
 
@@ -73,6 +74,22 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   if (!updated) return { ok: false, error: "Could not save. Check your access and try again." };
 
   for (const e of events) await addEvent(session, id, e.type, e.meta);
+
+  // Texts: alert a newly-assigned contractor, and the owner on contractor moves.
+  if (patch.assigned_to) {
+    const contractor = await getStaffById(session, patch.assigned_to);
+    await alertAssigned(contractor?.phone, {
+      name: current.name,
+      phone: current.phone,
+      service: current.service,
+      job_token: current.job_token,
+    }).catch(() => {});
+  }
+  if (patch.status && session.staff.role !== "owner") {
+    await alertOwner(
+      `${current.name}: moved to ${STATUS_LABELS[patch.status]} by ${session.staff.full_name || "crew"}.`,
+    ).catch(() => {});
+  }
 
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");

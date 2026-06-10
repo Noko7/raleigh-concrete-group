@@ -10,7 +10,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 const SUPABASE_READY = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 const UPLOAD_BUCKET = "quote-uploads";
-const MAX_FILE_MB = 50;
+const MAX_FILE_MB = 100;
 
 type Mode = "online" | "inperson";
 type Status = "idle" | "uploading" | "sending" | "success" | "error";
@@ -53,8 +53,30 @@ function isValidPhone(phone: string): boolean {
 function isValidEmail(email: string): boolean {
   return email === "" || EMAIL_RE.test(email);
 }
+// Phones (especially iOS) often report an empty or generic MIME type for HEIC
+// photos and .mov videos. Infer a real type from the extension so Storage's
+// allow-list accepts the upload and the file is stored with the right type.
+const EXT_MIME: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  heic: "image/heic",
+  heif: "image/heif",
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+};
+function fileMime(file: File): string {
+  if (file.type && file.type !== "application/octet-stream") return file.type;
+  const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "";
+  return EXT_MIME[ext] ?? "application/octet-stream";
+}
 function isAllowedFile(file: File): boolean {
-  return file.type.startsWith("image/") || file.type.startsWith("video/");
+  const m = fileMime(file);
+  return m.startsWith("image/") || m.startsWith("video/");
 }
 
 /* ── Icons (inline SVG, inherit currentColor) ─────────────────────────────── */
@@ -217,6 +239,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [fileError, setFileError] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const [honeypot, setHoneypot] = useState("");
 
   const steps = mode === "online" ? ONLINE_STEPS : mode === "inperson" ? INPERSON_STEPS : [];
@@ -289,19 +312,23 @@ function Modal({ onClose }: { onClose: () => void }) {
   async function uploadFiles(): Promise<string[]> {
     const paths: string[] = [];
     for (const file of files) {
-      const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
+      const contentType = fileMime(file);
+      const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "bin";
       const path = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
       const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${UPLOAD_BUCKET}/${path}`, {
         method: "POST",
         headers: {
           apikey: SUPABASE_ANON_KEY,
           Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": file.type || "application/octet-stream",
+          "Content-Type": contentType,
           "x-upsert": "true",
         },
         body: file,
       });
-      if (!res.ok) throw new Error("upload failed");
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new Error(detail || `upload failed (${res.status})`);
+      }
       paths.push(`${UPLOAD_BUCKET}/${path}`);
     }
     return paths;
@@ -313,11 +340,20 @@ function Modal({ onClose }: { onClose: () => void }) {
       setStatus("success");
       return;
     }
+    setErrorMsg("");
     try {
       let fileUrls: string[] = [];
       if (mode === "online" && files.length && SUPABASE_READY) {
         setStatus("uploading");
-        fileUrls = await uploadFiles();
+        try {
+          fileUrls = await uploadFiles();
+        } catch {
+          setErrorMsg(
+            `We couldn't upload one of your photos. Try fewer or smaller files, or call us at ${phoneDisplay}.`,
+          );
+          setStatus("error");
+          return;
+        }
       }
       setStatus("sending");
       const payload = {
@@ -340,8 +376,14 @@ function Modal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify(payload),
       });
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
-      setStatus(res.ok && json.ok ? "success" : "error");
+      if (res.ok && json.ok) {
+        setStatus("success");
+      } else {
+        setErrorMsg(`Something went wrong saving your request. Please call us at ${phoneDisplay}.`);
+        setStatus("error");
+      }
     } catch {
+      setErrorMsg(`Something went wrong. Please call us at ${phoneDisplay}.`);
       setStatus("error");
     }
   }
@@ -574,7 +616,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 </div>
 
                 {status === "error" && (
-                  <p className="qm-err">Something went wrong. Please call us at {phoneDisplay} instead.</p>
+                  <p className="qm-err">{errorMsg || `Something went wrong. Please call us at ${phoneDisplay} instead.`}</p>
                 )}
               </div>
             )}

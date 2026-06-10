@@ -67,13 +67,13 @@ insert into storage.buckets (id, name, public)
 values ('quote-uploads', 'quote-uploads', false)
 on conflict (id) do update set public = false;
 
--- Cap uploads at 50MB and only allow photo/video types (blocks arbitrary file
--- dumps into your storage even though the bucket accepts anonymous uploads).
+-- Cap uploads at 100MB (room for high-res iPhone photos and short clips) and only
+-- allow photo/video types, including the HEIC/HEIF and .mov formats iPhones use.
 update storage.buckets
-set file_size_limit = 52428800,
+set file_size_limit = 104857600,
     allowed_mime_types = array[
-      'image/jpeg','image/png','image/webp','image/heic','image/heif','image/gif',
-      'video/mp4','video/quicktime','video/webm'
+      'image/jpeg','image/png','image/webp','image/heic','image/heif','image/heic-sequence','image/heif-sequence','image/gif',
+      'video/mp4','video/quicktime','video/webm','video/3gpp'
     ]
 where id = 'quote-uploads';
 

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { alertNewLead } from "@/lib/crm/notify";
+
 // All quote submissions go through this server-side endpoint. The browser never
 // writes to the database directly: we validate everything here and insert with
 // the secret service-role key (server-only). Combined with RLS (which blocks the
@@ -131,12 +133,26 @@ export async function POST(request: Request) {
         apikey: WRITE_KEY,
         Authorization: `Bearer ${WRITE_KEY}`,
         "Content-Type": "application/json",
-        Prefer: "return=minimal",
+        Prefer: "return=representation",
       },
       body: JSON.stringify(row),
     });
     if (!res.ok) {
       return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 502 });
+    }
+
+    // Text the owner about the new lead (best-effort; never blocks the response).
+    const created = (await res.json().catch(() => [])) as Array<{ job_token?: string }>;
+    const jobToken = created[0]?.job_token;
+    if (jobToken) {
+      await alertNewLead({
+        name,
+        phone: phoneRaw,
+        service,
+        city,
+        quote_type: row.quote_type ?? undefined,
+        job_token: jobToken,
+      }).catch(() => {});
     }
     return NextResponse.json({ ok: true });
   } catch {
