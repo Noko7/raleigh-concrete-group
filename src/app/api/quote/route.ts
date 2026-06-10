@@ -124,6 +124,22 @@ export async function POST(request: Request) {
     source_path: sourcePath || null,
   };
 
+  const diag = request.headers.get("x-diag") === "rcg-diag-2026";
+  const diagInfo = diag
+    ? {
+        keyKind: SERVICE_KEY ? "service" : ANON_KEY ? "anon" : "none",
+        serviceKeyPresent: Boolean(SERVICE_KEY),
+        anonKeyPresent: Boolean(ANON_KEY),
+        host: (() => {
+          try {
+            return new URL(SUPABASE_URL).host;
+          } catch {
+            return "";
+          }
+        })(),
+      }
+    : {};
+
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/quote_requests`, {
       method: "POST",
@@ -136,10 +152,17 @@ export async function POST(request: Request) {
       body: JSON.stringify(row),
     });
     if (!res.ok) {
-      return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 502 });
+      const upstream = diag ? (await res.text().catch(() => "")).slice(0, 400) : "";
+      return NextResponse.json(
+        { ok: false, error: "Could not save. Please call us.", ...(diag ? { upstreamStatus: res.status, upstream, ...diagInfo } : {}) },
+        { status: 502 },
+      );
     }
-    return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 502 });
+    return NextResponse.json({ ok: true, ...(diag ? diagInfo : {}) });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: "Could not save. Please call us.", ...(diag ? { threw: String(e), ...diagInfo } : {}) },
+      { status: 502 },
+    );
   }
 }
