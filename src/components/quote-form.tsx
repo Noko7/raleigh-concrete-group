@@ -5,17 +5,9 @@ import { services } from "@/lib/site-data";
 
 type Status = "idle" | "sending" | "success" | "error";
 
-// Quote requests are saved straight into Supabase via its REST (PostgREST) API,
-// so there's no extra SDK to install. Set these two in Vercel → Project →
-// Settings → Environment Variables (and in a local .env.local for dev):
-//   NEXT_PUBLIC_SUPABASE_URL       e.g. https://abcd1234.supabase.co
-//   NEXT_PUBLIC_SUPABASE_ANON_KEY  the project's anon/public key
-// Then run the SQL in website/supabase/schema.sql once to create the table.
-// Without these set, the form runs in friendly demo mode.
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-const SUPABASE_READY = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-
+// Submissions go through our validated server endpoint (/api/quote), which
+// writes to the database with a server-only key. The browser never touches the
+// database directly. Runs in demo mode automatically if the server has no keys.
 export function QuoteForm({
   defaultCity,
   defaultService,
@@ -24,6 +16,7 @@ export function QuoteForm({
   defaultService?: string;
 }) {
   const [status, setStatus] = useState<Status>("idle");
+  const [demo, setDemo] = useState(false);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -38,28 +31,24 @@ export function QuoteForm({
       city: defaultCity ?? "",
       details: String(data.get("details") ?? ""),
       source_path: typeof window !== "undefined" ? window.location.pathname : "",
+      company: String(data.get("company") ?? ""), // honeypot
     };
-
-    if (!SUPABASE_READY) {
-      setStatus("success");
-      form.reset();
-      return;
-    }
 
     setStatus("sending");
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/quote_requests`, {
+      const res = await fetch("/api/quote", {
         method: "POST",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=minimal",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      setStatus(res.ok ? "success" : "error");
-      if (res.ok) form.reset();
+      const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; demo?: boolean };
+      if (res.ok && json.ok) {
+        setStatus("success");
+        setDemo(Boolean(json.demo));
+        form.reset();
+      } else {
+        setStatus("error");
+      }
     } catch {
       setStatus("error");
     }
@@ -70,11 +59,19 @@ export function QuoteForm({
       <div className="qf-row">
         <label className="qf-field">
           <span>Name</span>
-          <input name="name" autoComplete="name" required />
+          <input name="name" autoComplete="name" required minLength={2} maxLength={120} />
         </label>
         <label className="qf-field">
           <span>Phone</span>
-          <input name="phone" type="tel" autoComplete="tel" required />
+          <input
+            name="phone"
+            type="tel"
+            autoComplete="tel"
+            required
+            maxLength={32}
+            pattern="[0-9()+\-.\s]{10,}"
+            title="Enter a 10-digit US phone number"
+          />
         </label>
       </div>
       <div className="qf-row">
@@ -97,21 +94,38 @@ export function QuoteForm({
           <input
             name="address"
             autoComplete="street-address"
+            required
+            maxLength={300}
             defaultValue={defaultCity ? `${defaultCity}, NC` : ""}
+            placeholder="123 Main St, Raleigh, NC"
           />
         </label>
       </div>
       <label className="qf-field">
         <span>Project details</span>
-        <textarea name="details" rows={3} placeholder="Rough size, your timeline, anything else that helps…" />
+        <textarea
+          name="details"
+          rows={3}
+          maxLength={2000}
+          placeholder="Roughly how much space (e.g. 600 sq ft), your timeline, anything else that helps…"
+        />
       </label>
+
+      {/* Honeypot: hidden from real users; bots fill it and get dropped server-side. */}
+      <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", height: 0, width: 0, overflow: "hidden" }}>
+        <label>
+          Company
+          <input name="company" type="text" tabIndex={-1} autoComplete="off" />
+        </label>
+      </div>
+
       <button type="submit" className="cta-primary qf-submit" disabled={status === "sending"}>
         {status === "sending" ? "Sending…" : "Get My Free Quote"}
       </button>
       {status === "success" && (
         <p className="qf-note qf-note--ok" role="status">
           Thanks! We got your request and we&apos;ll give you a call back the same day.
-          {!SUPABASE_READY && " (Demo mode. Add your Supabase keys to start saving real requests.)"}
+          {demo && " (Demo mode. Add your Supabase keys to start saving real requests.)"}
         </p>
       )}
       {status === "error" && (

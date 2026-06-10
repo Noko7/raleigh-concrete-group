@@ -45,6 +45,18 @@ function cityFromAddress(address: string): string {
   return parts.length >= 2 ? parts[1] : "";
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function isValidPhone(phone: string): boolean {
+  const d = phone.replace(/\D/g, "");
+  return d.length === 10 || (d.length === 11 && d.startsWith("1"));
+}
+function isValidEmail(email: string): boolean {
+  return email === "" || EMAIL_RE.test(email);
+}
+function isAllowedFile(file: File): boolean {
+  return file.type.startsWith("image/") || file.type.startsWith("video/");
+}
+
 /* ── Address autocomplete (free US Census geocoder, proxied via /api/address) ─ */
 function AddressAutocomplete({
   value,
@@ -151,6 +163,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [fileError, setFileError] = useState("");
+  const [honeypot, setHoneypot] = useState("");
 
   const steps = mode === "online" ? ONLINE_STEPS : mode === "inperson" ? INPERSON_STEPS : [];
   const current = mode ? steps[stepIndex] : "choice";
@@ -177,6 +190,11 @@ function Modal({ onClose }: { onClose: () => void }) {
   function addFiles(list: FileList | null) {
     if (!list) return;
     const incoming = Array.from(list);
+    const badType = incoming.find((f) => !isAllowedFile(f));
+    if (badType) {
+      setFileError(`"${badType.name}" isn't a photo or video. Please add images or video only.`);
+      return;
+    }
     const tooBig = incoming.find((f) => f.size > MAX_FILE_MB * 1024 * 1024);
     if (tooBig) {
       setFileError(`"${tooBig.name}" is over ${MAX_FILE_MB}MB. Try a shorter video or smaller photo.`);
@@ -193,7 +211,8 @@ function Modal({ onClose }: { onClose: () => void }) {
     }
     if (current === "media") return files.length >= 1;
     if (current === "schedule") return data.preferredTime !== "";
-    if (current === "contact") return data.name.trim() !== "" && data.phone.trim() !== "";
+    if (current === "contact")
+      return data.name.trim().length >= 2 && isValidPhone(data.phone) && isValidEmail(data.email);
     return false;
   }
 
@@ -235,13 +254,14 @@ function Modal({ onClose }: { onClose: () => void }) {
   }
 
   async function submit() {
-    if (!SUPABASE_READY) {
+    // Bot trap: a real user can't fill the hidden honeypot. Silently "succeed".
+    if (honeypot.trim() !== "") {
       setStatus("success");
       return;
     }
     try {
       let fileUrls: string[] = [];
-      if (mode === "online" && files.length) {
+      if (mode === "online" && files.length && SUPABASE_READY) {
         setStatus("uploading");
         fileUrls = await uploadFiles();
       }
@@ -249,27 +269,24 @@ function Modal({ onClose }: { onClose: () => void }) {
       const payload = {
         name: data.name,
         phone: data.phone,
-        email: data.email || null,
+        email: data.email,
         service: data.service,
         address: data.address,
         city: cityFromAddress(data.address),
-        details: data.details || null,
+        details: data.details,
         quote_type: mode,
-        preferred_time: mode === "inperson" ? data.preferredTime : null,
-        file_urls: fileUrls.length ? fileUrls : null,
+        preferred_time: mode === "inperson" ? data.preferredTime : "",
+        file_urls: fileUrls,
         source_path: typeof window !== "undefined" ? window.location.pathname : "",
+        company: honeypot, // honeypot, validated server-side
       };
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/quote_requests`, {
+      const res = await fetch("/api/quote", {
         method: "POST",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=minimal",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      setStatus(res.ok ? "success" : "error");
+      const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+      setStatus(res.ok && json.ok ? "success" : "error");
     } catch {
       setStatus("error");
     }
@@ -449,7 +466,13 @@ function Modal({ onClose }: { onClose: () => void }) {
                 <h2 className="qm-title">Where do we send your quote?</h2>
                 <p className="qm-sub">We&apos;ll text or call you the same day. No spam, ever.</p>
                 <label className="qm-label">Name</label>
-                <input className="qm-input" value={data.name} onChange={(e) => set({ name: e.target.value })} autoComplete="name" />
+                <input
+                  className="qm-input"
+                  value={data.name}
+                  onChange={(e) => set({ name: e.target.value })}
+                  autoComplete="name"
+                  maxLength={120}
+                />
                 <label className="qm-label qm-mt">Phone</label>
                 <input
                   className="qm-input"
@@ -457,7 +480,12 @@ function Modal({ onClose }: { onClose: () => void }) {
                   value={data.phone}
                   onChange={(e) => set({ phone: e.target.value })}
                   autoComplete="tel"
+                  maxLength={32}
+                  inputMode="tel"
                 />
+                {data.phone.trim() !== "" && !isValidPhone(data.phone) && (
+                  <span className="qm-ac-status">Enter a 10-digit US phone number.</span>
+                )}
                 <label className="qm-label qm-mt">Email (optional)</label>
                 <input
                   className="qm-input"
@@ -465,7 +493,24 @@ function Modal({ onClose }: { onClose: () => void }) {
                   value={data.email}
                   onChange={(e) => set({ email: e.target.value })}
                   autoComplete="email"
+                  maxLength={200}
                 />
+                {!isValidEmail(data.email) && <span className="qm-ac-status">Enter a valid email address.</span>}
+
+                {/* Honeypot: hidden from real users; bots fill it and get dropped. */}
+                <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: "auto", height: 0, width: 0, overflow: "hidden" }}>
+                  <label>
+                    Company
+                    <input
+                      type="text"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={honeypot}
+                      onChange={(e) => setHoneypot(e.target.value)}
+                    />
+                  </label>
+                </div>
+
                 {status === "error" && (
                   <p className="qm-err">Something went wrong. Please call us at (919) 420-3146 instead.</p>
                 )}
