@@ -4,11 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 
-import { businessName, links, locationKeys, locations, phoneDisplay } from "@/lib/site-data";
-import type { LocationKey } from "@/lib/site-data";
+import { businessName, coreServices, links, phoneDisplay } from "@/lib/site-data";
 
 type SiteHeaderProps = {
-  activeLocation?: LocationKey;
+  activeService?: string;
 };
 
 function CallIcon() {
@@ -19,39 +18,33 @@ function CallIcon() {
   );
 }
 
-export function SiteHeader({ activeLocation }: SiteHeaderProps) {
-  const quoteHref = activeLocation ? "#quote" : "/raleigh#quote";
+export function SiteHeader({ activeService }: SiteHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <header className="site-header">
       <div className="header-inner">
-        {/* ── Logo (wordmark) ── */}
+        {/* ── Logo (horizontal) ── */}
         <Link href="/" className="logo-lockup" onClick={() => setMenuOpen(false)} aria-label={businessName}>
           <Image
-            src="/images/logo_main.png"
+            src="/images/logo_sideways_w_phrase.png"
             alt={businessName}
-            width={200}
-            height={56}
-            className="h-12 w-auto md:h-14"
+            width={320}
+            height={72}
+            className="h-11 w-auto md:h-12"
             priority
           />
         </Link>
 
-        {/* ── Desktop nav ── */}
-        <nav className="location-nav" aria-label="Locations">
-          {activeLocation ? (
-            <Link href="/" className="nav-pill" onClick={() => setMenuOpen(false)}>
-              Homepage
-            </Link>
-          ) : null}
-          {locationKeys.map((key) => (
+        {/* ── Desktop nav (services) ── */}
+        <nav className="location-nav" aria-label="Services">
+          {coreServices.map((service) => (
             <Link
-              key={key}
-              href={`/${key}`}
-              className={`nav-pill${activeLocation === key ? " nav-pill--active" : ""}`}
+              key={service.slug}
+              href={`/services/${service.slug}`}
+              className={`nav-pill${activeService === service.slug ? " nav-pill--active" : ""}`}
             >
-              {locations[key].city}
+              {service.navLabel}
             </Link>
           ))}
         </nav>
@@ -62,7 +55,7 @@ export function SiteHeader({ activeLocation }: SiteHeaderProps) {
             <CallIcon />
             <span>{phoneDisplay}</span>
           </a>
-          <a href={quoteHref} className="hdr-quote">
+          <a href="#quote" className="hdr-quote">
             Get Free Quote
           </a>
         </div>
@@ -84,19 +77,14 @@ export function SiteHeader({ activeLocation }: SiteHeaderProps) {
       {menuOpen && (
         <div className="mobile-menu" role="dialog" aria-modal="true" aria-label="Navigation">
           <nav className="mobile-nav">
-            {activeLocation ? (
-              <Link href="/" className="mobile-nav-link" onClick={() => setMenuOpen(false)}>
-                Homepage
-              </Link>
-            ) : null}
-            {locationKeys.map((key) => (
+            {coreServices.map((service) => (
               <Link
-                key={key}
-                href={`/${key}`}
-                className={`mobile-nav-link${activeLocation === key ? " mobile-nav-link--active" : ""}`}
+                key={service.slug}
+                href={`/services/${service.slug}`}
+                className={`mobile-nav-link${activeService === service.slug ? " mobile-nav-link--active" : ""}`}
                 onClick={() => setMenuOpen(false)}
               >
-                {locations[key].city}
+                {service.name}
               </Link>
             ))}
           </nav>
@@ -108,7 +96,7 @@ export function SiteHeader({ activeLocation }: SiteHeaderProps) {
             <a href={links.text} className="cta-secondary" onClick={() => setMenuOpen(false)}>
               Text Now
             </a>
-            <a href={quoteHref} className="hdr-quote" onClick={() => setMenuOpen(false)}>
+            <a href="#quote" className="hdr-quote" onClick={() => setMenuOpen(false)}>
               Get Free Quote
             </a>
           </div>

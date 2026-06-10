@@ -29,8 +29,11 @@ supabase/schema.sql     # run once to create the quote_requests table
 ## Edit content
 Everything lives in `src/lib/site-data.ts`:
 - **`businessName`, `phoneDisplay`, `phoneHref`, `textHref`** — your NAP.
-- **`services`** — name + description + tier (`primary` cards are highlighted).
-- **`locations`** — add/remove a city and it auto-creates a page, nav pill, and sitemap entry.
+- **`services`** — the service catalog. Each entry has a `slug`, `name`, `navLabel`,
+  `group` (`core` shows in the nav + homepage; `concrete`/`hardscaping` show in the full menu),
+  `blurb`, `intro`, `bullets`, `image`, and optional `beforeAfter`. Adding one auto-creates a
+  page at `/services/<slug>`.
+- **`locations`** — city pages live at `/<city>` (linked from the footer, not the main nav).
 - **`galleryImages`**, **`sharedBeforeAfter`**, **`testimonials`**.
 
 ## Before launch — final touches

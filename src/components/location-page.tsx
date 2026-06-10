@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { GalleryCarousel } from "@/components/gallery-carousel";
@@ -6,11 +7,11 @@ import { QuoteForm } from "@/components/quote-form";
 import { SiteHeader } from "@/components/site-header";
 import {
   businessName,
+  coreServices,
   galleryImages,
   links,
   locations,
   phoneDisplay,
-  services,
   testimonials,
   valueProps,
   type LocationKey,
@@ -53,12 +54,10 @@ function SharedCtaBar() {
 
 export function LocationPage({ locationKey }: LocationPageProps) {
   const location = locations[locationKey];
-  const primaryServices = services.filter((service) => service.tier === "primary");
-  const secondaryServices = services.filter((service) => service.tier !== "primary");
 
   return (
     <>
-      <SiteHeader activeLocation={locationKey} />
+      <SiteHeader />
 
       <main className="pb-24 md:pb-0">
         <section className="relative overflow-hidden py-14 md:py-20">
@@ -79,7 +78,7 @@ export function LocationPage({ locationKey }: LocationPageProps) {
                   <p className="stat-label">Rated</p>
                 </div>
                 <div className="stat-card text-center">
-                  <p className="stat-value">1–3 day</p>
+                  <p className="stat-value">1-3 Day</p>
                   <p className="stat-label">Installs</p>
                 </div>
                 <div className="stat-card text-center">
@@ -152,20 +151,20 @@ export function LocationPage({ locationKey }: LocationPageProps) {
         </section>
 
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8">
-          <h2 className="mb-6 font-headline text-4xl text-ivory">Core Services</h2>
+          <h2 className="mb-6 font-headline text-4xl text-ivory">Concrete Services in {location.city}</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {primaryServices.map((service) => (
-              <article key={service.name} className="rounded-2xl border border-amber-accent/30 bg-amber-accent/5 p-5">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-amber-accent">Primary</p>
+            {coreServices.map((service) => (
+              <Link
+                key={service.slug}
+                href={`/services/${service.slug}`}
+                className="group rounded-2xl border border-amber-accent/30 bg-amber-accent/5 p-5 transition hover:-translate-y-1 hover:border-amber-accent/60 hover:bg-amber-accent/10"
+              >
                 <h3 className="mb-2 font-headline text-2xl text-ivory">{service.name}</h3>
-                <p className="text-sm leading-relaxed text-slate-300">{service.description}</p>
-              </article>
-            ))}
-            {secondaryServices.map((service) => (
-              <article key={service.name} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                <h3 className="mb-2 font-headline text-2xl text-ivory">{service.name}</h3>
-                <p className="text-sm leading-relaxed text-slate-300">{service.description}</p>
-              </article>
+                <p className="text-sm leading-relaxed text-slate-300">{service.blurb}</p>
+                <span className="mt-3 inline-block text-sm font-bold uppercase tracking-[0.12em] text-amber-accent opacity-70 transition group-hover:opacity-100">
+                  View {service.navLabel} →
+                </span>
+              </Link>
             ))}
           </div>
         </section>
@@ -206,9 +205,9 @@ export function LocationPage({ locationKey }: LocationPageProps) {
               Get Your Free {location.city} Quote
             </h2>
             <p className="mb-6 max-w-2xl text-[#2b1a12]/80">
-              Tell us a little about your project and we&apos;ll get you a ballpark, usually the same
-              day. For driveways and slabs, we can often quote you without even coming out — just add
-              your address.
+              Tell us a little about your project and we&apos;ll get you a price, usually the same
+              day. For driveways and slabs we can often quote without coming out. Just add your
+              address.
             </p>
             <div className="mb-6 flex flex-wrap gap-2">
               <a href={links.call} className="rounded-full bg-[#2b1a12] px-5 py-2.5 text-sm font-bold text-white">

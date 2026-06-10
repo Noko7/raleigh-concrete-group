@@ -16,7 +16,13 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 const SUPABASE_READY = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-export function QuoteForm({ defaultCity }: { defaultCity?: string }) {
+export function QuoteForm({
+  defaultCity,
+  defaultService,
+}: {
+  defaultCity?: string;
+  defaultService?: string;
+}) {
   const [status, setStatus] = useState<Status>("idle");
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -74,7 +80,7 @@ export function QuoteForm({ defaultCity }: { defaultCity?: string }) {
       <div className="qf-row">
         <label className="qf-field">
           <span>Service</span>
-          <select name="service" defaultValue="" required>
+          <select name="service" defaultValue={defaultService ?? ""} required>
             <option value="" disabled>
               What do you need?
             </option>
@@ -105,7 +111,7 @@ export function QuoteForm({ defaultCity }: { defaultCity?: string }) {
       {status === "success" && (
         <p className="qf-note qf-note--ok" role="status">
           Thanks! We got your request and we&apos;ll give you a call back the same day.
-          {!SUPABASE_READY && " (Demo mode — add your Supabase keys to start saving real requests.)"}
+          {!SUPABASE_READY && " (Demo mode. Add your Supabase keys to start saving real requests.)"}
         </p>
       )}
       {status === "error" && (
