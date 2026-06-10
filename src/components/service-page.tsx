@@ -47,7 +47,7 @@ export function ServicePage({ service }: { service: Service }) {
                 Concrete Raleigh
               </p>
               <h1 className="mb-5 font-headline text-5xl leading-[0.95] text-ivory md:text-7xl">
-                {service.name} in Raleigh, NC
+                {service.name}
               </h1>
               <p className="mb-8 max-w-lg text-lg text-slate-300">{service.intro}</p>
               <CtaBar />
