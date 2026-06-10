@@ -17,11 +17,12 @@ export default function Home() {
               Raleigh · Cary · Apex · Wake Forest · Durham · More Coming Soon
             </span>
             <h1 className="mx-auto mb-5 max-w-4xl font-headline text-6xl leading-[0.92] text-ivory md:text-8xl">
-              Concrete &amp; Hardscape. Built to Last.
+              Concrete That&apos;s Built to Last.
             </h1>
             <p className="mx-auto mb-8 max-w-xl text-lg leading-relaxed text-slate-300">
-              Driveways, patios, walkways, retaining walls and pavers — done right the first time by a
-              crew that actually shows up. Serving Raleigh and the Triangle.
+              We pour driveways, patios, walkways, retaining walls and pavers — and we get it right
+              the first time. We actually show up when we say we will. Proud to serve Raleigh and the
+              rest of the Triangle.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link href="/raleigh#quote" className="cta-primary text-base">
@@ -39,7 +40,7 @@ export default function Home() {
           <span className="mb-2 block text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
             Select Your Location
           </span>
-          <h2 className="mb-8 font-headline text-4xl text-ivory">Your City, Your Crew</h2>
+          <h2 className="mb-8 font-headline text-4xl text-ivory">Find Your City</h2>
           <div className="grid gap-5 md:grid-cols-3">
             {locationKeys.map((key) => {
               const loc = locations[key];

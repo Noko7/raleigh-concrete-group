@@ -5,9 +5,16 @@ import { services } from "@/lib/site-data";
 
 type Status = "idle" | "sending" | "success" | "error";
 
-// Set NEXT_PUBLIC_FORM_ENDPOINT (e.g. a Formspree URL) in Vercel to receive
-// real submissions. Without it the form runs in friendly demo mode.
-const ENDPOINT = process.env.NEXT_PUBLIC_FORM_ENDPOINT ?? "";
+// Quote requests are saved straight into Supabase via its REST (PostgREST) API,
+// so there's no extra SDK to install. Set these two in Vercel → Project →
+// Settings → Environment Variables (and in a local .env.local for dev):
+//   NEXT_PUBLIC_SUPABASE_URL       e.g. https://abcd1234.supabase.co
+//   NEXT_PUBLIC_SUPABASE_ANON_KEY  the project's anon/public key
+// Then run the SQL in website/supabase/schema.sql once to create the table.
+// Without these set, the form runs in friendly demo mode.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+const SUPABASE_READY = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
 export function QuoteForm({ defaultCity }: { defaultCity?: string }) {
   const [status, setStatus] = useState<Status>("idle");
@@ -17,17 +24,33 @@ export function QuoteForm({ defaultCity }: { defaultCity?: string }) {
     const form = e.currentTarget;
     const data = new FormData(form);
 
-    if (!ENDPOINT) {
+    const payload = {
+      name: String(data.get("name") ?? ""),
+      phone: String(data.get("phone") ?? ""),
+      service: String(data.get("service") ?? ""),
+      address: String(data.get("address") ?? ""),
+      city: defaultCity ?? "",
+      details: String(data.get("details") ?? ""),
+      source_path: typeof window !== "undefined" ? window.location.pathname : "",
+    };
+
+    if (!SUPABASE_READY) {
       setStatus("success");
       form.reset();
       return;
     }
+
     setStatus("sending");
     try {
-      const res = await fetch(ENDPOINT, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/quote_requests`, {
         method: "POST",
-        body: data,
-        headers: { Accept: "application/json" },
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify(payload),
       });
       setStatus(res.ok ? "success" : "error");
       if (res.ok) form.reset();
@@ -53,7 +76,7 @@ export function QuoteForm({ defaultCity }: { defaultCity?: string }) {
           <span>Service</span>
           <select name="service" defaultValue="" required>
             <option value="" disabled>
-              Choose one…
+              What do you need?
             </option>
             {services.map((s) => (
               <option key={s.name} value={s.name}>
@@ -74,20 +97,20 @@ export function QuoteForm({ defaultCity }: { defaultCity?: string }) {
       </div>
       <label className="qf-field">
         <span>Project details</span>
-        <textarea name="details" rows={3} placeholder="Approx. size, timeline, anything helpful…" />
+        <textarea name="details" rows={3} placeholder="Rough size, your timeline, anything else that helps…" />
       </label>
       <button type="submit" className="cta-primary qf-submit" disabled={status === "sending"}>
         {status === "sending" ? "Sending…" : "Get My Free Quote"}
       </button>
       {status === "success" && (
         <p className="qf-note qf-note--ok" role="status">
-          Thanks! Your request was received. We&apos;ll call you back the same day.
-          {!ENDPOINT && " (Demo mode — set NEXT_PUBLIC_FORM_ENDPOINT to receive real submissions.)"}
+          Thanks! We got your request and we&apos;ll give you a call back the same day.
+          {!SUPABASE_READY && " (Demo mode — add your Supabase keys to start saving real requests.)"}
         </p>
       )}
       {status === "error" && (
         <p className="qf-note qf-note--err" role="status">
-          Something went wrong — please call us instead.
+          Hmm, that didn&apos;t go through. Mind giving us a call instead?
         </p>
       )}
     </form>

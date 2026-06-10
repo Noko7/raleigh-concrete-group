@@ -22,16 +22,16 @@ type LocationPageProps = {
 
 const processSteps = [
   {
-    label: "Free Quote",
-    body: "Call or send your address. For driveways and slabs we measure from satellite and text you a same-day ballpark.",
+    label: "Get Your Quote",
+    body: "Give us a call or send over your address. For driveways and slabs, we can measure from satellite and text you a ballpark the same day.",
   },
   {
-    label: "On-Site Confirm",
-    body: "We confirm base, grading and details for patios and walls, then lock your final written price.",
+    label: "We Confirm On-Site",
+    body: "For patios and walls, we swing by to check the base, the grading and the details, then lock in your final price in writing.",
   },
   {
-    label: "Built & Cleaned Up",
-    body: "Our licensed crew completes the job on schedule, cleans the site, and backs it with a workmanship warranty.",
+    label: "We Build & Clean Up",
+    body: "Our licensed crew gets the job done on schedule, cleans up after themselves, and backs the work with a warranty.",
   },
 ];
 
@@ -123,7 +123,7 @@ export function LocationPage({ locationKey }: LocationPageProps) {
         </section>
 
         <section className="mx-auto w-full max-w-6xl px-4 py-14 md:px-8">
-          <h2 className="mb-8 font-headline text-4xl text-ivory">Before and After Results</h2>
+          <h2 className="mb-8 font-headline text-4xl text-ivory">See the Before &amp; After</h2>
           <div className="grid gap-6 md:grid-cols-2">
             {location.beforeAfterPairs.map((pair) => (
               <div key={pair.label}>
@@ -206,8 +206,9 @@ export function LocationPage({ locationKey }: LocationPageProps) {
               Get Your Free {location.city} Quote
             </h2>
             <p className="mb-6 max-w-2xl text-[#2b1a12]/80">
-              Tell us about your project and we&apos;ll get you a same-day ballpark. Driveways and slabs
-              often quote without a visit — just include your address.
+              Tell us a little about your project and we&apos;ll get you a ballpark, usually the same
+              day. For driveways and slabs, we can often quote you without even coming out — just add
+              your address.
             </p>
             <div className="mb-6 flex flex-wrap gap-2">
               <a href={links.call} className="rounded-full bg-[#2b1a12] px-5 py-2.5 text-sm font-bold text-white">

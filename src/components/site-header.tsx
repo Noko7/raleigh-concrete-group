@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -26,11 +27,15 @@ export function SiteHeader({ activeLocation }: SiteHeaderProps) {
     <header className="site-header">
       <div className="header-inner">
         {/* ── Logo (wordmark) ── */}
-        <Link href="/" className="logo-lockup" onClick={() => setMenuOpen(false)}>
-          <span className="brand-wordmark">
-            <span className="brand-line-1">Raleigh Concrete</span>
-            <span className="brand-line-2">Group</span>
-          </span>
+        <Link href="/" className="logo-lockup" onClick={() => setMenuOpen(false)} aria-label={businessName}>
+          <Image
+            src="/images/logo_main.png"
+            alt={businessName}
+            width={200}
+            height={56}
+            className="h-12 w-auto md:h-14"
+            priority
+          />
         </Link>
 
         {/* ── Desktop nav ── */}

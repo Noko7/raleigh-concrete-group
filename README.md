@@ -19,10 +19,11 @@ src/
     before-after-slider.tsx# draggable before/after comparison
     gallery-carousel.tsx   # auto-rotating photo carousel
     location-page.tsx      # the per-city page template
-    quote-form.tsx         # quote form (replaces mammoth's Calendly)
+    quote-form.tsx         # quote form → saves to Supabase
   lib/
     site-data.ts        # ALL content: services, locations, gallery, reviews
-public/images/          # photos (placeholders — replace with real project shots)
+public/images/          # real project photos + logos
+supabase/schema.sql     # run once to create the quote_requests table
 ```
 
 ## Edit content
@@ -32,18 +33,27 @@ Everything lives in `src/lib/site-data.ts`:
 - **`locations`** — add/remove a city and it auto-creates a page, nav pill, and sitemap entry.
 - **`galleryImages`**, **`sharedBeforeAfter`**, **`testimonials`**.
 
-## Before launch — replace placeholders
-1. **Phone** — `(919) 555-0199` / `+19195550199` in `site-data.ts`.
-2. **Photos** — the images in `public/images/` are **placeholders** (epoxy stock from the template
-   repo). Drop in your real concrete/hardscape project photos using the same filenames, or update
-   the paths in `site-data.ts`. Before/after pairs: `before-after-1-*.jpg`, `before-after-2-*.jpg`.
+## Before launch — final touches
+1. **Phone** — set to `(919) 420-3146` in `site-data.ts`. ✅
+2. **Photos** — real project photos + logos are in `public/images/`. ✅ (They're large PNGs;
+   Vercel's image optimization handles resizing automatically, but you can compress them for
+   faster builds.)
 3. **Domain** — `https://www.raleighconcrete.net` in `src/app/layout.tsx` (`metadataBase`).
 4. **Reviews** — swap the testimonials for real Google reviews (never fabricate).
 
-## Quote form
-Runs in **demo mode** (shows success, sends nothing) until you set an endpoint:
-- Create a form at [formspree.io](https://formspree.io), then in Vercel set an env var
-  `NEXT_PUBLIC_FORM_ENDPOINT` = your Formspree URL. `quote-form.tsx` auto-detects it.
+## Quote form → Supabase
+The form saves submissions straight into Supabase via its REST API (no SDK to install). Runs in
+**demo mode** (shows success, saves nothing) until you set the keys below.
+
+**Setup:**
+1. Create a Supabase project at [supabase.com](https://supabase.com).
+2. In **SQL Editor**, paste & run `supabase/schema.sql` (creates the `quote_requests` table and a
+   policy that lets the public site insert leads but not read them).
+3. In **Project Settings → API**, copy the **Project URL** and the **anon public** key.
+4. In Vercel → your project → **Settings → Environment Variables**, add:
+   - `NEXT_PUBLIC_SUPABASE_URL` = your Project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = your anon public key
+5. Redeploy. New quote requests now appear in **Supabase → Table Editor → quote_requests**.
 
 ## Deploy to Vercel
 This is a standard Next.js app — Vercel builds it in the cloud (no local build needed).
