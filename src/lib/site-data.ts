@@ -125,7 +125,7 @@ export const services: Service[] = [
       "Front walks, side paths and sidewalks",
       "Free quote",
     ],
-    image: "/images/driveway_close_up_detailed_8k.png",
+    image: "/images/walkway_concrete_front_of_house.png",
   },
   {
     slug: "stamped-decorative-concrete",
@@ -253,7 +253,7 @@ export const services: Service[] = [
       "Edge restraints for clean lines",
       "Free quote",
     ],
-    image: "/images/after_driveway.png",
+    image: "/images/pavers_driveway.png",
   },
   {
     slug: "paver-walkways-pathways",
@@ -270,7 +270,7 @@ export const services: Service[] = [
       "Flat, even, settle-proof",
       "Free quote",
     ],
-    image: "/images/back_patio_finished.png",
+    image: "/images/patio_pavers.png",
   },
   {
     slug: "hardscape-paver-installation",
@@ -287,7 +287,7 @@ export const services: Service[] = [
       "Premium materials",
       "Free design and quote",
     ],
-    image: "/images/back_patio_finished.png",
+    image: "/images/patio_pavers.png",
   },
   {
     slug: "steps-stoops-landings",
@@ -350,6 +350,79 @@ export function getService(slug: string): Service | undefined {
   return services.find((s) => s.slug === slug);
 }
 
+// Simple, customer-friendly options for the quote-request dropdown.
+export const quoteServiceOptions = [
+  "Driveway",
+  "Patio",
+  "Walkway/Sidewalk",
+  "Pad/Slab",
+  "Front/Back Porch",
+  "Steps",
+  "Pool Deck",
+  "Retaining Wall",
+  "Commercial",
+  "Other",
+];
+
+// Photo of our team walking a homeowner through their quote — used to build trust.
+export const trustImage = "/images/servicing-to-client-image.png";
+
+// ── Header dropdowns: residential vs commercial ──
+export type NavLink = { label: string; slug: string };
+
+export const residentialNav: NavLink[] = [
+  { label: "Concrete Driveways", slug: "concrete-driveways" },
+  { label: "Concrete Patios", slug: "concrete-patios" },
+  { label: "Paver Patios", slug: "paver-patios" },
+  { label: "Walkways & Sidewalks", slug: "walkways-sidewalks" },
+  { label: "Stamped & Decorative", slug: "stamped-decorative-concrete" },
+  { label: "Pool Decks", slug: "pool-decks" },
+  { label: "Retaining Walls", slug: "retaining-walls" },
+  { label: "Steps, Stoops & Landings", slug: "steps-stoops-landings" },
+  { label: "Slabs & Flatwork", slug: "concrete-slabs-flatwork" },
+  { label: "Repair & Resurfacing", slug: "concrete-repair-resurfacing" },
+];
+
+export const commercialNav: NavLink[] = [
+  { label: "Commercial Flatwork", slug: "commercial-flatwork" },
+  { label: "Sidewalks & Walkways", slug: "walkways-sidewalks" },
+  { label: "Parking & Approach Slabs", slug: "concrete-slabs-flatwork" },
+  { label: "Removal & Replacement", slug: "concrete-removal-replacement" },
+  { label: "Repair & Resurfacing", slug: "concrete-repair-resurfacing" },
+];
+
+// ── "What to Expect" 3-step process ──
+export type ProcessStep = { title: string; body: string };
+export const processSteps: ProcessStep[] = [
+  {
+    title: "Request Your Free Quote",
+    body: "Call, text, or fill out our quick form and tell us about your project. It takes about a minute, and there's no obligation.",
+  },
+  {
+    title: "Talk With a Concrete Pro",
+    body: "We go over your goals, your budget, and the best options for your space — straight answers, no pressure, and no jargon.",
+  },
+  {
+    title: "Approve & Get Scheduled",
+    body: "Once you approve your written quote, we lock in a date and handle the entire job from prep to final cleanup.",
+  },
+];
+
+// ── Stat bar ("What makes us different") ──
+export type Stat = { value: string; label: string };
+export const homeStats: Stat[] = [
+  { value: "4.9★", label: "Google Rated" },
+  { value: "Licensed", label: "& Fully Insured" },
+  { value: "Same-Day", label: "Free Quotes" },
+  { value: "Warranty", label: "Backed Workmanship" },
+];
+
+// ── About / welcome copy ──
+export const aboutParagraphs: string[] = [
+  "Finding a concrete contractor you can actually count on in Raleigh shouldn't be this hard. At Raleigh Concrete Group, our crews have poured and built countless driveways, patios, walkways and retaining walls across the Triangle — and we treat every job like it's at our own home.",
+  "Whether you need a brand-new driveway, a backyard patio you'll actually use, or a commercial slab done on schedule, we start with a free, detailed quote so you know the price before we ever break ground. We're licensed, insured, and familiar with local codes across Raleigh and the surrounding towns.",
+];
+
 export const valueProps = [
   "We Show Up On Time",
   "Licensed & Insured",
@@ -361,8 +434,11 @@ export type GalleryImage = { src: string; alt: string };
 export const galleryImages: GalleryImage[] = [
   { src: "/images/after_driveway.png", alt: "Finished concrete driveway in Raleigh" },
   { src: "/images/back_patio_finished.png", alt: "Finished backyard concrete patio" },
+  { src: "/images/pavers_driveway.png", alt: "Custom paver driveway in Raleigh" },
   { src: "/images/retaining_wall.png", alt: "Block retaining wall installation" },
+  { src: "/images/patio_pavers.png", alt: "Paver patio with seating area" },
   { src: "/images/stamped_patio.png", alt: "Stamped concrete patio" },
+  { src: "/images/walkway_concrete_front_of_house.png", alt: "Concrete walkway at a home's front entrance" },
   { src: "/images/stampted_patio_2.png", alt: "Stamped concrete patio detail" },
   { src: "/images/driveway_close_up_detailed_8k.png", alt: "Broom-finished concrete driveway close-up" },
   { src: "/images/workers_pouring_driveway_live_action.png", alt: "Our crew pouring a new concrete driveway" },

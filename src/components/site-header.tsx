@@ -4,7 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 
-import { businessName, coreServices, links, phoneDisplay } from "@/lib/site-data";
+import {
+  businessName,
+  commercialNav,
+  links,
+  phoneDisplay,
+  residentialNav,
+  type NavLink,
+} from "@/lib/site-data";
 
 type SiteHeaderProps = {
   activeService?: string;
@@ -18,14 +25,95 @@ function CallIcon() {
   );
 }
 
+function Caret() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function NavDropdown({
+  label,
+  items,
+  activeService,
+}: {
+  label: string;
+  items: NavLink[];
+  activeService?: string;
+}) {
+  return (
+    <div className="nav-dropdown">
+      <button type="button" className="nav-dropdown-trigger">
+        {label}
+        <Caret />
+      </button>
+      <div className="nav-dropdown-panel" role="menu">
+        {items.map((item) => (
+          <Link
+            key={`${label}-${item.slug}`}
+            href={`/services/${item.slug}`}
+            role="menuitem"
+            className={`nav-dropdown-link${activeService === item.slug ? " nav-dropdown-link--active" : ""}`}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MobileGroup({
+  label,
+  items,
+  onNavigate,
+}: {
+  label: string;
+  items: NavLink[];
+  onNavigate: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mobile-group">
+      <button
+        type="button"
+        className="mobile-group-trigger"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {label}
+        <span className={`mobile-group-caret${open ? " mobile-group-caret--open" : ""}`}>
+          <Caret />
+        </span>
+      </button>
+      {open && (
+        <div className="mobile-group-items">
+          {items.map((item) => (
+            <Link
+              key={`m-${label}-${item.slug}`}
+              href={`/services/${item.slug}`}
+              className="mobile-nav-link"
+              onClick={onNavigate}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SiteHeader({ activeService }: SiteHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const close = () => setMenuOpen(false);
 
   return (
     <header className="site-header">
       <div className="header-inner">
         {/* ── Logo (horizontal) ── */}
-        <Link href="/" className="logo-lockup" onClick={() => setMenuOpen(false)} aria-label={businessName}>
+        <Link href="/" className="logo-lockup" onClick={close} aria-label={businessName}>
           <Image
             src="/images/logo_horizontal.png"
             alt={businessName}
@@ -36,17 +124,19 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
           />
         </Link>
 
-        {/* ── Desktop nav (services) ── */}
-        <nav className="location-nav" aria-label="Services">
-          {coreServices.map((service) => (
-            <Link
-              key={service.slug}
-              href={`/services/${service.slug}`}
-              className={`nav-pill${activeService === service.slug ? " nav-pill--active" : ""}`}
-            >
-              {service.navLabel}
-            </Link>
-          ))}
+        {/* ── Desktop nav ── */}
+        <nav className="main-nav" aria-label="Primary">
+          <NavDropdown label="Residential" items={residentialNav} activeService={activeService} />
+          <NavDropdown label="Commercial" items={commercialNav} activeService={activeService} />
+          <Link href="/#gallery" className="nav-link">
+            Gallery
+          </Link>
+          <Link href="/#reviews" className="nav-link">
+            Reviews
+          </Link>
+          <Link href="/#about" className="nav-link">
+            About
+          </Link>
         </nav>
 
         {/* ── Desktop CTAs ── */}
@@ -55,9 +145,9 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
             <CallIcon />
             <span>{phoneDisplay}</span>
           </a>
-          <a href="#quote" className="hdr-quote">
-            Get Free Quote
-          </a>
+          <Link href="/estimate" className="hdr-quote">
+            Free Estimate
+          </Link>
         </div>
 
         {/* ── Mobile hamburger ── */}
@@ -77,28 +167,29 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
       {menuOpen && (
         <div className="mobile-menu" role="dialog" aria-modal="true" aria-label="Navigation">
           <nav className="mobile-nav">
-            {coreServices.map((service) => (
-              <Link
-                key={service.slug}
-                href={`/services/${service.slug}`}
-                className={`mobile-nav-link${activeService === service.slug ? " mobile-nav-link--active" : ""}`}
-                onClick={() => setMenuOpen(false)}
-              >
-                {service.name}
-              </Link>
-            ))}
+            <MobileGroup label="Residential Services" items={residentialNav} onNavigate={close} />
+            <MobileGroup label="Commercial Services" items={commercialNav} onNavigate={close} />
+            <Link href="/#gallery" className="mobile-nav-link" onClick={close}>
+              Gallery
+            </Link>
+            <Link href="/#reviews" className="mobile-nav-link" onClick={close}>
+              Reviews
+            </Link>
+            <Link href="/#about" className="mobile-nav-link" onClick={close}>
+              About
+            </Link>
           </nav>
           <div className="mobile-menu-ctas">
-            <a href={links.call} className="hdr-call" onClick={() => setMenuOpen(false)}>
+            <a href={links.call} className="hdr-call" onClick={close}>
               <CallIcon />
               Call {phoneDisplay}
             </a>
-            <a href={links.text} className="cta-secondary" onClick={() => setMenuOpen(false)}>
+            <a href={links.text} className="cta-secondary" onClick={close}>
               Text Now
             </a>
-            <a href="#quote" className="hdr-quote" onClick={() => setMenuOpen(false)}>
-              Get Free Quote
-            </a>
+            <Link href="/estimate" className="hdr-quote" onClick={close}>
+              Free Estimate
+            </Link>
           </div>
         </div>
       )}

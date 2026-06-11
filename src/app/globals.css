@@ -138,7 +138,114 @@ body {
   text-transform: uppercase;
 }
 
-/* Desktop location nav */
+/* Desktop primary nav */
+.main-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-left: auto;
+}
+
+.nav-link {
+  border-radius: 999px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(245, 243, 239, 0.78);
+  text-decoration: none;
+  transition: color 140ms, background 140ms;
+  white-space: nowrap;
+}
+.nav-link:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--ivory);
+}
+
+/* Dropdown (Residential / Commercial) */
+.nav-dropdown {
+  position: relative;
+}
+.nav-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: rgba(245, 243, 239, 0.78);
+  transition: color 140ms, background 140ms;
+  white-space: nowrap;
+}
+.nav-dropdown-trigger svg {
+  transition: transform 160ms ease;
+}
+.nav-dropdown:hover .nav-dropdown-trigger,
+.nav-dropdown:focus-within .nav-dropdown-trigger {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--ivory);
+}
+.nav-dropdown:hover .nav-dropdown-trigger svg,
+.nav-dropdown:focus-within .nav-dropdown-trigger svg {
+  transform: rotate(180deg);
+}
+.nav-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  min-width: 17rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+  border-radius: 0.9rem;
+  background: rgba(24, 27, 33, 0.99);
+  border: 1px solid rgba(194, 104, 42, 0.28);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: opacity 150ms ease, transform 150ms ease, visibility 150ms;
+  z-index: 60;
+}
+/* Bridge the gap so the menu doesn't close between trigger and panel */
+.nav-dropdown::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 0.6rem;
+}
+.nav-dropdown:hover .nav-dropdown-panel,
+.nav-dropdown:focus-within .nav-dropdown-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.nav-dropdown-link {
+  display: block;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.55rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(245, 243, 239, 0.82);
+  text-decoration: none;
+  transition: background 120ms, color 120ms;
+}
+.nav-dropdown-link:hover {
+  background: rgba(194, 104, 42, 0.16);
+  color: var(--ivory);
+}
+.nav-dropdown-link--active {
+  background: var(--amber);
+  color: #fff;
+}
+
+/* Legacy location nav (kept for any older references) */
 .location-nav {
   display: flex;
   gap: 0.35rem;
@@ -271,6 +378,51 @@ body {
 .mobile-nav-link:hover { background: rgba(255,255,255,0.08); color: var(--ivory); }
 .mobile-nav-link--active { background: var(--amber); color: #fff; }
 
+/* Mobile collapsible service groups */
+.mobile-group {
+  display: flex;
+  flex-direction: column;
+}
+.mobile-group-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--ivory);
+}
+.mobile-group-trigger:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.mobile-group-caret {
+  display: inline-flex;
+  color: var(--amber);
+  transition: transform 180ms ease;
+}
+.mobile-group-caret--open {
+  transform: rotate(180deg);
+}
+.mobile-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.1rem 0 0.4rem 0.6rem;
+  border-left: 2px solid rgba(194, 104, 42, 0.3);
+  margin-left: 0.9rem;
+}
+.mobile-group-items .mobile-nav-link {
+  font-size: 0.94rem;
+  font-weight: 600;
+  padding: 0.5rem 0.8rem;
+}
+
 .mobile-menu-ctas {
   display: flex;
   flex-direction: column;
@@ -287,8 +439,9 @@ body {
 }
 
 /* Responsive breakpoints */
-@media (max-width: 768px) {
+@media (max-width: 980px) {
   .location-nav { display: none; }
+  .main-nav     { display: none; }
   .header-ctas  { display: none; }
   .hamburger    { display: flex; }
   .brand-line-1 { font-size: 1.4rem; }
@@ -314,6 +467,43 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.09em;
   margin-top: 4px;
+}
+
+/* ─── "What to Expect" process steps ─────────────────── */
+.process-step {
+  position: relative;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2.4rem 1.5rem 1.5rem;
+}
+.process-num {
+  position: absolute;
+  top: -1.25rem;
+  left: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.6rem;
+  width: 2.6rem;
+  border-radius: 999px;
+  background: var(--amber);
+  color: #fff;
+  font-family: var(--font-headline), sans-serif;
+  font-size: 1.5rem;
+  line-height: 1;
+  box-shadow: 0 8px 22px rgba(194, 104, 42, 0.45);
+}
+.process-title {
+  font-family: var(--font-headline), sans-serif;
+  font-size: 1.5rem;
+  color: var(--ivory);
+  margin-bottom: 0.5rem;
+}
+.process-body {
+  color: rgba(245, 243, 239, 0.74);
+  font-size: 0.95rem;
+  line-height: 1.55;
 }
 
 /* ─── Before/After Slider ────────────────────────────── */

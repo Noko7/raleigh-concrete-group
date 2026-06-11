@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { phoneDisplay, phoneHref, services } from "@/lib/site-data";
+import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
 
 // Supabase via REST (no SDK). Set these in Vercel → Settings → Environment Variables:
 //   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -518,12 +518,11 @@ function Modal({ onClose }: { onClose: () => void }) {
                   <option value="" disabled>
                     Choose a service…
                   </option>
-                  {services.map((s) => (
-                    <option key={s.slug} value={s.name}>
-                      {s.name}
+                  {quoteServiceOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
                     </option>
                   ))}
-                  <option value="Not sure yet">Not sure yet</option>
                 </select>
               </div>
             )}
