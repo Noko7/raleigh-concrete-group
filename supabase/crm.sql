@@ -98,6 +98,16 @@ alter table public.quote_requests add column if not exists discount_accepted    
 -- quote visit (max 5/day). Both are enforced in server code.
 alter table public.quote_requests add column if not exists visit_date  date;
 alter table public.quote_requests add column if not exists visit_time  text;
+
+-- Google Calendar event id, so we can update/cancel the invite we created for a
+-- booked job or an in-person quote visit (see lib/crm/gcal.ts).
+alter table public.quote_requests add column if not exists gcal_event_id text;
+
+-- Job lifecycle timestamps: the 2-day confirmation reminder, the customer's
+-- confirmation, and completion (done + paid).
+alter table public.quote_requests add column if not exists reminder_sent_at timestamptz;
+alter table public.quote_requests add column if not exists confirmed_at      timestamptz;
+alter table public.quote_requests add column if not exists completed_at      timestamptz;
 create index if not exists qr_scheduled_date_idx on public.quote_requests(scheduled_date);
 create index if not exists qr_visit_date_idx      on public.quote_requests(visit_date);
 -- Hard guarantee: at most one accepted/booked job per calendar day.
@@ -109,9 +119,15 @@ alter table public.quote_requests drop constraint if exists qr_customer_response
 alter table public.quote_requests add constraint qr_customer_response_chk
   check (customer_response is null or customer_response in ('accepted', 'declined'));
 
+-- Simplified pipeline: New -> Quoted -> Booked -> Confirmed -> Complete (+ Lost).
+-- Migrate any rows still using the old labels before tightening the constraint.
+update public.quote_requests set status = 'new'    where status = 'assigned';
+update public.quote_requests set status = 'quoted' where status in ('sent', 'viewed');
+update public.quote_requests set status = 'booked' where status = 'won';
+
 alter table public.quote_requests drop constraint if exists qr_status_chk;
 alter table public.quote_requests add constraint qr_status_chk
-  check (status in ('new', 'assigned', 'quoted', 'sent', 'viewed', 'won', 'lost'));
+  check (status in ('new', 'quoted', 'booked', 'confirmed', 'complete', 'lost'));
 
 -- Unguessable capability tokens for the customer quote view and the contractor
 -- job/photos view. Backfill existing rows, then default new rows.
@@ -200,6 +216,18 @@ create policy "staff insert events" on public.quote_events
       where q.id = quote_events.quote_id and q.assigned_to = auth.uid()
     )
   );
+
+-- ── 3b. Integrations (Google Calendar OAuth tokens, etc.) ───────────────────
+-- Singleton-ish key/value store for third-party tokens. Only ever touched by
+-- server code with the service-role key — no authenticated grants, RLS on with
+-- no policies so a logged-in user can never read the refresh token.
+create table if not exists public.app_integrations (
+  provider   text primary key,
+  data       jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.app_integrations enable row level security;
+grant all on public.app_integrations to service_role;
 
 -- ── 4. One-time: make yourself the owner ────────────────────────────────────
 -- Passwords live in Supabase Auth (auth.users), NOT in this table — never add a

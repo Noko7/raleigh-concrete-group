@@ -1,1 +1,1 @@
-export type SaveState = { ok: boolean; error?: string; sent?: boolean };
+export type SaveState = { ok: boolean; error?: string; sent?: boolean; smsDelivered?: boolean };

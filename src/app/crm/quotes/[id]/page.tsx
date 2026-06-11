@@ -10,6 +10,7 @@ import { getQuote, listContractors, listEvents, listStaff } from "@/lib/crm/quer
 import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
 import { QuoteEditor } from "./quote-editor";
+import { completeJob } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +50,17 @@ function eventText(e: QuoteEvent, names: Map<string, string>): string {
     case "customer_viewed":
       return "Customer opened their quote";
     case "customer_accepted":
-      return `Customer accepted${m.scheduled_date ? ` — booked ${String(m.scheduled_date)}` : ""}${m.discount ? " (10% off)" : ""}`;
+      return `Customer accepted${m.scheduled_date ? ` — booked ${String(m.scheduled_date)}` : ""}${m.discount ? " ($150 credit)" : ""}`;
     case "customer_declined":
       return "Customer declined the quote";
+    case "reminder_sent":
+      return "Confirmation reminder texted to the customer";
+    case "customer_confirmed":
+      return "Customer confirmed their job";
+    case "customer_unconfirmed":
+      return "Customer could not confirm their job";
+    case "job_completed":
+      return "Job marked complete + paid";
     default:
       return e.type.replace(/_/g, " ");
   }
@@ -161,7 +170,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   <dd>
                     {quote.customer_response === "accepted" ? (
                       <strong className="crm-link-strong">
-                        Accepted{quote.discount_accepted ? " (10% off)" : ""}
+                        Accepted{quote.discount_accepted ? " ($150 credit)" : ""}
                         {quote.scheduled_date ? ` · ${prettyDate(quote.scheduled_date)}` : ""}
                       </strong>
                     ) : (
@@ -226,6 +235,24 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               internal_notes: quote.internal_notes,
             }}
           />
+
+          {(quote.status === "booked" || quote.status === "confirmed") && (
+            <div className="crm-card">
+              <h2 className="crm-card-title">Finish the job</h2>
+              <p className="crm-muted crm-sm">
+                {quote.status === "confirmed"
+                  ? "Customer confirmed."
+                  : "Waiting on the customer's confirmation."}{" "}
+                When the work is done and paid, mark it complete to thank the customer and request a review.
+              </p>
+              <form action={completeJob}>
+                <input type="hidden" name="id" value={quote.id} />
+                <button type="submit" className="crm-btn crm-btn-primary">
+                  Mark complete + paid
+                </button>
+              </form>
+            </div>
+          )}
 
           <div className="crm-card">
             <h2 className="crm-card-title">Shareable links</h2>

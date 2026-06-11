@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { alertNewLead } from "@/lib/crm/notify";
-import { MAX_VISITS_PER_DAY, countVisitsOn } from "@/lib/crm/queries";
+import { notifyCustomerReceived, notifyNewQuote } from "@/lib/crm/notify";
+import {
+  MAX_VISITS_PER_DAY,
+  countVisitsOn,
+  getPrimaryContractorId,
+  getStaffContactById,
+} from "@/lib/crm/queries";
 
 // All quote submissions go through this server-side endpoint. The browser never
 // writes to the database directly: we validate everything here and insert with
@@ -162,18 +167,49 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 502 });
     }
 
-    // Text the owner about the new lead (best-effort; never blocks the response).
-    const created = (await res.json().catch(() => [])) as Array<{ job_token?: string }>;
-    const jobToken = created[0]?.job_token;
-    if (jobToken) {
-      await alertNewLead({
+    const created = (await res.json().catch(() => [])) as Array<{
+      id?: string;
+      job_token?: string;
+      public_token?: string;
+    }>;
+    const newRow = created[0];
+
+    // Auto-assign to the primary contractor (owner-selectable in Settings), then
+    // text the owner + contractor and acknowledge the customer. All best-effort.
+    if (newRow?.id && SERVICE_KEY) {
+      let contractorPhone: string | null = null;
+      try {
+        const primaryId = await getPrimaryContractorId();
+        if (primaryId) {
+          await fetch(`${SUPABASE_URL}/rest/v1/quote_requests?id=eq.${newRow.id}`, {
+            method: "PATCH",
+            headers: {
+              apikey: SERVICE_KEY,
+              Authorization: `Bearer ${SERVICE_KEY}`,
+              "Content-Type": "application/json",
+              Prefer: "return=minimal",
+            },
+            body: JSON.stringify({ assigned_to: primaryId }),
+          });
+          const contact = await getStaffContactById(primaryId);
+          contractorPhone = contact?.phone ?? null;
+        }
+      } catch {
+        // assignment is best-effort; the quote is already saved
+      }
+
+      const info = {
         name,
         phone: phoneRaw,
         service,
-        city,
         quote_type: row.quote_type ?? undefined,
-        job_token: jobToken,
-      }).catch(() => {});
+        visit_date: row.visit_date,
+        visit_time: row.visit_time,
+        public_token: newRow.public_token,
+        job_token: newRow.job_token,
+      };
+      await notifyNewQuote(info, contractorPhone).catch(() => {});
+      await notifyCustomerReceived(info).catch(() => {});
     }
     return NextResponse.json({ ok: true });
   } catch {

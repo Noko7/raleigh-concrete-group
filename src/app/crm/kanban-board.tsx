@@ -75,7 +75,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
 
   const byStatus = useMemo(() => {
     const map: Record<Status, BoardQuote[]> = {
-      new: [], assigned: [], quoted: [], sent: [], viewed: [], won: [], lost: [],
+      new: [], quoted: [], booked: [], confirmed: [], complete: [], lost: [],
     };
     for (const q of quotes) map[q.status]?.push(q);
     return map;
@@ -105,11 +105,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
   function assign(id: string, contractorId: string) {
     const prev = quotes;
     setQuotes((qs) =>
-      qs.map((q) =>
-        q.id === id
-          ? { ...q, assigned_to: contractorId || null, status: contractorId && q.status === "new" ? "assigned" : q.status }
-          : q,
-      ),
+      qs.map((q) => (q.id === id ? { ...q, assigned_to: contractorId || null } : q)),
     );
     startTransition(async () => {
       const res = await assignQuote(id, contractorId);

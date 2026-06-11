@@ -78,12 +78,22 @@ All of it runs over Supabase's REST/Auth APIs (no extra packages).
 
 **What's included**
 - **Login + roles** (`/crm/login`): owners see everything; contractors see only jobs assigned to them (enforced by Postgres Row-Level Security).
-- **Quotes dashboard** (`/crm`): filter by status / assignee / search; pipeline `New → Assigned → Quoted → Sent → Viewed → Won/Lost`.
-- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos via short-lived signed URLs**, status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, and copyable share links.
+- **Quotes dashboard** (`/crm`): filter by status / assignee / search; pipeline `New → Quoted → Booked → Confirmed → Complete` (plus `Lost`).
+- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos via short-lived signed URLs**, status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, copyable share links, and a **Mark complete + paid** button.
 - **Contractors** (`/crm/contractors`, owner only): create a crew login (returns a one-time temp password), deactivate/reactivate.
+- **Settings** (`/crm/settings`): your name + alert number; owners also pick the **primary contractor** that new quotes auto-assign to.
 - **Customers** (`/crm/customers`): quotes auto-grouped by phone/email with won-value totals.
-- **Customer quote link** (`https://raleighconcrete.net/q/<public_token>`): branded, no-login page showing the price + summary; opening it records a view (count + first-viewed) and flips status `Sent → Viewed`.
-- **Contractor job link** (`https://raleighconcrete.net/job/<job_token>`): no-login page with the photos, address (Maps link) and customer contact — safe to paste into your text-to-contractor automation.
+- **Calendar** (`/crm/calendar`): a month view of booked jobs (`scheduled_date`) and in-person quote visits (`visit_date`). Click any item to open the deal. Owners can connect Google Calendar here.
+- **Customer quote link** (`https://raleighconcrete.net/q/<public_token>`): branded, no-login page showing the price + summary; the customer accepts (and schedules) or declines right there.
+- **Job confirmation link** (`https://raleighconcrete.net/confirm/<public_token>`): sent in the 2-day reminder so the customer can confirm or ask to reschedule.
+- **Contractor job link** (`https://raleighconcrete.net/job/<job_token>`): no-login page with the photos, address (Maps link) and customer contact.
+
+**Deal lifecycle + automatic texts** (kept short to save SMS credits)
+1. **New** — quote arrives, auto-assigned to your primary contractor. Owner + contractor get a text; the customer gets an acknowledgement (in-person includes their visit date/time).
+2. Contractor sets a price + description and hits **Send Quote** → customer gets their quote link (**Quoted**).
+3. Customer accepts + picks a date → customer gets a "thanks for scheduling" text, owner + contractor get **JOB BOOKED** with details (**Booked**). Declining notifies owner + contractor (**Lost**).
+4. Two days before the job, a daily cron texts the customer a confirm link. Confirming moves it to **Confirmed**; "need to reschedule" pings owner + contractor.
+5. Contractor hits **Mark complete + paid** → customer gets a thank-you + Google review link (**Complete**).
 
 **One-time setup**
 1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql` in the SQL Editor.
@@ -113,7 +123,32 @@ Add these Vercel env vars (no SQL needed):
 
 Each person sets their own alert number under **CRM → Settings** (`/crm/settings`). Owner alerts go to every active owner's number **plus** `OWNER_PHONE`; contractor alerts use that contractor's saved number. The person who performs an action isn't texted about their own click. SMS is best-effort — a texting outage never blocks a quote from saving.
 
+Customer-facing text settings:
+- `OWNER_NAME` *(optional)* — first name used to sign customer texts (default `Noah`), e.g. "this is Noah with Raleigh Concrete Group".
+- `GOOGLE_REVIEW_URL` *(optional)* — your Google review link; included in the post-job thank-you text. If unset, the thank-you still sends without a link.
+
+**2-day confirmation reminder (Vercel Cron)**
+A daily cron texts customers a confirm link about two days before their booked job. `vercel.json` already declares the schedule (`/api/cron/reminders`, 14:00 UTC). Add a `CRON_SECRET` env var in Vercel — Vercel sends it as a Bearer token and the endpoint rejects anything else. Confirming flips the job to **Confirmed**; "need to reschedule" texts the owner + contractor.
+
 > If you also send texts from a Make.com scenario, disable that scenario (or the SMS step) to avoid sending duplicate messages, since the app now texts directly through Quo.
+
+**Google Calendar invites (optional)**
+When a job is booked (customer accepts) or you assign a contractor to a dated job/visit, the app
+creates an event on your Google Calendar and **invites the assigned contractor** (using the email
+they were created with) and the customer (if we have their email). Re-running keeps the same event,
+so assigning a contractor later still sends them the invite.
+
+Setup (one-time):
+1. Re-run `supabase/crm.sql` — it adds `quote_requests.gcal_event_id` and an `app_integrations` table for the OAuth token.
+2. In **Google Cloud Console** → create a project → **APIs & Services**:
+   - Enable the **Google Calendar API**.
+   - **OAuth consent screen**: External, add yourself as a test user (or publish).
+   - **Credentials → Create OAuth client ID → Web application**. Add an **Authorized redirect URI** that matches `GOOGLE_REDIRECT_URI` below exactly.
+3. Add these Vercel env vars:
+   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — from the OAuth client.
+   - `GOOGLE_REDIRECT_URI` — e.g. `https://crm.raleighconcrete.net/api/google/callback` (must be registered in step 2, exactly).
+   - `GOOGLE_CALENDAR_TZ` *(optional)* — IANA zone for timed visit events (default `America/New_York`).
+4. Redeploy, then go to **CRM → Calendar** and click **Connect Google Calendar** (owner only). The contractor's login email is the address that receives invites.
 
 ## Deploy to Vercel
 This is a standard Next.js app — Vercel builds it in the cloud (no local build needed).

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { updateOwnProfile } from "@/lib/crm/queries";
+import { setPrimaryContractorId, updateOwnProfile } from "@/lib/crm/queries";
 import type { SaveState } from "./types";
 
 // Returns the E.164 form, null to clear, or "invalid".
@@ -35,5 +35,21 @@ export async function saveSettings(_prev: SaveState, formData: FormData): Promis
 
   revalidatePath("/crm/settings");
   revalidatePath("/crm");
+  return { ok: true, saved: true };
+}
+
+// Owner-only: choose the contractor every new quote auto-assigns to.
+export async function savePrimaryContractor(_prev: SaveState, formData: FormData): Promise<SaveState> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
+
+  const raw = String(formData.get("primary_contractor_id") ?? "").trim();
+  const id = raw === "" ? null : raw;
+  if (id && !/^[0-9a-fA-F-]{36}$/.test(id)) return { ok: false, error: "Pick a valid contractor." };
+
+  const ok = await setPrimaryContractorId(id);
+  if (!ok) return { ok: false, error: "Could not save. Please try again." };
+
+  revalidatePath("/crm/settings");
   return { ok: true, saved: true };
 }

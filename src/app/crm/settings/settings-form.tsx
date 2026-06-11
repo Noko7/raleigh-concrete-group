@@ -22,7 +22,7 @@ export function SettingsForm({ fullName, phone, email, role }: Props) {
       <div className="crm-settings-head">
         <div>
           <div className="crm-settings-email">{email || "No email on file"}</div>
-          <span className={`crm-badge crm-badge-${role === "owner" ? "won" : "assigned"}`}>
+          <span className={`crm-badge crm-badge-${role === "owner" ? "owner" : "contractor"}`}>
             {role === "owner" ? "Owner" : "Contractor"}
           </span>
         </div>

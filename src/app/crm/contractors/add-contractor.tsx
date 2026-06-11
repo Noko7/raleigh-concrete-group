@@ -18,7 +18,7 @@ export function AddContractor() {
             <input name="full_name" className="crm-input" required />
           </label>
           <label className="crm-field">
-            <span>Email</span>
+            <span>Email (login + Google Calendar invites)</span>
             <input name="email" type="email" className="crm-input" required />
           </label>
           <label className="crm-field">

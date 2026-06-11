@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { alertOwner, jobLink, sendSms } from "@/lib/crm/notify";
+import { syncQuoteToCalendar } from "@/lib/crm/gcal";
+import { notifyBooked, notifyCustomerScheduled, notifyDeclined } from "@/lib/crm/notify";
 import { getQuoteByToken, getStaffPhoneById, recordCustomerResponse } from "@/lib/crm/queries";
 
 // Customer-facing endpoint behind the unguessable public_token. Records accept
-// (with a scheduled date, optionally the 10% save offer) or decline, then texts
+// (with a scheduled date, optionally the $150 save offer) or decline, then texts
 // the owner.
 export async function POST(request: Request) {
   let body: { token?: unknown; action?: unknown; discount?: unknown; scheduled_date?: unknown };
@@ -30,23 +31,15 @@ export async function POST(request: Request) {
   try {
     const q = await getQuoteByToken("public_token", token);
     if (q) {
-      const price = q.quote_amount != null ? ` ($${Number(q.quote_amount).toLocaleString("en-US")})` : "";
+      const contractorPhone = q.assigned_to ? await getStaffPhoneById(q.assigned_to) : null;
       if (action === "accept") {
-        const when = q.scheduled_date ? ` for ${q.scheduled_date}` : "";
-        const disc = q.discount_accepted ? " (10% off)" : "";
-        await alertOwner(`Booked: ${q.name}${when}${price}${disc}. ${q.phone}`);
-        if (q.assigned_to) {
-          const phone = await getStaffPhoneById(q.assigned_to);
-          if (phone) {
-            await sendSms(phone, `Job booked: ${q.name}${when}${price}. Details: ${jobLink(q.job_token)}`).catch(() => {});
-          }
-        }
+        // Put the booked job on Google Calendar (invites the crew if assigned).
+        await syncQuoteToCalendar(q.id);
+        // Thank the customer for scheduling, then text the crew the JOB BOOKED details.
+        await notifyCustomerScheduled(q);
+        await notifyBooked(q, contractorPhone);
       } else {
-        await alertOwner(`Declined: ${q.name}. ${q.phone}`);
-        if (q.assigned_to) {
-          const phone = await getStaffPhoneById(q.assigned_to);
-          if (phone) await sendSms(phone, `Heads up: ${q.name} declined their quote.`).catch(() => {});
-        }
+        await notifyDeclined(q, contractorPhone);
       }
     }
   } catch {

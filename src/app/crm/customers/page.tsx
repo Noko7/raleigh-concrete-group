@@ -27,6 +27,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
 
   const quotes = await listQuotes(session, { search: sp.search });
 
+  // A deal counts toward won value once the customer has accepted it.
+  const wonValueOf = (q: (typeof quotes)[number]) =>
+    q.customer_response === "accepted" ? Number(q.quote_amount ?? 0) : 0;
+
   const map = new Map<string, Customer>();
   for (const q of quotes) {
     const key = q.phone.replace(/\D/g, "") || q.email?.toLowerCase() || q.id;
@@ -40,7 +44,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         count: 1,
         lastDate: q.created_at,
         lastStatus: q.status,
-        wonValue: q.status === "won" ? Number(q.quote_amount ?? 0) : 0,
+        wonValue: wonValueOf(q),
       });
     } else {
       existing.count += 1;
@@ -49,7 +53,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         existing.lastStatus = q.status;
         existing.name = q.name;
       }
-      if (q.status === "won") existing.wonValue += Number(q.quote_amount ?? 0);
+      existing.wonValue += wonValueOf(q);
     }
   }
   const customers = [...map.values()].sort((a, b) => (a.lastDate < b.lastDate ? 1 : -1));

@@ -44,6 +44,10 @@ export type Quote = {
   discount_accepted: boolean;
   visit_date: string | null;
   visit_time: string | null;
+  gcal_event_id: string | null;
+  reminder_sent_at: string | null;
+  confirmed_at: string | null;
+  completed_at: string | null;
 };
 
 export type QuoteEvent = {

@@ -1,6 +1,7 @@
 // Server-only data access for the CRM. Reads/writes that belong to a logged-in
 // user go through pgUser (RLS enforces owner/contractor scoping). Token-page
 // lookups, view tracking and signed URLs use pgAdmin (no user context).
+import { DECLINE_CREDIT } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
 import type { Quote, QuoteEvent, Session, Staff } from "./types";
@@ -19,6 +20,18 @@ export async function listQuotes(session: Session, filters: QuoteFilters = {}): 
     if (s) params.set("or", `(name.ilike.*${s}*,phone.ilike.*${s}*,email.ilike.*${s}*,address.ilike.*${s}*)`);
   }
   const res = await pgUser(`quote_requests?${params.toString()}`, session.accessToken);
+  if (!res.ok) return [];
+  return (await res.json()) as Quote[];
+}
+
+// Everything with a date on it — booked work days (scheduled_date) and in-person
+// quote visits (visit_date) — for the CRM calendar. RLS scopes this to the
+// owner (all rows) or a contractor (only their assigned jobs).
+export async function listScheduled(session: Session): Promise<Quote[]> {
+  const res = await pgUser(
+    "quote_requests?select=*&or=(scheduled_date.not.is.null,visit_date.not.is.null)&order=created_at.desc",
+    session.accessToken,
+  );
   if (!res.ok) return [];
   return (await res.json()) as Quote[];
 }
@@ -152,6 +165,101 @@ export async function getStaffPhoneById(id: string): Promise<string | null> {
   return rows[0]?.phone ?? null;
 }
 
+// ── Owner settings (app_integrations, provider='settings') ──────────────────
+// Currently just the primary contractor every new quote auto-assigns to.
+export async function getPrimaryContractorId(): Promise<string | null> {
+  const res = await pgAdmin("app_integrations?provider=eq.settings&select=data&limit=1");
+  if (!res.ok) return null;
+  const rows = (await res.json()) as { data: { primary_contractor_id?: string } }[];
+  return rows[0]?.data?.primary_contractor_id || null;
+}
+
+export async function setPrimaryContractorId(id: string | null): Promise<boolean> {
+  const res = await pgAdmin("app_integrations", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({
+      provider: "settings",
+      data: { primary_contractor_id: id },
+      updated_at: new Date().toISOString(),
+    }),
+  });
+  return res.ok;
+}
+
+// Service-role lookup of a contractor's contact info (no session) — used by the
+// public submission endpoint when auto-assigning the primary contractor.
+export async function getStaffContactById(id: string): Promise<{ phone: string | null; email: string | null } | null> {
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) return null;
+  const res = await pgAdmin(`staff?id=eq.${id}&active=eq.true&select=phone,email&limit=1`);
+  if (!res.ok) return null;
+  const rows = (await res.json()) as { phone: string | null; email: string | null }[];
+  return rows[0] ?? null;
+}
+
+// ── 2-day reminder (cron) ───────────────────────────────────────────────────
+// Booked jobs landing on `date` that haven't had a reminder sent yet.
+export async function listBookedForReminder(date: string): Promise<Quote[]> {
+  if (!ISO_DATE.test(date)) return [];
+  const res = await pgAdmin(
+    `quote_requests?status=eq.booked&scheduled_date=eq.${date}&reminder_sent_at=is.null&select=*`,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as Quote[];
+}
+
+export async function markReminderSent(id: string): Promise<void> {
+  await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ reminder_sent_at: new Date().toISOString() }),
+  });
+}
+
+// Activity-log entry written by automatic/server-only processes (no session).
+export async function addAdminEvent(quoteId: string, type: string, meta?: Record<string, unknown>): Promise<void> {
+  await pgAdmin("quote_events", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ quote_id: quoteId, type, meta: meta ?? null, actor: null }),
+  });
+}
+
+// ── Customer confirmation from the reminder link (token-gated) ──────────────
+export async function recordJobConfirmation(
+  token: string,
+  action: "confirm" | "reschedule",
+): Promise<{ ok: boolean; error?: string; quote?: Quote }> {
+  if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
+  const res = await pgAdmin(`quote_requests?public_token=eq.${token}&select=*&limit=1`);
+  if (!res.ok) return { ok: false, error: "Could not load your job." };
+  const q = ((await res.json()) as Quote[])[0];
+  if (!q) return { ok: false, error: "Job not found." };
+
+  const patch: Partial<Quote> =
+    action === "confirm" ? { status: "confirmed", confirmed_at: new Date().toISOString() } : {};
+
+  if (Object.keys(patch).length > 0) {
+    const upd = await pgAdmin(`quote_requests?id=eq.${q.id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(patch),
+    });
+    if (!upd.ok) return { ok: false, error: "Could not save. Please call us." };
+  }
+
+  await pgAdmin("quote_events", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      quote_id: q.id,
+      type: action === "confirm" ? "customer_confirmed" : "customer_unconfirmed",
+      meta: { scheduled_date: q.scheduled_date ?? null },
+    }),
+  });
+  return { ok: true, quote: q };
+}
+
 export async function updateStaff(session: Session, id: string, patch: Partial<Staff>): Promise<boolean> {
   const res = await pgUser(`staff?id=eq.${encodeURIComponent(id)}`, session.accessToken, {
     method: "PATCH",
@@ -189,7 +297,6 @@ export async function recordCustomerView(token: string): Promise<void> {
 
   const patch: Partial<Quote> = { view_count: (q.view_count ?? 0) + 1 };
   if (!q.viewed_at) patch.viewed_at = new Date().toISOString();
-  if (q.status === "sent") patch.status = "viewed";
 
   await pgAdmin(`quote_requests?id=eq.${q.id}`, {
     method: "PATCH",
@@ -203,7 +310,7 @@ export async function recordCustomerView(token: string): Promise<void> {
   });
 }
 
-// Customer accepts (with a scheduled date, optionally taking the 10% save offer)
+// Customer accepts (with a scheduled date, optionally taking the $150 save offer)
 // or declines, straight from the branded quote page. Service role; token-gated.
 export async function recordCustomerResponse(
   token: string,
@@ -239,11 +346,13 @@ export async function recordCustomerResponse(
       return { ok: false, error: "That day is already booked. Please choose another date." };
     }
     patch.customer_response = "accepted";
-    patch.status = "won";
+    patch.status = "booked";
     patch.scheduled_date = date;
     if (input.discount && !q.discount_accepted) {
       patch.discount_accepted = true;
-      if (q.quote_amount != null) patch.quote_amount = Math.round(Number(q.quote_amount) * 0.9 * 100) / 100;
+      if (q.quote_amount != null) {
+        patch.quote_amount = Math.max(0, Math.round((Number(q.quote_amount) - DECLINE_CREDIT) * 100) / 100);
+      }
     }
     eventType = "customer_accepted";
   }

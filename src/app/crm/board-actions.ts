@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
 import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/constants";
-import { alertAssigned, alertOwner } from "@/lib/crm/notify";
+import { syncQuoteToCalendar } from "@/lib/crm/gcal";
+import { alertOwner, notifyAssignment, notifyComplete } from "@/lib/crm/notify";
 import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
 
@@ -22,12 +23,19 @@ export async function moveQuote(id: string, status: string): Promise<MoveResult>
   if (current.status === status) return { ok: true };
 
   const patch: Partial<Quote> = { status: status as Status };
-  if (status === "sent" && !current.quote_sent_at) patch.quote_sent_at = new Date().toISOString();
+  if (status === "quoted" && !current.quote_sent_at) patch.quote_sent_at = new Date().toISOString();
+  if (status === "complete" && !current.completed_at) patch.completed_at = new Date().toISOString();
 
   const updated = await updateQuote(session, id, patch);
   if (!updated) return { ok: false, error: "Could not move this quote." };
 
   await addEvent(session, id, "status_changed", { from: current.status, to: status });
+
+  // Marking a job Complete thanks the customer and asks for a review.
+  if (status === "complete" && current.status !== "complete") {
+    await notifyComplete({ name: current.name, phone: current.phone }).catch(() => {});
+  }
+
   // Owners get every status change; the actor is excluded so they aren't texted
   // about their own click.
   await alertOwner(
@@ -48,7 +56,6 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
 
   const next = contractorId === "" ? null : contractorId;
   const patch: Partial<Quote> = { assigned_to: next };
-  if (next && current.status === "new") patch.status = "assigned";
 
   const updated = await updateQuote(session, id, patch);
   if (!updated) return { ok: false, error: "Could not assign." };
@@ -56,7 +63,7 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
   await addEvent(session, id, "assigned", { to: next });
   if (next) {
     const contractor = await getStaffById(session, next);
-    await alertAssigned(contractor?.phone, {
+    await notifyAssignment(contractor?.phone, {
       name: current.name,
       phone: current.phone,
       service: current.service,
@@ -66,6 +73,8 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
       `${current.name} assigned to ${contractor?.full_name || "a contractor"}.`,
       session.staff.phone,
     ).catch(() => {});
+    // If this job/visit has a date, invite the new contractor on Google Calendar.
+    await syncQuoteToCalendar(id);
   }
   revalidatePath("/crm");
   return { ok: true };

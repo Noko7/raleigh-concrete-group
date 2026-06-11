@@ -1,6 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
+import { DECLINE_CREDIT } from "@/lib/crm/constants";
 
 type Mode = "choose" | "save" | "schedule" | "submitting" | "accepted" | "declined";
 
@@ -16,6 +19,7 @@ function pretty(s: string): string {
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 export function QuoteActions({ token, amount }: { token: string; amount: number | null }) {
+  const router = useRouter();
   const [mode, setMode] = useState<Mode>("choose");
   const [discount, setDiscount] = useState(false);
   const [date, setDate] = useState("");
@@ -45,7 +49,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
     }
   }
 
-  const discounted = amount != null ? Math.round(amount * 0.9 * 100) / 100 : null;
+  const discounted = amount != null ? Math.max(0, Math.round((amount - DECLINE_CREDIT) * 100) / 100) : null;
 
   async function submit(action: "accept" | "decline") {
     setError("");
@@ -65,6 +69,8 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
         } else {
           setMode("declined");
         }
+        // Re-render the server page into its full-screen confirmed/declined view.
+        router.refresh();
       } else {
         setError(json.error || "Something went wrong. Please call us.");
         setMode(fallback);
@@ -83,7 +89,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
         <h3>You&apos;re all set for {pretty(booked)}</h3>
         {finalPrice != null && (
           <p className="cq-result-price">
-            {discount && <span className="cq-result-save">10% off applied</span>}
+            {discount && <span className="cq-result-save">${DECLINE_CREDIT} credit applied</span>}
             <strong>{usd(finalPrice)}</strong>
           </p>
         )}
@@ -108,7 +114,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
     return (
       <div className="cq-offer">
         <p className="cq-offer-eyebrow">Wait — before you go</p>
-        <h3>Here&apos;s 10% off to earn your business.</h3>
+        <h3>Here&apos;s a ${DECLINE_CREDIT} credit to earn your business.</h3>
         {discounted != null && (
           <p className="cq-offer-price">
             <s>{usd(amount as number)}</s> <strong>{usd(discounted)}</strong>
@@ -122,7 +128,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
             setMode("schedule");
           }}
         >
-          Take 10% off &amp; schedule
+          Take ${DECLINE_CREDIT} off &amp; schedule
         </button>
         <button type="button" className="cq-textlink" onClick={() => submit("decline")}>
           No thanks, decline
@@ -139,7 +145,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
         <p className="cq-fine">Our earliest opening is about 1.5 weeks out. Pick any date from there.</p>
         {discount && discounted != null && (
           <p className="cq-offer-price">
-            With 10% off: <strong>{usd(discounted)}</strong>
+            With ${DECLINE_CREDIT} credit: <strong>{usd(discounted)}</strong>
           </p>
         )}
         <input

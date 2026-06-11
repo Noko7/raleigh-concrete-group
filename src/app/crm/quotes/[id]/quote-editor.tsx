@@ -139,6 +139,7 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
               {pending ? "Sending…" : "Confirm & send"}
             </button>
           </div>
+          {state.error && !pending && <p className="crm-auth-error crm-confirm-error">{state.error}</p>}
         </div>
       ) : (
         <>
@@ -149,7 +150,12 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
             <button type="button" className="crm-btn crm-btn-send" onClick={openConfirm} disabled={pending}>
               Send Quote
             </button>
-            {state.sent && !pending && !state.error && <span className="crm-saved">Quote sent to customer</span>}
+            {state.sent && state.smsDelivered && !pending && !state.error && (
+              <span className="crm-saved">Quote sent — customer texted</span>
+            )}
+            {state.sent && !state.smsDelivered && !pending && !state.error && (
+              <span className="crm-auth-error">Marked Sent, but the text didn&apos;t go out. Copy the customer link below and send it manually.</span>
+            )}
             {state.ok && !state.sent && !pending && !state.error && <span className="crm-saved">Saved</span>}
             {(localErr || state.error) && <span className="crm-auth-error">{localErr || state.error}</span>}
           </div>
