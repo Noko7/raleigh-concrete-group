@@ -21,6 +21,10 @@ import {
   trustImage,
 } from "@/lib/site-data";
 
+// A tight, strong subset of finished work for the hero strip (kept small so the
+// marquee stays light and the loop is seamless).
+const marqueeImages = galleryImages.slice(0, 14);
+
 const homeBeforeAfter = [
   {
     before: "/images/before_driveway.png",
@@ -43,14 +47,16 @@ export default function Home() {
         <section className="relative overflow-hidden pb-6 pt-12 md:pt-16">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_30%,rgba(194,104,42,0.18),transparent_45%)]" />
           <div className="relative mx-auto max-w-6xl px-4 text-center md:px-8">
-            <Image
-              src="/images/logo_horizontal.png"
-              alt="Raleigh Concrete Group"
-              width={600}
-              height={160}
-              priority
-              className="mx-auto mb-5 h-auto w-auto max-w-[260px] md:max-w-[420px]"
-            />
+            <div className="hero-logo-plate mx-auto mb-6">
+              <Image
+                src="/images/logo_horizontal.png"
+                alt="Raleigh Concrete Group"
+                width={600}
+                height={160}
+                priority
+                className="h-auto w-auto max-w-[240px] md:max-w-[400px]"
+              />
+            </div>
             <span className="mb-4 inline-block text-xs font-bold uppercase tracking-[0.22em] text-amber-accent">
               Concrete &amp; Hardscaping · Raleigh, NC
             </span>
@@ -68,6 +74,27 @@ export default function Home() {
               <a href={links.call} className="cta-secondary text-base">
                 Call or Text {phoneDisplay}
               </a>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Work photo strip (immediate proof, smooth auto-scroll) ── */}
+        <section aria-label="Recent concrete work" className="pb-4 pt-2">
+          <div className="marquee">
+            <div className="marquee-track">
+              {[...marqueeImages, ...marqueeImages].map((img, i) => (
+                <div key={`${img.src}-${i}`} className="marquee-item" aria-hidden={i >= marqueeImages.length}>
+                  <Image
+                    src={img.src}
+                    alt={img.alt}
+                    width={384}
+                    height={256}
+                    sizes="(max-width: 768px) 60vw, 20rem"
+                    className="marquee-img"
+                    priority={i < 4}
+                  />
+                </div>
+              ))}
             </div>
           </div>
         </section>
