@@ -145,9 +145,9 @@ export async function POST(request: Request) {
     city: city || null,
     details: details || null,
     quote_type: QUOTE_TYPES.has(quoteType) ? quoteType : null,
-    preferred_time: quoteType === "inperson" ? preferredTime || null : null,
-    visit_date: quoteType === "inperson" ? visitDate || null : null,
-    visit_time: quoteType === "inperson" ? visitTime || null : null,
+    preferred_time: preferredTime || null,
+    visit_date: /^\d{4}-\d{2}-\d{2}$/.test(visitDate) ? visitDate : null,
+    visit_time: visitTime || null,
     file_urls: fileUrls,
     source_path: sourcePath || null,
   };

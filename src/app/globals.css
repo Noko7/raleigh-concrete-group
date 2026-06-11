@@ -747,13 +747,22 @@ body {
 .qm-body { padding: 1.6rem 1.5rem 0.5rem; }
 @media (min-width: 768px) { .qm-body { padding: 2rem 2rem 0.75rem; } }
 
+.qm-step-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.5rem;
+}
+.qm-step-head .qm-title {
+  margin: 0;
+}
 .qm-step-num {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 2rem;
   height: 2rem;
-  margin-bottom: 0.6rem;
   border-radius: 9999px;
   background: var(--amber-accent, #c2682a);
   color: #fff;

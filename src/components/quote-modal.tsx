@@ -12,6 +12,7 @@ const SUPABASE_READY = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 const UPLOAD_BUCKET = "quote-uploads";
 const MAX_FILE_MB = 250;
 
+type Mode = "online" | "inperson";
 type Status = "idle" | "uploading" | "sending" | "success" | "error";
 
 type FormState = {
@@ -104,6 +105,21 @@ const svgBase = {
   strokeLinejoin: "round" as const,
   "aria-hidden": true,
 };
+function IconBolt() {
+  return (
+    <svg {...svgBase}>
+      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
+    </svg>
+  );
+}
+function IconCalendar() {
+  return (
+    <svg {...svgBase}>
+      <rect x="3" y="4.5" width="18" height="16" rx="2" />
+      <path d="M3 9h18M8 2.5v4M16 2.5v4" />
+    </svg>
+  );
+}
 function IconCamera() {
   return (
     <svg {...svgBase}>
@@ -230,6 +246,7 @@ function AddressAutocomplete({
 
 /* ── The modal ────────────────────────────────────────────────────────────── */
 function Modal({ onClose }: { onClose: () => void }) {
+  const [mode, setMode] = useState<Mode | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [data, setData] = useState<FormState>(EMPTY);
   const [addressVerified, setAddressVerified] = useState(false);
@@ -257,7 +274,7 @@ function Modal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const current = STEPS[stepIndex];
+  const current = mode ? STEPS[stepIndex] : "choice";
   const totalSteps = STEPS.length;
   const stepNumber = stepIndex + 1;
 
@@ -272,6 +289,11 @@ function Modal({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   const set = (patch: Partial<FormState>) => setData((d) => ({ ...d, ...patch }));
+
+  function pickMode(next: Mode) {
+    setMode(next);
+    setStepIndex(0);
+  }
 
   function addFiles(list: FileList | null) {
     if (!list) return;
@@ -308,7 +330,8 @@ function Modal({ onClose }: { onClose: () => void }) {
   }
 
   function back() {
-    if (stepIndex > 0) setStepIndex((i) => i - 1);
+    if (stepIndex === 0) setMode(null);
+    else setStepIndex((i) => i - 1);
   }
 
   function next() {
@@ -374,7 +397,7 @@ function Modal({ onClose }: { onClose: () => void }) {
         address: data.address,
         city: cityFromAddress(data.address),
         details: data.details,
-        quote_type: "inperson",
+        quote_type: mode ?? "inperson",
         preferred_time: data.visitTime,
         visit_date: data.visitDate,
         visit_time: data.visitTime,
@@ -437,16 +460,51 @@ function Modal({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <>
-            {/* Progress */}
-            <div className="qm-progress">
-              <div className="qm-progress-bar" style={{ width: `${(stepNumber / totalSteps) * 100}%` }} />
-            </div>
+            {/* Progress (hidden on the choice screen) */}
+            {mode && (
+              <div className="qm-progress">
+                <div className="qm-progress-bar" style={{ width: `${(stepNumber / totalSteps) * 100}%` }} />
+              </div>
+            )}
+
+            {/* Step: choice (online vs in-person) */}
+            {current === "choice" && (
+              <div className="qm-body">
+                <h2 className="qm-title">Get your free concrete quote</h2>
+                <p className="qm-sub">How would you like your quote? Pick the fastest option for you.</p>
+                <div className="qm-choices">
+                  <button className="qm-choice" onClick={() => pickMode("online")}>
+                    <span className="qm-choice-badge">Fastest</span>
+                    <span className="qm-choice-icon">
+                      <IconBolt />
+                    </span>
+                    <span className="qm-choice-title">Online Quote</span>
+                    <span className="qm-choice-desc">
+                      Send a few photos and your address. We quote most concrete jobs from satellite
+                      plus your pics, often the same day.
+                    </span>
+                  </button>
+                  <button className="qm-choice" onClick={() => pickMode("inperson")}>
+                    <span className="qm-choice-icon">
+                      <IconCalendar />
+                    </span>
+                    <span className="qm-choice-title">In-Person Quote</span>
+                    <span className="qm-choice-desc">
+                      Prefer we come out? Tell us where and when, and we&apos;ll measure on site and
+                      give you a written price.
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Step 1: Contact (name, phone, address together) */}
             {current === "contact" && (
               <div className="qm-body">
-                <span className="qm-step-num">1</span>
-                <h2 className="qm-title">Contact</h2>
+                <div className="qm-step-head">
+                  <span className="qm-step-num">1</span>
+                  <h2 className="qm-title">Contact</h2>
+                </div>
                 <p className="qm-sub">We need to know where you live so we can schedule your service.</p>
                 <label className="qm-label">Name</label>
                 <input
@@ -509,8 +567,10 @@ function Modal({ onClose }: { onClose: () => void }) {
             {/* Step 2: Service */}
             {current === "service" && (
               <div className="qm-body">
-                <span className="qm-step-num">2</span>
-                <h2 className="qm-title">Service</h2>
+                <div className="qm-step-head">
+                  <span className="qm-step-num">2</span>
+                  <h2 className="qm-title">Service</h2>
+                </div>
                 <p className="qm-sub">Select the service you want performed.</p>
                 <label className="qm-label">What do you need?</label>
                 <select className="qm-input" value={data.service} onChange={(e) => set({ service: e.target.value })}>
@@ -570,8 +630,10 @@ function Modal({ onClose }: { onClose: () => void }) {
             {/* Step 3: Schedule */}
             {current === "schedule" && (
               <div className="qm-body">
-                <span className="qm-step-num">3</span>
-                <h2 className="qm-title">Schedule</h2>
+                <div className="qm-step-head">
+                  <span className="qm-step-num">3</span>
+                  <h2 className="qm-title">Schedule</h2>
+                </div>
                 <p className="qm-sub">Select from the available dates and times.</p>
                 <label className="qm-label">Date</label>
                 <input
@@ -613,15 +675,12 @@ function Modal({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* Footer nav */}
+            {/* Footer nav (hidden on the choice screen) */}
+            {mode && (
             <div className="qm-footer">
-              {stepIndex > 0 ? (
-                <button className="qm-back" onClick={back} disabled={busy}>
-                  Back
-                </button>
-              ) : (
-                <span />
-              )}
+              <button className="qm-back" onClick={back} disabled={busy}>
+                Back
+              </button>
               <button className="cta-primary qm-next" onClick={next} disabled={!canProceed() || busy}>
                 {status === "uploading"
                   ? "Uploading…"
@@ -632,6 +691,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                       : "Continue"}
               </button>
             </div>
+            )}
           </>
         )}
       </div>
