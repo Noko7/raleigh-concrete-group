@@ -10,7 +10,7 @@ import { getQuote, listContractors, listEvents, listStaff } from "@/lib/crm/quer
 import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
 import { QuoteEditor } from "./quote-editor";
-import { completeJob } from "./actions";
+import { completeJob, markPaid, requestPayment } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,11 @@ function eventText(e: QuoteEvent, names: Map<string, string>): string {
     case "customer_unconfirmed":
       return "Customer could not confirm their job";
     case "job_completed":
-      return "Job marked complete + paid";
+      return "Work marked completed";
+    case "payment_requested":
+      return "Payment instructions texted to the customer";
+    case "job_paid":
+      return `Marked paid${m.amount != null ? ` ($${Number(m.amount).toLocaleString("en-US")})` : ""}`;
     default:
       return e.type.replace(/_/g, " ");
   }
@@ -236,21 +240,54 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             }}
           />
 
-          {(quote.status === "booked" || quote.status === "confirmed") && (
+          {quote.status === "scheduled" && (
             <div className="crm-card">
               <h2 className="crm-card-title">Finish the job</h2>
               <p className="crm-muted crm-sm">
-                {quote.status === "confirmed"
-                  ? "Customer confirmed."
-                  : "Waiting on the customer's confirmation."}{" "}
-                When the work is done and paid, mark it complete to thank the customer and request a review.
+                {quote.confirmed_at ? "Customer confirmed the date." : "Waiting on the customer's confirmation."}{" "}
+                When the work is done on site, mark it completed to thank the customer and request a review. You&apos;ll
+                collect payment in the next step.
               </p>
               <form action={completeJob}>
                 <input type="hidden" name="id" value={quote.id} />
                 <button type="submit" className="crm-btn crm-btn-primary">
-                  Mark complete + paid
+                  Mark completed
                 </button>
               </form>
+            </div>
+          )}
+
+          {quote.status === "completed" && (
+            <div className="crm-card">
+              <h2 className="crm-card-title">Get paid</h2>
+              <p className="crm-muted crm-sm">
+                {quote.payment_requested_at
+                  ? "Payment instructions were texted to the customer. Mark it paid once the money lands."
+                  : "Text the customer how to pay (Zelle / deposit), then mark it paid once the money lands."}
+              </p>
+              <div className="crm-editor-foot">
+                <form action={requestPayment}>
+                  <input type="hidden" name="id" value={quote.id} />
+                  <button type="submit" className="crm-btn crm-btn-ghost">
+                    {quote.payment_requested_at ? "Resend payment text" : "Request payment"}
+                  </button>
+                </form>
+                <form action={markPaid}>
+                  <input type="hidden" name="id" value={quote.id} />
+                  <button type="submit" className="crm-btn crm-btn-primary">
+                    Mark paid
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {quote.status === "paid" && (
+            <div className="crm-card">
+              <h2 className="crm-card-title">Paid</h2>
+              <p className="crm-muted crm-sm">
+                This job is paid and closed out{quote.paid_at ? ` (${fmt(quote.paid_at)})` : ""}. Nothing else to do.
+              </p>
             </div>
           )}
 

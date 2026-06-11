@@ -48,6 +48,8 @@ export type Quote = {
   reminder_sent_at: string | null;
   confirmed_at: string | null;
   completed_at: string | null;
+  paid_at: string | null;
+  payment_requested_at: string | null;
 };
 
 export type QuoteEvent = {

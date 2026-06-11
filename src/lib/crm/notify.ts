@@ -226,6 +226,19 @@ export async function notifyComplete(q: QuoteInfo): Promise<void> {
   ).catch(() => {});
 }
 
+// ── Payment: text the customer how to pay (Zelle / bank deposit) ────────────
+// PAYMENT_INSTRUCTIONS holds your real payment details, e.g.
+//   "Zelle to pay@raleighconcrete.net or 919-555-0142 (Raleigh Concrete Group)."
+// Falls back to a safe generic line so a missing env var never sends a broken text.
+const PAYMENT_INSTRUCTIONS = (process.env.PAYMENT_INSTRUCTIONS || "").trim();
+export async function notifyPaymentRequest(q: QuoteInfo): Promise<SendResult> {
+  const how = PAYMENT_INSTRUCTIONS || "Reply here and we'll send your payment details.";
+  return sendSmsResult(
+    q.phone,
+    `Hi ${firstName(q.name)}, your project with Raleigh Concrete Group is complete${money(q.quote_amount)}. ${how} Thank you for your business.`,
+  );
+}
+
 // Reassignment from the CRM: let the newly-assigned contractor know.
 export async function notifyAssignment(contractorPhone: string | null | undefined, q: QuoteInfo): Promise<void> {
   if (!contractorPhone) return;

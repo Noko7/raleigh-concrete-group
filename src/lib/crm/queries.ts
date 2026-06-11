@@ -202,7 +202,7 @@ export async function getStaffContactById(id: string): Promise<{ phone: string |
 export async function listBookedForReminder(date: string): Promise<Quote[]> {
   if (!ISO_DATE.test(date)) return [];
   const res = await pgAdmin(
-    `quote_requests?status=eq.booked&scheduled_date=eq.${date}&reminder_sent_at=is.null&select=*`,
+    `quote_requests?status=eq.scheduled&scheduled_date=eq.${date}&reminder_sent_at=is.null&select=*`,
   );
   if (!res.ok) return [];
   return (await res.json()) as Quote[];
@@ -236,8 +236,10 @@ export async function recordJobConfirmation(
   const q = ((await res.json()) as Quote[])[0];
   if (!q) return { ok: false, error: "Job not found." };
 
+  // Confirmation is now a flag on a Scheduled job (we keep the timestamp) rather
+  // than its own pipeline stage, so the board stays simple.
   const patch: Partial<Quote> =
-    action === "confirm" ? { status: "confirmed", confirmed_at: new Date().toISOString() } : {};
+    action === "confirm" ? { confirmed_at: new Date().toISOString() } : {};
 
   if (Object.keys(patch).length > 0) {
     const upd = await pgAdmin(`quote_requests?id=eq.${q.id}`, {
@@ -346,7 +348,7 @@ export async function recordCustomerResponse(
       return { ok: false, error: "That day is already booked. Please choose another date." };
     }
     patch.customer_response = "accepted";
-    patch.status = "booked";
+    patch.status = "scheduled";
     patch.scheduled_date = date;
     if (input.discount && !q.discount_accepted) {
       patch.discount_accepted = true;

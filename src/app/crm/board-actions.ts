@@ -24,15 +24,16 @@ export async function moveQuote(id: string, status: string): Promise<MoveResult>
 
   const patch: Partial<Quote> = { status: status as Status };
   if (status === "quoted" && !current.quote_sent_at) patch.quote_sent_at = new Date().toISOString();
-  if (status === "complete" && !current.completed_at) patch.completed_at = new Date().toISOString();
+  if (status === "completed" && !current.completed_at) patch.completed_at = new Date().toISOString();
+  if (status === "paid" && !current.paid_at) patch.paid_at = new Date().toISOString();
 
   const updated = await updateQuote(session, id, patch);
   if (!updated) return { ok: false, error: "Could not move this quote." };
 
   await addEvent(session, id, "status_changed", { from: current.status, to: status });
 
-  // Marking a job Complete thanks the customer and asks for a review.
-  if (status === "complete" && current.status !== "complete") {
+  // Marking a job Completed thanks the customer and asks for a review.
+  if (status === "completed" && current.status !== "completed") {
     await notifyComplete({ name: current.name, phone: current.phone }).catch(() => {});
   }
 

@@ -104,10 +104,13 @@ alter table public.quote_requests add column if not exists visit_time  text;
 alter table public.quote_requests add column if not exists gcal_event_id text;
 
 -- Job lifecycle timestamps: the 2-day confirmation reminder, the customer's
--- confirmation, and completion (done + paid).
-alter table public.quote_requests add column if not exists reminder_sent_at timestamptz;
-alter table public.quote_requests add column if not exists confirmed_at      timestamptz;
-alter table public.quote_requests add column if not exists completed_at      timestamptz;
+-- confirmation, when work was completed on site, when we asked for payment, and
+-- when the money landed (Zelle / deposit).
+alter table public.quote_requests add column if not exists reminder_sent_at     timestamptz;
+alter table public.quote_requests add column if not exists confirmed_at         timestamptz;
+alter table public.quote_requests add column if not exists completed_at         timestamptz;
+alter table public.quote_requests add column if not exists payment_requested_at timestamptz;
+alter table public.quote_requests add column if not exists paid_at              timestamptz;
 create index if not exists qr_scheduled_date_idx on public.quote_requests(scheduled_date);
 create index if not exists qr_visit_date_idx      on public.quote_requests(visit_date);
 -- Hard guarantee: at most one accepted/booked job per calendar day.
@@ -119,15 +122,16 @@ alter table public.quote_requests drop constraint if exists qr_customer_response
 alter table public.quote_requests add constraint qr_customer_response_chk
   check (customer_response is null or customer_response in ('accepted', 'declined'));
 
--- Simplified pipeline: New -> Quoted -> Booked -> Confirmed -> Complete (+ Lost).
--- Migrate any rows still using the old labels before tightening the constraint.
-update public.quote_requests set status = 'new'    where status = 'assigned';
-update public.quote_requests set status = 'quoted' where status in ('sent', 'viewed');
-update public.quote_requests set status = 'booked' where status = 'won';
-
+-- Simplified pipeline: New -> Quoted -> Scheduled -> Completed -> Paid (+ Lost).
+-- Confirmation is a flag (confirmed_at) on a Scheduled job, not its own stage.
+-- Migrate any rows still using older labels before tightening the constraint.
 alter table public.quote_requests drop constraint if exists qr_status_chk;
+update public.quote_requests set status = 'new'       where status = 'assigned';
+update public.quote_requests set status = 'quoted'    where status in ('sent', 'viewed');
+update public.quote_requests set status = 'scheduled' where status in ('won', 'booked', 'confirmed');
+update public.quote_requests set status = 'completed' where status = 'complete';
 alter table public.quote_requests add constraint qr_status_chk
-  check (status in ('new', 'quoted', 'booked', 'confirmed', 'complete', 'lost'));
+  check (status in ('new', 'quoted', 'scheduled', 'completed', 'paid', 'lost'));
 
 -- Unguessable capability tokens for the customer quote view and the contractor
 -- job/photos view. Backfill existing rows, then default new rows.

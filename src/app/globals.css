@@ -1104,9 +1104,9 @@ body {
 .crm-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; }
 .crm-badge-new { background: #e7f0ff; color: #1d4ed8; }
 .crm-badge-quoted { background: #ede9fe; color: #6d28d9; }
-.crm-badge-booked { background: #cffafe; color: #0e7490; }
-.crm-badge-confirmed { background: #dcfce7; color: #15803d; }
-.crm-badge-complete { background: #16a34a; color: #fff; }
+.crm-badge-scheduled { background: #cffafe; color: #0e7490; }
+.crm-badge-completed { background: #dcfce7; color: #15803d; }
+.crm-badge-paid { background: #16a34a; color: #fff; }
 .crm-badge-lost { background: #f1f3f5; color: #6b7280; }
 .crm-badge-owner { background: #16a34a; color: #fff; }
 .crm-badge-contractor { background: #fef3c7; color: #92400e; }
@@ -1263,9 +1263,9 @@ body {
 .kb-col-count { background: rgba(255, 255, 255, 0.1); border-radius: 999px; padding: 0.05rem 0.55rem; font-size: 0.72rem; font-weight: 800; }
 .kb-accent-new { border-top-color: #3b82f6; }
 .kb-accent-quoted { border-top-color: #8b5cf6; }
-.kb-accent-booked { border-top-color: #06b6d4; }
-.kb-accent-confirmed { border-top-color: #22c55e; }
-.kb-accent-complete { border-top-color: #16a34a; }
+.kb-accent-scheduled { border-top-color: #06b6d4; }
+.kb-accent-completed { border-top-color: #22c55e; }
+.kb-accent-paid { border-top-color: #16a34a; }
 .kb-accent-lost { border-top-color: #6b7280; }
 .kb-col-body { padding: 0.65rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.6rem; flex: 1; }
 .kb-empty { color: var(--crm-muted); font-size: 0.78rem; text-align: center; padding: 0.9rem 0; border: 1px dashed var(--crm-border); border-radius: 0.6rem; }
@@ -1282,6 +1282,8 @@ body {
 .kb-pill-inperson { background: rgba(250, 204, 21, 0.18); color: #fde047; }
 .kb-pill-view { background: rgba(74, 222, 128, 0.18); color: #86efac; }
 .kb-pill-assigned { background: rgba(194, 104, 42, 0.24); color: #f0b489; }
+.kb-pill-date { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
+.kb-pill-confirmed { background: rgba(34, 197, 94, 0.22); color: #4ade80; }
 .kb-quick { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
 .kb-quick-btn { flex: 1; text-align: center; text-decoration: none; font-size: 0.78rem; font-weight: 800; padding: 0.42rem; border-radius: 0.45rem; background: rgba(255, 255, 255, 0.09); border: 1px solid var(--crm-border); color: var(--crm-text); }
 .kb-quick-btn:hover { background: var(--amber); border-color: var(--amber); color: #fff; }
@@ -1363,14 +1365,18 @@ body {
 .cal-chip { text-align: left; border: none; border-radius: 0.35rem; padding: 0.18rem 0.4rem; font-size: 0.72rem; line-height: 1.2; cursor: pointer; color: #fff; display: flex; flex-direction: column; }
 .cal-chip:hover { filter: brightness(1.12); }
 .cal-chip-job { background: #16a34a; }
-.cal-chip-visit { background: var(--crm-accent); }
+.cal-chip-inperson { background: var(--crm-accent); }
+.cal-chip-online { background: #3b82f6; }
 .cal-chip-time { font-weight: 800; font-size: 0.66rem; opacity: 0.95; }
 .cal-chip-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal-legend { display: flex; gap: 1.2rem; margin-top: 0.85rem; font-size: 0.8rem; color: var(--crm-muted); }
-.cal-legend-item { display: inline-flex; align-items: center; gap: 0.4rem; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.85rem; font-size: 0.8rem; color: var(--crm-muted); }
+.cal-legend-item { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 999px; padding: 0.3rem 0.7rem; color: var(--crm-text); cursor: pointer; font-size: 0.78rem; }
+.cal-legend-item:hover { border-color: var(--crm-accent); }
+.cal-legend-off { opacity: 0.4; }
 .cal-dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 .cal-dot-job { background: #16a34a; }
-.cal-dot-visit { background: var(--crm-accent); }
+.cal-dot-inperson { background: var(--crm-accent); }
+.cal-dot-online { background: #3b82f6; }
 @media (max-width: 720px) {
   .cal-cell { min-height: 72px; padding: 0.25rem; }
   .cal-daynum { font-size: 0.7rem; }

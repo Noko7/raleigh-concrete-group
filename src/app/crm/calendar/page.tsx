@@ -29,11 +29,20 @@ export default async function CalendarPage({
   const events: CalEvent[] = [];
   for (const q of quotes) {
     const label = q.name || "Customer";
+    // Booked work day = a job install (only ever set once a customer accepts).
     if (q.scheduled_date) {
       events.push({ id: q.id, date: q.scheduled_date, kind: "job", title: label, time: null });
     }
+    // The appointment the customer picked: an on-site visit (in-person) or a
+    // remote photo review (online). Color them separately so the day reads clearly.
     if (q.visit_date) {
-      events.push({ id: q.id, date: q.visit_date, kind: "visit", title: label, time: q.visit_time });
+      events.push({
+        id: q.id,
+        date: q.visit_date,
+        kind: q.quote_type === "online" ? "online" : "inperson",
+        title: label,
+        time: q.visit_time,
+      });
     }
   }
 
@@ -46,7 +55,10 @@ export default async function CalendarPage({
       <div className="crm-page-head">
         <div>
           <h1>Calendar</h1>
-          <p className="crm-muted">Booked jobs and in-person quote visits. Click any item to open the deal.</p>
+          <p className="crm-muted">
+            Job installs, in-person quotes and online quotes, color-coded. Tap a color below to filter; click any item
+            to open the deal.
+          </p>
         </div>
       </div>
 

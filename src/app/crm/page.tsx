@@ -34,6 +34,10 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
     view_count: q.view_count,
     quote_type: q.quote_type,
     created_at: q.created_at,
+    scheduled_date: q.scheduled_date,
+    visit_date: q.visit_date,
+    visit_time: q.visit_time,
+    confirmed_at: q.confirmed_at,
   }));
 
   return (

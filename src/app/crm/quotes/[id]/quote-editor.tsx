@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { STATUSES, STATUS_LABELS } from "@/lib/crm/constants";
 import { saveQuote } from "./actions";
@@ -23,18 +24,46 @@ type Props = {
 };
 
 export function QuoteEditor({ id, isOwner, customerName, contractors, initial }: Props) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState<SaveState, FormData>(saveQuote, { ok: false });
 
-  // Controlled so the send confirmation always reflects the latest edits.
+  // Everything is controlled so the form always shows the saved truth. When the
+  // server data changes (after a save, or a customer action elsewhere) we resync
+  // the fields to it - that's the "stateful" behaviour the board needs.
+  const [status, setStatus] = useState(initial.status);
+  const [assigned, setAssigned] = useState(initial.assigned_to ?? "");
   const [amount, setAmount] = useState(initial.quote_amount != null ? String(initial.quote_amount) : "");
   const [summary, setSummary] = useState(initial.quote_summary ?? "");
+  const [notes, setNotes] = useState(initial.internal_notes ?? "");
   const [confirming, setConfirming] = useState(false);
   const [localErr, setLocalErr] = useState("");
 
-  // Close the confirmation once the send completes.
+  const initialSig = useMemo(
+    () =>
+      [
+        initial.status,
+        initial.assigned_to ?? "",
+        initial.quote_amount ?? "",
+        initial.quote_summary ?? "",
+        initial.internal_notes ?? "",
+      ].join("|"),
+    [initial],
+  );
+  useEffect(() => {
+    setStatus(initial.status);
+    setAssigned(initial.assigned_to ?? "");
+    setAmount(initial.quote_amount != null ? String(initial.quote_amount) : "");
+    setSummary(initial.quote_summary ?? "");
+    setNotes(initial.internal_notes ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSig]);
+
+  // After any successful save/send, pull fresh server data so the status badge,
+  // activity log and the rest of the page reflect the change immediately.
   useEffect(() => {
     if (state.sent) setConfirming(false);
-  }, [state.sent]);
+    if (state.ok || state.sent) router.refresh();
+  }, [state, router]);
 
   const amountNum = Number(amount);
   const amountValid = amount.trim() !== "" && Number.isFinite(amountNum) && amountNum > 0;
@@ -61,7 +90,7 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
       <div className="crm-editor-row">
         <label className="crm-field">
           <span>Status</span>
-          <select name="status" defaultValue={initial.status} className="crm-input">
+          <select name="status" value={status} onChange={(e) => setStatus(e.target.value)} className="crm-input">
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {STATUS_LABELS[s]}
@@ -73,7 +102,7 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
         {isOwner && (
           <label className="crm-field">
             <span>Assigned contractor</span>
-            <select name="assigned_to" defaultValue={initial.assigned_to ?? ""} className="crm-input">
+            <select name="assigned_to" value={assigned} onChange={(e) => setAssigned(e.target.value)} className="crm-input">
               <option value="">Unassigned</option>
               {contractors.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -116,7 +145,8 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
         <textarea
           name="internal_notes"
           rows={3}
-          defaultValue={initial.internal_notes ?? ""}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
           className="crm-input"
           placeholder="Notes for you and the crew."
         />

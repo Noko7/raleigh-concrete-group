@@ -3,12 +3,20 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+export type CalKind = "job" | "inperson" | "online";
+
 export type CalEvent = {
   id: string;
   date: string; // yyyy-mm-dd
-  kind: "job" | "visit";
+  kind: CalKind;
   title: string;
   time: string | null;
+};
+
+const KIND_LABEL: Record<CalKind, string> = {
+  job: "Job install",
+  inperson: "In-person quote",
+  online: "Online quote",
 };
 
 const MONTHS = [
@@ -25,16 +33,22 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
   const router = useRouter();
   const today = new Date();
   const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [show, setShow] = useState<Record<CalKind, boolean>>({ job: true, inperson: true, online: true });
+
+  function toggle(kind: CalKind) {
+    setShow((s) => ({ ...s, [kind]: !s[kind] }));
+  }
 
   const byDate = useMemo(() => {
     const map = new Map<string, CalEvent[]>();
     for (const e of events) {
+      if (!show[e.kind]) continue;
       const list = map.get(e.date) ?? [];
       list.push(e);
       map.set(e.date, list);
     }
     return map;
-  }, [events]);
+  }, [events, show]);
 
   // Build the 6-week grid starting on the Sunday on/before the 1st.
   const cells = useMemo(() => {
@@ -103,7 +117,7 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
                     type="button"
                     className={`cal-chip cal-chip-${e.kind}`}
                     onClick={() => router.push(`${base}/quotes/${e.id}`)}
-                    title={`${e.kind === "job" ? "Booked job" : "In-person quote"}: ${e.title}${e.time ? ` · ${e.time}` : ""}`}
+                    title={`${KIND_LABEL[e.kind]}: ${e.title}${e.time ? ` at ${e.time}` : ""}`}
                   >
                     {e.time && <span className="cal-chip-time">{e.time}</span>}
                     <span className="cal-chip-title">{e.title}</span>
@@ -116,12 +130,17 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
       </div>
 
       <div className="cal-legend">
-        <span className="cal-legend-item">
-          <i className="cal-dot cal-dot-job" /> Booked job
-        </span>
-        <span className="cal-legend-item">
-          <i className="cal-dot cal-dot-visit" /> In-person quote
-        </span>
+        {(["job", "inperson", "online"] as CalKind[]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            className={`cal-legend-item${show[k] ? "" : " cal-legend-off"}`}
+            onClick={() => toggle(k)}
+            title={show[k] ? `Hide ${KIND_LABEL[k]}` : `Show ${KIND_LABEL[k]}`}
+          >
+            <i className={`cal-dot cal-dot-${k}`} /> {KIND_LABEL[k]}
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -28,7 +28,7 @@ export default async function ConfirmJobPage({ params }: { params: Promise<{ tok
   if (!quote) notFound();
 
   const firstName = quote.name.split(" ")[0];
-  const alreadyConfirmed = quote.status === "confirmed" || !!quote.confirmed_at;
+  const alreadyConfirmed = !!quote.confirmed_at;
 
   return (
     <main className="cq-wrap">

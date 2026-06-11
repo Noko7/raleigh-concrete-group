@@ -19,7 +19,23 @@ export type BoardQuote = {
   view_count: number;
   quote_type: string | null;
   created_at: string;
+  scheduled_date: string | null;
+  visit_date: string | null;
+  visit_time: string | null;
+  confirmed_at: string | null;
 };
+
+function shortDate(ymd: string | null): string {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "";
+  return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// One clear label per lead type so a card reads at a glance.
+function typeLabel(q: BoardQuote): { text: string; cls: string } {
+  if (q.quote_type === "online") return { text: "Online quote", cls: "online" };
+  if (q.quote_type === "inperson") return { text: "In-person quote", cls: "inperson" };
+  return { text: "Lead", cls: "inperson" };
+}
 
 function telHref(phone: string): string {
   return `tel:${phone.replace(/[^0-9+]/g, "")}`;
@@ -75,7 +91,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
 
   const byStatus = useMemo(() => {
     const map: Record<Status, BoardQuote[]> = {
-      new: [], quoted: [], booked: [], confirmed: [], complete: [], lost: [],
+      new: [], quoted: [], scheduled: [], completed: [], paid: [], lost: [],
     };
     for (const q of quotes) map[q.status]?.push(q);
     return map;
@@ -171,15 +187,28 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
                     </div>
                     <p className="kb-card-sub">
                       {q.service || "Service TBD"}
-                      {q.city ? ` · ${q.city}` : ""}
+                      {q.city ? ` \u00b7 ${q.city}` : ""}
                     </p>
-                    <div className="kb-card-meta">
-                      <span className={`kb-pill kb-pill-${q.quote_type === "online" ? "online" : "inperson"}`}>
-                        {q.quote_type === "online" ? "Online" : q.quote_type === "inperson" ? "In-person" : "Lead"}
-                      </span>
-                      {q.view_count > 0 && <span className="kb-pill kb-pill-view">Viewed {q.view_count}x</span>}
-                      {q.assigned_to && <span className="kb-pill kb-pill-assigned">{nameMap[q.assigned_to] ?? "Assigned"}</span>}
-                    </div>
+                    {(() => {
+                      const t = typeLabel(q);
+                      const jobDate = shortDate(q.scheduled_date);
+                      const visitDate = shortDate(q.visit_date);
+                      return (
+                        <div className="kb-card-meta">
+                          <span className={`kb-pill kb-pill-${t.cls}`}>{t.text}</span>
+                          {jobDate && <span className="kb-pill kb-pill-date">Job {jobDate}</span>}
+                          {!jobDate && visitDate && (
+                            <span className="kb-pill kb-pill-date">
+                              Visit {visitDate}
+                              {q.visit_time ? ` ${q.visit_time}` : ""}
+                            </span>
+                          )}
+                          {q.confirmed_at && <span className="kb-pill kb-pill-confirmed">Confirmed</span>}
+                          {q.view_count > 0 && <span className="kb-pill kb-pill-view">Viewed {q.view_count}x</span>}
+                          {q.assigned_to && <span className="kb-pill kb-pill-assigned">{nameMap[q.assigned_to] ?? "Assigned"}</span>}
+                        </div>
+                      );
+                    })()}
 
                     <div className="kb-quick" onClick={(e) => e.stopPropagation()}>
                       <a href={telHref(q.phone)} className="kb-quick-btn" aria-label={`Call ${q.name}`}>

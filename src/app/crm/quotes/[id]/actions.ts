@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/crm/auth";
 import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/env";
 import { syncQuoteToCalendar } from "@/lib/crm/gcal";
-import { alertOwner, notifyAssignment, notifyComplete, notifyQuoteReady } from "@/lib/crm/notify";
+import { alertOwner, notifyAssignment, notifyComplete, notifyPaymentRequest, notifyQuoteReady } from "@/lib/crm/notify";
 import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
 import type { SaveState } from "./types";
@@ -30,7 +30,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   if (status && STATUSES.includes(status as Status) && status !== current.status) {
     patch.status = status as Status;
     if (status === "quoted" && !current.quote_sent_at) patch.quote_sent_at = new Date().toISOString();
-    if (status === "complete" && !current.completed_at) patch.completed_at = new Date().toISOString();
+    if (status === "completed" && !current.completed_at) patch.completed_at = new Date().toISOString();
+    if (status === "paid" && !current.paid_at) patch.paid_at = new Date().toISOString();
     events.push({ type: "status_changed", meta: { from: current.status, to: status } });
   }
 
@@ -125,8 +126,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
         session.staff.phone,
       ).catch(() => {});
     }
-    // Marking the job Complete here (via the status dropdown) also thanks the customer.
-    if (patch.status === "complete" && current.status !== "complete") {
+    // Marking the job Completed here (via the status dropdown) also thanks the customer.
+    if (patch.status === "completed" && current.status !== "completed") {
       await notifyComplete({ name: current.name, phone: current.phone }).catch(() => {});
     }
 
@@ -150,8 +151,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   }
 }
 
-// Contractor/owner marks the job done + paid. Moves it to Complete and texts the
-// customer a thank-you with the review link.
+// Contractor/owner marks the on-site work done. Moves it to Completed and texts
+// the customer a thank-you with the review link. Payment is the next step.
 export async function completeJob(formData: FormData): Promise<void> {
   const session = await getSession();
   if (!session) return;
@@ -159,16 +160,73 @@ export async function completeJob(formData: FormData): Promise<void> {
   if (!id) return;
 
   const current = await getQuote(session, id);
-  if (!current || current.status === "complete") return;
+  if (!current || current.status === "completed" || current.status === "paid") return;
 
-  const updated = await updateQuote(session, id, { status: "complete", completed_at: new Date().toISOString() });
+  const updated = await updateQuote(session, id, { status: "completed", completed_at: new Date().toISOString() });
   if (!updated) return;
 
-  await addEvent(session, id, "status_changed", { from: current.status, to: "complete" });
+  await addEvent(session, id, "status_changed", { from: current.status, to: "completed" });
   await addEvent(session, id, "job_completed");
   await notifyComplete({ name: current.name, phone: current.phone }).catch(() => {});
   await alertOwner(
-    `Job complete + paid: ${current.name}, by ${session.staff.full_name || "crew"}.`,
+    `Job completed: ${current.name}, by ${session.staff.full_name || "crew"}.`,
+    session.staff.phone,
+  ).catch(() => {});
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+}
+
+// Text the customer how to pay (Zelle / bank deposit). The actual instructions
+// live in the PAYMENT_INSTRUCTIONS env var so you can change your Zelle handle
+// without a code change.
+export async function requestPayment(formData: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const current = await getQuote(session, id);
+  if (!current) return;
+
+  const sent = await notifyPaymentRequest({
+    name: current.name,
+    phone: current.phone,
+    amount: current.quote_amount,
+  }).catch(() => null);
+
+  await updateQuote(session, id, { payment_requested_at: new Date().toISOString() });
+  await addEvent(session, id, "payment_requested", { delivered: Boolean(sent?.ok) });
+  await alertOwner(
+    `Payment requested from ${current.name} by ${session.staff.full_name || "crew"}.`,
+    session.staff.phone,
+  ).catch(() => {});
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+}
+
+// Money's in. Move it to Paid - the end of the pipeline.
+export async function markPaid(formData: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const current = await getQuote(session, id);
+  if (!current || current.status === "paid") return;
+
+  const updated = await updateQuote(session, id, {
+    status: "paid",
+    paid_at: new Date().toISOString(),
+    completed_at: current.completed_at ?? new Date().toISOString(),
+  });
+  if (!updated) return;
+
+  await addEvent(session, id, "status_changed", { from: current.status, to: "paid" });
+  await addEvent(session, id, "job_paid", { amount: current.quote_amount });
+  await alertOwner(
+    `Paid: ${current.name}${current.quote_amount != null ? ` ($${Number(current.quote_amount).toLocaleString("en-US")})` : ""}, recorded by ${session.staff.full_name || "crew"}.`,
     session.staff.phone,
   ).catch(() => {});
 
