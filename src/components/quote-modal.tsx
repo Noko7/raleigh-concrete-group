@@ -12,7 +12,6 @@ const SUPABASE_READY = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 const UPLOAD_BUCKET = "quote-uploads";
 const MAX_FILE_MB = 250;
 
-type Mode = "online" | "inperson";
 type Status = "idle" | "uploading" | "sending" | "success" | "error";
 
 type FormState = {
@@ -37,8 +36,7 @@ const EMPTY: FormState = {
   visitTime: "",
 };
 
-const ONLINE_STEPS = ["address", "media", "contact"] as const;
-const INPERSON_STEPS = ["address", "schedule", "contact"] as const;
+const STEPS = ["contact", "service", "schedule"] as const;
 
 const TIME_SLOTS = ["8:00 AM", "10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM"];
 
@@ -106,21 +104,6 @@ const svgBase = {
   strokeLinejoin: "round" as const,
   "aria-hidden": true,
 };
-function IconBolt() {
-  return (
-    <svg {...svgBase}>
-      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
-    </svg>
-  );
-}
-function IconCalendar() {
-  return (
-    <svg {...svgBase}>
-      <rect x="3" y="4.5" width="18" height="16" rx="2" />
-      <path d="M3 9h18M8 2.5v4M16 2.5v4" />
-    </svg>
-  );
-}
 function IconCamera() {
   return (
     <svg {...svgBase}>
@@ -247,7 +230,6 @@ function AddressAutocomplete({
 
 /* ── The modal ────────────────────────────────────────────────────────────── */
 function Modal({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<Mode | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [data, setData] = useState<FormState>(EMPTY);
   const [addressVerified, setAddressVerified] = useState(false);
@@ -275,10 +257,9 @@ function Modal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const steps = mode === "online" ? ONLINE_STEPS : mode === "inperson" ? INPERSON_STEPS : [];
-  const current = mode ? steps[stepIndex] : "choice";
-  const totalSteps = 4; // choice + 3
-  const stepNumber = mode ? stepIndex + 2 : 1;
+  const current = STEPS[stepIndex];
+  const totalSteps = STEPS.length;
+  const stepNumber = stepIndex + 1;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -291,11 +272,6 @@ function Modal({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   const set = (patch: Partial<FormState>) => setData((d) => ({ ...d, ...patch }));
-
-  function pickMode(next: Mode) {
-    setMode(next);
-    setStepIndex(0);
-  }
 
   function addFiles(list: FileList | null) {
     if (!list) return;
@@ -315,29 +291,29 @@ function Modal({ onClose }: { onClose: () => void }) {
   }
 
   function canProceed(): boolean {
-    if (current === "address") {
+    if (current === "contact") {
       const hasHouseNumber = /^\s*\d+\s+\S/.test(data.address);
-      return (addressVerified || hasHouseNumber) && data.address.trim().length > 8 && data.service !== "";
+      return (
+        data.name.trim().length >= 2 &&
+        isValidPhone(data.phone) &&
+        isValidEmail(data.email) &&
+        (addressVerified || hasHouseNumber) &&
+        data.address.trim().length > 8
+      );
     }
-    if (current === "media") return files.length >= 1;
+    if (current === "service") return data.service !== "";
     if (current === "schedule")
       return /^\d{4}-\d{2}-\d{2}$/.test(data.visitDate) && data.visitTime !== "" && !dateFull && !dateChecking;
-    if (current === "contact")
-      return data.name.trim().length >= 2 && isValidPhone(data.phone) && isValidEmail(data.email);
     return false;
   }
 
   function back() {
-    if (stepIndex === 0) {
-      setMode(null);
-    } else {
-      setStepIndex((i) => i - 1);
-    }
+    if (stepIndex > 0) setStepIndex((i) => i - 1);
   }
 
   function next() {
     if (!canProceed()) return;
-    if (stepIndex < steps.length - 1) setStepIndex((i) => i + 1);
+    if (stepIndex < STEPS.length - 1) setStepIndex((i) => i + 1);
     else submit();
   }
 
@@ -377,7 +353,7 @@ function Modal({ onClose }: { onClose: () => void }) {
     setErrorMsg("");
     try {
       let fileUrls: string[] = [];
-      if (mode === "online" && files.length && SUPABASE_READY) {
+      if (files.length && SUPABASE_READY) {
         setStatus("uploading");
         try {
           fileUrls = await uploadFiles();
@@ -398,10 +374,10 @@ function Modal({ onClose }: { onClose: () => void }) {
         address: data.address,
         city: cityFromAddress(data.address),
         details: data.details,
-        quote_type: mode,
-        preferred_time: mode === "inperson" ? data.visitTime : "",
-        visit_date: mode === "inperson" ? data.visitDate : "",
-        visit_time: mode === "inperson" ? data.visitTime : "",
+        quote_type: "inperson",
+        preferred_time: data.visitTime,
+        visit_date: data.visitDate,
+        visit_time: data.visitTime,
         file_urls: fileUrls,
         source_path: typeof window !== "undefined" ? window.location.pathname : "",
         company: honeypot, // honeypot, validated server-side
@@ -418,7 +394,7 @@ function Modal({ onClose }: { onClose: () => void }) {
         // That day filled up between picking it and submitting - send them back.
         setDateFull(true);
         setStatus("idle");
-        if (mode === "inperson") setStepIndex(INPERSON_STEPS.indexOf("schedule"));
+        setStepIndex(STEPS.indexOf("schedule"));
         setErrorMsg("");
       } else {
         setErrorMsg(json.error || `Something went wrong saving your request. Please call us at ${phoneDisplay}.`);
@@ -466,54 +442,77 @@ function Modal({ onClose }: { onClose: () => void }) {
               <div className="qm-progress-bar" style={{ width: `${(stepNumber / totalSteps) * 100}%` }} />
             </div>
 
-            {/* Step: choice */}
-            {current === "choice" && (
+            {/* Step 1: Contact (name, phone, address together) */}
+            {current === "contact" && (
               <div className="qm-body">
-                <h2 className="qm-title">Get your free concrete quote</h2>
-                <p className="qm-sub">How would you like your quote? Pick the fastest option for you.</p>
-                <div className="qm-choices">
-                  <button className="qm-choice" onClick={() => pickMode("online")}>
-                    <span className="qm-choice-badge">Fastest</span>
-                    <span className="qm-choice-icon">
-                      <IconBolt />
-                    </span>
-                    <span className="qm-choice-title">Online Quote</span>
-                    <span className="qm-choice-desc">
-                      Send a few photos and your address. We quote most concrete jobs from satellite
-                      plus your pics, often the same day. No waiting on a visit.
-                    </span>
-                  </button>
-                  <button className="qm-choice" onClick={() => pickMode("inperson")}>
-                    <span className="qm-choice-icon">
-                      <IconCalendar />
-                    </span>
-                    <span className="qm-choice-title">In-Person Quote</span>
-                    <span className="qm-choice-desc">
-                      Prefer we come out? Tell us where and when, and we&apos;ll measure on site and
-                      give you a written price.
-                    </span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step: address (both paths) */}
-            {current === "address" && (
-              <div className="qm-body">
-                <h2 className="qm-title">Where&apos;s the project?</h2>
-                <p className="qm-sub">
-                  {mode === "online"
-                    ? "We'll pull satellite imagery for this address to get you a fast quote."
-                    : "We'll come measure on site."}
-                </p>
-                <label className="qm-label">Project address</label>
+                <span className="qm-step-num">1</span>
+                <h2 className="qm-title">Contact</h2>
+                <p className="qm-sub">We need to know where you live so we can schedule your service.</p>
+                <label className="qm-label">Name</label>
+                <input
+                  className="qm-input"
+                  value={data.name}
+                  onChange={(e) => set({ name: e.target.value })}
+                  autoComplete="name"
+                  maxLength={120}
+                  placeholder="First and last name"
+                />
+                <label className="qm-label qm-mt">Phone</label>
+                <input
+                  className="qm-input"
+                  type="tel"
+                  value={data.phone}
+                  onChange={(e) => set({ phone: e.target.value })}
+                  autoComplete="tel"
+                  maxLength={32}
+                  inputMode="tel"
+                  placeholder="(919) 555-0123"
+                />
+                {data.phone.trim() !== "" && !isValidPhone(data.phone) && (
+                  <span className="qm-ac-status">Enter a 10-digit US phone number.</span>
+                )}
+                <label className="qm-label qm-mt">Property address</label>
                 <AddressAutocomplete
                   value={data.address}
                   verified={addressVerified}
                   onChange={(v) => set({ address: v })}
                   onVerifiedChange={setAddressVerified}
                 />
-                <label className="qm-label qm-mt">What do you need?</label>
+                <label className="qm-label qm-mt">Email (optional)</label>
+                <input
+                  className="qm-input"
+                  type="email"
+                  value={data.email}
+                  onChange={(e) => set({ email: e.target.value })}
+                  autoComplete="email"
+                  maxLength={200}
+                  placeholder="you@email.com"
+                />
+                {!isValidEmail(data.email) && <span className="qm-ac-status">Enter a valid email address.</span>}
+
+                {/* Honeypot: hidden from real users; bots fill it and get dropped. */}
+                <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: "auto", height: 0, width: 0, overflow: "hidden" }}>
+                  <label>
+                    Company
+                    <input
+                      type="text"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={honeypot}
+                      onChange={(e) => setHoneypot(e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Service */}
+            {current === "service" && (
+              <div className="qm-body">
+                <span className="qm-step-num">2</span>
+                <h2 className="qm-title">Service</h2>
+                <p className="qm-sub">Select the service you want performed.</p>
+                <label className="qm-label">What do you need?</label>
                 <select className="qm-input" value={data.service} onChange={(e) => set({ service: e.target.value })}>
                   <option value="" disabled>
                     Choose a service…
@@ -524,18 +523,17 @@ function Modal({ onClose }: { onClose: () => void }) {
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
 
-            {/* Step: media (online) */}
-            {current === "media" && (
-              <div className="qm-body">
-                <h2 className="qm-title">Show us the area</h2>
-                <p className="qm-sub">
-                  A few photos (and a short video if you can) let us quote accurately without a visit.
-                  At least one photo is required.
-                </p>
-                <label className="qm-dropzone">
+                <label className="qm-label qm-mt">Tell us a bit more (optional)</label>
+                <textarea
+                  className="qm-input"
+                  rows={2}
+                  value={data.details}
+                  onChange={(e) => set({ details: e.target.value })}
+                  placeholder="Roughly how much space (e.g. 600 sq ft or 20x30), your timeline, and anything else that helps…"
+                />
+
+                <label className="qm-dropzone qm-mt">
                   <input
                     type="file"
                     accept="image/*,video/*"
@@ -546,8 +544,8 @@ function Modal({ onClose }: { onClose: () => void }) {
                   <span className="qm-dropzone-icon">
                     <IconCamera />
                   </span>
-                  <span className="qm-dropzone-title">Tap to add photos or video</span>
-                  <span className="qm-dropzone-hint">Up to 8 files, {MAX_FILE_MB}MB each</span>
+                  <span className="qm-dropzone-title">Add photos or video (optional)</span>
+                  <span className="qm-dropzone-hint">Speeds up your quote. Up to 8 files, {MAX_FILE_MB}MB each</span>
                 </label>
                 {fileError && <p className="qm-err">{fileError}</p>}
                 {files.length > 0 && (
@@ -566,23 +564,16 @@ function Modal({ onClose }: { onClose: () => void }) {
                     ))}
                   </ul>
                 )}
-                <label className="qm-label qm-mt">Tell us a bit more about your project</label>
-                <textarea
-                  className="qm-input"
-                  rows={2}
-                  value={data.details}
-                  onChange={(e) => set({ details: e.target.value })}
-                  placeholder="Roughly how much space (e.g. 600 sq ft or 20x30), your timeline, and anything else that helps…"
-                />
               </div>
             )}
 
-            {/* Step: schedule (in-person) */}
+            {/* Step 3: Schedule */}
             {current === "schedule" && (
               <div className="qm-body">
-                <h2 className="qm-title">Pick a day and time</h2>
-                <p className="qm-sub">Choose when we&apos;ll come measure on site. We&apos;ll confirm by text.</p>
-                <label className="qm-label">Visit date</label>
+                <span className="qm-step-num">3</span>
+                <h2 className="qm-title">Schedule</h2>
+                <p className="qm-sub">Select from the available dates and times.</p>
+                <label className="qm-label">Date</label>
                 <input
                   className="qm-input"
                   type="date"
@@ -615,67 +606,6 @@ function Modal({ onClose }: { onClose: () => void }) {
                     </button>
                   ))}
                 </div>
-                <label className="qm-label qm-mt">Tell us a bit more about your project</label>
-                <textarea
-                  className="qm-input"
-                  rows={2}
-                  value={data.details}
-                  onChange={(e) => set({ details: e.target.value })}
-                  placeholder="Roughly how much space (e.g. 600 sq ft or 20x30), your timeline, and anything else that helps…"
-                />
-              </div>
-            )}
-
-            {/* Step: contact (both) */}
-            {current === "contact" && (
-              <div className="qm-body">
-                <h2 className="qm-title">Where do we send your quote?</h2>
-                <p className="qm-sub">We&apos;ll text or call you the same day. No spam, ever.</p>
-                <label className="qm-label">Name</label>
-                <input
-                  className="qm-input"
-                  value={data.name}
-                  onChange={(e) => set({ name: e.target.value })}
-                  autoComplete="name"
-                  maxLength={120}
-                />
-                <label className="qm-label qm-mt">Phone</label>
-                <input
-                  className="qm-input"
-                  type="tel"
-                  value={data.phone}
-                  onChange={(e) => set({ phone: e.target.value })}
-                  autoComplete="tel"
-                  maxLength={32}
-                  inputMode="tel"
-                />
-                {data.phone.trim() !== "" && !isValidPhone(data.phone) && (
-                  <span className="qm-ac-status">Enter a 10-digit US phone number.</span>
-                )}
-                <label className="qm-label qm-mt">Email (optional)</label>
-                <input
-                  className="qm-input"
-                  type="email"
-                  value={data.email}
-                  onChange={(e) => set({ email: e.target.value })}
-                  autoComplete="email"
-                  maxLength={200}
-                />
-                {!isValidEmail(data.email) && <span className="qm-ac-status">Enter a valid email address.</span>}
-
-                {/* Honeypot: hidden from real users; bots fill it and get dropped. */}
-                <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: "auto", height: 0, width: 0, overflow: "hidden" }}>
-                  <label>
-                    Company
-                    <input
-                      type="text"
-                      tabIndex={-1}
-                      autoComplete="off"
-                      value={honeypot}
-                      onChange={(e) => setHoneypot(e.target.value)}
-                    />
-                  </label>
-                </div>
 
                 {status === "error" && (
                   <p className="qm-err">{errorMsg || `Something went wrong. Please call us at ${phoneDisplay} instead.`}</p>
@@ -684,22 +614,24 @@ function Modal({ onClose }: { onClose: () => void }) {
             )}
 
             {/* Footer nav */}
-            {current !== "choice" && (
-              <div className="qm-footer">
+            <div className="qm-footer">
+              {stepIndex > 0 ? (
                 <button className="qm-back" onClick={back} disabled={busy}>
                   Back
                 </button>
-                <button className="cta-primary qm-next" onClick={next} disabled={!canProceed() || busy}>
-                  {status === "uploading"
-                    ? "Uploading…"
-                    : status === "sending"
-                      ? "Sending…"
-                      : current === "contact"
-                        ? "Get My Free Quote"
-                        : "Continue"}
-                </button>
-              </div>
-            )}
+              ) : (
+                <span />
+              )}
+              <button className="cta-primary qm-next" onClick={next} disabled={!canProceed() || busy}>
+                {status === "uploading"
+                  ? "Uploading…"
+                  : status === "sending"
+                    ? "Sending…"
+                    : current === "schedule"
+                      ? "Book My Free Quote"
+                      : "Continue"}
+              </button>
+            </div>
           </>
         )}
       </div>

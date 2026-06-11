@@ -747,6 +747,20 @@ body {
 .qm-body { padding: 1.6rem 1.5rem 0.5rem; }
 @media (min-width: 768px) { .qm-body { padding: 2rem 2rem 0.75rem; } }
 
+.qm-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin-bottom: 0.6rem;
+  border-radius: 9999px;
+  background: var(--amber-accent, #c2682a);
+  color: #fff;
+  font-weight: 800;
+  font-size: 1rem;
+}
+
 .qm-title {
   font-family: var(--font-headline), sans-serif;
   font-size: 2rem;
