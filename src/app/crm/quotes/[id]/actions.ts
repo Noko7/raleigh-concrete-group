@@ -192,7 +192,7 @@ export async function requestPayment(formData: FormData): Promise<void> {
   const sent = await notifyPaymentRequest({
     name: current.name,
     phone: current.phone,
-    amount: current.quote_amount,
+    quote_amount: current.quote_amount,
   }).catch(() => null);
 
   await updateQuote(session, id, { payment_requested_at: new Date().toISOString() });
