@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { isEmailAllowed, isRoleAllowed } from "@/lib/crm/access";
 import { AT_COOKIE, RT_COOKIE, ADMIN_READY } from "@/lib/crm/env";
 import { signInWithPassword, pgAdmin } from "@/lib/crm/rest";
 import type { Staff } from "@/lib/crm/types";
@@ -42,9 +43,10 @@ export async function POST(request: Request) {
 
     // Only users with an active staff row may use the CRM. id is a server-issued
     // UUID from the verified token (not user input), and still URL-encoded.
-    const res = await pgAdmin(`staff?id=eq.${encodeURIComponent(token.user.id)}&select=active&limit=1`);
-    const rows = res.ok ? ((await res.json()) as Pick<Staff, "active">[]) : [];
-    if (!rows[0]?.active) {
+    const res = await pgAdmin(`staff?id=eq.${encodeURIComponent(token.user.id)}&select=active,role,email&limit=1`);
+    const rows = res.ok ? ((await res.json()) as Pick<Staff, "active" | "role" | "email">[]) : [];
+    const staff = rows[0];
+    if (!staff?.active || !isRoleAllowed(staff.role) || !isEmailAllowed(staff.email ?? token.user.email)) {
       return NextResponse.json({ ok: false, error: "This account doesn't have CRM access." }, { status: 403 });
     }
 

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { isEmailAllowed, isRoleAllowed } from "./access";
 import { AT_COOKIE } from "./env";
 import { getAuthUser, pgAdmin } from "./rest";
 import type { Session, Staff } from "./types";
@@ -21,6 +22,8 @@ export async function getSession(): Promise<Session | null> {
   const rows = (await res.json()) as Staff[];
   const staff = rows[0];
   if (!staff || !staff.active) return null;
+  if (!isEmailAllowed(staff.email ?? user.email)) return null;
+  if (!isRoleAllowed(staff.role)) return null;
 
   return { accessToken: at, user, staff };
 }

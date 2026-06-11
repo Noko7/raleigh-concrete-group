@@ -31,7 +31,7 @@ const processSteps = [
   },
   {
     label: "We Build & Clean Up",
-    body: "Our licensed crew gets the job done on schedule, cleans up after themselves, and backs the work with a warranty.",
+    body: "Our experienced crew gets the job done on schedule, cleans up after themselves, and backs the work with a warranty.",
   },
 ];
 
@@ -81,8 +81,8 @@ export function LocationPage({ locationKey }: LocationPageProps) {
                   <p className="stat-label">Installs</p>
                 </div>
                 <div className="stat-card text-center">
-                  <p className="stat-value">Insured</p>
-                  <p className="stat-label">& Licensed</p>
+                  <p className="stat-value">Trusted</p>
+                  <p className="stat-label">Local Crew</p>
                 </div>
               </div>
             </div>

@@ -47,7 +47,7 @@ export const services: Service[] = [
       "Broom, smooth or stamped finishes",
       "Free same-day quote, often from satellite",
     ],
-    image: "/images/after_driveway.png",
+    image: "/images/residential_driveway_raleigh_concrete.png",
     beforeAfter: {
       before: "/images/before_driveway.png",
       after: "/images/after_driveway.png",
@@ -69,7 +69,7 @@ export const services: Service[] = [
       "Clean, finished look that adds usable yard",
       "Free on-site assessment",
     ],
-    image: "/images/retaining_wall.png",
+    image: "/images/retaining-wall-brick.png",
   },
   {
     slug: "paver-patios",
@@ -108,7 +108,7 @@ export const services: Service[] = [
       "Flat, square and built to drain",
       "Free same-day quote",
     ],
-    image: "/images/stamped_patio.png",
+    image: "/images/decorative_stampted_back_patio.png",
   },
   {
     slug: "walkways-sidewalks",
@@ -142,7 +142,7 @@ export const services: Service[] = [
       "Sealed for long-lasting color",
       "Free quote",
     ],
-    image: "/images/stampted_patio_2.png",
+    image: "/images/decorative_stamped_driveway.png",
   },
 
   // ── Concrete (volume + satellite-quotable) ──
@@ -161,7 +161,7 @@ export const services: Service[] = [
       "Foundations and footings",
       "Free same-day quote",
     ],
-    image: "/images/workers_pouring_driveway_live_action.png",
+    image: "/images/residential_driveway_raleigh_concrete_2.png",
   },
   {
     slug: "concrete-removal-replacement",
@@ -234,7 +234,75 @@ export const services: Service[] = [
       "ADA-aware ramps and pads",
       "Free quote",
     ],
-    image: "/images/workers_pouring_driveway_live_action.png",
+    image: "/images/parkinglot-commercial-job.png",
+  },
+  {
+    slug: "commercial-sidewalks-walkways",
+    name: "Commercial Sidewalks & Walkways",
+    navLabel: "Commercial Walkways",
+    group: "concrete",
+    blurb:
+      "Commercial sidewalk and entry walkway concrete for offices, retail and medical properties across Raleigh.",
+    intro:
+      "We pour and replace commercial sidewalks and entry walkways for HOAs, office buildings, retail centers and medical properties across Raleigh. Our crews plan around your foot traffic and keep access clear while work is underway.",
+    bullets: [
+      "Entryways, sidewalk runs and path tie-ins",
+      "Clean transitions and safe walking surfaces",
+      "Work sequenced to reduce disruption",
+      "Free site quote",
+    ],
+    image: "/images/commercial-sidewalk-entry-way-medical.png",
+  },
+  {
+    slug: "commercial-parking-approach-slabs",
+    name: "Commercial Parking & Approach Slabs",
+    navLabel: "Parking Slabs",
+    group: "concrete",
+    blurb:
+      "Approach slabs and parking-area concrete for commercial properties and multi-unit communities.",
+    intro:
+      "From approach slabs to heavy-use parking areas, we install commercial concrete built for daily traffic and long-term durability. We coordinate staging, pours and cure windows to keep your property moving.",
+    bullets: [
+      "Approach slabs and high-traffic areas",
+      "Built for durability and drainage",
+      "Phased scheduling to protect access",
+      "Free commercial estimate",
+    ],
+    image: "/images/parkinglot-commercial-job.png",
+  },
+  {
+    slug: "commercial-concrete-removal-replacement",
+    name: "Commercial Concrete Removal & Replacement",
+    navLabel: "Commercial Replacement",
+    group: "concrete",
+    blurb:
+      "Demo and replacement of failed commercial concrete with proper base prep and clean site turnover.",
+    intro:
+      "When commercial concrete is cracked, settled or unsafe, we handle complete removal and replacement. Our team demos, hauls, re-forms and re-pours so your property is left clean and ready for daily use.",
+    bullets: [
+      "Full demo and haul-off",
+      "Re-pour with proper prep and reinforcement",
+      "Walkways, slabs, loading and access zones",
+      "Clear scheduling and communication",
+    ],
+    image: "/images/loadnig_dock_commercial.png",
+  },
+  {
+    slug: "commercial-concrete-repair-resurfacing",
+    name: "Commercial Concrete Repair & Resurfacing",
+    navLabel: "Commercial Repair",
+    group: "concrete",
+    blurb:
+      "Commercial crack repair, patching and resurfacing to extend slab life without full replacement.",
+    intro:
+      "Not every commercial slab needs to be replaced. We repair cracks, patch damaged sections and resurface worn concrete so your property stays safe, presentable and functional.",
+    bullets: [
+      "Crack and joint stabilization",
+      "Targeted patching and resurfacing",
+      "Cost-effective life-extension options",
+      "Fast commercial response",
+    ],
+    image: "/images/commercial-entryway-clean.png",
   },
 
   // ── Hardscaping (high-ticket) ──
@@ -366,6 +434,7 @@ export const quoteServiceOptions = [
 
 // Photo of our team walking a homeowner through their quote — used to build trust.
 export const trustImage = "/images/servicing-to-client-image.png";
+export const clipboardImage = "/images/contractor_holding_pen+paper.png";
 
 // ── Header dropdowns: residential vs commercial ──
 export type NavLink = { label: string; slug: string };
@@ -385,11 +454,12 @@ export const residentialNav: NavLink[] = [
 
 export const commercialNav: NavLink[] = [
   { label: "Commercial Flatwork", slug: "commercial-flatwork" },
-  { label: "Sidewalks & Walkways", slug: "walkways-sidewalks" },
-  { label: "Parking & Approach Slabs", slug: "concrete-slabs-flatwork" },
-  { label: "Removal & Replacement", slug: "concrete-removal-replacement" },
-  { label: "Repair & Resurfacing", slug: "concrete-repair-resurfacing" },
+  { label: "Sidewalks & Walkways", slug: "commercial-sidewalks-walkways" },
+  { label: "Parking & Approach Slabs", slug: "commercial-parking-approach-slabs" },
+  { label: "Removal & Replacement", slug: "commercial-concrete-removal-replacement" },
+  { label: "Repair & Resurfacing", slug: "commercial-concrete-repair-resurfacing" },
 ];
+export const commercialServiceSlugs = new Set(commercialNav.map((item) => item.slug));
 
 // ── "What to Expect" 3-step process ──
 export type ProcessStep = { title: string; body: string };
@@ -412,7 +482,7 @@ export const processSteps: ProcessStep[] = [
 export type Stat = { value: string; label: string };
 export const homeStats: Stat[] = [
   { value: "4.9★", label: "Google Rated" },
-  { value: "Licensed", label: "& Fully Insured" },
+  { value: "Trusted", label: "Local Team" },
   { value: "Same-Day", label: "Free Quotes" },
   { value: "Warranty", label: "Backed Workmanship" },
 ];
@@ -420,12 +490,12 @@ export const homeStats: Stat[] = [
 // ── About / welcome copy ──
 export const aboutParagraphs: string[] = [
   "Finding a concrete contractor you can actually count on in Raleigh shouldn't be this hard. At Raleigh Concrete Group, our crews have poured and built countless driveways, patios, walkways and retaining walls across the Triangle — and we treat every job like it's at our own home.",
-  "Whether you need a brand-new driveway, a backyard patio you'll actually use, or a commercial slab done on schedule, we start with a free, detailed quote so you know the price before we ever break ground. We're licensed, insured, and familiar with local codes across Raleigh and the surrounding towns.",
+  "Whether you need a brand-new driveway, a backyard patio you'll actually use, or a commercial slab done on schedule, we start with a free, detailed quote so you know the price before we ever break ground. Our crews are experienced, respectful on site, and familiar with local codes across Raleigh and the surrounding towns.",
 ];
 
 export const valueProps = [
   "We Show Up On Time",
-  "Licensed & Insured",
+  "Clear, Honest Pricing",
   "Backed By Our Warranty",
 ];
 
@@ -433,15 +503,30 @@ export type GalleryImage = { src: string; alt: string };
 
 export const galleryImages: GalleryImage[] = [
   { src: "/images/after_driveway.png", alt: "Finished concrete driveway in Raleigh" },
+  { src: "/images/residential_driveway_raleigh_concrete.png", alt: "Residential driveway concrete installation" },
+  { src: "/images/residential_driveway_raleigh_concrete_2.png", alt: "Newly poured residential driveway" },
   { src: "/images/back_patio_finished.png", alt: "Finished backyard concrete patio" },
+  { src: "/images/pavers_backyard_porchsetup.png", alt: "Backyard paver porch setup" },
   { src: "/images/pavers_driveway.png", alt: "Custom paver driveway in Raleigh" },
   { src: "/images/retaining_wall.png", alt: "Block retaining wall installation" },
+  { src: "/images/retaining-wall-brick.png", alt: "Brick retaining wall installation" },
   { src: "/images/patio_pavers.png", alt: "Paver patio with seating area" },
+  { src: "/images/decorative_stamped_back_porch.png", alt: "Decorative stamped back porch concrete" },
+  { src: "/images/decorative_stampted_back_patio.png", alt: "Decorative stamped back patio concrete" },
   { src: "/images/stamped_patio.png", alt: "Stamped concrete patio" },
+  { src: "/images/front_walkway+driveway.png", alt: "Front walkway and driveway concrete work" },
   { src: "/images/walkway_concrete_front_of_house.png", alt: "Concrete walkway at a home's front entrance" },
+  { src: "/images/pavers_front_porch-stairs.png", alt: "Paver front porch and stairs" },
   { src: "/images/stampted_patio_2.png", alt: "Stamped concrete patio detail" },
+  { src: "/images/parkinglot-commercial-job.png", alt: "Commercial parking lot concrete project" },
+  { src: "/images/commercial-entryway-clean.png", alt: "Clean commercial concrete entryway" },
+  { src: "/images/commercial-sidewalk-entry-way-medical.png", alt: "Commercial sidewalk near medical building" },
+  { src: "/images/walkway_entryway-commercial.png", alt: "Commercial walkway and entryway concrete" },
+  { src: "/images/hoa_sidewalk_commercial.png", alt: "HOA commercial sidewalk concrete work" },
+  { src: "/images/loadnig_dock_commercial.png", alt: "Commercial loading dock concrete project" },
   { src: "/images/driveway_close_up_detailed_8k.png", alt: "Broom-finished concrete driveway close-up" },
   { src: "/images/workers_pouring_driveway_live_action.png", alt: "Our crew pouring a new concrete driveway" },
+  { src: "/images/servicing-to-client-image.png", alt: "Crew member walking customer through a quote" },
   { src: "/images/after_cracked_concrete_driveway.png", alt: "Repaired and resurfaced concrete driveway" },
 ];
 
@@ -493,7 +578,7 @@ export const locations: Record<LocationKey, LocationContent> = {
     title: "Concrete & Hardscaping in Raleigh, NC",
     seoTitle: "Concrete Raleigh NC | Driveways, Patios & Pavers",
     description:
-      "We build concrete driveways, patios, walkways and retaining walls for homeowners all over Raleigh. We're licensed, insured, and we show up when we say we will. Quotes are free, usually the same day.",
+      "We build concrete driveways, patios, walkways and retaining walls for homeowners all over Raleigh. We show up when we say we will and keep communication clear from quote to finish. Quotes are free, usually the same day.",
     heroImage: "/images/after_driveway.png",
     beforeAfterPairs: sharedBeforeAfter,
     neighborhoods: ["North Hills", "Five Points", "Brier Creek", "Midtown", "North Raleigh"],

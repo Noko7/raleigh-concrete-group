@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     template: "%s | Raleigh Concrete Group",
   },
   description:
-    "Raleigh Concrete Group builds concrete driveways, patios, walkways, retaining walls and pavers across Raleigh, Cary, Apex, Wake Forest and Durham, NC. Licensed, insured, and on time, with free quotes, usually the same day.",
+    "Raleigh Concrete Group builds concrete driveways, patios, walkways, retaining walls and pavers across Raleigh, Cary, Apex, Wake Forest and Durham, NC. On time, clear pricing, and free quotes, usually the same day.",
   metadataBase: new URL("https://www.raleighconcrete.net"),
   alternates: { canonical: "/" },
   openGraph: {

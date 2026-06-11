@@ -6,8 +6,11 @@ import { GalleryCarousel } from "@/components/gallery-carousel";
 import { SiteHeader } from "@/components/site-header";
 import {
   businessName,
+  clipboardImage,
+  commercialServiceSlugs,
   coreServices,
   galleryImages,
+  getService,
   links,
   phoneDisplay,
   type Service,
@@ -30,7 +33,13 @@ function CtaBar() {
 }
 
 export function ServicePage({ service }: { service: Service }) {
-  const otherServices = coreServices.filter((s) => s.slug !== service.slug);
+  const isCommercial = commercialServiceSlugs.has(service.slug);
+  const otherServices = isCommercial
+    ? Array.from(commercialServiceSlugs)
+        .filter((slug) => slug !== service.slug)
+        .map((slug) => getService(slug))
+        .filter((s): s is Service => Boolean(s))
+    : coreServices.filter((s) => s.slug !== service.slug);
 
   return (
     <>
@@ -60,8 +69,8 @@ export function ServicePage({ service }: { service: Service }) {
                   <p className="stat-label">Quotes</p>
                 </div>
                 <div className="stat-card text-center">
-                  <p className="stat-value">Insured</p>
-                  <p className="stat-label">& Licensed</p>
+                  <p className="stat-value">Trusted</p>
+                  <p className="stat-label">Local Crew</p>
                 </div>
               </div>
             </div>
@@ -79,6 +88,33 @@ export function ServicePage({ service }: { service: Service }) {
             </div>
           </div>
         </section>
+
+        {isCommercial && (
+          <section className="mx-auto w-full max-w-6xl px-4 pb-6 md:px-8">
+            <div className="grid items-center gap-6 rounded-2xl border border-white/10 bg-white/5 p-6 md:grid-cols-2">
+              <div className="overflow-hidden rounded-xl border border-white/10">
+                <Image
+                  src={clipboardImage}
+                  alt="Raleigh Concrete Group estimator with clipboard discussing a commercial scope"
+                  width={1000}
+                  height={750}
+                  className="h-full w-full object-cover"
+                  sizes="(max-width: 768px) 100vw, 50vw"
+                />
+              </div>
+              <div>
+                <span className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-amber-accent">
+                  Commercial Project Planning
+                </span>
+                <h2 className="mb-3 font-headline text-3xl text-ivory">Clear Scope. Clear Pricing.</h2>
+                <p className="text-slate-300">
+                  Every commercial quote includes a clear scope, schedule expectations, and a direct
+                  point of contact so your team knows exactly what to expect on site.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* What you get */}
         <section className="mx-auto w-full max-w-6xl px-4 py-12 md:px-8">
