@@ -50,13 +50,13 @@ export default function Home() {
               The Best Concrete Contractors in Raleigh.
             </h1>
             <p className="mx-auto mb-8 max-w-xl text-lg leading-relaxed text-slate-300">
-              Residential and commercial concrete done right the first time — driveways, patios,
+              Residential and commercial concrete done right the first time: driveways, patios,
               walkways, retaining walls and pavers, built by a crew that actually shows up.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <Link href="/estimate" className="cta-primary text-base">
+              <a href="/#quote" className="cta-primary text-base">
                 Get a Free Estimate
-              </Link>
+              </a>
               <a href={links.call} className="cta-secondary text-base">
                 Call or Text {phoneDisplay}
               </a>
@@ -127,9 +127,9 @@ export default function Home() {
                   {paragraph}
                 </p>
               ))}
-              <Link href="/estimate" className="cta-primary mt-2">
+              <a href="/#quote" className="cta-primary mt-2">
                 Get My Free Estimate
-              </Link>
+              </a>
             </div>
           </div>
         </section>
@@ -183,9 +183,9 @@ export default function Home() {
               ))}
             </div>
             <div className="mt-10 text-center">
-              <Link href="/estimate" className="cta-primary">
+              <a href="/#quote" className="cta-primary">
                 Start My Free Estimate
-              </Link>
+              </a>
             </div>
           </div>
         </section>
@@ -260,9 +260,9 @@ export default function Home() {
               For driveways and slabs we can often quote without coming out. Just add your address.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
-              <Link href="/estimate" className="rounded-full bg-[#2b1a12] px-7 py-3.5 text-base font-bold text-white transition hover:bg-[#3a241a]">
+              <a href="/#quote" className="rounded-full bg-[#2b1a12] px-7 py-3.5 text-base font-bold text-white transition hover:bg-[#3a241a]">
                 Get a Free Estimate
-              </Link>
+              </a>
               <a href={links.call} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
                 Call Now
               </a>
@@ -300,7 +300,7 @@ export default function Home() {
       </main>
 
       <div className="mobile-bar">
-        <Link href="/estimate" className="cta-primary flex-1 justify-center">Free Estimate</Link>
+        <a href="/#quote" className="cta-primary flex-1 justify-center">Free Estimate</a>
         <a href={links.call} className="cta-secondary flex-1 justify-center">Call</a>
         <a href={links.text} className="cta-secondary flex-1 justify-center">Text</a>
       </div>

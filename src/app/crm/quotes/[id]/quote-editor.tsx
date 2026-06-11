@@ -39,7 +39,7 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
   const amountNum = Number(amount);
   const amountValid = amount.trim() !== "" && Number.isFinite(amountNum) && amountNum > 0;
   const summaryValid = summary.trim().length > 0;
-  const previewPrice = amountValid ? `$${amountNum.toLocaleString("en-US")}` : "—";
+  const previewPrice = amountValid ? `$${amountNum.toLocaleString("en-US")}` : "N/A";
 
   function openConfirm() {
     if (!amountValid && !summaryValid) {
@@ -107,7 +107,7 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
           className="crm-input"
-          placeholder="What's included, scope, timeline — this is shown to the customer on their quote link."
+          placeholder="What's included, scope, timeline. This is shown to the customer on their quote link."
         />
       </label>
 
@@ -151,7 +151,7 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
               Send Quote
             </button>
             {state.sent && state.smsDelivered && !pending && !state.error && (
-              <span className="crm-saved">Quote sent — customer texted</span>
+              <span className="crm-saved">Quote sent, customer texted</span>
             )}
             {state.sent && !state.smsDelivered && !pending && !state.error && (
               <span className="crm-auth-error">Marked Sent, but the text didn&apos;t go out. Copy the customer link below and send it manually.</span>

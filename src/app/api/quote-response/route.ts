@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       }
     }
   } catch {
-    // ignore — texting must never fail the customer's action
+    // ignore - texting must never fail the customer's action
   }
 
   return NextResponse.json({ ok: true });

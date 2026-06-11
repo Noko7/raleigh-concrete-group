@@ -145,9 +145,9 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
             <CallIcon />
             <span>{phoneDisplay}</span>
           </a>
-          <Link href="/estimate" className="hdr-quote">
+          <a href="/#quote" className="hdr-quote">
             Free Estimate
-          </Link>
+          </a>
         </div>
 
         {/* ── Mobile hamburger ── */}
@@ -187,9 +187,9 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
             <a href={links.text} className="cta-secondary" onClick={close}>
               Text Now
             </a>
-            <Link href="/estimate" className="hdr-quote" onClick={close}>
+            <a href="/#quote" className="hdr-quote" onClick={close}>
               Free Estimate
-            </Link>
+            </a>
           </div>
         </div>
       )}

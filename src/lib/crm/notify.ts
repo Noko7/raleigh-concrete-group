@@ -76,7 +76,7 @@ async function sendCustom(to: string, message: string): Promise<SendResult> {
   return { ok: res.ok, provider: "custom", to, status: res.status, detail };
 }
 
-// Detailed send — returns why it failed (used by the diagnostic endpoint).
+// Detailed send - returns why it failed (used by the diagnostic endpoint).
 export async function sendSmsResult(toRaw: string, message: string): Promise<SendResult> {
   const to = toE164(toRaw);
   if (!to) return { ok: false, provider: SMS_PROVIDER, detail: `Invalid phone number: "${toRaw}"` };
@@ -110,7 +110,7 @@ export async function alertOwner(message: string, excludeRaw?: string | null): P
   try {
     for (const p of await getOwnerPhones()) add(p);
   } catch {
-    // ignore — fall back to OWNER_PHONE
+    // ignore - fall back to OWNER_PHONE
   }
   const exclude = excludeRaw ? toE164(excludeRaw) : null;
   if (exclude) recipients.delete(exclude);

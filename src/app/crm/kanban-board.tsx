@@ -177,7 +177,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
                       <span className={`kb-pill kb-pill-${q.quote_type === "online" ? "online" : "inperson"}`}>
                         {q.quote_type === "online" ? "Online" : q.quote_type === "inperson" ? "In-person" : "Lead"}
                       </span>
-                      {q.view_count > 0 && <span className="kb-pill kb-pill-view">Viewed Ã—{q.view_count}</span>}
+                      {q.view_count > 0 && <span className="kb-pill kb-pill-view">Viewed Ã-{q.view_count}</span>}
                       {q.assigned_to && <span className="kb-pill kb-pill-assigned">{nameMap[q.assigned_to] ?? "Assigned"}</span>}
                     </div>
 

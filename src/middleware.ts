@@ -24,7 +24,7 @@ const ALLOWED_ROLES = new Set(
     .filter(Boolean),
 );
 
-// Decode a JWT payload (no signature check — Supabase validates that on every
+// Decode a JWT payload (no signature check - Supabase validates that on every
 // API call; here we only need the expiry to decide whether to refresh).
 function jwtExpMs(token: string): number {
   try {
@@ -142,7 +142,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // The CRM lives under /crm (mapped from the crm.* subdomain). Everything else
-  // is the public marketing site / token pages — leave it untouched.
+  // is the public marketing site / token pages - leave it untouched.
   const touchesCrm = isCrmHost || pathname.startsWith("/crm");
   if (!touchesCrm) return withNoIndex(NextResponse.next());
 

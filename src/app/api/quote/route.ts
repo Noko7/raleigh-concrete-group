@@ -121,7 +121,7 @@ export async function POST(request: Request) {
   }
 
   if (!CONFIGURED) {
-    // No keys configured (e.g. preview without env) — accept but don't persist.
+    // No keys configured (e.g. preview without env) - accept but don't persist.
     return NextResponse.json({ ok: true, demo: true });
   }
 

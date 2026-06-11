@@ -38,9 +38,9 @@ export default async function ContractorsPage() {
               <tbody>
                 {contractors.map((c) => (
                   <tr key={c.id}>
-                    <td>{c.full_name || "—"}</td>
+                    <td>{c.full_name || "N/A"}</td>
                     <td>{c.email}</td>
-                    <td>{c.phone || "—"}</td>
+                    <td>{c.phone || "N/A"}</td>
                     <td>
                       {c.active ? (
                         <span className="crm-badge crm-badge-won">Active</span>

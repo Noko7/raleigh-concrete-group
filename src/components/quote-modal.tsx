@@ -220,7 +220,7 @@ function AddressAutocomplete({
         </span>
       )}
       {!loading && !verified && searchedEmpty && (
-        <span className="qm-ac-status">No exact match yet — keep typing your full street, city and state.</span>
+        <span className="qm-ac-status">No exact match yet, keep typing your full street, city and state.</span>
       )}
       {showList && suggestions.length > 0 && (
         <ul className="qm-suggestions">
@@ -415,7 +415,7 @@ function Modal({ onClose }: { onClose: () => void }) {
       if (res.ok && json.ok) {
         setStatus("success");
       } else if (res.status === 409 || json.fields?.includes("visit_date")) {
-        // That day filled up between picking it and submitting — send them back.
+        // That day filled up between picking it and submitting - send them back.
         setDateFull(true);
         setStatus("idle");
         if (mode === "inperson") setStepIndex(INPERSON_STEPS.indexOf("schedule"));
@@ -595,7 +595,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 />
                 {dateChecking && <span className="qm-ac-status">Checking that day…</span>}
                 {!dateChecking && dateFull && (
-                  <span className="qm-ac-status qm-ac-full">That day is fully booked — please pick another.</span>
+                  <span className="qm-ac-status qm-ac-full">That day is fully booked, please pick another.</span>
                 )}
                 {!dateChecking && !dateFull && data.visitDate && (
                   <span className="qm-ac-status qm-ac-ok">

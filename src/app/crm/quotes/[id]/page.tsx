@@ -22,7 +22,7 @@ function prettyDate(s: string) {
   return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" });
 }
 
-const statusLabel = (v: unknown) => STATUS_LABELS[String(v) as keyof typeof STATUS_LABELS] ?? String(v ?? "—");
+const statusLabel = (v: unknown) => STATUS_LABELS[String(v) as keyof typeof STATUS_LABELS] ?? String(v ?? "N/A");
 
 // Who triggered the event: a named teammate, the customer, or an automatic change.
 function eventActor(e: QuoteEvent, names: Map<string, string>): string {
@@ -50,7 +50,7 @@ function eventText(e: QuoteEvent, names: Map<string, string>): string {
     case "customer_viewed":
       return "Customer opened their quote";
     case "customer_accepted":
-      return `Customer accepted${m.scheduled_date ? ` — booked ${String(m.scheduled_date)}` : ""}${m.discount ? " ($150 credit)" : ""}`;
+      return `Customer accepted${m.scheduled_date ? `, booked ${String(m.scheduled_date)}` : ""}${m.discount ? " ($150 credit)" : ""}`;
     case "customer_declined":
       return "Customer declined the quote";
     case "reminder_sent":
@@ -119,11 +119,11 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               )}
               <div>
                 <dt>Service</dt>
-                <dd>{quote.service || "—"}</dd>
+                <dd>{quote.service || "N/A"}</dd>
               </div>
               <div>
                 <dt>Type</dt>
-                <dd>{quote.quote_type === "online" ? "Online (photos)" : quote.quote_type === "inperson" ? "In-person" : "—"}</dd>
+                <dd>{quote.quote_type === "online" ? "Online (photos)" : quote.quote_type === "inperson" ? "In-person" : "N/A"}</dd>
               </div>
               {quote.visit_date && (
                 <div>
@@ -143,7 +143,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               <div>
                 <dt>Address</dt>
                 <dd>
-                  {quote.address || "—"}
+                  {quote.address || "N/A"}
                   {mapsLink && (
                     <>
                       {" "}

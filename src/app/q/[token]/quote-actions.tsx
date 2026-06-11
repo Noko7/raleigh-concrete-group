@@ -113,7 +113,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
   if (mode === "save") {
     return (
       <div className="cq-offer">
-        <p className="cq-offer-eyebrow">Wait — before you go</p>
+        <p className="cq-offer-eyebrow">Wait, before you go</p>
         <h3>Here&apos;s a ${DECLINE_CREDIT} credit to earn your business.</h3>
         {discounted != null && (
           <p className="cq-offer-price">

@@ -1,4 +1,4 @@
-// ── Raleigh Concrete Group — central site data ──────────────────────────────
+// ── Raleigh Concrete Group - central site data ──────────────────────────────
 // Edit content here; the homepage, location pages, header and SEO all read from it.
 
 export const businessName = "Raleigh Concrete Group";
@@ -27,6 +27,7 @@ export type Service = {
   intro: string;
   bullets: string[];
   image: string;
+  showcaseImage?: string;
   beforeAfter?: BeforeAfterPair;
 };
 
@@ -162,6 +163,7 @@ export const services: Service[] = [
       "Free same-day quote",
     ],
     image: "/images/residential_driveway_raleigh_concrete_2.png",
+    showcaseImage: "/images/front_walkway+driveway.png",
   },
   {
     slug: "concrete-removal-replacement",
@@ -201,6 +203,7 @@ export const services: Service[] = [
       "Free quote",
     ],
     image: "/images/after_cracked_concrete_driveway.png",
+    showcaseImage: "/images/residential_driveway_raleigh_concrete.png",
   },
   {
     slug: "pool-decks",
@@ -218,6 +221,7 @@ export const services: Service[] = [
       "Free quote",
     ],
     image: "/images/stamped_patio.png",
+    showcaseImage: "/images/decorative_stamped_back_porch.png",
   },
   {
     slug: "commercial-flatwork",
@@ -235,6 +239,7 @@ export const services: Service[] = [
       "Free quote",
     ],
     image: "/images/parkinglot-commercial-job.png",
+    showcaseImage: "/images/commercial-entryway-clean.png",
   },
   {
     slug: "commercial-sidewalks-walkways",
@@ -252,6 +257,7 @@ export const services: Service[] = [
       "Free site quote",
     ],
     image: "/images/commercial-sidewalk-entry-way-medical.png",
+    showcaseImage: "/images/walkway_entryway-commercial.png",
   },
   {
     slug: "commercial-parking-approach-slabs",
@@ -269,6 +275,7 @@ export const services: Service[] = [
       "Free commercial estimate",
     ],
     image: "/images/parkinglot-commercial-job.png",
+    showcaseImage: "/images/hoa_sidewalk_commercial.png",
   },
   {
     slug: "commercial-concrete-removal-replacement",
@@ -286,6 +293,7 @@ export const services: Service[] = [
       "Clear scheduling and communication",
     ],
     image: "/images/loadnig_dock_commercial.png",
+    showcaseImage: "/images/commercial-entryway-clean.png",
   },
   {
     slug: "commercial-concrete-repair-resurfacing",
@@ -303,6 +311,7 @@ export const services: Service[] = [
       "Fast commercial response",
     ],
     image: "/images/commercial-entryway-clean.png",
+    showcaseImage: "/images/hoa_sidewalk_commercial.png",
   },
 
   // ── Hardscaping (high-ticket) ──
@@ -432,7 +441,7 @@ export const quoteServiceOptions = [
   "Other",
 ];
 
-// Photo of our team walking a homeowner through their quote — used to build trust.
+// Photo of our team walking a homeowner through their quote - used to build trust.
 export const trustImage = "/images/servicing-to-client-image.png";
 export const clipboardImage = "/images/contractor_holding_pen+paper.png";
 
@@ -470,7 +479,7 @@ export const processSteps: ProcessStep[] = [
   },
   {
     title: "Talk With a Concrete Pro",
-    body: "We go over your goals, your budget, and the best options for your space — straight answers, no pressure, and no jargon.",
+    body: "We go over your goals, your budget, and the best options for your space with straight answers, no pressure, and no jargon.",
   },
   {
     title: "Approve & Get Scheduled",
@@ -489,7 +498,7 @@ export const homeStats: Stat[] = [
 
 // ── About / welcome copy ──
 export const aboutParagraphs: string[] = [
-  "Finding a concrete contractor you can actually count on in Raleigh shouldn't be this hard. At Raleigh Concrete Group, our crews have poured and built countless driveways, patios, walkways and retaining walls across the Triangle — and we treat every job like it's at our own home.",
+  "Finding a concrete contractor you can actually count on in Raleigh shouldn't be this hard. At Raleigh Concrete Group, our crews have poured and built countless driveways, patios, walkways and retaining walls across the Triangle, and we treat every job like it's at our own home.",
   "Whether you need a brand-new driveway, a backyard patio you'll actually use, or a commercial slab done on schedule, we start with a free, detailed quote so you know the price before we ever break ground. Our crews are experienced, respectful on site, and familiar with local codes across Raleigh and the surrounding towns.",
 ];
 

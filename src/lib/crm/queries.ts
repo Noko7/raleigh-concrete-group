@@ -24,8 +24,8 @@ export async function listQuotes(session: Session, filters: QuoteFilters = {}): 
   return (await res.json()) as Quote[];
 }
 
-// Everything with a date on it — booked work days (scheduled_date) and in-person
-// quote visits (visit_date) — for the CRM calendar. RLS scopes this to the
+// Everything with a date on it - booked work days (scheduled_date) and in-person
+// quote visits (visit_date) - for the CRM calendar. RLS scopes this to the
 // owner (all rows) or a contractor (only their assigned jobs).
 export async function listScheduled(session: Session): Promise<Quote[]> {
   const res = await pgUser(
@@ -104,7 +104,7 @@ export async function getStaffById(session: Session, id: string): Promise<Staff 
 
 // Self-service profile update. Uses the service role so a contractor can edit
 // their own row, but the server restricts the write to their own id and to the
-// name/phone columns only — role and active can never be changed here.
+// name/phone columns only - role and active can never be changed here.
 export async function updateOwnProfile(
   session: Session,
   patch: { full_name?: string | null; phone?: string | null },
@@ -121,7 +121,7 @@ export async function updateOwnProfile(
   return res.ok;
 }
 
-// Phones of every active owner — they receive all notifications. Service role so
+// Phones of every active owner - they receive all notifications. Service role so
 // this works from /api/quote (no user session) too.
 export async function getOwnerPhones(): Promise<string[]> {
   const res = await pgAdmin("staff?role=eq.owner&active=eq.true&select=phone");
@@ -187,7 +187,7 @@ export async function setPrimaryContractorId(id: string | null): Promise<boolean
   return res.ok;
 }
 
-// Service-role lookup of a contractor's contact info (no session) — used by the
+// Service-role lookup of a contractor's contact info (no session) - used by the
 // public submission endpoint when auto-assigning the primary contractor.
 export async function getStaffContactById(id: string): Promise<{ phone: string | null; email: string | null } | null> {
   if (!/^[0-9a-fA-F-]{36}$/.test(id)) return null;

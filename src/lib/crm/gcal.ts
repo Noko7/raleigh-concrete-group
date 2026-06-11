@@ -1,4 +1,4 @@
-// Server-only Google Calendar integration. No SDK — just fetch() against
+// Server-only Google Calendar integration. No SDK - just fetch() against
 // Google's OAuth + Calendar REST endpoints so nothing needs to be installed.
 //
 // Flow: the owner connects their Google account once (OAuth, offline access).
@@ -181,7 +181,7 @@ function buildEvent(q: Quote, attendees: GAttendee[]): GEvent | null {
   if (q.scheduled_date) {
     return {
       ...base,
-      summary: `Concrete job — ${q.name}`,
+      summary: `Concrete job: ${q.name}`,
       description: describe(q, false),
       location: q.address ?? undefined,
       start: { date: q.scheduled_date },
@@ -200,7 +200,7 @@ function buildEvent(q: Quote, attendees: GAttendee[]): GEvent | null {
       const end = `${q.visit_date}T${endH}:${mm}:00`;
       return {
         ...base,
-        summary: `In-person quote — ${q.name}`,
+        summary: `In-person quote: ${q.name}`,
         description: describe(q, true),
         location: q.address ?? undefined,
         start: { dateTime: start, timeZone: TZ },
@@ -209,7 +209,7 @@ function buildEvent(q: Quote, attendees: GAttendee[]): GEvent | null {
     }
     return {
       ...base,
-      summary: `In-person quote — ${q.name}`,
+      summary: `In-person quote: ${q.name}`,
       description: describe(q, true),
       location: q.address ?? undefined,
       start: { date: q.visit_date },
@@ -230,7 +230,7 @@ async function staffEmail(id: string): Promise<string | null> {
 
 // Create or update the calendar invite for a quote. Idempotent: stores the
 // Google event id on the quote so subsequent calls update the same event (and
-// invite any newly-assigned contractor). Best-effort — never throws.
+// invite any newly-assigned contractor). Best-effort - never throws.
 export async function syncQuoteToCalendar(quoteId: string): Promise<void> {
   try {
     if (!googleConfigured()) return;
@@ -265,7 +265,7 @@ export async function syncQuoteToCalendar(quoteId: string): Promise<void> {
         console.error("[gcal] update failed", upd.status, await upd.text().catch(() => ""));
         return;
       }
-      // 404/410: event was deleted in Google — fall through and recreate.
+      // 404/410: event was deleted in Google - fall through and recreate.
     }
 
     const created = await fetch(`${CAL_BASE}?sendUpdates=all`, {

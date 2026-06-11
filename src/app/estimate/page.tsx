@@ -4,12 +4,17 @@ import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
 import {
   businessName,
-  homeStats,
   links,
   phoneDisplay,
   processSteps,
-  valueProps,
 } from "@/lib/site-data";
+
+const estimateStats = [
+  { value: "4.9★", label: "Google Rated" },
+  { value: "Same-Day", label: "Response" },
+  { value: "60 Sec", label: "Quick Form" },
+  { value: "Clear", label: "Written Price" },
+];
 
 export const metadata: Metadata = {
   title: "Get a Free Concrete Estimate in Raleigh",
@@ -35,12 +40,18 @@ export default function EstimatePage() {
                 Get Your Free Concrete Estimate
               </h1>
               <p className="mb-7 max-w-lg text-lg leading-relaxed text-slate-300">
-                Tell us about your project and we&apos;ll get you a clear, written price — usually the
+                Tell us about your project and we&apos;ll get you a clear, written price, usually the
                 same day. For driveways and slabs we can often quote from satellite imagery without
                 ever coming out.
               </p>
+              <a href="/#quote" className="cta-primary mb-4 w-full max-w-sm justify-center text-base sm:w-auto">
+                Start My 60-Second Quote
+              </a>
+              <p className="text-sm text-slate-400">
+                Most homeowners finish this in under 1 minute.
+              </p>
               <div className="grid max-w-md grid-cols-2 gap-3 sm:grid-cols-4">
-                {homeStats.map((stat) => (
+                {estimateStats.map((stat) => (
                   <div key={stat.label} className="stat-card text-center">
                     <p className="stat-value text-xl">{stat.value}</p>
                     <p className="stat-label">{stat.label}</p>
@@ -51,15 +62,16 @@ export default function EstimatePage() {
 
             {/* Start card */}
             <div className="rounded-3xl border border-amber-accent/30 bg-white/5 p-7 md:p-8">
-              <h2 className="mb-2 font-headline text-3xl text-ivory">Start Your Estimate</h2>
+              <h2 className="mb-2 font-headline text-3xl text-ivory">Ready for Your Price?</h2>
               <p className="mb-6 text-slate-300">
-                It takes about a minute. Choose the option that works best for you.
+                Use the quick form to upload photos and share your address. We&apos;ll review and send
+                your estimate fast.
               </p>
-              <a href="#quote" className="cta-primary mb-3 w-full justify-center text-base">
-                Request My Estimate Online
+              <a href="/#quote" className="cta-primary mb-3 w-full justify-center text-base">
+                Open Quick Quote Form
               </a>
               <p className="mb-5 text-center text-sm text-slate-400">
-                Upload a few photos and we&apos;ll get to work.
+                No phone call required to get started.
               </p>
               <div className="flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row">
                 <a href={links.call} className="cta-secondary flex-1 justify-center">
@@ -99,9 +111,9 @@ export default function EstimatePage() {
 
         {/* ── Why choose us ── */}
         <section className="mx-auto w-full max-w-6xl px-4 py-14 md:px-8">
-          <h2 className="mb-8 font-headline text-4xl text-ivory">Why Homeowners Choose Us</h2>
+          <h2 className="mb-8 font-headline text-4xl text-ivory">Why Homeowners Convert Fast Here</h2>
           <div className="grid gap-4 sm:grid-cols-3">
-            {valueProps.map((point) => (
+            {["Same-day response", "Clear pricing in writing", "No-pressure estimate flow"].map((point) => (
               <div key={point} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-5">
                 <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-amber-accent text-black">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
@@ -113,7 +125,7 @@ export default function EstimatePage() {
             ))}
           </div>
           <div className="mt-10 text-center">
-            <a href="#quote" className="cta-primary text-base">
+            <a href="/#quote" className="cta-primary text-base">
               Request My Free Estimate
             </a>
           </div>
@@ -130,7 +142,7 @@ export default function EstimatePage() {
       </main>
 
       <div className="mobile-bar">
-        <a href="#quote" className="cta-primary flex-1 justify-center">Free Estimate</a>
+        <a href="/#quote" className="cta-primary flex-1 justify-center">Free Estimate</a>
         <a href={links.call} className="cta-secondary flex-1 justify-center">Call</a>
         <a href={links.text} className="cta-secondary flex-1 justify-center">Text</a>
       </div>

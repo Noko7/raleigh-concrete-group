@@ -104,7 +104,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   <td>
                     <span className={`crm-badge crm-badge-${c.lastStatus}`}>{STATUS_LABELS[c.lastStatus]}</span>
                   </td>
-                  <td>{c.wonValue > 0 ? `$${c.wonValue.toLocaleString()}` : "—"}</td>
+                  <td>{c.wonValue > 0 ? `$${c.wonValue.toLocaleString()}` : "N/A"}</td>
                   <td className="crm-row-actions">
                     <Link href={`${base}/?search=${encodeURIComponent(c.phone)}`} className="crm-btn crm-btn-ghost">
                       View quotes

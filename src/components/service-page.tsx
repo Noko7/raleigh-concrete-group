@@ -33,6 +33,10 @@ function CtaBar() {
 }
 
 export function ServicePage({ service }: { service: Service }) {
+  const secondaryShowcaseImage =
+    service.showcaseImage && service.showcaseImage !== service.image
+      ? service.showcaseImage
+      : "/images/servicing-to-client-image.png";
   const isCommercial = commercialServiceSlugs.has(service.slug);
   const otherServices = isCommercial
     ? Array.from(commercialServiceSlugs)
@@ -155,7 +159,7 @@ export function ServicePage({ service }: { service: Service }) {
             ) : (
               <div className="overflow-hidden rounded-2xl border border-white/10">
                 <Image
-                  src={service.image}
+                  src={secondaryShowcaseImage}
                   alt={`${service.name} project in Raleigh`}
                   width={1000}
                   height={750}

@@ -37,7 +37,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 1200,
         type: "image/jpeg",
-        alt: "Raleigh Concrete Group — concrete driveways, patios and pavers in the Triangle",
+        alt: "Raleigh Concrete Group: concrete driveways, patios and pavers in the Triangle",
       },
     ],
   },
