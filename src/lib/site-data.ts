@@ -71,6 +71,7 @@ export const services: Service[] = [
       "Free on-site assessment",
     ],
     image: "/images/retaining-wall-brick.png",
+    showcaseImage: "/images/retaining_wall.png",
   },
   {
     slug: "paver-patios",
@@ -110,6 +111,7 @@ export const services: Service[] = [
       "Free same-day quote",
     ],
     image: "/images/decorative_stampted_back_patio.png",
+    showcaseImage: "/images/stamped_patio.png",
   },
   {
     slug: "walkways-sidewalks",
@@ -127,6 +129,7 @@ export const services: Service[] = [
       "Free quote",
     ],
     image: "/images/walkway_concrete_front_of_house.png",
+    showcaseImage: "/images/front_walkway+driveway.png",
   },
   {
     slug: "stamped-decorative-concrete",
@@ -144,6 +147,7 @@ export const services: Service[] = [
       "Free quote",
     ],
     image: "/images/decorative_stamped_driveway.png",
+    showcaseImage: "/images/stampted_patio_2.png",
   },
 
   // ── Concrete (volume + satellite-quotable) ──
@@ -163,7 +167,7 @@ export const services: Service[] = [
       "Free same-day quote",
     ],
     image: "/images/residential_driveway_raleigh_concrete_2.png",
-    showcaseImage: "/images/front_walkway+driveway.png",
+    showcaseImage: "/images/workers_pouring_driveway_live_action.png",
   },
   {
     slug: "concrete-removal-replacement",
@@ -180,7 +184,7 @@ export const services: Service[] = [
       "Driveways, patios and walkways",
       "Free quote",
     ],
-    image: "/images/before_cracked_concrete_driveway.png",
+    image: "/images/workers_pouring_driveway_live_action.png",
     beforeAfter: {
       before: "/images/before_cracked_concrete_driveway.png",
       after: "/images/after_cracked_concrete_driveway.png",
@@ -331,6 +335,7 @@ export const services: Service[] = [
       "Free quote",
     ],
     image: "/images/pavers_driveway.png",
+    showcaseImage: "/images/pavers_front_porch-stairs.png",
   },
   {
     slug: "paver-walkways-pathways",
@@ -348,6 +353,7 @@ export const services: Service[] = [
       "Free quote",
     ],
     image: "/images/patio_pavers.png",
+    showcaseImage: "/images/pavers_backyard_porchsetup.png",
   },
   {
     slug: "hardscape-paver-installation",
@@ -365,6 +371,7 @@ export const services: Service[] = [
       "Free design and quote",
     ],
     image: "/images/patio_pavers.png",
+    showcaseImage: "/images/pavers_driveway.png",
   },
   {
     slug: "steps-stoops-landings",
@@ -382,6 +389,7 @@ export const services: Service[] = [
       "Free quote",
     ],
     image: "/images/retaining_wall.png",
+    showcaseImage: "/images/pavers_front_porch-stairs.png",
   },
   {
     slug: "seating-walls-fire-pits",
@@ -399,6 +407,7 @@ export const services: Service[] = [
       "Free quote",
     ],
     image: "/images/back_patio_finished.png",
+    showcaseImage: "/images/pavers_backyard_porchsetup.png",
   },
   {
     slug: "landscape-curbing",
@@ -416,6 +425,7 @@ export const services: Service[] = [
       "Free quote",
     ],
     image: "/images/driveway_close_up_detailed_8k.png",
+    showcaseImage: "/images/front_walkway+driveway.png",
   },
 ];
 

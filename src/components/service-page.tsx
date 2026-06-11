@@ -33,10 +33,19 @@ function CtaBar() {
 }
 
 export function ServicePage({ service }: { service: Service }) {
+  // Guarantee the stacked hero + showcase images are never identical. Prefer the
+  // service's own showcase image, then fall back through a small pool until we
+  // land on something different from the hero image.
+  const showcaseFallbacks = [
+    "/images/servicing-to-client-image.png",
+    "/images/workers_pouring_driveway_live_action.png",
+    "/images/front_walkway+driveway.png",
+  ];
   const secondaryShowcaseImage =
     service.showcaseImage && service.showcaseImage !== service.image
       ? service.showcaseImage
-      : "/images/servicing-to-client-image.png";
+      : showcaseFallbacks.find((src) => src !== service.image) ??
+        showcaseFallbacks[0];
   const isCommercial = commercialServiceSlugs.has(service.slug);
   const otherServices = isCommercial
     ? Array.from(commercialServiceSlugs)
