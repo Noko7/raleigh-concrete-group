@@ -520,9 +520,10 @@ export const valueProps = [
 
 export type GalleryImage = { src: string; alt: string };
 
+// "Recent work" gallery shown in the auto-scrolling carousels and the /gallery
+// page. Intentionally excludes before/after pairs (those live in the dedicated
+// comparison sliders) and the customer-service trust photo (used in About).
 export const galleryImages: GalleryImage[] = [
-  { src: "/images/after_driveway.png", alt: "Finished concrete driveway in Raleigh" },
-  { src: "/images/residential_driveway_raleigh_concrete.png", alt: "Residential driveway concrete installation" },
   { src: "/images/residential_driveway_raleigh_concrete_2.png", alt: "Newly poured residential driveway" },
   { src: "/images/back_patio_finished.png", alt: "Finished backyard concrete patio" },
   { src: "/images/pavers_backyard_porchsetup.png", alt: "Backyard paver porch setup" },
@@ -545,8 +546,6 @@ export const galleryImages: GalleryImage[] = [
   { src: "/images/loadnig_dock_commercial.png", alt: "Commercial loading dock concrete project" },
   { src: "/images/driveway_close_up_detailed_8k.png", alt: "Broom-finished concrete driveway close-up" },
   { src: "/images/workers_pouring_driveway_live_action.png", alt: "Our crew pouring a new concrete driveway" },
-  { src: "/images/servicing-to-client-image.png", alt: "Crew member walking customer through a quote" },
-  { src: "/images/after_cracked_concrete_driveway.png", alt: "Repaired and resurfaced concrete driveway" },
 ];
 
 export const links = {
@@ -572,7 +571,7 @@ export type LocationContent = {
   neighborhoods: string[];
 };
 
-const sharedBeforeAfter: BeforeAfterPair[] = [
+export const sharedBeforeAfter: BeforeAfterPair[] = [
   {
     before: "/images/before_driveway.png",
     after: "/images/after_driveway.png",

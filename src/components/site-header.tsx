@@ -128,7 +128,7 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
         <nav className="main-nav" aria-label="Primary">
           <NavDropdown label="Residential" items={residentialNav} activeService={activeService} />
           <NavDropdown label="Commercial" items={commercialNav} activeService={activeService} />
-          <Link href="/#gallery" className="nav-link">
+          <Link href="/gallery" className="nav-link">
             Gallery
           </Link>
           <Link href="/#reviews" className="nav-link">
@@ -169,7 +169,7 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
           <nav className="mobile-nav">
             <MobileGroup label="Residential Services" items={residentialNav} onNavigate={close} />
             <MobileGroup label="Commercial Services" items={commercialNav} onNavigate={close} />
-            <Link href="/#gallery" className="mobile-nav-link" onClick={close}>
+            <Link href="/gallery" className="mobile-nav-link" onClick={close}>
               Gallery
             </Link>
             <Link href="/#reviews" className="mobile-nav-link" onClick={close}>

@@ -89,7 +89,7 @@ body {
   width: max-content;
   /* Duplicated list + translateX(-50%) = seamless loop. Spacing is on the item
      (margin) not a track gap, so -50% lands exactly on one full set. */
-  animation: marquee-scroll 55s linear infinite;
+  animation: marquee-scroll 80s linear infinite;
   will-change: transform;
 }
 .marquee:hover .marquee-track {
@@ -616,7 +616,7 @@ body {
   display: flex;
   width: max-content;
   /* Opposite direction from the hero strip; duplicated list + -50% = seamless. */
-  animation: marquee-scroll 70s linear infinite reverse;
+  animation: marquee-scroll 95s linear infinite reverse;
   will-change: transform;
 }
 .gscroll:hover .gscroll-track {
@@ -628,10 +628,18 @@ body {
   width: 26rem;
   height: 17rem;
   margin-right: 1.1rem;
+  padding: 0;
   border-radius: 1.1rem;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
+  cursor: zoom-in;
+  transition: border-color 160ms, transform 160ms;
+}
+.gscroll-item:hover,
+.gscroll-item:focus-visible {
+  border-color: var(--amber);
+  outline: none;
 }
 .gscroll-img {
   width: 100%;
@@ -641,6 +649,106 @@ body {
 @media (max-width: 768px) {
   .gscroll-item { width: 17rem; height: 11.5rem; margin-right: 0.8rem; }
 }
+
+/* ─── Expandable image grid (/gallery) ───────────────── */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+.gallery-tile {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: zoom-in;
+  transition: border-color 160ms, transform 160ms;
+}
+.gallery-tile:hover,
+.gallery-tile:focus-visible {
+  border-color: var(--amber);
+  transform: translateY(-2px);
+  outline: none;
+}
+.gallery-tile-img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ─── Lightbox ───────────────────────────────────────── */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: rgba(6, 8, 10, 0.92);
+  backdrop-filter: blur(4px);
+  animation: qm-fade 160ms ease;
+}
+.lightbox-stage {
+  position: relative;
+  max-width: min(94vw, 1400px);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.lightbox-img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 82vh;
+  object-fit: contain;
+  border-radius: 0.8rem;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.lightbox-caption {
+  margin-top: 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #cbd5e1;
+  text-align: center;
+}
+.lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1.25rem;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  font-size: 2rem;
+  line-height: 1;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 140ms;
+}
+.lightbox-close:hover { background: rgba(255, 255, 255, 0.2); }
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 52px;
+  height: 52px;
+  font-size: 2.2rem;
+  line-height: 1;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 140ms;
+}
+.lightbox-nav:hover { background: rgba(255, 255, 255, 0.2); }
+.lightbox-nav-l { left: clamp(0.75rem, 3vw, 2rem); }
+.lightbox-nav-r { right: clamp(0.75rem, 3vw, 2rem); }
 
 /* ─── Quote form (on ivory card) ─────────────────────── */
 .quote-form { display: flex; flex-direction: column; gap: 0.9rem; }

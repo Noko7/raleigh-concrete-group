@@ -96,6 +96,26 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ── Before / After (right below the recent-work strip) ── */}
+        <section className="mx-auto w-full max-w-6xl px-4 pb-8 pt-6 md:px-8">
+          <h2 className="mb-6 font-headline text-4xl text-ivory">See the Before &amp; After</h2>
+          <div className="grid gap-6 md:grid-cols-2">
+            {homeBeforeAfter.map((pair) => (
+              <div key={pair.label}>
+                <BeforeAfterSlider
+                  beforeSrc={pair.before}
+                  afterSrc={pair.after}
+                  beforeAlt={`Raleigh ${pair.label} before`}
+                  afterAlt={`Raleigh ${pair.label} after`}
+                />
+                <p className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  {pair.label} · Drag to Compare
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* ── Stat bar ── */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-10 pt-6 md:px-8">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -163,26 +183,6 @@ export default function Home() {
                 Get My Free Estimate
               </a>
             </div>
-          </div>
-        </section>
-
-        {/* ── Before / After ── */}
-        <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8">
-          <h2 className="mb-6 font-headline text-4xl text-ivory">See the Before &amp; After</h2>
-          <div className="grid gap-6 md:grid-cols-2">
-            {homeBeforeAfter.map((pair) => (
-              <div key={pair.label}>
-                <BeforeAfterSlider
-                  beforeSrc={pair.before}
-                  afterSrc={pair.after}
-                  beforeAlt={`Raleigh ${pair.label} before`}
-                  afterAlt={`Raleigh ${pair.label} after`}
-                />
-                <p className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  {pair.label} · Drag to Compare
-                </p>
-              </div>
-            ))}
           </div>
         </section>
 
