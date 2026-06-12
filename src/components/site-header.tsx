@@ -115,7 +115,7 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
         {/* ── Logo (horizontal) ── */}
         <Link href="/" className="logo-lockup" onClick={close} aria-label={businessName}>
           <Image
-            src="/images/logo_horizontal.png"
+            src="/images/logo_horizontal_light.png"
             alt={businessName}
             width={967}
             height={243}

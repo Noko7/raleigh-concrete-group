@@ -47,16 +47,14 @@ export default function Home() {
         <section className="relative overflow-hidden pb-6 pt-12 md:pt-16">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_30%,rgba(194,104,42,0.18),transparent_45%)]" />
           <div className="relative mx-auto max-w-6xl px-4 text-center md:px-8">
-            <div className="hero-logo-plate mx-auto mb-6">
-              <Image
-                src="/images/logo_horizontal.png"
-                alt="Raleigh Concrete Group"
-                width={600}
-                height={160}
-                priority
-                className="h-auto w-auto max-w-[240px] md:max-w-[400px]"
-              />
-            </div>
+            <Image
+              src="/images/logo_horizontal_light.png"
+              alt="Raleigh Concrete Group"
+              width={967}
+              height={243}
+              priority
+              className="mx-auto mb-6 h-auto w-auto max-w-[280px] drop-shadow-lg md:max-w-[440px]"
+            />
             <span className="mb-4 inline-block text-xs font-bold uppercase tracking-[0.22em] text-amber-accent">
               Concrete &amp; Hardscaping · Raleigh, NC
             </span>
