@@ -675,6 +675,15 @@ function Modal({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
+            {/* SMS consent disclosure, shown on the final step before submitting */}
+            {mode && current === "schedule" && (
+              <p className="qm-consent">
+                By submitting your phone number, you agree to receive text messages from Raleigh
+                Concrete Group regarding your quote and project. Message &amp; data rates may apply.
+                Reply STOP to unsubscribe.
+              </p>
+            )}
+
             {/* Footer nav (hidden on the choice screen) */}
             {mode && (
             <div className="qm-footer">

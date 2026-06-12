@@ -1084,6 +1084,15 @@ body {
 
 .qm-err { color: #b3402f; font-size: 0.85rem; font-weight: 600; margin: 0.6rem 0 0; }
 
+.qm-consent {
+  padding: 0 1.5rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: rgba(43, 26, 18, 0.6);
+}
+@media (min-width: 768px) { .qm-consent { padding: 0 2rem; } }
+
 /* Footer nav */
 .qm-footer {
   position: sticky;
