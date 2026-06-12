@@ -118,9 +118,6 @@ body {
 @media (max-width: 768px) {
   .marquee-item { width: 14rem; height: 9.5rem; margin-right: 0.7rem; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .marquee-track { animation: none; }
-}
 
 /* ─── Keyframes ──────────────────────────────────────── */
 @keyframes glow-pulse {
@@ -643,9 +640,6 @@ body {
 }
 @media (max-width: 768px) {
   .gscroll-item { width: 17rem; height: 11.5rem; margin-right: 0.8rem; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .gscroll-track { animation: none; }
 }
 
 /* ─── Quote form (on ivory card) ─────────────────────── */

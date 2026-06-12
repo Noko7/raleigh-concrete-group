@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
-import { GalleryCarousel } from "@/components/gallery-carousel";
 import { SiteHeader } from "@/components/site-header";
 import {
   aboutParagraphs,
@@ -165,12 +164,6 @@ export default function Home() {
               </a>
             </div>
           </div>
-        </section>
-
-        {/* ── Gallery ── */}
-        <section id="gallery" className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 pb-10 md:px-8">
-          <h2 className="mb-6 font-headline text-4xl text-ivory">Recent Work in Raleigh</h2>
-          <GalleryCarousel images={galleryImages} />
         </section>
 
         {/* ── Before / After ── */}
