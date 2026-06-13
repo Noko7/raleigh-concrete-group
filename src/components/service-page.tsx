@@ -233,9 +233,17 @@ export function ServicePage({ service }: { service: Service }) {
         <footer className="border-t border-white/10 bg-black/20">
           <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-8 md:px-8">
             <span className="font-headline text-2xl text-ivory">{businessName}</span>
-            <p className="text-right text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-              {businessName} · Concrete &amp; Hardscaping · {phoneDisplay}
-            </p>
+            <div className="flex flex-col items-end gap-1">
+              <Link
+                href="/privacy-policy"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300 transition hover:text-amber-accent"
+              >
+                Privacy Policy
+              </Link>
+              <p className="text-right text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
+                {businessName} · Concrete &amp; Hardscaping · {phoneDisplay}
+              </p>
+            </div>
           </div>
         </footer>
       </main>

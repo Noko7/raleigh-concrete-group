@@ -1092,6 +1092,27 @@ body {
   color: rgba(43, 26, 18, 0.6);
 }
 @media (min-width: 768px) { .qm-consent { padding: 0 2rem; } }
+.qm-consent-link { color: #8a5a2b; text-decoration: underline; font-weight: 600; }
+
+/* ─── Legal prose (privacy policy, terms) ────────────── */
+.legal-prose { color: #cbd5e1; line-height: 1.7; font-size: 1rem; }
+.legal-prose p { margin: 0 0 1.1rem; }
+.legal-prose h2 {
+  margin: 2.2rem 0 0.8rem;
+  font-family: var(--font-headline);
+  font-size: 1.9rem;
+  color: var(--ivory);
+}
+.legal-prose ul { margin: 0 0 1.1rem; padding-left: 1.25rem; list-style: disc; }
+.legal-prose li { margin: 0 0 0.5rem; }
+.legal-prose a { color: var(--amber); text-decoration: underline; font-weight: 600; }
+.legal-prose strong { color: var(--ivory); }
+.legal-emphasis {
+  padding: 1rem 1.2rem;
+  border-left: 3px solid var(--amber);
+  background: rgba(194, 104, 42, 0.08);
+  border-radius: 0.4rem;
+}
 
 /* Footer nav */
 .qm-footer {

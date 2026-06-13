@@ -317,9 +317,17 @@ export default function Home() {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">
               <span className="font-headline text-2xl text-ivory">{businessName}</span>
-              <p className="text-right text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-                {businessName} · Concrete &amp; Hardscaping · {phoneDisplay}
-              </p>
+              <div className="flex flex-col items-start gap-1 md:items-end">
+                <Link
+                  href="/privacy-policy"
+                  className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300 transition hover:text-amber-accent"
+                >
+                  Privacy Policy
+                </Link>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300 md:text-right">
+                  {businessName} · Concrete &amp; Hardscaping · {phoneDisplay}
+                </p>
+              </div>
             </div>
           </div>
         </footer>
