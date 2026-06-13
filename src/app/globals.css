@@ -782,6 +782,23 @@ body {
 .qf-note--ok { color: #2f6b46; }
 .qf-note--err { color: #b3402f; }
 
+.estimate-consent {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: rgba(43, 26, 18, 0.78);
+}
+.estimate-consent input[type="checkbox"] {
+  margin-top: 0.15rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+  accent-color: var(--amber);
+}
+.estimate-consent a { color: #8a5a2b; text-decoration: underline; font-weight: 600; }
+
 @media (max-width: 560px) {
   .qf-row { grid-template-columns: 1fr; }
 }
