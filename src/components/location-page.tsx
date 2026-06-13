@@ -65,7 +65,8 @@ export function LocationPage({ locationKey }: LocationPageProps) {
       <JsonLd
         data={[
           serviceSchema({
-            name: `Concrete & Hardscaping in ${location.city}`,
+            name: `Concrete & Hardscaping in ${location.city}, NC`,
+            serviceType: "Concrete & Hardscaping",
             description: location.description,
             slug: location.key,
             url: `/${location.key}`,
@@ -184,10 +185,12 @@ export function LocationPage({ locationKey }: LocationPageProps) {
             {coreServices.map((service) => (
               <Link
                 key={service.slug}
-                href={`/services/${service.slug}`}
+                href={`/${location.key}/${service.slug}`}
                 className="group rounded-2xl border border-amber-accent/30 bg-amber-accent/5 p-5 transition hover:-translate-y-1 hover:border-amber-accent/60 hover:bg-amber-accent/10"
               >
-                <h3 className="mb-2 font-headline text-2xl text-ivory">{service.name}</h3>
+                <h3 className="mb-2 font-headline text-2xl text-ivory">
+                  {service.name} in {location.city}
+                </h3>
                 <p className="text-sm leading-relaxed text-slate-300">{service.blurb}</p>
                 <span className="mt-3 inline-block text-sm font-bold uppercase tracking-[0.12em] text-amber-accent opacity-70 transition group-hover:opacity-100">
                   View {service.navLabel} →

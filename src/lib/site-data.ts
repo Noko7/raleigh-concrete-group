@@ -574,6 +574,107 @@ export function getServiceFaqs(slug: string): FaqItem[] {
   return [...specific, ...universalServiceFaqs];
 }
 
+// Specific (non-universal) service FAQs, used when composing city+service pages
+// so we don't repeat the site-wide "what areas do you serve" answer everywhere.
+export function getServiceSpecificFaqs(slug: string): FaqItem[] {
+  return serviceFaqMap[slug] ?? [];
+}
+
+// ── City + Service landing pages (/[city]/[service]) ──
+// We intentionally limit this matrix to the core money services so each page
+// carries substantial, genuinely localized copy rather than thin doorway-style
+// boilerplate. Every combination gets a unique intro that weaves in the city
+// and two real neighborhoods.
+export const cityServiceSlugs = coreServices.map((s) => s.slug);
+
+export const cityServicePairs: { location: LocationKey; service: string }[] =
+  locationKeys.flatMap((location) =>
+    cityServiceSlugs.map((service) => ({ location, service })),
+  );
+
+export function isCityServicePair(location: string, service: string): boolean {
+  return (
+    locationKeys.includes(location as LocationKey) &&
+    cityServiceSlugs.includes(service)
+  );
+}
+
+export type CityServiceContent = {
+  service: Service;
+  city: string;
+  locationKey: LocationKey;
+  neighborhoods: string[];
+  metaTitle: string;
+  metaDescription: string;
+  heading: string;
+  paragraphs: string[];
+  faqs: FaqItem[];
+};
+
+function cityServiceParagraphs(service: Service, city: string, hoods: string[]): string[] {
+  const a = hoods[0] ?? city;
+  const b = hoods[1] ?? "the surrounding area";
+  const lead: Record<string, string[]> = {
+    "concrete-driveways": [
+      `Need a new concrete driveway in ${city}? We pour and replace driveways for homeowners all over ${city}, from ${a} to ${b}, with proper base prep so they hold up to daily traffic and North Carolina weather.`,
+      `Whether you're tearing out a cracked, sinking slab or paving fresh, we handle the full job, broom, smooth or stamped finish included, and we can usually get you a same-day quote on a ${city} driveway from satellite imagery.`,
+    ],
+    "retaining-walls": [
+      `We build engineered concrete and block retaining walls across ${city}, including ${a} and ${b}, to handle grading, drainage and erosion on sloped lots.`,
+      `The walls that fail are almost always the ones with bad drainage behind them, so we build in gravel backfill and proper drainage from the start. We'll tell you up front whether your ${city} project needs a permit or engineering.`,
+    ],
+    "paver-patios": [
+      `Thinking about a paver patio in ${city}? We design and install paver patios for homes in ${a}, ${b} and throughout ${city}, on a compacted base with edge restraints so they stay level for years.`,
+      `Pavers give you a huge range of colors and patterns, flex with the ground instead of cracking, and individual units can be lifted and reset if you ever need to. We'll walk you through the options for your ${city} backyard.`,
+    ],
+    "concrete-patios": [
+      `A concrete patio is one of the most cost-effective ways to add usable outdoor space to a ${city} home. We pour patios across ${a}, ${b} and the rest of ${city} with broom, smooth, exposed-aggregate or stamped finishes.`,
+      `Most ${city} patios are poured within a day or two once the site is prepped, and we handle the layout, base and finish so it drains correctly and looks clean against your house.`,
+    ],
+    "walkways-sidewalks": [
+      `We build concrete walkways and sidewalks for ${city} homeowners, tying ${a} and ${b} properties together with clean, safe, properly graded paths.`,
+      `New walkways are usually finished in a day, and we match width, finish and joint spacing to your existing concrete as closely as possible so the addition looks like it belongs.`,
+    ],
+    "stamped-decorative-concrete": [
+      `Want the look of stone, brick or slate without the price tag in ${city}? We install stamped and decorative concrete for patios, walkways and pool decks across ${a}, ${b} and all of ${city}.`,
+      `Stamped concrete usually costs less to install than natural stone or pavers, and with a periodic re-seal it holds its color and pattern for years against North Carolina sun and rain. We can add a non-slip additive on ${city} pool decks and walkways.`,
+    ],
+  };
+  return lead[service.slug] ?? [service.intro];
+}
+
+export function getCityServiceContent(
+  locationKey: LocationKey,
+  slug: string,
+): CityServiceContent | null {
+  const service = getService(slug);
+  if (!service || !cityServiceSlugs.includes(slug)) return null;
+  const location = locations[locationKey];
+  const city = location.city;
+  const hoods = location.neighborhoods;
+  const paragraphs = cityServiceParagraphs(service, city, hoods);
+
+  const faqs: FaqItem[] = [
+    {
+      q: `Do you offer ${service.name.toLowerCase()} in ${city}?`,
+      a: `Yes. ${service.name} is one of our core services and we work throughout ${city}, including ${hoods.slice(0, 2).join(" and ")}. Estimates are free and usually same-day.`,
+    },
+    ...getServiceSpecificFaqs(slug),
+  ];
+
+  return {
+    service,
+    city,
+    locationKey,
+    neighborhoods: hoods,
+    metaTitle: `${service.name} in ${city}, NC`,
+    metaDescription: `${service.name} in ${city}, NC. ${service.blurb} Free same-day quotes from a local Triangle crew.`,
+    heading: `${service.name} in ${city}, NC`,
+    paragraphs,
+    faqs,
+  };
+}
+
 // Localized FAQs for city landing pages. The city name is woven into each
 // answer so every location page carries unique FAQ content (no boilerplate
 // duplication that could read as doorway pages).

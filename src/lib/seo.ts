@@ -71,6 +71,7 @@ export function websiteSchema() {
 
 export function serviceSchema(opts: {
   name: string;
+  serviceType?: string;
   description: string;
   slug: string;
   image?: string;
@@ -79,8 +80,8 @@ export function serviceSchema(opts: {
   return {
     "@context": "https://schema.org",
     "@type": "Service",
-    name: `${opts.name} in Raleigh, NC`,
-    serviceType: opts.name,
+    name: opts.name,
+    serviceType: opts.serviceType ?? opts.name,
     url: opts.url ? `${SITE_URL}${opts.url}` : `${SITE_URL}/services/${opts.slug}`,
     ...(opts.image ? { image: `${SITE_URL}${opts.image}` } : {}),
     description: opts.description,

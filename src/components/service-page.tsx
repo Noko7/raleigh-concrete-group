@@ -65,7 +65,8 @@ export function ServicePage({ service }: { service: Service }) {
       <JsonLd
         data={[
           serviceSchema({
-            name: service.name,
+            name: `${service.name} in Raleigh, NC`,
+            serviceType: service.name,
             description: service.blurb,
             slug: service.slug,
             image: service.image,
