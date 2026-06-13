@@ -1,0 +1,20 @@
+import type { MetadataRoute } from "next";
+
+import { locationKeys, services } from "@/lib/site-data";
+
+const BASE_URL = "https://www.raleighconcrete.net";
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  const now = new Date();
+
+  const staticPaths = ["", "/estimate", "/gallery", "/privacy-policy"];
+  const servicePaths = services.map((s) => `/services/${s.slug}`);
+  const locationPaths = locationKeys.map((k) => `/${k}`);
+
+  return [...staticPaths, ...servicePaths, ...locationPaths].map((path) => ({
+    url: `${BASE_URL}${path}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: path === "" ? 1 : 0.7,
+  }));
+}

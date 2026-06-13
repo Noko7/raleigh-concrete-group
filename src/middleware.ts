@@ -144,7 +144,16 @@ export async function middleware(request: NextRequest) {
   // The CRM lives under /crm (mapped from the crm.* subdomain). Everything else
   // is the public marketing site / token pages - leave it untouched.
   const touchesCrm = isCrmHost || pathname.startsWith("/crm");
-  if (!touchesCrm) return withNoIndex(NextResponse.next());
+  if (!touchesCrm) {
+    // Allow Google to index the public marketing pages. Keep private customer
+    // token pages and API endpoints out of search with a noindex header.
+    const keepPrivate =
+      pathname.startsWith("/q/") ||
+      pathname.startsWith("/job/") ||
+      pathname.startsWith("/confirm") ||
+      pathname.startsWith("/api/");
+    return keepPrivate ? withNoIndex(NextResponse.next()) : NextResponse.next();
+  }
 
   // Keep the access token fresh so server components see a valid session.
   let accessToken = request.cookies.get(AT_COOKIE)?.value;
