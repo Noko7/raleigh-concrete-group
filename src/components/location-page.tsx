@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { GalleryCarousel } from "@/components/gallery-carousel";
 import { JsonLd } from "@/components/json-ld";
 import { SiteHeader } from "@/components/site-header";
@@ -75,6 +76,12 @@ export function LocationPage({ locationKey }: LocationPageProps) {
       <SiteHeader />
 
       <main className="pb-24 md:pb-0">
+        <Breadcrumbs
+          items={[
+            { name: "Home", path: "/" },
+            { name: location.city, path: `/${location.key}` },
+          ]}
+        />
         <section className="relative overflow-hidden py-14 md:py-20">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_30%,rgba(194,104,42,0.18),transparent_48%)]" />
           <div className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 md:px-8 lg:grid-cols-2 lg:items-center">

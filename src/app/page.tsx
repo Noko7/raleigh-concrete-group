@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -19,6 +20,14 @@ import {
   testimonials,
   trustImage,
 } from "@/lib/site-data";
+
+export const metadata: Metadata = {
+  // Lead with the money keyword instead of the brand on the homepage.
+  title: { absolute: "Raleigh Concrete Contractors | Driveways, Patios & Stamped Concrete" },
+  description:
+    "Top-rated concrete contractors in Raleigh, NC. We pour driveways, patios, walkways, retaining walls, stamped concrete and pavers across the Triangle. Free same-day quotes.",
+  alternates: { canonical: "/" },
+};
 
 // A tight, strong subset of finished work for the hero strip (kept small so the
 // marquee stays light and the loop is seamless).

@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { GalleryCarousel } from "@/components/gallery-carousel";
 import { JsonLd } from "@/components/json-ld";
 import { SiteHeader } from "@/components/site-header";
@@ -68,7 +69,6 @@ export function ServicePage({ service }: { service: Service }) {
           }),
           breadcrumbSchema([
             { name: "Home", path: "/" },
-            { name: isCommercial ? "Commercial" : "Residential", path: "/" },
             { name: service.name, path: `/services/${service.slug}` },
           ]),
         ]}
@@ -76,6 +76,12 @@ export function ServicePage({ service }: { service: Service }) {
       <SiteHeader activeService={service.slug} />
 
       <main className="pb-24 md:pb-0">
+        <Breadcrumbs
+          items={[
+            { name: "Home", path: "/" },
+            { name: service.name, path: `/services/${service.slug}` },
+          ]}
+        />
         {/* Hero */}
         <section className="relative overflow-hidden py-12 md:py-16">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_30%,rgba(194,104,42,0.18),transparent_48%)]" />
