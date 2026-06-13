@@ -34,7 +34,7 @@ const processSteps = [
   },
   {
     label: "We Build & Clean Up",
-    body: "Our experienced crew gets the job done on schedule, cleans up after themselves, and backs the work with a warranty.",
+    body: "Our experienced crew gets the job done on schedule, cleans up after themselves, and treats your property like it's our own.",
   },
 ];
 
@@ -96,8 +96,8 @@ export function LocationPage({ locationKey }: LocationPageProps) {
               <SharedCtaBar />
               <div className="mt-8 grid max-w-sm grid-cols-3 gap-3">
                 <div className="stat-card text-center">
-                  <p className="stat-value">4.9★</p>
-                  <p className="stat-label">Rated</p>
+                  <p className="stat-value">20+ Yrs</p>
+                  <p className="stat-label">Crew Experience</p>
                 </div>
                 <div className="stat-card text-center">
                   <p className="stat-value">1-3 Day</p>
@@ -209,7 +209,6 @@ export function LocationPage({ locationKey }: LocationPageProps) {
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8">
           <div className="mb-6 flex items-end justify-between gap-4">
             <h2 className="font-headline text-4xl text-ivory">What Customers Say</h2>
-            <span className="text-sm font-bold text-amber-accent">4.9★ Rated</span>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {testimonials.slice(0, 3).map((item) => (

@@ -97,8 +97,8 @@ export function ServicePage({ service }: { service: Service }) {
               <CtaBar />
               <div className="mt-8 grid max-w-sm grid-cols-3 gap-3">
                 <div className="stat-card text-center">
-                  <p className="stat-value">4.9★</p>
-                  <p className="stat-label">Rated</p>
+                  <p className="stat-value">20+ Yrs</p>
+                  <p className="stat-label">Crew Experience</p>
                 </div>
                 <div className="stat-card text-center">
                   <p className="stat-value">Same Day</p>

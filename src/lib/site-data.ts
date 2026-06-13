@@ -500,10 +500,10 @@ export const processSteps: ProcessStep[] = [
 // ── Stat bar ("What makes us different") ──
 export type Stat = { value: string; label: string };
 export const homeStats: Stat[] = [
-  { value: "4.9★", label: "Google Rated" },
-  { value: "Trusted", label: "Local Team" },
+  { value: "20+ Yrs", label: "Combined Crew Experience" },
+  { value: "Local", label: "Raleigh-Based Team" },
   { value: "Same-Day", label: "Free Quotes" },
-  { value: "Warranty", label: "Backed Workmanship" },
+  { value: "On-Time", label: "Prep to Cleanup" },
 ];
 
 // ── About / welcome copy ──
@@ -515,7 +515,7 @@ export const aboutParagraphs: string[] = [
 export const valueProps = [
   "We Show Up On Time",
   "Clear, Honest Pricing",
-  "Backed By Our Warranty",
+  "Clean Job Sites Every Time",
 ];
 
 export type GalleryImage = { src: string; alt: string };
@@ -629,7 +629,7 @@ export const locations: Record<LocationKey, LocationContent> = {
     title: "Concrete & Hardscaping in Wake Forest, NC",
     seoTitle: "Concrete Wake Forest NC | Driveways, Patios & Pavers",
     description:
-      "New driveways, patios and retaining walls in Wake Forest. Usually wrapped up fast, done right, and backed by our workmanship warranty.",
+      "New driveways, patios and retaining walls in Wake Forest. Usually wrapped up fast, done right, and built to handle North Carolina weather.",
     heroImage: "/images/stamped_patio.png",
     beforeAfterPairs: sharedBeforeAfter,
     neighborhoods: ["Heritage", "Traditions", "Holding Village", "Wakefield", "Stonegate"],

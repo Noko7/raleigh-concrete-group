@@ -270,7 +270,6 @@ export default function Home() {
         <section id="reviews" className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 pb-14 md:px-8">
           <div className="mb-6 flex items-end justify-between gap-4">
             <h2 className="font-headline text-4xl text-ivory">What Customers Say</h2>
-            <span className="text-sm font-bold text-amber-accent">4.9★ Rated</span>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {testimonials.slice(0, 3).map((item) => (
