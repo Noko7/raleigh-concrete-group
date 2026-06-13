@@ -6,7 +6,16 @@ export const phoneDisplay = "(919) 897-7695";
 export const phoneHref = "tel:+19198977695";
 export const textHref = "sms:+19198977695";
 
-export type LocationKey = "raleigh" | "cary" | "apex" | "wake-forest" | "durham";
+export type LocationKey =
+  | "raleigh"
+  | "cary"
+  | "apex"
+  | "wake-forest"
+  | "durham"
+  | "morrisville"
+  | "garner"
+  | "holly-springs"
+  | "knightdale";
 
 export const locationKeys: LocationKey[] = [
   "raleigh",
@@ -14,6 +23,10 @@ export const locationKeys: LocationKey[] = [
   "apex",
   "wake-forest",
   "durham",
+  "morrisville",
+  "garner",
+  "holly-springs",
+  "knightdale",
 ];
 
 export type ServiceGroup = "core" | "concrete" | "hardscaping";
@@ -644,6 +657,50 @@ export const locations: Record<LocationKey, LocationContent> = {
     heroImage: "/images/workers_pouring_driveway_live_action.png",
     beforeAfterPairs: sharedBeforeAfter,
     neighborhoods: ["Southpoint", "Hope Valley", "Brightleaf", "Trinity Park", "Woodcroft"],
+  },
+  morrisville: {
+    key: "morrisville",
+    city: "Morrisville",
+    title: "Concrete & Hardscaping in Morrisville, NC",
+    seoTitle: "Concrete Morrisville NC | Driveways, Patios & Pavers",
+    description:
+      "Concrete driveways, patios and walkways for Morrisville homeowners. We keep the schedule tight, the pricing clear, and the job site clean from start to finish.",
+    heroImage: "/images/pavers_driveway.png",
+    beforeAfterPairs: sharedBeforeAfter,
+    neighborhoods: ["Breckenridge", "Savannah", "Kitts Creek", "Carpenter Village", "Town Hall Commons"],
+  },
+  garner: {
+    key: "garner",
+    city: "Garner",
+    title: "Concrete & Hardscaping in Garner, NC",
+    seoTitle: "Concrete Garner NC | Driveways, Patios & Pavers",
+    description:
+      "New driveways, stamped patios and retaining walls for Garner homes. Solid prep, durable finishes, and work built to hold up to North Carolina weather.",
+    heroImage: "/images/retaining-wall-brick.png",
+    beforeAfterPairs: sharedBeforeAfter,
+    neighborhoods: ["Vandora Springs", "Heather Hills", "Cleveland", "Forest Hills", "White Oak"],
+  },
+  "holly-springs": {
+    key: "holly-springs",
+    city: "Holly Springs",
+    title: "Concrete & Hardscaping in Holly Springs, NC",
+    seoTitle: "Concrete Holly Springs NC | Driveways, Patios & Pavers",
+    description:
+      "Driveways, patios, walkways and paver work for Holly Springs homeowners. Free same-day quotes and a crew that treats your property like its own.",
+    heroImage: "/images/patio_pavers.png",
+    beforeAfterPairs: sharedBeforeAfter,
+    neighborhoods: ["Sunset Ridge", "12 Oaks", "Holly Glen", "Bass Lake", "Forest Springs"],
+  },
+  knightdale: {
+    key: "knightdale",
+    city: "Knightdale",
+    title: "Concrete & Hardscaping in Knightdale, NC",
+    seoTitle: "Concrete Knightdale NC | Driveways, Patios & Pavers",
+    description:
+      "Concrete and hardscaping for Knightdale homes: driveways, patios, slabs and retaining walls, done right the first time with clear communication throughout.",
+    heroImage: "/images/decorative_stamped_back_porch.png",
+    beforeAfterPairs: sharedBeforeAfter,
+    neighborhoods: ["Princeton Manor", "Widewaters", "Emerald Crest", "Knightdale Station", "Mingo Creek"],
   },
 };
 
