@@ -67,6 +67,7 @@ export default function AboutPage() {
                 height={750}
                 className="h-full w-full object-cover"
                 sizes="(max-width: 1024px) 100vw, 50vw"
+                quality={90}
                 priority
               />
             </div>
@@ -118,6 +119,7 @@ export default function AboutPage() {
                 height={750}
                 className="h-full w-full object-cover"
                 sizes="(max-width: 1024px) 100vw, 50vw"
+                quality={90}
               />
             </div>
           </div>

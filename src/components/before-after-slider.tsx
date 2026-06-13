@@ -70,6 +70,7 @@ export function BeforeAfterSlider({
           fill
           sizes="(max-width:768px) 100vw, 800px"
           className="ba-img"
+          quality={90}
         />
         <span className="ba-label ba-label-right">After</span>
       </div>
@@ -82,6 +83,7 @@ export function BeforeAfterSlider({
           fill
           sizes="(max-width:768px) 100vw, 800px"
           className="ba-img"
+          quality={90}
         />
         <span className="ba-label ba-label-left">Before</span>
       </div>

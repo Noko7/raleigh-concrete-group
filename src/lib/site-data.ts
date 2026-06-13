@@ -762,10 +762,10 @@ export const processSteps: ProcessStep[] = [
 // ── Stat bar ("What makes us different") ──
 export type Stat = { value: string; label: string };
 export const homeStats: Stat[] = [
+  { value: "5.0★", label: "Rated on Google" },
   { value: "20+ Yrs", label: "Combined Crew Experience" },
   { value: "Local", label: "Raleigh-Based Team" },
   { value: "Same-Day", label: "Free Quotes" },
-  { value: "On-Time", label: "Prep to Cleanup" },
 ];
 
 // ── About / welcome copy ──

@@ -102,8 +102,8 @@ export function ServicePage({ service }: { service: Service }) {
               <CtaBar />
               <div className="mt-8 grid max-w-sm grid-cols-3 gap-3">
                 <div className="stat-card text-center">
-                  <p className="stat-value">20+ Yrs</p>
-                  <p className="stat-label">Crew Experience</p>
+                  <p className="stat-value">5.0★</p>
+                  <p className="stat-label">Google Rated</p>
                 </div>
                 <div className="stat-card text-center">
                   <p className="stat-value">Same Day</p>
@@ -124,6 +124,7 @@ export function ServicePage({ service }: { service: Service }) {
                 height={900}
                 className="h-full w-full object-cover"
                 sizes="(max-width: 1024px) 100vw, 50vw"
+                quality={90}
                 priority
               />
             </div>
@@ -140,6 +141,7 @@ export function ServicePage({ service }: { service: Service }) {
                   width={1000}
                   height={750}
                   className="h-full w-full object-cover"
+                  quality={90}
                   sizes="(max-width: 768px) 100vw, 50vw"
                 />
               </div>
@@ -202,6 +204,7 @@ export function ServicePage({ service }: { service: Service }) {
                   height={750}
                   className="h-full w-full object-cover"
                   sizes="(max-width: 1024px) 100vw, 50vw"
+                  quality={90}
                 />
               </div>
             )}

@@ -78,6 +78,7 @@ export function Lightbox({ images, index, onClose, onNavigate }: LightboxProps) 
           height={1067}
           sizes="100vw"
           className="lightbox-img"
+          quality={90}
           priority
         />
         <p className="lightbox-caption">{current.alt}</p>

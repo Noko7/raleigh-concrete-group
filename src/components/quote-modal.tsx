@@ -505,7 +505,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                   <span className="qm-step-num">1</span>
                   <h2 className="qm-title">Contact</h2>
                 </div>
-                <p className="qm-sub">We need to know where you live so we can schedule your service.</p>
+                <p className="qm-sub">Share your contact and address details and we&apos;ll prepare your free, no-obligation quote.</p>
                 <label className="qm-label">Name</label>
                 <input
                   className="qm-input"
