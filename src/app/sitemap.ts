@@ -7,7 +7,7 @@ const BASE_URL = "https://www.raleighconcrete.net";
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
 
-  const staticPaths = ["", "/estimate", "/gallery", "/privacy-policy"];
+  const staticPaths = ["", "/about", "/estimate", "/gallery", "/privacy-policy"];
   const servicePaths = services.map((s) => `/services/${s.slug}`);
   const locationPaths = locationKeys.map((k) => `/${k}`);
 

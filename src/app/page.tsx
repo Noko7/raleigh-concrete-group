@@ -188,9 +188,17 @@ export default function Home() {
                   {paragraph}
                 </p>
               ))}
-              <a href="/#quote" className="cta-primary mt-2">
-                Get My Free Estimate
-              </a>
+              <div className="mt-2 flex flex-wrap items-center gap-4">
+                <a href="/#quote" className="cta-primary">
+                  Get My Free Estimate
+                </a>
+                <Link
+                  href="/about"
+                  className="text-sm font-bold uppercase tracking-[0.12em] text-amber-accent transition hover:text-ivory"
+                >
+                  More About Us →
+                </Link>
+              </div>
             </div>
           </div>
         </section>

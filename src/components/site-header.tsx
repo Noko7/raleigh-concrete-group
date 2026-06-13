@@ -134,7 +134,7 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
           <Link href="/#reviews" className="nav-link">
             Reviews
           </Link>
-          <Link href="/#about" className="nav-link">
+          <Link href="/about" className="nav-link">
             About
           </Link>
         </nav>
@@ -175,7 +175,7 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
             <Link href="/#reviews" className="mobile-nav-link" onClick={close}>
               Reviews
             </Link>
-            <Link href="/#about" className="mobile-nav-link" onClick={close}>
+            <Link href="/about" className="mobile-nav-link" onClick={close}>
               About
             </Link>
           </nav>
