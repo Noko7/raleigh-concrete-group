@@ -3,10 +3,11 @@ import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { FaqSection } from "@/components/faq-section";
 import { GalleryCarousel } from "@/components/gallery-carousel";
 import { JsonLd } from "@/components/json-ld";
 import { SiteHeader } from "@/components/site-header";
-import { breadcrumbSchema, serviceSchema } from "@/lib/seo";
+import { breadcrumbSchema, faqSchema, serviceSchema } from "@/lib/seo";
 import {
   businessName,
   clipboardImage,
@@ -14,6 +15,7 @@ import {
   coreServices,
   galleryImages,
   getService,
+  getServiceFaqs,
   links,
   phoneDisplay,
   type Service,
@@ -50,6 +52,7 @@ export function ServicePage({ service }: { service: Service }) {
       : showcaseFallbacks.find((src) => src !== service.image) ??
         showcaseFallbacks[0];
   const isCommercial = commercialServiceSlugs.has(service.slug);
+  const faqs = getServiceFaqs(service.slug);
   const otherServices = isCommercial
     ? Array.from(commercialServiceSlugs)
         .filter((slug) => slug !== service.slug)
@@ -71,6 +74,7 @@ export function ServicePage({ service }: { service: Service }) {
             { name: "Home", path: "/" },
             { name: service.name, path: `/services/${service.slug}` },
           ]),
+          faqSchema(faqs),
         ]}
       />
       <SiteHeader activeService={service.slug} />
@@ -232,6 +236,9 @@ export function ServicePage({ service }: { service: Service }) {
             </div>
           </div>
         </section>
+
+        {/* FAQ */}
+        <FaqSection faqs={faqs} heading={`${service.name} FAQs`} />
 
         {/* Other services */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8">

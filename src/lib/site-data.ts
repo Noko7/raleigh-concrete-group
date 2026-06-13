@@ -450,6 +450,154 @@ export function getService(slug: string): Service | undefined {
   return services.find((s) => s.slug === slug);
 }
 
+// ── Service FAQs ──
+// High-intent Q&A for the money pages. Answers intentionally avoid price
+// figures, warranty claims and licensing claims (per business policy) and lean
+// on durability, process and free-quote messaging. Rendered on service pages
+// and emitted as FAQPage structured data.
+export type FaqItem = { q: string; a: string };
+
+const universalServiceFaqs: FaqItem[] = [
+  {
+    q: "Do you offer free estimates in Raleigh?",
+    a: "Yes. Every estimate is free, and we can usually get you a number the same day. For many projects we can scope it from satellite imagery and confirm details on a quick visit.",
+  },
+  {
+    q: "What areas around Raleigh do you serve?",
+    a: "We work throughout Raleigh and the surrounding Triangle, including Cary, Apex, Morrisville, Wake Forest, Garner, Holly Springs, Knightdale and Durham.",
+  },
+];
+
+const serviceFaqMap: Record<string, FaqItem[]> = {
+  "concrete-driveways": [
+    {
+      q: "How long does a new concrete driveway take to install?",
+      a: "Most residential driveways take one to three days on site depending on size and whether we're tearing out an old slab. After the pour, plan on staying off it with foot traffic for about 24 hours and keeping vehicles off for roughly seven days while it cures.",
+    },
+    {
+      q: "Should I repair or replace my concrete driveway?",
+      a: "If you have isolated cracks or surface wear, resurfacing or repair is often enough. Once you see widespread cracking, sinking sections, or a failing base, a full tear-out and re-pour is the longer-lasting fix. We'll tell you honestly which one your driveway needs.",
+    },
+    {
+      q: "How thick should a concrete driveway be?",
+      a: "For standard residential vehicles we typically pour four inches over a properly compacted base, and we go thicker where heavier vehicles or trucks are parked. Good base prep matters as much as thickness for preventing early cracking.",
+    },
+  ],
+  "concrete-patios": [
+    {
+      q: "How long does a concrete patio take to build?",
+      a: "A typical backyard patio is usually poured within one to two days once the site is prepped. You can walk on it after about 24 hours, and it reaches full strength over the following weeks as it cures.",
+    },
+    {
+      q: "What finishes can I get on a concrete patio?",
+      a: "We offer broom, smooth-troweled, exposed-aggregate and stamped or decorative finishes. Stamped concrete can mimic stone, brick or pavers for a higher-end look at a lower install cost than natural stone.",
+    },
+  ],
+  "paver-patios": [
+    {
+      q: "Are paver patios better than poured concrete?",
+      a: "Pavers flex with the ground instead of cracking, individual units can be lifted and reset if needed, and there's a huge range of colors and patterns. Poured concrete is typically faster to install and lower maintenance. We'll walk you through the trade-offs for your yard.",
+    },
+    {
+      q: "Do paver patios need a lot of maintenance?",
+      a: "Not much. Occasional sweeping, the odd weed in the joints, and re-sanding the joints every few years keeps them looking sharp. We use a compacted base and edge restraints so they stay level over time.",
+    },
+  ],
+  "walkways-sidewalks": [
+    {
+      q: "How long does it take to pour a walkway or sidewalk?",
+      a: "Most residential walkways are finished in a day. Keep foot traffic off for about 24 hours after the pour while the surface sets.",
+    },
+    {
+      q: "Can you match a new walkway to my existing concrete?",
+      a: "In most cases yes. We match width, finish and joint spacing as closely as possible. Keep in mind brand-new concrete is lighter and lightens further as it cures, so a slight color difference from older concrete is normal at first.",
+    },
+  ],
+  "stamped-decorative-concrete": [
+    {
+      q: "How long does stamped concrete last?",
+      a: "With proper installation and a periodic re-seal every couple of years, stamped concrete holds up for decades. Sealing protects the color and pattern and helps it stand up to North Carolina sun and rain.",
+    },
+    {
+      q: "Is stamped concrete cheaper than pavers or natural stone?",
+      a: "Stamped concrete usually installs for less than natural stone or pavers while still giving you a custom stone, slate or brick look. It's a popular way to get a high-end finish on patios, walkways and pool decks on a tighter budget.",
+    },
+    {
+      q: "Does stamped concrete get slippery?",
+      a: "It can when wet, especially around pools. We can add a non-slip additive to the sealer on pool decks and walkways to improve traction.",
+    },
+  ],
+  "retaining-walls": [
+    {
+      q: "Do I need a permit for a retaining wall?",
+      a: "Taller walls and walls that hold back significant slopes often require a permit and, in some cases, engineering. We'll let you know what your project needs and build to handle the load and drainage behind it.",
+    },
+    {
+      q: "How do retaining walls handle drainage?",
+      a: "Proper drainage is what keeps a wall standing. We build in gravel backfill and drainage so water doesn't build up behind the wall, which is the most common reason walls fail or lean over time.",
+    },
+  ],
+  "concrete-slabs-flatwork": [
+    {
+      q: "What are concrete slabs used for?",
+      a: "Slabs work for sheds, garages, HVAC and generator pads, hot tubs, workshops and outdoor equipment. We prep the base and reinforce as needed so the slab carries the load without cracking or settling.",
+    },
+  ],
+  "pool-decks": [
+    {
+      q: "What's the best surface for a pool deck?",
+      a: "Stamped or broom-finished concrete is popular because it's durable and customizable, and we can add a non-slip additive to the sealer for safer footing around the water.",
+    },
+  ],
+  "steps-stoops-landings": [
+    {
+      q: "Can you replace just my front steps or stoop?",
+      a: "Yes. We replace and rebuild steps, stoops and landings on their own, and we can tie the finish into your existing walkway or porch so it looks like it was always there.",
+    },
+  ],
+  "concrete-repair-resurfacing": [
+    {
+      q: "When is concrete repair worth it instead of replacement?",
+      a: "If the slab is structurally sound with surface cracks, spalling or worn finish, resurfacing restores the look for less than a full replacement. Once the base has failed or sections are sinking, replacement is the better long-term call. We'll give you a straight answer after we look at it.",
+    },
+  ],
+  "paver-driveways": [
+    {
+      q: "Can a paver driveway handle vehicle weight?",
+      a: "Yes. With the right base depth, compaction and edge restraints, paver driveways carry everyday vehicle traffic and let you reset individual pavers later instead of patching a slab.",
+    },
+  ],
+};
+
+export function getServiceFaqs(slug: string): FaqItem[] {
+  const specific = serviceFaqMap[slug] ?? [];
+  return [...specific, ...universalServiceFaqs];
+}
+
+// Localized FAQs for city landing pages. The city name is woven into each
+// answer so every location page carries unique FAQ content (no boilerplate
+// duplication that could read as doorway pages).
+export function getLocationFaqs(city: string): FaqItem[] {
+  return [
+    {
+      q: `Do you offer free concrete estimates in ${city}?`,
+      a: `Yes. Estimates in ${city} are always free and usually same-day. For driveways and slabs we can often quote from satellite imagery and confirm the details on a short visit.`,
+    },
+    {
+      q: `How soon can you start a concrete project in ${city}?`,
+      a: `Scheduling in ${city} depends on the season and our current workload, but we move quickly on quotes and will give you a realistic start window up front instead of stringing you along.`,
+    },
+    {
+      q: `What concrete and hardscaping services do you offer in ${city}?`,
+      a: `We handle driveways, patios, walkways, sidewalks, slabs, steps, retaining walls, stamped and decorative concrete, and paver work for homes and businesses throughout ${city}.`,
+    },
+    {
+      q: `Is your concrete work built for ${city}'s weather?`,
+      a: `Yes. We prep a proper compacted base, reinforce where it's needed, and finish and cure the concrete so it stands up to North Carolina's heat, rain and freeze-thaw cycles in ${city}.`,
+    },
+  ];
+}
+
 // Simple, customer-friendly options for the quote-request dropdown.
 export const quoteServiceOptions = [
   "Driveway",

@@ -3,14 +3,16 @@ import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { FaqSection } from "@/components/faq-section";
 import { GalleryCarousel } from "@/components/gallery-carousel";
 import { JsonLd } from "@/components/json-ld";
 import { SiteHeader } from "@/components/site-header";
-import { breadcrumbSchema, serviceSchema } from "@/lib/seo";
+import { breadcrumbSchema, faqSchema, serviceSchema } from "@/lib/seo";
 import {
   businessName,
   coreServices,
   galleryImages,
+  getLocationFaqs,
   links,
   locations,
   phoneDisplay,
@@ -56,6 +58,7 @@ function SharedCtaBar() {
 
 export function LocationPage({ locationKey }: LocationPageProps) {
   const location = locations[locationKey];
+  const faqs = getLocationFaqs(location.city);
 
   return (
     <>
@@ -71,6 +74,7 @@ export function LocationPage({ locationKey }: LocationPageProps) {
             { name: "Home", path: "/" },
             { name: location.city, path: `/${location.key}` },
           ]),
+          faqSchema(faqs),
         ]}
       />
       <SiteHeader />
@@ -258,6 +262,8 @@ export function LocationPage({ locationKey }: LocationPageProps) {
             </div>
           </div>
         </section>
+
+        <FaqSection faqs={faqs} heading={`Concrete in ${location.city}: FAQs`} />
 
         <footer className="border-t border-white/10 bg-black/20">
           <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-8 md:px-8">

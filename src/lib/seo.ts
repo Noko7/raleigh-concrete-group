@@ -15,6 +15,7 @@ export const SERVICE_AREAS = [
   "Morrisville",
   "Garner",
   "Holly Springs",
+  "Knightdale",
 ];
 
 const PHONE_E164 = "+19198977695";
