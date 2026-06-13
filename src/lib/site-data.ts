@@ -608,7 +608,196 @@ export type CityServiceContent = {
   metaDescription: string;
   heading: string;
   paragraphs: string[];
+  projectExample: string | null;
   faqs: FaqItem[];
+};
+
+// ── Hand-written priority pages ──
+// These combinations get fully bespoke copy (unique intro, a representative
+// local project, neighborhood detail and city-specific FAQs) instead of the
+// generated template, because they're the highest-intent, highest-volume
+// searches. Keyed by `${locationKey}/${slug}`. Project examples are framed as
+// "what a typical project here looks like" so nothing claims a specific past
+// customer.
+type PriorityContent = { intro: string[]; projectExample: string; faqs: FaqItem[] };
+
+const cityServiceLocalContent: Record<string, PriorityContent> = {
+  "raleigh/concrete-driveways": {
+    intro: [
+      "Raleigh driveways take a beating, from daily traffic and brutal summer heat to the red clay soil that shifts under a poorly prepped slab. We pour and replace concrete driveways all over Raleigh, from the older homes around Five Points and Midtown to the newer builds out in Brier Creek and North Raleigh.",
+      "A lot of the driveways we replace in established Raleigh neighborhoods are 30 to 50 years old: too thin, too narrow, and cracked from tree roots and decades of freeze-thaw. We tear them out, fix the base and drainage, and pour a properly reinforced four-inch slab (thicker where you park heavier vehicles) so the new driveway actually outlasts the old one.",
+    ],
+    projectExample:
+      "A typical Raleigh driveway project for us is a full tear-out and re-pour on a mid-century home in Five Points or North Hills. We break out the old cracked slab, regrade and compact the base to fix the drainage that caused the cracking, set forms and rebar, then pour and finish with a broom or exposed-aggregate surface. Most are done in two to three days, weather permitting.",
+    faqs: [
+      {
+        q: "How much does a concrete driveway cost in Raleigh?",
+        a: "It depends on the size, whether we're removing an old slab, site access and the finish you choose. Rather than guess, we give you a free written quote, usually the same day, so you know the number before anything starts.",
+      },
+      {
+        q: "Do I need a permit to replace a driveway in Raleigh?",
+        a: "A like-for-like replacement usually doesn't, but widening the driveway or changing the apron where it meets the street can require approval from the City of Raleigh. We'll flag that before we begin.",
+      },
+      {
+        q: "Will tree roots crack my new Raleigh driveway?",
+        a: "Mature willow oaks and pines are everywhere in older Raleigh neighborhoods. We deal with roots during base prep and can add reinforcement or tweak the layout to lower the chance of future heaving.",
+      },
+    ],
+  },
+  "raleigh/concrete-patios": {
+    intro: [
+      "A concrete patio is the easiest way to turn an unused Raleigh backyard into real living space. We pour patios for homeowners from Midtown and Five Points to the newer neighborhoods around Brier Creek and North Raleigh, with broom, smooth, exposed-aggregate or stamped finishes to match the house.",
+      "Raleigh's clay-heavy soil holds water, so drainage and base prep are everything with a patio. We grade the pad to pull water away from your foundation and pour a properly jointed slab that won't pond or crack through our hot summers and the occasional hard freeze.",
+    ],
+    projectExample:
+      "A common Raleigh patio job is a 12x16 to 16x20 slab off the back of the house in a neighborhood like North Hills or Brier Creek, often with a stamped border or a step down into the yard. We handle layout, base, pour and finish in about one to two days once the site is ready.",
+    faqs: [
+      {
+        q: "How big should my Raleigh patio be?",
+        a: "For a table and chairs plus a small seating area, most Raleigh homeowners land around 16x20. We'll help you size it to your yard and how you actually plan to use the space before we pour.",
+      },
+      {
+        q: "Should I choose concrete or pavers for my Raleigh patio?",
+        a: "Concrete is faster to install, lower maintenance and easy to stamp for a custom look. Pavers flex with the ground and can be reset individually. We'll walk you through both for your yard and budget.",
+      },
+      {
+        q: "Will my patio crack in Raleigh's weather?",
+        a: "All concrete moves, which is why we cut control joints to direct any cracking and prep the base so the slab is supported evenly through Raleigh's heat and freeze-thaw swings.",
+      },
+    ],
+  },
+  "raleigh/stamped-decorative-concrete": {
+    intro: [
+      "Stamped concrete gives Raleigh homeowners the look of stone, brick or slate for a fraction of what those materials cost to install. We pour and stamp patios, walkways, porches and pool decks across Raleigh, from Five Points bungalows to new construction in Brier Creek.",
+      "We work with a wide range of patterns and color combinations, and we seal every stamped surface so it stands up to Raleigh's UV-heavy summers. On walkways and pool decks we mix a non-slip additive into the sealer so the surface stays safe when it's wet.",
+    ],
+    projectExample:
+      "A typical Raleigh stamped project is a back patio done in an ashlar-slate or seamless-stone pattern with a contrasting border band, then sealed, over a couple of days. We also do stamped front entries and walkways in older neighborhoods like Five Points and Midtown where homeowners want a high-end look that still suits the house.",
+    faqs: [
+      {
+        q: "How long does stamped concrete last in Raleigh?",
+        a: "With proper installation and a re-seal every couple of years, stamped concrete holds up for decades. Sealing is what protects the color and pattern against Raleigh's strong summer sun.",
+      },
+      {
+        q: "Is stamped concrete cheaper than pavers in Raleigh?",
+        a: "Usually, yes. Stamped concrete typically installs for less than pavers or natural stone while still giving you a custom stone or brick look on patios, walkways and pool decks.",
+      },
+      {
+        q: "Does stamped concrete get slippery around a Raleigh pool?",
+        a: "It can when wet, so for pool decks and walkways we add a non-slip additive to the sealer to improve traction.",
+      },
+    ],
+  },
+  "raleigh/retaining-walls": {
+    intro: [
+      "Plenty of Raleigh lots are anything but flat, and a well-built retaining wall is what keeps a sloped yard usable and your soil where it belongs. We build engineered concrete and segmental block retaining walls across Raleigh, from the rolling lots in North Raleigh to hillside properties near Five Points and Midtown.",
+      "The walls that fail are the ones with bad drainage behind them, especially in Raleigh's clay soil that holds water and pushes hard against a wall. We build in gravel backfill, drainage and proper reinforcement, and we'll tell you up front if your wall height needs a permit or engineering.",
+    ],
+    projectExample:
+      "A typical Raleigh wall project is a two-to-four-foot terraced block wall to level a backyard slope or stop erosion along a driveway in a neighborhood like North Hills. We excavate, compact a base, build the wall with proper batter and drainage, and backfill it so it holds for the long haul.",
+    faqs: [
+      {
+        q: "Do I need a permit for a retaining wall in Raleigh?",
+        a: "Shorter landscape walls often don't, but taller walls (commonly four feet and up) and walls holding back significant load typically require a permit and sometimes engineering. We'll let you know what yours needs.",
+      },
+      {
+        q: "Why do retaining walls fail in Raleigh's clay soil?",
+        a: "Almost always poor drainage. Clay holds water and pushes against the wall, so we build in gravel backfill and drainage pipe to relieve that pressure from the start.",
+      },
+      {
+        q: "Should my Raleigh wall be block or poured concrete?",
+        a: "Segmental block is versatile and great for terraced, landscaped looks; poured concrete suits taller structural walls. We'll recommend the right system for your slope and budget.",
+      },
+    ],
+  },
+  "cary/concrete-driveways": {
+    intro: [
+      "Cary's master-planned neighborhoods come with high standards, and a cracked or stained driveway stands out fast. We replace and pour concrete driveways across Cary, from Preston and MacGregor Downs to Amberly, Highcroft and West Cary, with clean finishes that fit the neighborhood.",
+      "Many Cary communities have HOA guidelines on driveway materials and finishes, so we match what's approved and keep the work tidy from tear-out to final cleanup. Proper base prep on Cary's clay soil keeps the new slab from cracking the way the old one did.",
+    ],
+    projectExample:
+      "A typical Cary driveway job is a full replacement in a community like Preston or Amberly: we remove the old slab, rebuild and compact the base, then pour a reinforced driveway with a broom or exposed-aggregate finish that meets HOA expectations. Most are completed in two to three days.",
+    faqs: [
+      {
+        q: "Will you work with my Cary HOA's driveway requirements?",
+        a: "Yes. A lot of Cary neighborhoods specify approved finishes and materials. We build to match what your HOA allows and keep the job site clean throughout.",
+      },
+      {
+        q: "How long does a new driveway take in Cary?",
+        a: "Most residential driveways are one to three days on site. Plan to stay off it on foot for about a day and keep vehicles off for roughly a week while it cures.",
+      },
+      {
+        q: "Should I repair or replace my Cary driveway?",
+        a: "Isolated cracks or surface wear can often be repaired or resurfaced. Widespread cracking, sinking sections or a failing base call for a full replacement. We'll give you a straight answer after we look.",
+      },
+    ],
+  },
+  "cary/concrete-patios": {
+    intro: [
+      "A concrete patio adds usable outdoor living space to a Cary home without the upkeep of wood or the cost of natural stone. We pour patios throughout Cary, from Preston and MacGregor Downs to Highcroft, Amberly and West Cary, in finishes from broom to stamped.",
+      "We grade every Cary patio to drain away from the house, which matters with the area's clay soil, and we coordinate with HOA guidelines where they apply so your new patio is both approved and built to last.",
+    ],
+    projectExample:
+      "A common Cary patio is a stamped or exposed-aggregate slab off the back of a two-story home in Amberly or Preston, sized for a table and a seating area, finished in a day or two once the base is prepped.",
+    faqs: [
+      {
+        q: "Does my Cary HOA need to approve a patio?",
+        a: "Often, yes, especially for anything visible or structural. We're used to building to HOA guidelines in Cary communities and can keep your patio within what's approved.",
+      },
+      {
+        q: "Stamped or plain concrete patio in Cary?",
+        a: "Plain broom-finish concrete is clean and economical; stamped concrete gives you a stone or slate look for a custom feel. Both hold up well when prepped and sealed correctly.",
+      },
+      {
+        q: "How soon can I use my new Cary patio?",
+        a: "You can usually walk on it after about 24 hours. It keeps gaining strength over the following weeks as it fully cures.",
+      },
+    ],
+  },
+  "apex/concrete-driveways": {
+    intro: [
+      "Apex keeps growing, and whether you're in an established part of town or a newer subdivision, a solid concrete driveway is one of the best upgrades for curb appeal and function. We pour and replace driveways across Apex, from Haddon Hall and Scotts Mill to Bella Casa, the Villages of Apex and downtown.",
+      "We prep the base properly for Apex's clay soil and pour a reinforced slab built for daily traffic and North Carolina weather. Where an HOA has finish or material requirements, we build to match and keep the site clean throughout.",
+    ],
+    projectExample:
+      "A typical Apex driveway project is a tear-out and re-pour on a home in Scotts Mill or Haddon Hall, where we fix the base and drainage that cracked the original, then finish with a broom or exposed-aggregate surface. Usually two to three days start to finish.",
+    faqs: [
+      {
+        q: "How much does a driveway cost in Apex?",
+        a: "Pricing comes down to size, removal of the old slab, access and finish. We give you a free, written quote, usually the same day, so there are no surprises.",
+      },
+      {
+        q: "Do you handle Apex HOA driveway rules?",
+        a: "Yes. Many Apex subdivisions have finish and material guidelines. We build to what's approved for your community.",
+      },
+      {
+        q: "Can you replace just part of my Apex driveway?",
+        a: "Often, yes. If the damage is contained to certain sections, a partial replacement at the control joints can save money versus a full tear-out. We'll tell you whether that makes sense for yours.",
+      },
+    ],
+  },
+  "apex/concrete-patios": {
+    intro: [
+      "A concrete patio turns an Apex backyard into space you'll actually use, for less than pavers or natural stone and with almost no upkeep. We pour patios across Apex, from the Villages of Apex and downtown to Haddon Hall, Bella Casa and Scotts Mill.",
+      "Apex's clay soil holds water, so we grade each patio to drain away from your foundation and joint the slab to control cracking through hot summers and the occasional hard freeze. Broom, exposed-aggregate and stamped finishes are all on the table.",
+    ],
+    projectExample:
+      "A typical Apex patio is a 12x16 to 16x20 slab off the back of the house in a neighborhood like Bella Casa or Scotts Mill, sometimes with a stamped border, finished in a day or two once the base is set.",
+    faqs: [
+      {
+        q: "What's the best patio surface for an Apex backyard?",
+        a: "Concrete is hard to beat on value and upkeep, and it can be stamped for a high-end look. We'll match the finish to your home and how you want to use the space.",
+      },
+      {
+        q: "Will an Apex patio crack over time?",
+        a: "We cut control joints to direct any natural cracking and prep the base so the slab is evenly supported through Apex's seasonal temperature swings.",
+      },
+      {
+        q: "Do I need HOA approval for a patio in Apex?",
+        a: "Frequently, yes. We're comfortable working within Apex HOA guidelines so your patio is approved and built to last.",
+      },
+    ],
+  },
 };
 
 function cityServiceParagraphs(service: Service, city: string, hoods: string[]): string[] {
@@ -652,15 +841,20 @@ export function getCityServiceContent(
   const location = locations[locationKey];
   const city = location.city;
   const hoods = location.neighborhoods;
-  const paragraphs = cityServiceParagraphs(service, city, hoods);
 
-  const faqs: FaqItem[] = [
-    {
-      q: `Do you offer ${service.name.toLowerCase()} in ${city}?`,
-      a: `Yes. ${service.name} is one of our core services and we work throughout ${city}, including ${hoods.slice(0, 2).join(" and ")}. Estimates are free and usually same-day.`,
-    },
-    ...getServiceSpecificFaqs(slug),
-  ];
+  const bespoke = cityServiceLocalContent[`${locationKey}/${slug}`];
+
+  const paragraphs = bespoke ? bespoke.intro : cityServiceParagraphs(service, city, hoods);
+
+  const faqs: FaqItem[] = bespoke
+    ? bespoke.faqs
+    : [
+        {
+          q: `Do you offer ${service.name.toLowerCase()} in ${city}?`,
+          a: `Yes. ${service.name} is one of our core services and we work throughout ${city}, including ${hoods.slice(0, 2).join(" and ")}. Estimates are free and usually same-day.`,
+        },
+        ...getServiceSpecificFaqs(slug),
+      ];
 
   return {
     service,
@@ -671,6 +865,7 @@ export function getCityServiceContent(
     metaDescription: `${service.name} in ${city}, NC. ${service.blurb} Free same-day quotes from a local Triangle crew.`,
     heading: `${service.name} in ${city}, NC`,
     paragraphs,
+    projectExample: bespoke ? bespoke.projectExample : null,
     faqs,
   };
 }

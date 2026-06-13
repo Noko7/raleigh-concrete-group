@@ -28,7 +28,7 @@ export function CityServicePage({
 }) {
   const content = getCityServiceContent(locationKey, slug);
   if (!content) return null;
-  const { service, city, neighborhoods, paragraphs, faqs } = content;
+  const { service, city, neighborhoods, paragraphs, projectExample, faqs } = content;
 
   const otherCoreInCity = cityServiceSlugs
     .filter((s) => s !== slug)
@@ -121,6 +121,18 @@ export function CityServicePage({
             </div>
           </div>
         </section>
+
+        {/* Local project example */}
+        {projectExample && (
+          <section className="mx-auto w-full max-w-3xl px-4 pb-12 md:px-8">
+            <div className="rounded-3xl border-l-4 border-amber-accent bg-white/5 p-6 md:p-8">
+              <h2 className="mb-3 font-headline text-2xl text-ivory">
+                What a {service.name} Project in {city} Looks Like
+              </h2>
+              <p className="text-lg leading-relaxed text-slate-300">{projectExample}</p>
+            </div>
+          </section>
+        )}
 
         {/* What's included */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8">
