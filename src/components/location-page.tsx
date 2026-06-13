@@ -3,7 +3,9 @@ import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { GalleryCarousel } from "@/components/gallery-carousel";
+import { JsonLd } from "@/components/json-ld";
 import { SiteHeader } from "@/components/site-header";
+import { breadcrumbSchema, serviceSchema } from "@/lib/seo";
 import {
   businessName,
   coreServices,
@@ -56,6 +58,20 @@ export function LocationPage({ locationKey }: LocationPageProps) {
 
   return (
     <>
+      <JsonLd
+        data={[
+          serviceSchema({
+            name: `Concrete & Hardscaping in ${location.city}`,
+            description: location.description,
+            slug: location.key,
+            url: `/${location.key}`,
+          }),
+          breadcrumbSchema([
+            { name: "Home", path: "/" },
+            { name: location.city, path: `/${location.key}` },
+          ]),
+        ]}
+      />
       <SiteHeader />
 
       <main className="pb-24 md:pb-0">

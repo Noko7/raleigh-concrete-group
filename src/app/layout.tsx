@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Bebas_Neue, Sora } from "next/font/google";
 
+import { JsonLd } from "@/components/json-ld";
 import { QuoteModalRoot } from "@/components/quote-modal";
+import { localBusinessSchema, websiteSchema } from "@/lib/seo";
 import "./globals.css";
 
 const headline = Bebas_Neue({
@@ -56,6 +58,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${headline.variable} ${body.variable} h-full antialiased`}>
       <body className="min-h-full">
+        <JsonLd data={[localBusinessSchema(), websiteSchema()]} />
         {children}
         <QuoteModalRoot />
       </body>

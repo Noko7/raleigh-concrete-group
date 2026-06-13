@@ -3,7 +3,9 @@ import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { GalleryCarousel } from "@/components/gallery-carousel";
+import { JsonLd } from "@/components/json-ld";
 import { SiteHeader } from "@/components/site-header";
+import { breadcrumbSchema, serviceSchema } from "@/lib/seo";
 import {
   businessName,
   clipboardImage,
@@ -56,6 +58,21 @@ export function ServicePage({ service }: { service: Service }) {
 
   return (
     <>
+      <JsonLd
+        data={[
+          serviceSchema({
+            name: service.name,
+            description: service.blurb,
+            slug: service.slug,
+            image: service.image,
+          }),
+          breadcrumbSchema([
+            { name: "Home", path: "/" },
+            { name: isCommercial ? "Commercial" : "Residential", path: "/" },
+            { name: service.name, path: `/services/${service.slug}` },
+          ]),
+        ]}
+      />
       <SiteHeader activeService={service.slug} />
 
       <main className="pb-24 md:pb-0">
