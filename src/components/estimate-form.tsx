@@ -174,7 +174,7 @@ export function EstimateForm() {
           </a>{" "}
           and{" "}
           <a href="/terms" target="_blank" rel="noopener noreferrer">
-            Terms of Service
+            SMS Terms
           </a>
           .
         </span>
