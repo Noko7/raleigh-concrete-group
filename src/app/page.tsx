@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
+import { HeroMarquee } from "@/components/hero-marquee";
 import { SiteHeader } from "@/components/site-header";
 import {
   aboutParagraphs,
@@ -67,7 +68,7 @@ export default function Home() {
               Concrete &amp; Hardscaping · Raleigh, NC
             </span>
             <h1 className="mx-auto mb-5 max-w-4xl font-headline text-6xl leading-[0.92] text-ivory md:text-8xl">
-              The Best Concrete Contractors in Raleigh.
+              Raleigh Concrete Contractors.
             </h1>
             <p className="mx-auto mb-8 max-w-xl text-lg leading-relaxed text-slate-300">
               Residential and commercial concrete done right the first time: driveways, patios,
@@ -84,25 +85,9 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Work photo strip (immediate proof, smooth auto-scroll) ── */}
+        {/* ── Work photo strip (immediate proof, smooth auto-scroll, click for HD) ── */}
         <section aria-label="Recent concrete work" className="pb-4 pt-2">
-          <div className="marquee">
-            <div className="marquee-track">
-              {[...marqueeImages, ...marqueeImages].map((img, i) => (
-                <div key={`${img.src}-${i}`} className="marquee-item" aria-hidden={i >= marqueeImages.length}>
-                  <Image
-                    src={img.src}
-                    alt={img.alt}
-                    width={384}
-                    height={256}
-                    sizes="(max-width: 768px) 60vw, 20rem"
-                    className="marquee-img"
-                    priority={i < 4}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+          <HeroMarquee images={marqueeImages} />
         </section>
 
         {/* ── Before / After (right below the recent-work strip) ── */}

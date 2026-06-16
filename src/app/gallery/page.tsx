@@ -30,7 +30,7 @@ export default function GalleryPage() {
           <span className="mb-2 block text-xs font-bold uppercase tracking-[0.22em] text-amber-accent">
             Our Work
           </span>
-          <h1 className="mb-4 font-headline text-5xl text-ivory md:text-6xl">Recent Work in Raleigh</h1>
+          <h1 className="mb-4 font-headline text-5xl text-ivory md:text-6xl">Recent Work</h1>
           <p className="max-w-2xl leading-relaxed text-slate-300">
             A look at concrete and hardscaping projects we&apos;ve finished around the Triangle. Tap any
             photo to open it full size.
