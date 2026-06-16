@@ -28,6 +28,10 @@ export async function GET(request: Request) {
     status: 200,
     headers: {
       "Content-Type": upstream.headers.get("content-type") ?? "application/octet-stream",
+      // Don't let the browser MIME-sniff a stored object into executable HTML,
+      // and force inline rendering rather than treating it as a page.
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": "inline",
       "Cache-Control": "private, max-age=300",
     },
   });

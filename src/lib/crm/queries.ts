@@ -382,6 +382,8 @@ export async function recordCustomerResponse(
 export async function signFile(storagePath: string, expiresIn = 3600): Promise<string | null> {
   const prefix = `${UPLOAD_BUCKET}/`;
   const obj = storagePath.startsWith(prefix) ? storagePath.slice(prefix.length) : storagePath;
+  // Only sign objects inside our bucket; reject traversal / absolute paths.
+  if (!obj || obj.includes("..") || obj.startsWith("/")) return null;
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${UPLOAD_BUCKET}/${obj}`, {
     method: "POST",
     cache: "no-store",

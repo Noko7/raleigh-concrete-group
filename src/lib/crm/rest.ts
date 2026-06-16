@@ -2,6 +2,10 @@
 // this module references the service-role key.
 import { SUPABASE_URL, ANON_KEY, SERVICE_KEY } from "./env";
 
+if (typeof window !== "undefined") {
+  throw new Error("@/lib/crm/rest is server-only and must not be imported from client code.");
+}
+
 const REST = `${SUPABASE_URL}/rest/v1`;
 const AUTH = `${SUPABASE_URL}/auth/v1`;
 

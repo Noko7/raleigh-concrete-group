@@ -233,3 +233,32 @@ export async function markPaid(formData: FormData): Promise<void> {
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
 }
+
+// Regenerate the customer + contractor capability tokens. Use this if a link is
+// leaked or shared too widely: the old /q/<token> and /job/<token> URLs stop
+// resolving immediately and you re-text the fresh customer link.
+export async function rotateTokens(formData: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const current = await getQuote(session, id);
+  if (!current) return;
+
+  const patch: Partial<Quote> = {
+    public_token: crypto.randomUUID().replace(/-/g, ""),
+    job_token: crypto.randomUUID().replace(/-/g, ""),
+  };
+  const updated = await updateQuote(session, id, patch);
+  if (!updated) return;
+
+  await addEvent(session, id, "links_rotated");
+  await alertOwner(
+    `Customer/job links rotated for ${current.name} by ${session.staff.full_name || "crew"} — old links no longer work.`,
+    session.staff.phone,
+  ).catch(() => {});
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+}

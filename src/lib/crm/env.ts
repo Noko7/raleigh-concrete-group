@@ -1,5 +1,14 @@
 // Central config for the CRM. Public values are safe in the browser; the
 // service-role key is only ever imported by server-only modules.
+//
+// Hard stop: this module carries the service-role key and must never be pulled
+// into a client bundle. Next already strips non-NEXT_PUBLIC_ env vars from the
+// browser, but this guard fails loudly if the module is ever imported in a
+// client component instead of silently shipping an empty key.
+if (typeof window !== "undefined") {
+  throw new Error("@/lib/crm/env is server-only and must not be imported from client code.");
+}
+
 export const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 export const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";

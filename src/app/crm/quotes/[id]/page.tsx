@@ -10,7 +10,7 @@ import { getQuote, listContractors, listEvents, listStaff } from "@/lib/crm/quer
 import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
 import { QuoteEditor } from "./quote-editor";
-import { completeJob, markPaid, requestPayment } from "./actions";
+import { completeJob, markPaid, requestPayment, rotateTokens } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +65,8 @@ function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "Payment instructions texted to the customer";
     case "job_paid":
       return `Marked paid${m.amount != null ? ` ($${Number(m.amount).toLocaleString("en-US")})` : ""}`;
+    case "links_rotated":
+      return "Customer/job links regenerated (old links disabled)";
     default:
       return e.type.replace(/_/g, " ");
   }
@@ -299,6 +301,15 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             </p>
             <CopyField label="Customer quote (branded, tracked)" value={customerLink} />
             <CopyField label="Contractor job link (photos + address)" value={jobLink} />
+            <div className="crm-editor-foot">
+              <form action={rotateTokens}>
+                <input type="hidden" name="id" value={quote.id} />
+                <button type="submit" className="crm-btn crm-btn-ghost">
+                  Regenerate links
+                </button>
+              </form>
+              <span className="crm-muted crm-sm">Invalidates the current links if one was shared too widely.</span>
+            </div>
           </div>
         </section>
       </div>
