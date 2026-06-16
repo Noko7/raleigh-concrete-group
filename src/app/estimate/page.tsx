@@ -34,6 +34,32 @@ export default function EstimatePage() {
           <div className="rounded-3xl bg-ivory p-6 text-[#2b1a12] md:p-9">
             <EstimateForm />
           </div>
+
+          {/* Server-rendered SMS consent disclosure. Duplicated here as static
+              HTML (not behind JS) so A2P / carrier reviewers and crawlers always
+              see the opt-in language and the Privacy Policy / SMS Terms links in
+              the raw page source. */}
+          <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
+            <h2 className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-amber-accent">
+              SMS Consent
+            </h2>
+            <p className="text-sm leading-relaxed text-slate-300">
+              By checking the consent box on this form, you agree to receive recurring automated text
+              messages from <strong className="text-ivory">Raleigh Concrete Group</strong> at the phone
+              number provided regarding your quote, appointments, and project updates. Message &amp;
+              data rates may apply. Message frequency varies. Reply <strong className="text-ivory">HELP</strong>{" "}
+              for help and <strong className="text-ivory">STOP</strong> to unsubscribe. Consent is not a
+              condition of purchase. View our{" "}
+              <Link href="/privacy-policy" className="font-semibold text-amber-accent underline">
+                Privacy Policy
+              </Link>{" "}
+              and{" "}
+              <Link href="/terms" className="font-semibold text-amber-accent underline">
+                SMS Terms
+              </Link>
+              .
+            </p>
+          </div>
         </section>
 
         <footer className="border-t border-white/10 bg-black/20">

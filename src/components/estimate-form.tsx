@@ -165,18 +165,11 @@ export function EstimateForm() {
           required
         />
         <span>
-          I agree to receive recurring automated text messages from Raleigh Concrete Group at the
-          phone number provided regarding my project quotes, appointments, and updates. Message
-          &amp; data rates may apply. Message frequency varies. Reply HELP for help and STOP to
-          unsubscribe.{" "}
-          <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">
-            View our Privacy Policy
-          </a>{" "}
-          and{" "}
-          <a href="/terms" target="_blank" rel="noopener noreferrer">
-            SMS Terms
-          </a>
-          .
+          I agree to receive recurring automated text messages from{" "}
+          <strong>Raleigh Concrete Group</strong> regarding my quote, appointments, and project
+          updates. Message &amp; data rates may apply. Message frequency varies. Reply{" "}
+          <strong>HELP</strong> for help and <strong>STOP</strong> to unsubscribe. View our{" "}
+          <a href="/privacy-policy">Privacy Policy</a> and <a href="/terms">SMS Terms</a>.
         </span>
       </label>
 
