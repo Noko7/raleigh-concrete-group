@@ -1,31 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { isEmailAllowed, isRoleAllowed } from "@/lib/crm/access";
 import { AT_COOKIE, RT_COOKIE } from "@/lib/crm/env";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const ALLOWED_EMAILS = new Set(
-  (process.env.CRM_ALLOWED_EMAILS ?? "")
-    .split(",")
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean),
-);
-const ALLOWED_DOMAINS = new Set(
-  (process.env.CRM_ALLOWED_DOMAINS ?? "")
-    .split(",")
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean),
-);
-const ALLOWED_ROLES = new Set(
-  (process.env.CRM_ALLOWED_ROLES ?? "")
-    .split(",")
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean),
-);
 
-// Decode a JWT payload (no signature check - Supabase validates that on every
-// API call; here we only need the expiry to decide whether to refresh).
+// Decode only the expiry from a JWT (no signature check) to decide whether to
+// refresh. Identity/authorization is NEVER trusted from this — see verifyUser,
+// which validates the token's signature with Supabase before we act on it.
 function jwtExpMs(token: string): number {
   try {
     const part = token.split(".")[1];
@@ -35,32 +20,6 @@ function jwtExpMs(token: string): number {
   } catch {
     return 0;
   }
-}
-
-function jwtPayload(token: string): { exp?: number; sub?: string; email?: string } {
-  try {
-    const part = token.split(".")[1];
-    const b64 = part.replace(/-/g, "+").replace(/_/g, "/").padEnd(part.length + ((4 - (part.length % 4)) % 4), "=");
-    return JSON.parse(decodeURIComponent(escape(atob(b64)))) as { exp?: number; sub?: string; email?: string };
-  } catch {
-    return {};
-  }
-}
-
-function emailAllowed(email: string | undefined): boolean {
-  const normalized = (email ?? "").trim().toLowerCase();
-  if (!normalized) return false;
-  if (!ALLOWED_EMAILS.size && !ALLOWED_DOMAINS.size) return true;
-  if (ALLOWED_EMAILS.has(normalized)) return true;
-  const at = normalized.lastIndexOf("@");
-  if (at < 0) return false;
-  return ALLOWED_DOMAINS.has(normalized.slice(at + 1));
-}
-
-function roleAllowed(role: string | null | undefined): boolean {
-  if (!role) return false;
-  if (!ALLOWED_ROLES.size) return true;
-  return ALLOWED_ROLES.has(role.toLowerCase());
 }
 
 async function refresh(refreshToken: string) {
@@ -80,28 +39,37 @@ async function refresh(refreshToken: string) {
 const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: "lax" as const, path: "/" };
 const ACCESS_CACHE_TTL_MS = 3 * 60 * 1000;
 const accessCache = new Map<string, { active: boolean; role: string | null; email: string | null; ts: number }>();
-const hits = new Map<string, number[]>();
+
+// Verified-identity cache, keyed by the access token. We confirm the token's
+// signature + expiry with Supabase (which rejects forged/altered tokens) and
+// only then trust its `sub`/`email`. Cached briefly to avoid a round-trip on
+// every CRM navigation.
+const authCache = new Map<string, { id: string; email: string | null; ts: number }>();
+
+async function verifyUser(accessToken: string): Promise<{ id: string; email: string | null } | null> {
+  const cached = authCache.get(accessToken);
+  if (cached && Date.now() - cached.ts < ACCESS_CACHE_TTL_MS) return cached;
+  if (!SUPABASE_URL || !ANON_KEY) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      cache: "no-store",
+      headers: { apikey: ANON_KEY, Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return null;
+    const u = (await res.json()) as { id?: string; email?: string };
+    if (!u?.id) return null;
+    const value = { id: u.id, email: u.email ?? null, ts: Date.now() };
+    if (authCache.size > 8000) authCache.clear();
+    authCache.set(accessToken, value);
+    return value;
+  } catch {
+    return null;
+  }
+}
 
 function withNoIndex(response: NextResponse): NextResponse {
   response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   return response;
-}
-
-function clientIp(request: NextRequest): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown"
-  );
-}
-
-function limited(key: string, max: number, windowMs: number): boolean {
-  const now = Date.now();
-  const recent = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
-  recent.push(now);
-  hits.set(key, recent);
-  if (hits.size > 8000) hits.clear();
-  return recent.length > max;
 }
 
 async function getStaffAccess(userId: string) {
@@ -167,8 +135,6 @@ export async function middleware(request: NextRequest) {
       request.cookies.set(RT_COOKIE, refreshed.refresh_token);
     }
   }
-  const hasSession = Boolean(accessToken && jwtExpMs(accessToken) > Date.now());
-  const token = accessToken ? jwtPayload(accessToken) : {};
 
   // CRM-relative path with any /crm prefix stripped, so the checks below behave
   // the same whether we arrived via crm.host/login or apex/crm/login.
@@ -176,20 +142,25 @@ export async function middleware(request: NextRequest) {
   const isLogin = normalized === "/login";
   const isAuthApi = normalized.startsWith("/api/login") || normalized.startsWith("/api/logout");
 
-  // Rate limit CRM/API surface.
+  // Rate limit CRM/API surface (durable across instances when Upstash is set).
   const ip = clientIp(request);
   const rlKeyBase = `${ip}:${normalized}`;
   if (normalized.startsWith("/api/login")) {
-    if (limited(`login:${rlKeyBase}`, 12, 10 * 60 * 1000)) {
+    if (await rateLimit(`login:${rlKeyBase}`, 12, 10 * 60 * 1000)) {
       return withNoIndex(NextResponse.json({ ok: false, error: "Too many login attempts." }, { status: 429 }));
     }
   } else if (normalized.startsWith("/api/")) {
-    if (limited(`api:${rlKeyBase}`, 120, 60 * 1000)) {
+    if (await rateLimit(`api:${rlKeyBase}`, 120, 60 * 1000)) {
       return withNoIndex(NextResponse.json({ ok: false, error: "Too many requests." }, { status: 429 }));
     }
-  } else if (limited(`page:${ip}`, 300, 60 * 1000)) {
+  } else if (await rateLimit(`page:${ip}`, 300, 60 * 1000)) {
     return withNoIndex(new NextResponse("Too many requests.", { status: 429 }));
   }
+
+  // Verify the session token's signature with Supabase. A forged or tampered
+  // token yields no verified identity, so it's treated as signed-out.
+  const verified = accessToken ? await verifyUser(accessToken) : null;
+  const hasSession = Boolean(verified);
 
   // Guard: signed-out users can only reach the login page + auth endpoints.
   if (!hasSession && !isLogin && !isAuthApi) {
@@ -206,10 +177,11 @@ export async function middleware(request: NextRequest) {
     return withNoIndex(NextResponse.redirect(url));
   }
 
-  // Restrict by allowlisted email/domain and role for all authenticated CRM routes.
-  if (hasSession && !isAuthApi) {
-    const tokenEmail = (token.email ?? "").toLowerCase();
-    if (!emailAllowed(tokenEmail)) {
+  // Restrict by allowlisted email/domain and role for all authenticated CRM
+  // routes, using the VERIFIED identity (never raw token claims).
+  if (hasSession && !isAuthApi && verified) {
+    const tokenEmail = (verified.email ?? "").toLowerCase();
+    if (!isEmailAllowed(tokenEmail)) {
       const url = request.nextUrl.clone();
       url.pathname = isCrmHost ? "/login" : "/crm/login";
       url.search = "";
@@ -219,10 +191,10 @@ export async function middleware(request: NextRequest) {
       return withNoIndex(denied);
     }
 
-    const userId = token.sub ?? "";
+    const userId = verified.id;
     if (userId) {
       const staff = await getStaffAccess(userId);
-      if (!staff || !staff.active || !roleAllowed(staff.role) || !emailAllowed(staff.email ?? tokenEmail)) {
+      if (!staff || !staff.active || !isRoleAllowed(staff.role) || !isEmailAllowed(staff.email ?? tokenEmail)) {
         const url = request.nextUrl.clone();
         url.pathname = isCrmHost ? "/login" : "/crm/login";
         url.search = "";

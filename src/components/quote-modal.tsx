@@ -9,8 +9,7 @@ import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 const SUPABASE_READY = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-const UPLOAD_BUCKET = "quote-uploads";
-const MAX_FILE_MB = 250;
+const MAX_FILE_MB = 50;
 
 type Mode = "online" | "inperson";
 type Status = "idle" | "uploading" | "sending" | "success" | "error";
@@ -340,29 +339,36 @@ function Modal({ onClose }: { onClose: () => void }) {
     else submit();
   }
 
-  // Private bucket: we store the object path (not a public URL). View the files
-  // in Supabase → Storage → quote-uploads, or generate a signed URL.
+  // Private bucket. The browser no longer has blanket write access: we ask our
+  // server for a one-time signed upload URL (rate-limited + type-checked) and
+  // PUT the file straight to it. We store only the object path on the lead row.
   async function uploadFiles(): Promise<string[]> {
     const paths: string[] = [];
     for (const file of files) {
       const contentType = fileMime(file);
-      const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "bin";
-      const path = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
-      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${UPLOAD_BUCKET}/${path}`, {
+      const ext = file.name.includes(".")
+        ? file.name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "")
+        : "bin";
+
+      const signRes = await fetch("/api/upload-url", {
         method: "POST",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": contentType,
-          "x-upsert": "true",
-        },
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ext: ext || "bin", contentType }),
+      });
+      if (!signRes.ok) throw new Error(`could not authorize upload (${signRes.status})`);
+      const signed = (await signRes.json()) as { ok?: boolean; path?: string; uploadUrl?: string };
+      if (!signed.ok || !signed.uploadUrl || !signed.path) throw new Error("could not authorize upload");
+
+      const put = await fetch(signed.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType, "x-upsert": "true" },
         body: file,
       });
-      if (!res.ok) {
-        const detail = await res.text().catch(() => "");
-        throw new Error(detail || `upload failed (${res.status})`);
+      if (!put.ok) {
+        const detail = await put.text().catch(() => "");
+        throw new Error(detail || `upload failed (${put.status})`);
       }
-      paths.push(`${UPLOAD_BUCKET}/${path}`);
+      paths.push(signed.path);
     }
     return paths;
   }

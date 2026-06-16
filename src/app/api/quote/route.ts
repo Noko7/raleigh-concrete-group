@@ -7,6 +7,7 @@ import {
   getPrimaryContractorId,
   getStaffContactById,
 } from "@/lib/crm/queries";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 // All quote submissions go through this server-side endpoint. The browser never
 // writes to the database directly: we validate everything here and insert with
@@ -43,20 +44,6 @@ function asString(v: unknown, max: number): string {
   return typeof v === "string" ? v.trim().slice(0, max) : "";
 }
 
-// Best-effort per-IP rate limit. Serverless instances are ephemeral, so this is
-// a deterrent rather than a guarantee; the honeypot + validation do the rest.
-const hits = new Map<string, number[]>();
-function rateLimited(ip: string): boolean {
-  const now = Date.now();
-  const windowMs = 10 * 60 * 1000;
-  const max = 8;
-  const recent = (hits.get(ip) ?? []).filter((t) => now - t < windowMs);
-  recent.push(now);
-  hits.set(ip, recent);
-  if (hits.size > 5000) hits.clear(); // crude memory cap
-  return recent.length > max;
-}
-
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
   try {
@@ -70,11 +57,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown";
-  if (rateLimited(ip)) {
+  const ip = clientIp(request);
+  if (await rateLimit(`quote:${ip}`, 8, 10 * 60 * 1000)) {
     return NextResponse.json({ ok: false, error: "Too many requests. Please call us." }, { status: 429 });
   }
 

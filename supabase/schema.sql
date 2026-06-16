@@ -67,24 +67,23 @@ insert into storage.buckets (id, name, public)
 values ('quote-uploads', 'quote-uploads', false)
 on conflict (id) do update set public = false;
 
--- Cap uploads at 250MB (room for high-res iPhone photos, ProRAW and longer
--- clips) and only allow photo/video types, including HEIC/HEIF and .mov.
+-- Cap uploads at 50MB (plenty for high-res / HEIC phone photos and the short
+-- clips a phone produces; uploads are mostly images) and only allow photo/video
+-- types, including HEIC/HEIF and .mov.
 -- NOTE: Supabase also has a project-wide "Global file size limit" under
--- Storage → Settings that overrides this. On the free plan it maxes at 50MB —
--- raise it there too if larger uploads get rejected with a 413.
+-- Storage → Settings; keep it at or above 50MB.
 update storage.buckets
-set file_size_limit = 262144000,
+set file_size_limit = 52428800,
     allowed_mime_types = array[
       'image/jpeg','image/png','image/webp','image/heic','image/heif','image/heic-sequence','image/heif-sequence','image/gif',
       'video/mp4','video/quicktime','video/webm','video/3gpp'
     ]
 where id = 'quote-uploads';
 
--- Let anonymous visitors upload into (only) the quote-uploads bucket. They can
--- write but not read, so customer photos stay private.
+-- Storage access model: the browser gets NO blanket write access. Customer
+-- photos are uploaded with a one-time, single-object SIGNED upload URL minted
+-- server-side by /api/upload-url (rate-limited + type-checked). The signed
+-- token authorizes that one PUT, so there is no standing anon insert policy to
+-- abuse. Reads stay private (no anon select policy); staff view files through
+-- the authenticated /crm/api/file proxy. Remove the old broad policy if present.
 drop policy if exists "anon can upload quote files" on storage.objects;
-create policy "anon can upload quote files"
-  on storage.objects
-  for insert
-  to anon
-  with check (bucket_id = 'quote-uploads');

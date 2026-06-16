@@ -1,6 +1,19 @@
 import type { NextConfig } from "next";
 
-const NOINDEX = [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }];
+const NOINDEX = { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" };
+
+// Baseline hardening applied to every response.
+const SECURITY_HEADERS = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), browsing-topics=()" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+];
+
+// Customer/contractor capability tokens live in the URL of these pages; never
+// leak them to third parties via the Referer header.
+const NO_REFERRER = { key: "Referrer-Policy", value: "no-referrer" };
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
@@ -14,15 +27,21 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 31536000,
   },
   async headers() {
-    // Only keep private surfaces out of search. The public marketing pages
-    // (home, services, locations, gallery, estimate, privacy policy) are
-    // intentionally left indexable so Google can rank them.
+    // Security headers everywhere; private surfaces also get noindex. The public
+    // marketing pages (home, services, locations, gallery, estimate, privacy
+    // policy) stay indexable so Google can rank them.
     return [
-      { source: "/crm/:path*", headers: NOINDEX },
-      { source: "/api/:path*", headers: NOINDEX },
-      { source: "/q/:path*", headers: NOINDEX },
-      { source: "/job/:path*", headers: NOINDEX },
-      { source: "/confirm/:path*", headers: NOINDEX },
+      { source: "/:path*", headers: SECURITY_HEADERS },
+      // The CRM must never be framed (clickjacking) — belt-and-suspenders with
+      // X-Frame-Options via the modern frame-ancestors directive.
+      {
+        source: "/crm/:path*",
+        headers: [NOINDEX, { key: "Content-Security-Policy", value: "frame-ancestors 'none'" }],
+      },
+      { source: "/api/:path*", headers: [NOINDEX] },
+      { source: "/q/:path*", headers: [NOINDEX, NO_REFERRER] },
+      { source: "/job/:path*", headers: [NOINDEX, NO_REFERRER] },
+      { source: "/confirm/:path*", headers: [NOINDEX, NO_REFERRER] },
     ];
   },
 };

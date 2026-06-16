@@ -52,8 +52,11 @@ create policy "owner manages staff" on public.staff
 grant select, insert, update, delete on public.staff to authenticated;
 grant all on public.staff to service_role;
 
--- New auth users become contractors automatically; promote yourself to owner
--- with the snippet at the bottom of this file.
+-- New auth users get a contractor staff row that is INACTIVE by default. An
+-- owner must explicitly activate it (Staff settings, or flip active = true)
+-- before that person can sign in. This means a stray/self-service Supabase
+-- signup can never reach the CRM on its own. Promote yourself to owner with the
+-- snippet at the bottom of this file (that snippet sets active = true for you).
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -61,8 +64,8 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.staff (id, email, full_name, role)
-  values (new.id, new.email, coalesce(new.raw_user_meta_data->>'full_name', ''), 'contractor')
+  insert into public.staff (id, email, full_name, role, active)
+  values (new.id, new.email, coalesce(new.raw_user_meta_data->>'full_name', ''), 'contractor', false)
   on conflict (id) do nothing;
   return new;
 end;
