@@ -4,13 +4,12 @@ import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
 import { businessName, links, locationKeys, locations, phoneDisplay, phoneHref } from "@/lib/site-data";
 
-const CONTACT_EMAIL = "info@raleighconcrete.net";
-const LAST_UPDATED = "June 15, 2026";
+const EFFECTIVE_DATE = "June 15, 2026";
 
 export const metadata: Metadata = {
-  title: "Terms of Service",
+  title: "SMS Terms of Service",
   description:
-    "Terms of Service for RaleighConcrete.net, including SMS/text messaging terms and disclaimers about independent contractors.",
+    "SMS Terms of Service for Raleigh Concrete Group: consent, message frequency, rates, STOP/HELP opt-out, supported carriers, and privacy, in accordance with A2P 10DLC requirements.",
   alternates: { canonical: "/terms" },
 };
 
@@ -20,104 +19,73 @@ export default function TermsPage() {
       <SiteHeader />
       <main className="pb-24 md:pb-0">
         <section className="mx-auto w-full max-w-3xl px-4 pb-16 pt-12 md:px-8 md:pt-16">
-          <h1 className="mb-2 font-headline text-5xl text-ivory md:text-6xl">Terms of Service</h1>
+          <h1 className="mb-2 font-headline text-5xl text-ivory md:text-6xl">SMS Terms of Service</h1>
           <p className="mb-10 text-sm font-semibold uppercase tracking-[0.14em] text-slate-400">
-            Last updated: {LAST_UPDATED}
+            Effective Date: {EFFECTIVE_DATE}
           </p>
 
           <div className="legal-prose">
             <p>
-              These Terms of Service (&ldquo;Terms&rdquo;) govern your use of RaleighConcrete.net and the
-              services offered by {businessName} (&ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;).
-              By using this website or submitting a form, you agree to these Terms. If you do not agree,
-              please do not use the site.
+              {businessName} (&ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;) provides text
+              messaging services to communicate with our customers. By providing your phone number and
+              consenting to receive text messages, you agree to these SMS Terms of Service.
             </p>
 
-            <h2>About Our Service</h2>
+            <h2>1. Consent</h2>
             <p>
-              RaleighConcrete.net is a service to assist homeowners in connecting with local service
-              contractors. All contractors are independent, and this site does not warrant or guarantee
-              any work performed. It is the responsibility of the homeowner to verify that the hired
-              contractor furnishes the necessary license and insurance required for the work being
-              performed. All persons depicted in a photo or video are actors or models and not
-              contractors listed on this site.
-            </p>
-
-            <h2>No Warranty; Independent Contractors</h2>
-            <p>
-              Any contractor introduced through this site is an independent third party. We do not
-              employ, supervise, or control the contractors and are not responsible for the quality,
-              timing, safety, legality, or outcome of any work they perform. You are solely responsible
-              for evaluating, selecting, contracting with, and paying any contractor, and for confirming
-              their licensing, insurance, and qualifications before work begins.
-            </p>
-
-            <h2>SMS / Text Messaging</h2>
-            <p>
-              When you provide your phone number through a form on our website and check the consent box,
-              you agree to receive recurring automated text messages from {businessName} at the phone
-              number provided regarding your project quotes, appointments, and updates.
+              By checking the consent box on our estimate form or by verbally consenting during a phone
+              call, you agree to receive recurring automated text messages from {businessName} at the
+              phone number you provided. These messages may include:
             </p>
             <ul>
-              <li>
-                <strong>Message frequency varies</strong> based on your interactions with us.
-              </li>
-              <li>
-                <strong>Message and data rates may apply</strong>, depending on your mobile carrier and plan.
-              </li>
-              <li>
-                Reply <strong>HELP</strong> for help, or contact us at {phoneDisplay}.
-              </li>
-              <li>
-                Reply <strong>STOP</strong> at any time to unsubscribe and stop receiving text messages.
-              </li>
+              <li>Project quotes and estimates</li>
+              <li>Appointment scheduling and confirmations</li>
+              <li>Project updates and reminders</li>
+              <li>Follow-up messages and review requests</li>
             </ul>
+
+            <h2>2. Message Frequency</h2>
             <p>
-              See our{" "}
-              <Link href="/privacy-policy">Privacy Policy</Link> for details on how we handle the
-              information you provide. No mobile information or SMS opt-in consent is sold, rented, or
-              shared with third parties for marketing purposes.
+              You may receive 2&ndash;8 text messages per project (typically 3&ndash;6 messages total).
+              Message frequency may vary.
             </p>
 
-            <h2>Acceptable Use</h2>
+            <h2>3. Message &amp; Data Rates</h2>
+            <p>Message and data rates may apply. Check with your mobile carrier for details.</p>
+
+            <h2>4. Opt-Out Instructions</h2>
             <p>
-              You agree to provide accurate information, to use the site only for lawful purposes, and not
-              to interfere with, disrupt, or attempt to gain unauthorized access to the site or its
-              systems.
+              You can opt out of receiving text messages at any time by replying STOP to any message we
+              send. After you reply STOP, we will send one final confirmation message and then stop
+              sending you SMS messages. You may also opt out by contacting us at{" "}
+              <a href={phoneHref}>{phoneDisplay}</a>.
             </p>
 
-            <h2>Intellectual Property</h2>
+            <h2>5. Help Requests</h2>
+            <p>If you need help, reply HELP to any message or contact us directly.</p>
+
+            <h2>6. Supported Carriers</h2>
             <p>
-              The content, branding, and materials on this site are owned by {businessName} or its
-              licensors and may not be copied or reused without permission.
+              Our text messaging service works with most major U.S. carriers. However, availability may
+              vary.
             </p>
 
-            <h2>Limitation of Liability</h2>
+            <h2>7. Changes to These Terms</h2>
             <p>
-              To the fullest extent permitted by law, {businessName} is not liable for any indirect,
-              incidental, or consequential damages arising from your use of the site or from any work
-              performed by an independent contractor. The site is provided &ldquo;as is&rdquo; without
-              warranties of any kind.
+              We reserve the right to update these SMS Terms of Service. We will notify you of material
+              changes via text message or our website.
             </p>
 
-            <h2>Changes to These Terms</h2>
+            <h2>8. Privacy</h2>
             <p>
-              We may update these Terms from time to time. When we do, we will revise the &ldquo;Last
-              updated&rdquo; date above. Continued use of the site after changes take effect constitutes
-              acceptance of the updated Terms.
+              Your information is handled according to our{" "}
+              <Link href="/privacy-policy">Privacy Policy</Link>.
             </p>
 
-            <h2>Contact Us</h2>
-            <p>If you have questions about these Terms, contact us:</p>
-            <ul>
-              <li>{businessName}</li>
-              <li>
-                Phone: <a href={phoneHref}>{phoneDisplay}</a>
-              </li>
-              <li>
-                Email: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
-              </li>
-            </ul>
+            <p className="legal-emphasis">
+              By consenting to receive text messages, you confirm that you are the owner of the phone
+              number provided or have authorization to consent on behalf of the owner.
+            </p>
           </div>
         </section>
 
