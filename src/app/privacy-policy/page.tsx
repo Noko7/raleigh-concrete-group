@@ -5,7 +5,7 @@ import { SiteHeader } from "@/components/site-header";
 import { businessName, links, locationKeys, locations, phoneDisplay, phoneHref } from "@/lib/site-data";
 
 const CONTACT_EMAIL = "info@raleighconcrete.net";
-const LAST_UPDATED = "June 13, 2026";
+const LAST_UPDATED = "June 17, 2026";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",

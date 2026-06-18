@@ -62,12 +62,10 @@ export default function RootLayout({
         {children}
         <footer className="border-t border-white/10 px-4 py-6 md:px-8">
           <p className="mx-auto max-w-4xl text-center text-[11px] italic leading-relaxed text-slate-500">
-            RaleighConcrete.net is a service to assist homeowners in connecting with local service
-            contractors. All contractors are independent, and this site does not warrant or guarantee
-            any work performed. It is the responsibility of the homeowner to verify that the hired
-            contractor furnishes the necessary license and insurance required for the work being
-            performed. All persons depicted in a photo or video are actors or models and not
-            contractors listed on this site.
+            Raleigh Concrete Group is a concrete and hardscaping contractor serving Raleigh, NC and the
+            surrounding Triangle area. We perform our own concrete driveways, patios, walkways, slabs,
+            stamped concrete, and related hardscaping work. Images may include representative examples of
+            completed projects. &copy; 2026 Raleigh Concrete Group. All rights reserved.
           </p>
         </footer>
         <QuoteModalRoot />

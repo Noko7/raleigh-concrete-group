@@ -4,7 +4,7 @@ import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
 import { businessName, links, locationKeys, locations, phoneDisplay, phoneHref } from "@/lib/site-data";
 
-const EFFECTIVE_DATE = "June 15, 2026";
+const EFFECTIVE_DATE = "June 17, 2026";
 
 export const metadata: Metadata = {
   title: "SMS Terms of Service",
