@@ -82,6 +82,10 @@ export default function PrivacyPolicyPage() {
               consent obtained for text messaging will only be shared with our SMS/text messaging
               service provider solely to deliver the messages described above, and for no other purpose.
             </p>
+            <p className="legal-emphasis">
+              All the above categories exclude text messaging originator opt-in data and consent; this
+              information will not be shared with any third parties.
+            </p>
             <p>
               For complete text-messaging terms, including message frequency, supported carriers, and
               opt-out details, see our <Link href="/terms">SMS Terms of Service</Link>.
