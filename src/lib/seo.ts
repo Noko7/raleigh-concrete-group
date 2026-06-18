@@ -12,6 +12,7 @@ export const SERVICE_AREAS = [
   "Apex",
   "Wake Forest",
   "Durham",
+  "Chapel Hill",
   "Morrisville",
   "Garner",
   "Holly Springs",
@@ -32,7 +33,7 @@ export function localBusinessSchema() {
     logo: `${SITE_URL}/images/logo_horizontal_light.png`,
     description:
       "Concrete and hardscaping contractor in Raleigh, NC. Driveways, patios, walkways, retaining walls, stamped concrete and pavers for residential and commercial clients across the Triangle.",
-    foundingDate: "2026",
+    foundingDate: "2020",
     priceRange: "$$",
     address: {
       "@type": "PostalAddress",

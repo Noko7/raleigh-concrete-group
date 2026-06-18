@@ -12,6 +12,7 @@ export type LocationKey =
   | "apex"
   | "wake-forest"
   | "durham"
+  | "chapel-hill"
   | "morrisville"
   | "garner"
   | "holly-springs"
@@ -23,6 +24,7 @@ export const locationKeys: LocationKey[] = [
   "apex",
   "wake-forest",
   "durham",
+  "chapel-hill",
   "morrisville",
   "garner",
   "holly-springs",
@@ -1101,6 +1103,17 @@ export const locations: Record<LocationKey, LocationContent> = {
     heroImage: "/images/workers_pouring_driveway_live_action.png",
     beforeAfterPairs: sharedBeforeAfter,
     neighborhoods: ["Southpoint", "Hope Valley", "Brightleaf", "Trinity Park", "Woodcroft"],
+  },
+  "chapel-hill": {
+    key: "chapel-hill",
+    city: "Chapel Hill",
+    title: "Concrete & Hardscaping in Chapel Hill, NC",
+    seoTitle: "Concrete Chapel Hill NC | Driveways, Patios & Pavers",
+    description:
+      "Concrete driveways, patios, walkways and retaining walls for Chapel Hill homeowners. Clean prep, durable finishes, and clear communication from quote to final cleanup.",
+    heroImage: "/images/front_walkway+driveway.png",
+    beforeAfterPairs: sharedBeforeAfter,
+    neighborhoods: ["Southern Village", "Meadowmont", "Chapel Hill North", "Glen Lennox", "Briar Chapel"],
   },
   morrisville: {
     key: "morrisville",

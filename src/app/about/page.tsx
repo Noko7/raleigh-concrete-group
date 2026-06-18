@@ -16,7 +16,7 @@ import {
 export const metadata: Metadata = {
   title: "About Raleigh Concrete Group | Local Concrete Contractor",
   description:
-    "Raleigh Concrete Group is a locally run concrete contractor serving Raleigh and the Triangle. New company, 20+ years of combined crew experience, honest pricing and clean job sites.",
+    "Raleigh Concrete Group is a locally run concrete contractor serving Raleigh and the Triangle since 2020, with 20+ years of combined crew experience, honest pricing and clean job sites.",
   alternates: { canonical: "/about" },
 };
 
@@ -46,7 +46,7 @@ export default function AboutPage() {
               </h1>
               <p className="mb-4 max-w-lg text-lg leading-relaxed text-slate-300">
                 We&apos;re a locally run concrete contractor working with homeowners and businesses
-                across Raleigh and the surrounding Triangle. We started the company in 2026 with a
+                across Raleigh and the surrounding Triangle. We started the company in 2020 with a
                 pretty simple idea: do dependable concrete work, communicate like professionals,
                 price things honestly, and build stuff that lasts.
               </p>
@@ -77,12 +77,11 @@ export default function AboutPage() {
         <section className="mx-auto w-full max-w-3xl px-4 pb-12 md:px-8">
           <div className="space-y-5 text-lg leading-relaxed text-slate-300">
             <p>
-              We&apos;re a new company, but the people doing the work aren&apos;t new to it. The crews
-              and contractors behind our projects bring more than 20 years of combined hands-on
-              concrete experience, on everything from residential driveways and patios to commercial
-              flatwork. Whether it&apos;s stamped concrete, sidewalks, slabs or a full driveway, our
-              team knows how to build surfaces that hold up to North Carolina weather and everyday
-              use.
+              We&apos;ve been pouring concrete around the Triangle since 2020, and the people doing
+              the work bring more than 20 years of combined hands-on concrete experience, on
+              everything from residential driveways and patios to commercial flatwork. Whether
+              it&apos;s stamped concrete, sidewalks, slabs or a full driveway, our team knows how to
+              build surfaces that hold up to North Carolina weather and everyday use.
             </p>
             <p>
               We care about the things that actually show up in the finished product: solid site
