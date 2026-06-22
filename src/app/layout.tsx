@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Bebas_Neue, Sora } from "next/font/google";
 
@@ -69,6 +70,7 @@ export default function RootLayout({
           </p>
         </footer>
         <QuoteModalRoot />
+        <Analytics />
       </body>
     </html>
   );
