@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /crm
+Disallow: /api/
+Disallow: /q/
+Disallow: /job/
+Disallow: /confirm
+
+Sitemap: https://www.raleighconcrete.net/sitemap.xml
