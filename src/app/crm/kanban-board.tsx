@@ -90,9 +90,9 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
   }, [dragId, isPending, router]);
 
   const byStatus = useMemo(() => {
-    const map: Record<Status, BoardQuote[]> = {
-      new: [], quoted: [], scheduled: [], completed: [], paid: [], lost: [],
-    };
+    // Built from STATUSES rather than spelled out, so adding a pipeline stage
+    // can't leave this map missing a column.
+    const map = Object.fromEntries(STATUSES.map((s) => [s, [] as BoardQuote[]])) as Record<Status, BoardQuote[]>;
     for (const q of quotes) map[q.status]?.push(q);
     return map;
   }, [quotes]);
