@@ -138,6 +138,21 @@ Add these Vercel env vars (no SQL needed):
 
 Each person sets their own alert number under **CRM → Settings** (`/crm/settings`). Owner alerts go to every active owner's number **plus** `OWNER_PHONE`; contractor alerts use that contractor's saved number. The person who performs an action isn't texted about their own click. SMS is best-effort — a texting outage never blocks a quote from saving.
 
+**Testing texts (owner only)**
+**CRM → Settings** has a **Text notifications** panel that shows the active provider, the sending
+number, any missing env vars, and exactly which numbers an owner alert would reach. The **Send test
+text** button sends one real message and prints the provider's raw response, which is how you tell
+these apart:
+- `401` — bad or missing `QUO_API_KEY`.
+- `400` with *A2P Registration Not Approved* — the key is fine, but the carrier hasn't approved the
+  brand/campaign yet. Nothing in the app can work around this.
+- `403` *Not Phone Number User* — `QUO_FROM` isn't a number your `QUO_USER_ID` can send from. Clear
+  `QUO_USER_ID` to default to the number's owner.
+- **Accepted** but no text arrives — the provider took it; the hold-up is carrier delivery.
+
+`QUO_FROM` must be E.164 (`+19198733919`) or a Quo phone ID (`PN…`). Leave the number blank in the
+test panel to text every owner number at once.
+
 Customer-facing text settings:
 - `OWNER_NAME` *(optional)* — first name used to sign customer texts (default `Noah`), e.g. "this is Noah with Raleigh Concrete Group".
 - `GOOGLE_REVIEW_URL` *(optional)* — your Google review link; included in the post-job thank-you text. If unset, the thank-you still sends without a link.

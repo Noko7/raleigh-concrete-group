@@ -98,9 +98,11 @@ export async function sendSms(toRaw: string, message: string): Promise<boolean> 
   return (await sendSmsResult(toRaw, message)).ok;
 }
 
-// Every active owner gets a copy (their staff phone + the OWNER_PHONE env), with
-// the acting user excluded so they aren't texted about their own clicks.
-export async function alertOwner(message: string, excludeRaw?: string | null): Promise<void> {
+// Everyone who receives an owner alert: the OWNER_PHONE env plus every active
+// owner's saved number, de-duplicated in E.164. Exported so the Settings
+// diagnostics can show exactly who a real alert would reach, rather than
+// re-deriving the list and drifting from what alertOwner actually does.
+export async function ownerRecipients(excludeRaw?: string | null): Promise<string[]> {
   const recipients = new Map<string, string>();
   const add = (raw?: string | null) => {
     const e = raw ? toE164(raw) : null;
@@ -114,11 +116,49 @@ export async function alertOwner(message: string, excludeRaw?: string | null): P
   }
   const exclude = excludeRaw ? toE164(excludeRaw) : null;
   if (exclude) recipients.delete(exclude);
-  if (recipients.size === 0) {
+  return [...recipients.values()];
+}
+
+// Every active owner gets a copy, with the acting user excluded so they aren't
+// texted about their own clicks.
+export async function alertOwner(message: string, excludeRaw?: string | null): Promise<void> {
+  const recipients = await ownerRecipients(excludeRaw);
+  if (recipients.length === 0) {
     console.error("[sms] alertOwner: no owner recipients (set OWNER_PHONE or an owner's phone in Settings)");
     return;
   }
-  await Promise.all([...recipients.values()].map((p) => sendSms(p, message).catch(() => {})));
+  await Promise.all(recipients.map((p) => sendSms(p, message).catch(() => {})));
+}
+
+// What's configured right now, for the Settings → Notifications panel. Never
+// returns a key or token: only whether each one is present, so this is safe to
+// render in the CRM.
+export type SmsDiagnostics = {
+  provider: string;
+  from: string | null;
+  missing: string[];
+  ready: boolean;
+};
+
+export function smsDiagnostics(): SmsDiagnostics {
+  const missing: string[] = [];
+  let from: string | null = null;
+
+  if (SMS_PROVIDER === "quo" || SMS_PROVIDER === "openphone") {
+    if (!process.env.QUO_API_KEY) missing.push("QUO_API_KEY");
+    from = (process.env.QUO_FROM || "").trim() || null;
+    if (!from) missing.push("QUO_FROM");
+  } else if (SMS_PROVIDER === "custom") {
+    if (!process.env.SMS_API_URL) missing.push("SMS_API_URL");
+    from = (process.env.SMS_FROM || "").trim() || null;
+  } else {
+    if (!process.env.TWILIO_ACCOUNT_SID) missing.push("TWILIO_ACCOUNT_SID");
+    if (!process.env.TWILIO_AUTH_TOKEN) missing.push("TWILIO_AUTH_TOKEN");
+    from = (process.env.TWILIO_FROM || "").trim() || null;
+    if (!from) missing.push("TWILIO_FROM");
+  }
+
+  return { provider: SMS_PROVIDER, from, missing, ready: missing.length === 0 };
 }
 
 export function jobLink(token: string): string {

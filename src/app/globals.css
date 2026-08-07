@@ -1520,6 +1520,15 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .kb-delete-btn { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
 }
 
+/* ── SMS test panel (Settings) ── */
+.sms-diag { margin-bottom: 1rem; }
+.sms-results { list-style: none; margin: 1rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.sms-results li { border: 1px solid var(--crm-border); border-radius: 0.7rem; padding: 0.8rem 0.9rem; background: var(--crm-surface-solid); }
+.sms-result-ok { border-color: rgba(22, 163, 74, 0.5); }
+.sms-result-bad { border-color: rgba(220, 38, 38, 0.5); }
+.sms-result-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.sms-detail { margin: 0.6rem 0 0; padding: 0.6rem 0.7rem; background: #15181c; border-radius: 0.45rem; font-family: ui-monospace, monospace; font-size: 0.78rem; color: #fca5a5; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto; }
+
 /* ── Security dashboard ── */
 .sec-inline-badge { margin-left: 0.45rem; }
 .sec-failed { color: #f87171; font-weight: 700; }
