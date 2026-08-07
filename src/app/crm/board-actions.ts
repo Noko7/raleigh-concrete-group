@@ -64,12 +64,20 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
   await addEvent(session, id, "assigned", { to: next });
   if (next) {
     const contractor = await getStaffById(session, next);
-    await notifyAssignment(contractor?.phone, {
-      name: current.name,
-      phone: current.phone,
-      service: current.service,
-      job_token: current.job_token,
-    }).catch(() => {});
+    await notifyAssignment(
+      contractor?.phone,
+      {
+        name: current.name,
+        phone: current.phone,
+        service: current.service,
+        address: current.address,
+        scheduled_date: current.scheduled_date,
+        visit_date: current.visit_date,
+        visit_time: current.visit_time,
+        job_token: current.job_token,
+      },
+      contractor?.full_name,
+    ).catch(() => {});
     await alertOwner(
       `${current.name} assigned to ${contractor?.full_name || "a contractor"}.`,
       session.staff.phone,

@@ -196,12 +196,41 @@ function prettyDay(ymd?: string | null): string {
   return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
-// ── 1. New quote in: text the owner(s) and the assigned contractor ──────────
-export async function notifyNewQuote(q: QuoteInfo, contractorPhone?: string | null): Promise<void> {
+// Same date, but honest when there isn't one - a crew text shouldn't say "your
+// scheduled day" for a job nobody has booked yet.
+function dayOrNull(ymd?: string | null): string | null {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+}
+
+// The customer block shared by every crew-facing text. Only lines we actually
+// have are included, so a sparse lead doesn't produce "Address: null".
+function customerBrief(q: QuoteInfo): string {
+  const lines = [`Customer: ${q.name}`, `Phone: ${q.phone}`];
+  if (q.service?.trim()) lines.push(`Service: ${q.service.trim()}`);
+  if (q.address?.trim()) lines.push(`Address: ${q.address.trim()}`);
+
+  const jobDay = dayOrNull(q.scheduled_date);
+  const visitDay = dayOrNull(q.visit_date);
+  if (jobDay) lines.push(`Scheduled: ${jobDay}`);
+  else if (visitDay) lines.push(`Quote visit: ${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}`);
+  else lines.push("Not scheduled yet");
+
+  return lines.join("\n");
+}
+
+// ── 1. New quote in: text the owner(s) and the auto-assigned contractor ─────
+export async function notifyNewQuote(
+  q: QuoteInfo,
+  contractorPhone?: string | null,
+  contractorName?: string | null,
+): Promise<void> {
   const kind = q.service?.trim() || "concrete";
   await alertOwner(`New quote: ${q.name}, ${kind}. ${q.phone}. ${jobLink(q.job_token ?? "")}`);
   if (contractorPhone) {
-    await sendSms(contractorPhone, `New job for you: ${q.name}, ${kind}. Details: ${jobLink(q.job_token ?? "")}`).catch(() => {});
+    // Same full brief as a manual assignment - from the crew's side this is the
+    // same event, so it shouldn't read differently.
+    await sendSms(contractorPhone, assignmentMessage(q, contractorName)).catch(() => {});
   }
 }
 
@@ -279,9 +308,29 @@ export async function notifyPaymentRequest(q: QuoteInfo): Promise<SendResult> {
   );
 }
 
-// Reassignment from the CRM: let the newly-assigned contractor know.
-export async function notifyAssignment(contractorPhone: string | null | undefined, q: QuoteInfo): Promise<void> {
+// Assignment from the CRM: give the contractor everything they need to pick up
+// the phone without opening anything first, then point them at the full job.
+// The job link needs a CRM session now, so the text says so up front rather
+// than letting them tap through to a login screen with no explanation.
+export function assignmentMessage(q: QuoteInfo, contractorName?: string | null): string {
+  const greeting = contractorName?.trim() ? `Hi ${firstName(contractorName)},` : "Hi,";
+  return [
+    `${greeting} you've been assigned a new job with Raleigh Concrete Group.`,
+    "",
+    customerBrief(q),
+    "",
+    `Full details and photos: ${jobLink(q.job_token ?? "")}`,
+    "Sign in with your CRM login to open it.",
+    "",
+    `Please give ${firstName(q.name)} a call to introduce yourself and confirm the details.`,
+  ].join("\n");
+}
+
+export async function notifyAssignment(
+  contractorPhone: string | null | undefined,
+  q: QuoteInfo,
+  contractorName?: string | null,
+): Promise<void> {
   if (!contractorPhone) return;
-  const kind = q.service?.trim() || "concrete";
-  await sendSms(contractorPhone, `New job for you: ${q.name}, ${kind}. Details: ${jobLink(q.job_token ?? "")}`).catch(() => {});
+  await sendSms(contractorPhone, assignmentMessage(q, contractorName)).catch(() => {});
 }

@@ -192,11 +192,13 @@ export async function setPrimaryContractorId(id: string | null): Promise<boolean
 
 // Service-role lookup of a contractor's contact info (no session) - used by the
 // public submission endpoint when auto-assigning the primary contractor.
-export async function getStaffContactById(id: string): Promise<{ phone: string | null; email: string | null } | null> {
+export async function getStaffContactById(
+  id: string,
+): Promise<{ phone: string | null; email: string | null; full_name: string | null } | null> {
   if (!/^[0-9a-fA-F-]{36}$/.test(id)) return null;
-  const res = await pgAdmin(`staff?id=eq.${id}&active=eq.true&select=phone,email&limit=1`);
+  const res = await pgAdmin(`staff?id=eq.${id}&active=eq.true&select=phone,email,full_name&limit=1`);
   if (!res.ok) return null;
-  const rows = (await res.json()) as { phone: string | null; email: string | null }[];
+  const rows = (await res.json()) as { phone: string | null; email: string | null; full_name: string | null }[];
   return rows[0] ?? null;
 }
 

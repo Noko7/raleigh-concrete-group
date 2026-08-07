@@ -162,6 +162,7 @@ export async function POST(request: Request) {
     // text the owner + contractor and acknowledge the customer. All best-effort.
     if (newRow?.id && SERVICE_KEY) {
       let contractorPhone: string | null = null;
+      let contractorName: string | null = null;
       try {
         const primaryId = await getPrimaryContractorId();
         if (primaryId) {
@@ -177,6 +178,7 @@ export async function POST(request: Request) {
           });
           const contact = await getStaffContactById(primaryId);
           contractorPhone = contact?.phone ?? null;
+          contractorName = contact?.full_name ?? null;
         }
       } catch {
         // assignment is best-effort; the quote is already saved
@@ -186,13 +188,14 @@ export async function POST(request: Request) {
         name,
         phone: phoneRaw,
         service,
+        address,
         quote_type: row.quote_type ?? undefined,
         visit_date: row.visit_date,
         visit_time: row.visit_time,
         public_token: newRow.public_token,
         job_token: newRow.job_token,
       };
-      await notifyNewQuote(info, contractorPhone).catch(() => {});
+      await notifyNewQuote(info, contractorPhone, contractorName).catch(() => {});
       await notifyCustomerReceived(info).catch(() => {});
     }
     return NextResponse.json({ ok: true });

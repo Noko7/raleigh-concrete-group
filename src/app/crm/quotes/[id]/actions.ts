@@ -107,12 +107,20 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     // acting user is excluded so they aren't texted about their own edits).
     if (patch.assigned_to) {
       const contractor = await getStaffById(session, patch.assigned_to);
-      await notifyAssignment(contractor?.phone, {
-        name: current.name,
-        phone: current.phone,
-        service: current.service,
-        job_token: current.job_token,
-      }).catch(() => {});
+      await notifyAssignment(
+        contractor?.phone,
+        {
+          name: current.name,
+          phone: current.phone,
+          service: current.service,
+          address: current.address,
+          scheduled_date: current.scheduled_date,
+          visit_date: current.visit_date,
+          visit_time: current.visit_time,
+          job_token: current.job_token,
+        },
+        contractor?.full_name,
+      ).catch(() => {});
       await alertOwner(
         `${current.name} assigned to ${contractor?.full_name || "a contractor"}.`,
         session.staff.phone,
