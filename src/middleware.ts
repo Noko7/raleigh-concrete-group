@@ -109,15 +109,16 @@ export async function middleware(request: NextRequest) {
   const isCrmHost = host.startsWith("crm.");
   const { pathname } = request.nextUrl;
 
-  // The CRM lives under /crm (mapped from the crm.* subdomain). Everything else
-  // is the public marketing site / token pages - leave it untouched.
+  // The CRM lives under /crm (mapped from the crm.* subdomain). Contractor job
+  // pages (/job/*) also require a logged-in staff session; everything else is
+  // the public marketing site / customer token pages - leave it untouched.
+  const isJobPath = pathname.startsWith("/job/");
   const touchesCrm = isCrmHost || pathname.startsWith("/crm");
-  if (!touchesCrm) {
+  if (!touchesCrm && !isJobPath) {
     // Allow Google to index the public marketing pages. Keep private customer
     // token pages and API endpoints out of search with a noindex header.
     const keepPrivate =
       pathname.startsWith("/q/") ||
-      pathname.startsWith("/job/") ||
       pathname.startsWith("/confirm") ||
       pathname.startsWith("/api/");
     return keepPrivate ? withNoIndex(NextResponse.next()) : NextResponse.next();
@@ -166,7 +167,7 @@ export async function middleware(request: NextRequest) {
   if (!hasSession && !isLogin && !isAuthApi) {
     const url = request.nextUrl.clone();
     url.pathname = isCrmHost ? "/login" : "/crm/login";
-    url.search = "";
+    url.search = isJobPath ? `?next=${encodeURIComponent(pathname)}` : "";
     return withNoIndex(NextResponse.redirect(url));
   }
   // Signed-in users skip the login screen.

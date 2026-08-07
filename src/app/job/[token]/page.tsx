@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 
+import { requireSession } from "@/lib/crm/auth";
 import { getQuoteByToken, signFiles } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 
@@ -14,8 +15,11 @@ export const metadata: Metadata = {
 
 export default async function JobPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  const session = await requireSession(`/crm/login?next=${encodeURIComponent(`/job/${token}`)}`);
   const quote = await getQuoteByToken("job_token", token);
   if (!quote) notFound();
+  // Contractors only see jobs assigned to them; owners can see any job.
+  if (session.staff.role !== "owner" && quote.assigned_to !== session.staff.id) notFound();
 
   const photos = quote.file_urls?.length ? await signFiles(quote.file_urls, 7200) : [];
   const prettyVisit = quote.visit_date

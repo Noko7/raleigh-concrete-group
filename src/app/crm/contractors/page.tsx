@@ -1,6 +1,7 @@
 import { requireOwner } from "@/lib/crm/auth";
 import { listStaff } from "@/lib/crm/queries";
 import { AddContractor } from "./add-contractor";
+import { ResetPassword } from "./reset-password";
 import { setContractorActive } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +57,7 @@ export default async function ContractorsPage() {
                           {c.active ? "Deactivate" : "Reactivate"}
                         </button>
                       </form>
+                      <ResetPassword id={c.id} name={c.full_name || c.email || "this contractor"} />
                     </td>
                   </tr>
                 ))}

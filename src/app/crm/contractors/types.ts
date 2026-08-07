@@ -6,3 +6,11 @@ export type AddState = {
   smsSent?: boolean;
   smsNote?: string;
 };
+
+export type ResetState = {
+  ok: boolean;
+  error?: string;
+  password?: string;
+  smsSent?: boolean;
+  smsNote?: string;
+};

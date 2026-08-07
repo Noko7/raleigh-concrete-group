@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export function LoginForm({ base }: { base: string }) {
+export function LoginForm({ base, next }: { base: string; next?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,7 +20,7 @@ export function LoginForm({ base }: { base: string }) {
       });
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
       if (res.ok && json.ok) {
-        window.location.href = `${base}/`;
+        window.location.href = next || `${base}/`;
         return;
       }
       setError(json.error || "Could not sign in.");

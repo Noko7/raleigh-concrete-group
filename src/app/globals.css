@@ -1283,6 +1283,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .crm-link-strong { font-weight: 700; color: var(--crm-text); text-decoration: none; }
 .crm-link-strong:hover { color: var(--crm-accent); }
 .crm-row-actions { text-align: right; }
+.crm-row-actions:has(> * + *) { display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem; }
 .crm-empty { padding: 2.5rem; text-align: center; color: var(--crm-muted); background: var(--crm-surface); border: 1px dashed var(--crm-border); border-radius: 0.9rem; }
 
 .crm-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -1394,18 +1395,19 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cq-btn { flex: 1; min-width: 140px; text-align: center; border-radius: 999px; padding: 0.85rem 1.25rem; font-weight: 800; text-decoration: none; }
 .cq-btn-primary { background: #2b1a12; color: #fff; }
 .cq-btn-secondary { background: var(--amber); color: #fff; border: 2px solid var(--amber); }
+.cq-btn-secondary:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
 .cq-fine { margin-top: 1rem; font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); text-align: center; }
 
 /* Full-screen booking confirmation / declined page */
 .cq-confirm { width: 100%; max-width: 520px; background: var(--ivory); border-radius: 1.25rem; padding: 2.5rem 2rem; color: #2b1a12; text-align: center; }
-.cq-confirm-badge { width: 84px; height: 84px; margin: 0 auto 1.25rem; border-radius: 50%; background: #16a34a; color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(22, 163, 74, 0.35); }
-.cq-confirm-eyebrow { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; color: #15803d; margin-bottom: 0.5rem; }
+.cq-confirm-badge { width: 84px; height: 84px; margin: 0 auto 1.25rem; border-radius: 50%; background: var(--amber); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(194, 104, 42, 0.35); }
+.cq-confirm-eyebrow { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; color: var(--amber-dark); margin-bottom: 0.5rem; }
 .cq-confirm-eyebrow-muted { color: rgba(43, 26, 18, 0.55); }
 .cq-confirm-title { font-family: var(--font-headline), sans-serif; font-size: 2.4rem; line-height: 1.05; margin-bottom: 0.85rem; }
 .cq-confirm-date { font-size: 1.05rem; color: rgba(43, 26, 18, 0.85); margin-bottom: 1rem; }
 .cq-confirm-date strong { color: #2b1a12; }
-.cq-confirm-price { display: inline-flex; align-items: center; gap: 0.6rem; background: #fff; border: 2px solid #16a34a; border-radius: 0.9rem; padding: 0.7rem 1.25rem; margin-bottom: 1.1rem; font-family: var(--font-headline), sans-serif; font-size: 1.8rem; color: #2b1a12; }
-.cq-confirm-save { font-family: var(--font-body), sans-serif; font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #15803d; background: #dcfce7; border-radius: 999px; padding: 0.18rem 0.6rem; }
+.cq-confirm-price { display: inline-flex; align-items: center; gap: 0.6rem; background: #fff; border: 2px solid var(--amber); border-radius: 0.9rem; padding: 0.7rem 1.25rem; margin-bottom: 1.1rem; font-family: var(--font-headline), sans-serif; font-size: 1.8rem; color: #2b1a12; }
+.cq-confirm-save { font-family: var(--font-body), sans-serif; font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--amber-dark); background: rgba(194, 104, 42, 0.14); border-radius: 999px; padding: 0.18rem 0.6rem; }
 .cq-confirm-note { color: rgba(43, 26, 18, 0.8); margin-bottom: 1.5rem; line-height: 1.5; }
 .cq-confirm .cq-cta { margin-bottom: 1.5rem; }
 .cq-confirm-logo { height: 34px; width: auto; opacity: 0.85; margin: 0 auto; }
@@ -1413,19 +1415,19 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 /* Customer accept / decline / schedule flow */
 .cq-actions { display: flex; gap: 0.7rem; margin-bottom: 1.1rem; }
 .cq-actions .cq-btn { cursor: pointer; border: none; font: inherit; font-weight: 800; }
-.cq-btn-accept { background: #16a34a; color: #fff; border: none; cursor: pointer; }
-.cq-btn-accept:hover { background: #15803d; }
+.cq-btn-accept { background: var(--amber); color: #fff; border: none; cursor: pointer; }
+.cq-btn-accept:hover { background: var(--amber-dark); }
 .cq-btn-accept:disabled { opacity: 0.55; cursor: not-allowed; }
 .cq-btn-decline { background: #fff; border: 2px solid #2b1a12; color: #2b1a12; cursor: pointer; }
 .cq-btn-decline:hover { background: #2b1a12; color: #fff; }
 .cq-offer, .cq-schedule, .cq-result { background: #fff; border: 1px solid #ececec; border-radius: 0.9rem; padding: 1.4rem; margin-bottom: 1.1rem; text-align: center; }
 .cq-offer { border: 2px solid var(--amber); }
-.cq-result-ok { border: 2px solid #16a34a; background: #f3fbf5; }
+.cq-result-ok { border: 2px solid var(--amber); background: rgba(194, 104, 42, 0.08); }
 .cq-offer-eyebrow { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--amber); }
-.cq-result-eyebrow { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #15803d; }
+.cq-result-eyebrow { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--amber-dark); }
 .cq-result:not(.cq-result-ok) .cq-result-eyebrow { color: rgba(43, 26, 18, 0.55); }
 .cq-result-price { font-family: var(--font-headline), sans-serif; font-size: 2rem; color: #2b1a12; margin: 0.2rem 0 0.5rem; }
-.cq-result-save { display: inline-block; font-family: var(--font-body), sans-serif; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #15803d; background: #dcfce7; border-radius: 999px; padding: 0.15rem 0.55rem; margin-right: 0.5rem; vertical-align: middle; }
+.cq-result-save { display: inline-block; font-family: var(--font-body), sans-serif; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--amber-dark); background: rgba(194, 104, 42, 0.14); border-radius: 999px; padding: 0.15rem 0.55rem; margin-right: 0.5rem; vertical-align: middle; }
 .cq-result-note { color: rgba(43, 26, 18, 0.8); }
 .cq-offer h3, .cq-schedule h3, .cq-result h3 { font-family: var(--font-headline), sans-serif; font-size: 1.5rem; margin: 0.3rem 0 0.6rem; }
 .cq-offer-price { font-size: 1.15rem; margin-bottom: 0.9rem; }
@@ -1440,7 +1442,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .job-logo { height: 40px; width: auto; margin-bottom: 0.75rem; }
 
 /* ── Contractor job page (/job/[token]) ── */
-.job-wrap { min-height: 100vh; background: #f4f5f7; padding: 1.5rem; }
+.job-wrap { min-height: 100vh; background: #f4f5f7; padding: 1.5rem; color: #1f2328; }
 .job-card { max-width: 760px; margin: 0 auto; background: #fff; border-radius: 1rem; padding: 1.75rem; border: 1px solid #e2e5ea; }
 .job-brand { font-weight: 800; color: var(--amber); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; }
 .job-title { font-size: 1.7rem; font-weight: 800; margin-bottom: 1.1rem; }
