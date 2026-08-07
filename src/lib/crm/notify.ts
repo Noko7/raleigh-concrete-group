@@ -211,6 +211,7 @@ type QuoteInfo = {
   phone: string;
   service?: string | null;
   address?: string | null;
+  details?: string | null;
   quote_type?: string | null;
   quote_amount?: number | null;
   scheduled_date?: string | null;
@@ -252,13 +253,37 @@ function customerBrief(q: QuoteInfo): string {
 }
 
 // ── 1. New quote in: text the owner(s) and the auto-assigned contractor ─────
+// The owner's version is laid out in labelled blocks rather than one run-on
+// line: a new lead is usually read on a phone while doing something else, and
+// the name and number need to be scannable without parsing a sentence.
+export function newQuoteMessage(q: QuoteInfo): string {
+  const lines = [
+    "New Quote Request for:",
+    q.name,
+    "",
+    "Job Type:",
+    q.service?.trim() || "Not specified",
+    "",
+    "Customer Phone:",
+    q.phone,
+  ];
+  if (q.address?.trim()) lines.push("", "Address:", q.address.trim());
+  // Free text from the customer, so cap it - an essay shouldn't turn one alert
+  // into a ten-part text.
+  const details = q.details?.trim();
+  if (details) {
+    lines.push("", "Details:", details.length > 400 ? `${details.slice(0, 400)}…` : details);
+  }
+  if (q.job_token) lines.push("", jobLink(q.job_token));
+  return lines.join("\n");
+}
+
 export async function notifyNewQuote(
   q: QuoteInfo,
   contractorPhone?: string | null,
   contractorName?: string | null,
 ): Promise<void> {
-  const kind = q.service?.trim() || "concrete";
-  await alertOwner(`New quote: ${q.name}, ${kind}. ${q.phone}. ${jobLink(q.job_token ?? "")}`);
+  await alertOwner(newQuoteMessage(q));
   if (contractorPhone) {
     // Same full brief as a manual assignment - from the crew's side this is the
     // same event, so it shouldn't read differently.

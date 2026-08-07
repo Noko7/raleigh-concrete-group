@@ -189,6 +189,7 @@ export async function POST(request: Request) {
         phone: phoneRaw,
         service,
         address,
+        details,
         quote_type: row.quote_type ?? undefined,
         visit_date: row.visit_date,
         visit_time: row.visit_time,

@@ -24,7 +24,8 @@ Who gets told what, and when. Every message in the system is listed here.
 │ CUSTOMER  "Thanks for reaching out. We're reviewing and will text   │
 │            your price shortly."                                     │
 │            (in-person requests instead confirm the visit day/time)  │
-│ OWNER     New quote: name, service, phone, job link                 │
+│ OWNER     Labelled block: name, job type, phone, address,           │
+│            details, job link (see "Owner: new lead format" below)   │
 │ CREW      Full brief — customer, phone, service, address, timing    │
 │            (only if auto-assigned to your primary contractor)       │
 └─────────────────────────────────────────────────────────────────────┘
@@ -141,6 +142,37 @@ At most **six** texts across an entire job:
 
 Plus payment instructions if you request payment, and one "date moved" message
 per reschedule.
+
+---
+
+## Owner: new lead format
+
+A new lead is usually read on a phone mid-task, so it's laid out in labelled
+blocks rather than one run-on line:
+
+```
+New Quote Request for:
+Jane Doe
+
+Job Type:
+Driveway replacement
+
+Customer Phone:
+(919) 555-1234
+
+Address:
+123 Main St, Raleigh NC
+
+Details:
+Cracked driveway, about 600 sq ft, would like it
+replaced before the fall.
+
+https://raleighconcrete.net/job/abc123
+```
+
+Address and Details are only included when the customer gave them. Details is
+free text, so it's capped at 400 characters — an essay shouldn't turn one alert
+into a ten-part text.
 
 ---
 
