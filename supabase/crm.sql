@@ -244,6 +244,33 @@ create table if not exists public.app_integrations (
 alter table public.app_integrations enable row level security;
 grant all on public.app_integrations to service_role;
 
+-- ── 3c. Login attempts (owner-visible security log) ─────────────────────────
+-- Every POST to /crm/api/login writes one row here, success or failure, with
+-- the service-role key (there's no user session yet at login time). Owners can
+-- read it from the CRM Security dashboard; nothing else can touch it.
+create table if not exists public.login_attempts (
+  id         uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  email      text,
+  success    boolean not null,
+  reason     text not null,
+  staff_id   uuid references public.staff(id) on delete set null,
+  ip         text,
+  user_agent text
+);
+create index if not exists la_created_idx on public.login_attempts(created_at desc);
+create index if not exists la_email_idx   on public.login_attempts(email);
+create index if not exists la_ip_idx      on public.login_attempts(ip);
+
+alter table public.login_attempts enable row level security;
+grant all on public.login_attempts to service_role;
+grant select on public.login_attempts to authenticated;
+
+drop policy if exists "owner reads login attempts" on public.login_attempts;
+create policy "owner reads login attempts" on public.login_attempts
+  for select to authenticated
+  using (public.is_owner());
+
 -- ── 4. One-time: make yourself the owner ────────────────────────────────────
 -- Passwords live in Supabase Auth (auth.users), NOT in this table — never add a
 -- password column here.

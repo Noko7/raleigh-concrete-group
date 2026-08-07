@@ -62,6 +62,17 @@ export type QuoteEvent = {
   created_at: string;
 };
 
+export type LoginAttempt = {
+  id: string;
+  created_at: string;
+  email: string | null;
+  success: boolean;
+  reason: string;
+  staff_id: string | null;
+  ip: string | null;
+  user_agent: string | null;
+};
+
 export type Session = {
   accessToken: string;
   user: { id: string; email?: string };

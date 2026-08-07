@@ -4,7 +4,7 @@
 import { DECLINE_CREDIT } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
-import type { Quote, QuoteEvent, Session, Staff } from "./types";
+import type { LoginAttempt, Quote, QuoteEvent, Session, Staff } from "./types";
 
 export type QuoteFilters = { status?: string; assignedTo?: string; search?: string; archived?: boolean };
 
@@ -400,4 +400,38 @@ export async function signFile(storagePath: string, expiresIn = 3600): Promise<s
 
 export async function signFiles(paths: string[], expiresIn = 3600): Promise<{ path: string; url: string | null }[]> {
   return Promise.all(paths.map(async (p) => ({ path: p, url: await signFile(p, expiresIn) })));
+}
+
+// ── Login attempts (owner-visible security log) ─────────────────────────────
+// Written from /crm/api/login with the service-role key - there's no user
+// session yet at login time, success or failure.
+export async function logLoginAttempt(input: {
+  email: string;
+  success: boolean;
+  reason: string;
+  staffId?: string | null;
+  ip: string;
+  userAgent: string | null;
+}): Promise<void> {
+  await pgAdmin("login_attempts", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      email: input.email || null,
+      success: input.success,
+      reason: input.reason,
+      staff_id: input.staffId ?? null,
+      ip: input.ip,
+      user_agent: input.userAgent,
+    }),
+  });
+}
+
+export async function listLoginAttempts(session: Session, limit = 300): Promise<LoginAttempt[]> {
+  const res = await pgUser(
+    `login_attempts?select=*&order=created_at.desc&limit=${limit}`,
+    session.accessToken,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as LoginAttempt[];
 }
