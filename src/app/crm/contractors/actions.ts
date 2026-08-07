@@ -13,6 +13,21 @@ function tempPassword(): string {
   return `Rcg-${crypto.randomUUID().slice(0, 8)}-${crypto.randomUUID().slice(0, 4)}`;
 }
 
+// The credentials text, built in one place so a new account and a password
+// reset can't drift apart. /crm bounces to the login screen when they're signed
+// out, so it's the shorter thing to put in a text.
+function loginMessage(lead: string, email: string | null, password: string): string {
+  return [
+    lead,
+    "",
+    `${SITE_ORIGIN}/crm`,
+    `username: ${email ?? ""}`,
+    `password: ${password}`,
+    "",
+    "You'll set your own password the first time you sign in.",
+  ].join("\n");
+}
+
 export async function createContractor(_prev: AddState, formData: FormData): Promise<AddState> {
   const session = await getSession();
   if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
@@ -49,8 +64,7 @@ export async function createContractor(_prev: AddState, formData: FormData): Pro
     if (!phone) {
       smsNote = "Add a phone number to text their login.";
     } else {
-      const loginUrl = `${SITE_ORIGIN}/crm/login`;
-      const msg = `Raleigh Concrete Group CRM is ready for you.\nSign in: ${loginUrl}\nEmail: ${email}\nTemp password: ${password}\nYou'll set your own password on first login.`;
+      const msg = loginMessage("Your Raleigh Concrete Group CRM login is ready.", email, password);
       const res = await sendSmsResult(phone, msg);
       smsSent = res.ok;
       if (!res.ok) smsNote = `Couldn't text them (${res.detail || res.status || "unknown error"}). Share the password manually.`;
@@ -94,7 +108,7 @@ export async function resetContractorPassword(_prev: ResetState, formData: FormD
     if (!contractor.phone) {
       smsNote = "No phone number on file. Share the password manually.";
     } else {
-      const msg = `Your Raleigh Concrete Group CRM password was reset.\nSign in: ${SITE_ORIGIN}/crm/login\nEmail: ${contractor.email}\nTemp password: ${password}\nYou'll set a new password when you sign in.`;
+      const msg = loginMessage("Your Raleigh Concrete Group CRM password was reset.", contractor.email, password);
       const sms = await sendSmsResult(contractor.phone, msg);
       smsSent = sms.ok;
       if (!sms.ok) smsNote = `Couldn't text them (${sms.detail || sms.status || "unknown error"}). Share the password manually.`;
