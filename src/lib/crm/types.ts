@@ -41,6 +41,10 @@ export type Quote = {
   customer_response: "accepted" | "declined" | null;
   customer_responded_at: string | null;
   scheduled_date: string | null;
+  // Days the customer said work for them; the crew confirms one of these.
+  preferred_dates: string[] | null;
+  scheduled_by: string | null;
+  scheduled_at: string | null;
   discount_accepted: boolean;
   visit_date: string | null;
   visit_time: string | null;

@@ -183,6 +183,7 @@ type QuoteInfo = {
   quote_type?: string | null;
   quote_amount?: number | null;
   scheduled_date?: string | null;
+  preferred_dates?: string[] | null;
   visit_date?: string | null;
   visit_time?: string | null;
   public_token?: string;
@@ -253,15 +254,64 @@ export async function notifyQuoteReady(q: QuoteInfo): Promise<SendResult> {
   );
 }
 
-// ── 6 + 8. Customer booked: thank them, and text the crew the job details ───
+// ── 6. Customer approved: thank them, but don't promise a day yet ───────────
+// They've proposed dates; the crew confirms one. Saying "we'll confirm" here is
+// what stops the customer assuming their first choice is locked in.
+export async function notifyCustomerApproved(q: QuoteInfo): Promise<void> {
+  await sendSms(
+    q.phone,
+    `Thanks for approving your quote, ${firstName(q.name)}. We're checking the crew's schedule against the days you picked and will text you shortly to confirm your installation date.`,
+  ).catch(() => {});
+}
+
+// ── 6b. Approved: tell the owner + crew it needs a date ─────────────────────
+export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: string | null): Promise<void> {
+  const picks = (q.preferred_dates ?? []).map((d) => dayOrNull(d)).filter(Boolean);
+  const wanted = picks.length ? `Customer prefers: ${picks.join(", ")}.` : "No preferred days given.";
+  await alertOwner(`APPROVED: ${q.name}${money(q.quote_amount)}. ${wanted} Needs a confirmed date.`);
+  if (contractorPhone) {
+    await sendSms(
+      contractorPhone,
+      [
+        `${q.name} approved their quote — we need a date confirmed.`,
+        "",
+        customerBrief(q),
+        "",
+        wanted,
+        "",
+        `Confirm the day that works: ${jobLink(q.job_token ?? "")}`,
+        "Sign in with your CRM login to pick it.",
+      ].join("\n"),
+    ).catch(() => {});
+  }
+}
+
+// ── 7. Date confirmed by the crew: now we can promise the customer a day ────
 export async function notifyCustomerScheduled(q: QuoteInfo): Promise<void> {
   await sendSms(
     q.phone,
-    `Thank you for scheduling your project with Raleigh Concrete Group. You're set for ${prettyDay(q.scheduled_date)}. We'll send a reminder before we arrive. We appreciate your business.`,
+    `Good news ${firstName(q.name)} — your project with Raleigh Concrete Group is booked for ${prettyDay(q.scheduled_date)}. We'll text a reminder before we arrive. Thanks for your business.`,
   ).catch(() => {});
 }
-export async function notifyBooked(q: QuoteInfo, contractorPhone?: string | null): Promise<void> {
-  const msg = `JOB BOOKED: ${q.name} on ${prettyDay(q.scheduled_date)}${money(q.quote_amount)}. ${q.address ?? ""}. ${q.phone}. ${jobLink(q.job_token ?? "")}`;
+
+// The date moved. Say so plainly rather than re-sending the "booked" text, which
+// reads as a mistake when the customer already had a different day.
+export async function notifyCustomerRescheduled(q: QuoteInfo, previous?: string | null): Promise<void> {
+  const was = dayOrNull(previous);
+  await sendSms(
+    q.phone,
+    `Hi ${firstName(q.name)}, your project with Raleigh Concrete Group has been moved${was ? ` from ${was}` : ""} to ${prettyDay(q.scheduled_date)}. Sorry for the change — call or text us if that day doesn't work.`,
+  ).catch(() => {});
+}
+
+export async function notifyBooked(
+  q: QuoteInfo,
+  contractorPhone?: string | null,
+  previous?: string | null,
+): Promise<void> {
+  const was = dayOrNull(previous);
+  const headline = was ? `DATE CHANGED (${was} → ${prettyDay(q.scheduled_date)})` : `JOB BOOKED: ${prettyDay(q.scheduled_date)}`;
+  const msg = [`${headline} — ${q.name}${money(q.quote_amount)}`, "", customerBrief(q), "", jobLink(q.job_token ?? "")].join("\n");
   await alertOwner(msg);
   if (contractorPhone) await sendSms(contractorPhone, msg).catch(() => {});
 }

@@ -1,7 +1,7 @@
 // Server-only data access for the CRM. Reads/writes that belong to a logged-in
 // user go through pgUser (RLS enforces owner/contractor scoping). Token-page
 // lookups, view tracking and signed URLs use pgAdmin (no user context).
-import { DECLINE_CREDIT } from "./constants";
+import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
 import type { Agreement, LoginAttempt, Quote, QuoteEvent, Session, Staff } from "./types";
@@ -321,7 +321,7 @@ export async function recordCustomerView(token: string): Promise<void> {
 // or declines, straight from the branded quote page. Service role; token-gated.
 export async function recordCustomerResponse(
   token: string,
-  input: { action: "accept" | "decline"; discount?: boolean; scheduledDate?: string },
+  input: { action: "accept" | "decline"; discount?: boolean; preferredDates?: string[] },
 ): Promise<{ ok: boolean; error?: string }> {
   if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
   const res = await pgAdmin(
@@ -340,21 +340,28 @@ export async function recordCustomerResponse(
     patch.status = "lost";
     eventType = "customer_declined";
   } else {
-    const date = (input.scheduledDate || "").slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "Please pick a valid date." };
-    const picked = new Date(`${date}T00:00:00Z`).getTime();
-    const min = Date.now() + 10 * 24 * 60 * 60 * 1000; // ~1.5 weeks (lenient by a day for time zones)
-    if (!Number.isFinite(picked) || picked < min) {
-      return { ok: false, error: "Please choose a date at least 1.5 weeks out." };
+    // Approving no longer books a day. The customer proposes dates that suit
+    // them and the job parks in "approved" until the crew confirms one against
+    // their own schedule - that confirmation is what puts it on the calendar.
+    const min = Date.now() + (LEAD_TIME_DAYS - 1) * 24 * 60 * 60 * 1000; // lenient by a day for time zones
+    const seen = new Set<string>();
+    const dates: string[] = [];
+    for (const raw of input.preferredDates ?? []) {
+      const date = String(raw).slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || seen.has(date)) continue;
+      const picked = new Date(`${date}T00:00:00Z`).getTime();
+      if (!Number.isFinite(picked) || picked < min) continue;
+      seen.add(date);
+      dates.push(date);
+      if (dates.length >= MAX_PREFERRED_DATES) break;
     }
-    // One job per day. Don't let two customers book the same date.
-    const alreadyBooked = await countJobsOn(date, q.id);
-    if (alreadyBooked >= MAX_JOBS_PER_DAY) {
-      return { ok: false, error: "That day is already booked. Please choose another date." };
+    if (dates.length === 0) {
+      return { ok: false, error: `Please pick at least one date about ${LEAD_TIME_DAYS} days out or later.` };
     }
+
     patch.customer_response = "accepted";
-    patch.status = "scheduled";
-    patch.scheduled_date = date;
+    patch.status = "approved";
+    patch.preferred_dates = dates;
     if (input.discount && !q.discount_accepted) {
       patch.discount_accepted = true;
       if (q.quote_amount != null) {
@@ -377,10 +384,45 @@ export async function recordCustomerResponse(
     body: JSON.stringify({
       quote_id: q.id,
       type: eventType,
-      meta: { discount: Boolean(input.discount), scheduled_date: patch.scheduled_date ?? null },
+      meta: { discount: Boolean(input.discount), preferred_dates: patch.preferred_dates ?? null },
     }),
   });
   return { ok: true };
+}
+
+// Confirm (or move) the work day. Runs as the logged-in user so RLS keeps a
+// contractor to their own assigned jobs, which is what lets the crew - not just
+// the owner - lock in a date. Returns the previous date so the caller can tell a
+// first booking apart from a reschedule when it sends the texts.
+export async function confirmSchedule(
+  session: Session,
+  id: string,
+  date: string,
+): Promise<{ ok: boolean; error?: string; previous?: string | null }> {
+  if (!ISO_DATE.test(date)) return { ok: false, error: "Pick a valid date." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+  if (current.scheduled_date === date) return { ok: true, previous: date };
+
+  // One job per day - the DB enforces this too, but checking here gives a clear
+  // message instead of a constraint violation.
+  if ((await countJobsOn(date, id)) >= MAX_JOBS_PER_DAY) {
+    return { ok: false, error: "Another job is already booked that day." };
+  }
+
+  const updated = await updateQuote(session, id, {
+    scheduled_date: date,
+    status: current.status === "completed" || current.status === "paid" ? current.status : "scheduled",
+    scheduled_by: session.staff.id,
+    scheduled_at: new Date().toISOString(),
+    // A moved date invalidates any confirmation the customer already gave.
+    confirmed_at: null,
+    reminder_sent_at: null,
+  });
+  if (!updated) return { ok: false, error: "Could not save that date. Please try again." };
+
+  return { ok: true, previous: current.scheduled_date };
 }
 
 // Short-lived signed URL for one private storage object (path = "bucket/obj").

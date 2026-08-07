@@ -30,8 +30,15 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "Quote sent to the customer";
     case "customer_viewed":
       return "Customer opened their quote";
-    case "customer_accepted":
-      return `Customer accepted${m.scheduled_date ? `, booked ${String(m.scheduled_date)}` : ""}${m.discount ? " ($150 credit)" : ""}`;
+    case "customer_accepted": {
+      const picks = Array.isArray(m.preferred_dates) ? (m.preferred_dates as string[]) : [];
+      const wanted = picks.length ? `, prefers ${picks.join(", ")}` : "";
+      return `Customer approved the quote${wanted}${m.discount ? " ($150 credit)" : ""}`;
+    }
+    case "date_confirmed":
+      return `Work day confirmed for ${String(m.to ?? "a date")}`;
+    case "date_changed":
+      return `Work day moved${m.from ? ` from ${String(m.from)}` : ""} to ${String(m.to ?? "a new date")}`;
     case "customer_declined":
       return "Customer declined the quote";
     case "reminder_sent":

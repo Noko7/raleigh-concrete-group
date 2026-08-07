@@ -37,12 +37,15 @@ export async function moveQuote(id: string, status: string): Promise<MoveResult>
     await notifyComplete({ name: current.name, phone: current.phone }).catch(() => {});
   }
 
-  // Owners get every status change; the actor is excluded so they aren't texted
-  // about their own click.
-  await alertOwner(
-    `${current.name}: moved to ${STATUS_LABELS[status as Status]} by ${session.staff.full_name || "crew"}.`,
-    session.staff.phone,
-  ).catch(() => {});
+  // Only the stages worth interrupting someone for. Dragging a card between the
+  // early columns is bookkeeping, not news - the pipeline already shows it.
+  const NOTABLE: Status[] = ["approved", "paid", "lost"];
+  if (NOTABLE.includes(status as Status)) {
+    await alertOwner(
+      `${current.name}: moved to ${STATUS_LABELS[status as Status]} by ${session.staff.full_name || "crew"}.`,
+      session.staff.phone,
+    ).catch(() => {});
+  }
   revalidatePath("/crm");
   return { ok: true };
 }
@@ -78,10 +81,7 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
       },
       contractor?.full_name,
     ).catch(() => {});
-    await alertOwner(
-      `${current.name} assigned to ${contractor?.full_name || "a contractor"}.`,
-      session.staff.phone,
-    ).catch(() => {});
+    // No owner text: whoever assigned it is the one who'd be notified.
     // If this job/visit has a date, invite the new contractor on Google Calendar.
     await syncQuoteToCalendar(id);
   }

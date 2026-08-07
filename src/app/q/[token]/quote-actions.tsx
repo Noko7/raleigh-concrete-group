@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { DECLINE_CREDIT } from "@/lib/crm/constants";
+import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES } from "@/lib/crm/constants";
 
 type Mode = "choose" | "save" | "schedule" | "submitting" | "accepted" | "declined";
 
@@ -22,31 +22,51 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("choose");
   const [discount, setDiscount] = useState(false);
-  const [date, setDate] = useState("");
-  const [booked, setBooked] = useState("");
+  // Days the customer says work for them. The crew confirms one of these against
+  // their own schedule, so nothing here is a booking.
+  const [picks, setPicks] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
-  const [dateChecking, setDateChecking] = useState(false);
-  const [dateFull, setDateFull] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [taken, setTaken] = useState<string[]>([]);
 
   const minDate = useMemo(() => {
     const d = new Date();
-    d.setDate(d.getDate() + 11); // ~1.5 weeks out
+    d.setDate(d.getDate() + LEAD_TIME_DAYS);
     return ymd(d);
   }, []);
 
-  async function checkDate(d: string) {
-    setDateFull(false);
+  // Warn early if a day is already spoken for, so the customer doesn't offer
+  // three days we can't use.
+  async function addDate(d: string) {
+    setError("");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
-    setDateChecking(true);
+    if (picks.includes(d)) {
+      setDraft("");
+      return;
+    }
+    if (picks.length >= MAX_PREFERRED_DATES) {
+      setError(`You can suggest up to ${MAX_PREFERRED_DATES} days.`);
+      return;
+    }
+    setPicks((p) => [...p, d].sort());
+    setDraft("");
+
+    setChecking(true);
     try {
       const res = await fetch(`/api/availability?type=job&date=${d}`);
       const json = (await res.json()) as { available?: boolean };
-      setDateFull(json.available === false);
+      if (json.available === false) setTaken((t) => (t.includes(d) ? t : [...t, d]));
     } catch {
-      setDateFull(false);
+      // A failed check is not worth blocking on - the crew confirms anyway.
     } finally {
-      setDateChecking(false);
+      setChecking(false);
     }
+  }
+
+  function removeDate(d: string) {
+    setPicks((p) => p.filter((x) => x !== d));
+    setTaken((t) => t.filter((x) => x !== d));
   }
 
   const discounted = amount != null ? Math.max(0, Math.round((amount - DECLINE_CREDIT) * 100) / 100) : null;
@@ -59,16 +79,16 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
       const res = await fetch("/api/quote-response", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, action, discount, scheduled_date: action === "accept" ? date : undefined }),
+        body: JSON.stringify({
+          token,
+          action,
+          discount,
+          preferred_dates: action === "accept" ? picks : undefined,
+        }),
       });
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
       if (res.ok && json.ok) {
-        if (action === "accept") {
-          setBooked(date);
-          setMode("accepted");
-        } else {
-          setMode("declined");
-        }
+        setMode(action === "accept" ? "accepted" : "declined");
         // Re-render the server page into its full-screen confirmed/declined view.
         router.refresh();
       } else {
@@ -85,16 +105,21 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
     const finalPrice = discount && discounted != null ? discounted : amount;
     return (
       <div className="cq-result cq-result-ok">
-        <p className="cq-result-eyebrow">Booking confirmed</p>
-        <h3>You&apos;re all set for {pretty(booked)}</h3>
+        <p className="cq-result-eyebrow">Quote approved</p>
+        <h3>Thanks — we&apos;ll confirm your date shortly</h3>
         {finalPrice != null && (
           <p className="cq-result-price">
             {discount && <span className="cq-result-save">${DECLINE_CREDIT} credit applied</span>}
             <strong>{usd(finalPrice)}</strong>
           </p>
         )}
+        {picks.length > 0 && (
+          <p className="cq-result-note">
+            You told us these work: {picks.map((d) => pretty(d)).join(", ")}.
+          </p>
+        )}
         <p className="cq-result-note">
-          We&apos;ll reach out to confirm the details and timing. Thanks for choosing Raleigh Concrete Group.
+          We&apos;re checking the crew&apos;s schedule now and will text you to confirm your installation date.
         </p>
       </div>
     );
@@ -128,7 +153,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
             setMode("schedule");
           }}
         >
-          Take ${DECLINE_CREDIT} off &amp; schedule
+          Take ${DECLINE_CREDIT} off &amp; approve
         </button>
         <button type="button" className="cq-textlink" onClick={() => submit("decline")}>
           No thanks, decline
@@ -141,34 +166,56 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
     const busy = mode === "submitting";
     return (
       <div className="cq-schedule">
-        <h3>Pick your start date</h3>
-        <p className="cq-fine">Our earliest opening is about 1.5 weeks out. Pick any date from there.</p>
+        <h3>Which days work for you?</h3>
+        <p className="cq-fine">
+          Pick up to {MAX_PREFERRED_DATES} days that suit you, starting about {LEAD_TIME_DAYS} days out. Our crew will
+          confirm one of them and text you back — nothing is booked until then.
+        </p>
         {discount && discounted != null && (
           <p className="cq-offer-price">
             With ${DECLINE_CREDIT} credit: <strong>{usd(discounted)}</strong>
           </p>
         )}
-        <input
-          type="date"
-          className="cq-date"
-          min={minDate}
-          value={date}
-          onChange={(e) => {
-            setDate(e.target.value);
-            checkDate(e.target.value);
-          }}
-          disabled={busy}
-        />
-        {dateChecking && <p className="cq-fine">Checking that day…</p>}
-        {!dateChecking && dateFull && <p className="cq-err">That day is already booked. Please pick another.</p>}
+
+        {picks.length > 0 && (
+          <ul className="cq-picks">
+            {picks.map((d) => (
+              <li key={d} className={taken.includes(d) ? "cq-pick cq-pick-taken" : "cq-pick"}>
+                <span>
+                  {pretty(d)}
+                  {taken.includes(d) && <em> — likely full, we&apos;ll suggest another</em>}
+                </span>
+                <button type="button" onClick={() => removeDate(d)} disabled={busy} aria-label={`Remove ${pretty(d)}`}>
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {picks.length < MAX_PREFERRED_DATES && (
+          <input
+            type="date"
+            className="cq-date"
+            min={minDate}
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              addDate(e.target.value);
+            }}
+            disabled={busy}
+          />
+        )}
+        {checking && <p className="cq-fine">Checking that day…</p>}
         {error && <p className="cq-err">{error}</p>}
+
         <button
           type="button"
           className="cq-btn cq-btn-accept"
-          disabled={!date || busy || dateChecking || dateFull}
+          disabled={picks.length === 0 || busy}
           onClick={() => submit("accept")}
         >
-          {busy ? "Booking…" : "Confirm booking"}
+          {busy ? "Sending…" : "Approve quote"}
         </button>
         <button type="button" className="cq-textlink" disabled={busy} onClick={() => setMode("choose")}>
           Back
@@ -188,7 +235,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
           setMode("schedule");
         }}
       >
-        Accept &amp; schedule
+        Approve quote
       </button>
       <button type="button" className="cq-btn cq-btn-decline" onClick={() => setMode("save")}>
         Decline

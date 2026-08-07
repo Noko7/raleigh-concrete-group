@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
 import { SITE_ORIGIN } from "@/lib/crm/env";
-import { STATUS_LABELS } from "@/lib/crm/constants";
+import { LEAD_TIME_DAYS, STATUS_LABELS } from "@/lib/crm/constants";
 import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText } from "@/lib/crm/events";
 import { getQuote, listAgreementsForQuote, listContractors, listEvents, listStaff } from "@/lib/crm/queries";
@@ -12,6 +12,7 @@ import { AgreementList } from "../../agreements/agreement-list";
 import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
 import { QuoteEditor } from "./quote-editor";
+import { ScheduleCard } from "./schedule-card";
 import { completeJob, markPaid, requestPayment, rotateTokens } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,12 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const events = await listEvents(session, id);
   const agreements = await listAgreementsForQuote(session, id);
   const photoUrls = (quote.file_urls ?? []).map((p) => `${base}/api/file?p=${encodeURIComponent(p)}`);
+
+  // Earliest day the crew can realistically start, matching what the customer
+  // was shown when they picked their preferred days.
+  const minJobDate = new Date(Date.now() + LEAD_TIME_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Scheduling only makes sense once the customer has actually said yes.
+  const showSchedule = quote.customer_response === "accepted" && quote.status !== "lost";
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
   const jobLink = `${SITE_ORIGIN}/job/${quote.job_token}`;
@@ -209,6 +216,15 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               internal_notes: quote.internal_notes,
             }}
           />
+
+          {showSchedule && (
+            <ScheduleCard
+              id={quote.id}
+              scheduledDate={quote.scheduled_date}
+              preferredDates={quote.preferred_dates ?? []}
+              minDate={minJobDate}
+            />
+          )}
 
           {quote.status === "scheduled" && (
             <div className="crm-card">

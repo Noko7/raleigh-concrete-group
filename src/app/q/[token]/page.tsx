@@ -53,6 +53,10 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
 
   // ── Full-screen confirmation once the customer has responded ──
   if (responded === "accepted") {
+    // Approving no longer books a day - the crew confirms one of the customer's
+    // preferred days first. Until then this must not claim a date is locked in.
+    const awaitingDate = !quote.scheduled_date;
+    const preferred = (quote.preferred_dates ?? []).filter(Boolean);
     return (
       <main className="cq-wrap">
         <ViewBeacon token={token} />
@@ -60,11 +64,24 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           <div className="cq-confirm-badge">
             <CheckMark />
           </div>
-          <p className="cq-confirm-eyebrow">Booking Confirmed</p>
-          <h1 className="cq-confirm-title">You&apos;re all set{firstName ? `, ${firstName}` : ""}!</h1>
-          {quote.scheduled_date && (
+          <p className="cq-confirm-eyebrow">{awaitingDate ? "Quote Approved" : "Booking Confirmed"}</p>
+          <h1 className="cq-confirm-title">
+            {awaitingDate ? "Thanks" : "You're all set"}
+            {firstName ? `, ${firstName}` : ""}!
+          </h1>
+          {awaitingDate ? (
             <p className="cq-confirm-date">
-              We&apos;ve got you booked for <strong>{prettyDate(quote.scheduled_date)}</strong>
+              We&apos;re checking the crew&apos;s schedule and will text you to confirm your installation date.
+              {preferred.length > 0 && (
+                <>
+                  {" "}
+                  You told us these work: <strong>{preferred.map((d) => prettyDate(d)).join(", ")}</strong>.
+                </>
+              )}
+            </p>
+          ) : (
+            <p className="cq-confirm-date">
+              We&apos;ve got you booked for <strong>{prettyDate(quote.scheduled_date as string)}</strong>
             </p>
           )}
           {amount && (
@@ -74,7 +91,9 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             </div>
           )}
           <p className="cq-confirm-note">
-            We&apos;ll reach out to confirm the details and timing. Thanks for choosing Raleigh Concrete Group.
+            {awaitingDate
+              ? "If none of those days end up working, we'll call you to find one that does. Thanks for choosing Raleigh Concrete Group."
+              : "We'll text a reminder before we arrive. Thanks for choosing Raleigh Concrete Group."}
           </p>
           <ContactButtons />
           <Image

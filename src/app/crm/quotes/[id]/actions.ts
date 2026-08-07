@@ -3,12 +3,21 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/env";
+import { STATUSES, type Status } from "@/lib/crm/env";
 import { syncQuoteToCalendar } from "@/lib/crm/gcal";
-import { alertOwner, notifyAssignment, notifyComplete, notifyPaymentRequest, notifyQuoteReady } from "@/lib/crm/notify";
-import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
+import {
+  alertOwner,
+  notifyAssignment,
+  notifyBooked,
+  notifyComplete,
+  notifyCustomerRescheduled,
+  notifyCustomerScheduled,
+  notifyPaymentRequest,
+  notifyQuoteReady,
+} from "@/lib/crm/notify";
+import { addEvent, confirmSchedule, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
-import type { SaveState } from "./types";
+import type { SaveState, ScheduleState } from "./types";
 
 export async function saveQuote(_prev: SaveState, formData: FormData): Promise<SaveState> {
   const session = await getSession();
@@ -121,18 +130,9 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
         },
         contractor?.full_name,
       ).catch(() => {});
-      await alertOwner(
-        `${current.name} assigned to ${contractor?.full_name || "a contractor"}.`,
-        session.staff.phone,
-      ).catch(() => {});
+      // No owner text here: whoever assigned it is the one who'd be notified.
       // Invite the newly-assigned contractor on Google Calendar (if dated).
       await syncQuoteToCalendar(id);
-    }
-    if (patch.status) {
-      await alertOwner(
-        `${current.name}: moved to ${STATUS_LABELS[patch.status]} by ${session.staff.full_name || "crew"}.`,
-        session.staff.phone,
-      ).catch(() => {});
     }
     // Marking the job Completed here (via the status dropdown) also thanks the customer.
     if (patch.status === "completed" && current.status !== "completed") {
@@ -147,7 +147,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
         public_token: current.public_token,
       }).catch(() => null);
       smsDelivered = Boolean(r?.ok);
-      await alertOwner(`Quote sent to ${current.name}.`, session.staff.phone).catch(() => {});
+      // No owner text: sending the quote is always a deliberate click, and the
+      // result already shows in the UI.
     }
 
     revalidatePath(`/crm/quotes/${id}`);
@@ -157,6 +158,54 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     console.error("[saveQuote] failed", err);
     return { ok: false, error: "Something went wrong saving this quote. Please try again." };
   }
+}
+
+// Confirm the work day, or move it. This is the one action that turns an
+// approved job into a booked one: it texts the customer their date (or that it
+// moved), tells the crew, and syncs the calendar. Contractors can run it for
+// their own assigned jobs - RLS in confirmSchedule enforces that - which is what
+// lets the crew settle a date without waiting on the owner.
+export async function setJobDate(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+
+  const id = String(formData.get("id") ?? "");
+  const date = String(formData.get("date") ?? "").slice(0, 10);
+  if (!id) return { ok: false, error: "Missing job id." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+
+  const result = await confirmSchedule(session, id, date);
+  if (!result.ok) return { ok: false, error: result.error ?? "Could not save that date." };
+  if (result.previous === date) return { ok: true, message: "That date was already set." };
+
+  const moved = Boolean(result.previous);
+  await addEvent(session, id, moved ? "date_changed" : "date_confirmed", {
+    from: result.previous ?? null,
+    to: date,
+  });
+
+  const info = {
+    name: current.name,
+    phone: current.phone,
+    service: current.service,
+    address: current.address,
+    quote_amount: current.quote_amount,
+    scheduled_date: date,
+    job_token: current.job_token,
+  };
+
+  const contractor = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
+  if (moved) await notifyCustomerRescheduled(info, result.previous).catch(() => {});
+  else await notifyCustomerScheduled(info).catch(() => {});
+  await notifyBooked(info, contractor?.phone, result.previous).catch(() => {});
+  await syncQuoteToCalendar(id);
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+  revalidatePath("/crm/calendar");
+  return { ok: true, message: moved ? "Date changed and everyone notified." : "Date confirmed and customer texted." };
 }
 
 // Contractor/owner marks the on-site work done. Moves it to Completed and texts
@@ -205,10 +254,6 @@ export async function requestPayment(formData: FormData): Promise<void> {
 
   await updateQuote(session, id, { payment_requested_at: new Date().toISOString() });
   await addEvent(session, id, "payment_requested", { delivered: Boolean(sent?.ok) });
-  await alertOwner(
-    `Payment requested from ${current.name} by ${session.staff.full_name || "crew"}.`,
-    session.staff.phone,
-  ).catch(() => {});
 
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
@@ -262,10 +307,6 @@ export async function rotateTokens(formData: FormData): Promise<void> {
   if (!updated) return;
 
   await addEvent(session, id, "links_rotated");
-  await alertOwner(
-    `Customer/job links rotated for ${current.name} by ${session.staff.full_name || "crew"} — old links no longer work.`,
-    session.staff.phone,
-  ).catch(() => {});
 
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");

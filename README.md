@@ -86,17 +86,31 @@ All of it runs over Supabase's REST/Auth APIs (no extra packages).
 - **Calendar** (`/crm/calendar`): a month view of booked jobs (`scheduled_date`) and in-person quote visits (`visit_date`). Click any item to open the deal. Owners can connect Google Calendar here.
 - **Customer quote link** (`https://raleighconcrete.net/q/<public_token>`): branded, no-login page showing the price + summary; the customer accepts (and schedules) or declines right there.
 - **Job confirmation link** (`https://raleighconcrete.net/confirm/<public_token>`): sent in the 2-day reminder so the customer can confirm or ask to reschedule.
-- **Contractor job link** (`https://raleighconcrete.net/job/<job_token>`): no-login page with the photos, address (Maps link) and customer contact.
+- **Contractor job link** (`https://raleighconcrete.net/job/<job_token>`): the photos, address (Maps link) and customer contact. Requires a CRM sign-in, and a contractor only sees jobs assigned to them.
 
-**Deal lifecycle + automatic texts** (kept short to save SMS credits)
-1. **New** — quote arrives, auto-assigned to your primary contractor. Owner + contractor get a text; the customer gets an acknowledgement (in-person includes their visit date/time).
-2. Contractor sets a price + description and hits **Send Quote** → customer gets their quote link (**Quoted**).
-3. Customer accepts + picks a date → customer gets a "thanks for scheduling" text, owner + contractor get **JOB BOOKED** with details (**Booked**). Declining notifies owner + contractor (**Lost**).
-4. Two days before the job, a daily cron texts the customer a confirm link. Confirming moves it to **Confirmed**; "need to reschedule" pings owner + contractor.
-5. Contractor hits **Mark complete + paid** → customer gets a thank-you + Google review link (**Complete**).
+**Deal lifecycle + automatic texts**
+The customer hears from us at most six times, and only when something they care
+about actually changes. Nothing internal — assignments, price edits, notes,
+status drags — ever texts the customer.
+
+1. **New** — quote arrives, auto-assigned to your primary contractor. Owner + contractor get the full brief; the customer gets an acknowledgement (in-person includes their visit date/time).
+2. You set a price + description and hit **Send Quote** → customer gets their quote link (**Quoted**).
+3. Customer approves and picks **up to 3 days that suit them** → they're told we'll confirm shortly; owner + contractor are told it **needs a date** (**Needs scheduling**). Declining notifies owner + contractor (**Lost**).
+4. The assigned contractor (or an owner) confirms one of those days on the job page → **this is what books it**: the customer is texted their date, the crew gets the brief, and it lands on Google Calendar (**Scheduled**).
+5. Changing that date later texts the customer that it moved, re-notifies the crew, and updates the calendar. The 2-day reminder resets so they still get one.
+6. Two days before, a daily cron texts the customer a confirm link. "Need to reschedule" pings owner + contractor.
+7. **Mark completed** → customer gets a thank-you + Google review link. **Request payment** → payment instructions. **Mark paid** closes it out.
+
+Why the split at step 3/4: letting the customer book a day outright committed
+the crew to dates nobody had checked. They now propose, the crew disposes — so
+scheduling is settled in one text each way instead of a phone-tag loop.
+
+**Owner alerts** are limited to the moments worth interrupting you: new lead,
+approved, declined, date confirmed or moved, can't-confirm, completed, and paid.
+You're never texted about an action you performed yourself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql` in the SQL Editor.
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, then `supabase/scheduling.sql` in the SQL Editor.
 2. Confirm Vercel env vars exist: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (the CRM needs the service-role key).
 3. Create your owner login: Supabase → **Authentication → Users → Add user** (email + password), then run the promote snippet at the bottom of `supabase/crm.sql`.
 4. **Subdomain:** in Vercel → Project → **Domains**, add `crm.raleighconcrete.net`; in your DNS registrar add the **CNAME** Vercel shows (typically `crm` → `cname.vercel-dns.com`). Routing to the CRM is already wired in `src/middleware.ts`. (Until DNS is live you can also reach it at `raleighconcrete.net/crm`.)
