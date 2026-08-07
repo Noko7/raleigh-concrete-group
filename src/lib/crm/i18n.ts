@@ -2,6 +2,12 @@
 // `es` is annotated `typeof en`, so leaving a key untranslated is a build error
 // rather than something that silently renders English to a Spanish speaker.
 //
+// Note there's deliberately no `as const` on `en`. It would make every value a
+// literal type, and `typeof en` would then require the Spanish strings to be
+// character-for-character identical to the English ones. Without it the values
+// widen to `string` while the key checking - which is what actually matters
+// here - still holds.
+//
 // Safe to import from client components - there are no server-only deps here.
 
 export const LOCALES = ["en", "es"] as const;
@@ -257,7 +263,7 @@ const en = {
     error: "Something went wrong. Please try again.",
     sessionExpired: "Your session expired. Please sign in again.",
   },
-} as const;
+};
 
 // The annotation is the point: TypeScript flags any key that's missing or
 // misspelled here, so a partially translated release can't ship.

@@ -17,7 +17,10 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
   const session = await getSession();
   const base = await crmBase();
   const isOwner = session?.staff.role === "owner";
-  const locale = isLocale(session?.staff.locale) ? session.staff.locale : "en";
+  // Read into a local first: narrowing `session?.staff.locale` doesn't tell
+  // TypeScript anything about `session` itself, which may be null here.
+  const rawLocale = session?.staff.locale;
+  const locale = isLocale(rawLocale) ? rawLocale : "en";
   const t = dict(locale);
 
   return (
