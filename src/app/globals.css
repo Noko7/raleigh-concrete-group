@@ -1520,6 +1520,10 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .kb-delete-btn { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
 }
 
+/* ── Security dashboard ── */
+.sec-inline-badge { margin-left: 0.45rem; }
+.sec-failed { color: #f87171; font-weight: 700; }
+
 /* ── Agreements (contracts tracked alongside DocuSeal) ── */
 .ag-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
 .ag-item { background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.7rem; padding: 0.85rem 1rem; }

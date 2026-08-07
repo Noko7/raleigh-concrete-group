@@ -511,11 +511,41 @@ export async function logLoginAttempt(input: {
   });
 }
 
-export async function listLoginAttempts(session: Session, limit = 300): Promise<LoginAttempt[]> {
+// `since` (ISO timestamp) bounds the window so the per-person sign-in stats on
+// the Security dashboard aren't silently truncated by the row limit.
+export async function listLoginAttempts(
+  session: Session,
+  limit = 300,
+  since?: string,
+): Promise<LoginAttempt[]> {
+  const params = new URLSearchParams({ select: "*", order: "created_at.desc", limit: String(limit) });
+  if (since) params.set("created_at", `gte.${since}`);
+  const res = await pgUser(`login_attempts?${params.toString()}`, session.accessToken);
+  if (!res.ok) return [];
+  return (await res.json()) as LoginAttempt[];
+}
+
+// ── Platform activity (who did what, across every job) ──────────────────────
+// RLS scopes this the same way as the per-job timeline: owners see everything,
+// a contractor only events on jobs assigned to them.
+export async function listRecentActivity(session: Session, limit = 250): Promise<QuoteEvent[]> {
   const res = await pgUser(
-    `login_attempts?select=*&order=created_at.desc&limit=${limit}`,
+    `quote_events?select=*&order=created_at.desc&limit=${limit}`,
     session.accessToken,
   );
   if (!res.ok) return [];
-  return (await res.json()) as LoginAttempt[];
+  return (await res.json()) as QuoteEvent[];
+}
+
+// Resolve job names for an activity feed in one round trip. Done as an explicit
+// second query rather than a PostgREST embed so it still works for events whose
+// job has since been archived.
+export async function getQuoteNames(session: Session, ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const list = unique.map((id) => encodeURIComponent(id)).join(",");
+  const res = await pgUser(`quote_requests?id=in.(${list})&select=id,name`, session.accessToken);
+  if (!res.ok) return new Map();
+  const rows = (await res.json()) as { id: string; name: string }[];
+  return new Map(rows.map((r) => [r.id, r.name]));
 }
