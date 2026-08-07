@@ -50,9 +50,6 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
             {isOwner ? "" : " assigned to you"} · drag a card or use Move to update it
           </p>
         </div>
-        <Link href={`${base}/calculator`} className="crm-btn crm-btn-primary">
-          Job Calculator
-        </Link>
       </div>
 
       <form className="crm-filters" method="get" action={`${base}/`}>

@@ -1520,26 +1520,6 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .kb-delete-btn { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
 }
 
-/* ── Job calculator ── */
-.calc { display: grid; grid-template-columns: 1.25fr 1fr; gap: 1.1rem; align-items: start; }
-@media (max-width: 760px) { .calc { grid-template-columns: 1fr; } }
-.calc-presets { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
-.calc-chip { background: rgba(255, 255, 255, 0.06); border: 1px solid var(--crm-border); border-radius: 999px; padding: 0.4rem 0.85rem; font-size: 0.82rem; font-weight: 700; cursor: pointer; color: var(--crm-text); }
-.calc-chip-on { background: var(--amber); border-color: var(--amber); color: #fff; }
-.calc-toggle { display: inline-flex; border: 1px solid var(--crm-border); border-radius: 0.55rem; overflow: hidden; margin-bottom: 1rem; }
-.calc-toggle button { background: transparent; color: var(--crm-muted); border: none; padding: 0.45rem 0.9rem; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
-.calc-toggle button.on { background: var(--amber); color: #fff; }
-.calc-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.8rem; }
-.calc-result { background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.9rem; padding: 1.25rem; position: sticky; top: 80px; }
-.calc-price { text-align: center; padding-bottom: 1rem; border-bottom: 1px solid var(--crm-border); margin-bottom: 1rem; }
-.calc-price-label { display: block; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.08em; color: var(--crm-muted); }
-.calc-price-value { display: block; font-family: var(--font-headline), sans-serif; font-size: 3rem; color: var(--amber); line-height: 1; }
-.calc-price-sub { color: var(--crm-muted); font-size: 0.82rem; }
-.calc-lines { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
-.calc-lines li { display: flex; align-items: center; justify-content: space-between; font-size: 0.92rem; }
-.calc-lines-total { border-top: 1px solid var(--crm-border); padding-top: 0.5rem; font-size: 1.05rem; }
-.calc-copy { width: 100%; margin-bottom: 0.6rem; }
-
 /* ── Photo grid + lightbox ── */
 .pg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.6rem; }
 .pg-thumb { padding: 0; border: 1px solid var(--crm-border); border-radius: 0.6rem; overflow: hidden; aspect-ratio: 1; background: #1a1f24; cursor: pointer; position: relative; }
