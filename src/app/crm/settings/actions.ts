@@ -78,6 +78,7 @@ export async function sendTestSms(_prev: TestSmsState, formData: FormData): Prom
       const r = await sendSmsResult(to, `Raleigh Concrete Group CRM test message (${stamp}). Notifications are working.`);
       return {
         to,
+        from: r.from ?? null,
         ok: r.ok,
         status: r.status ?? null,
         // The provider's raw response is the whole point of this feature - it's

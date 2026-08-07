@@ -16,7 +16,15 @@ import { getOwnerPhones } from "./queries";
 export const SMS_PROVIDER = (process.env.SMS_PROVIDER || (process.env.QUO_API_KEY ? "quo" : "twilio")).toLowerCase();
 const OWNER_PHONE = process.env.OWNER_PHONE || "";
 
-export type SendResult = { ok: boolean; provider: string; to?: string; status?: number; detail?: string };
+export type SendResult = {
+  ok: boolean;
+  provider: string;
+  to?: string;
+  // The number we sent from, so a failure log shows both ends of the attempt.
+  from?: string;
+  status?: number;
+  detail?: string;
+};
 
 export function toE164(raw: string): string | null {
   const trimmed = (raw || "").trim();
@@ -36,13 +44,28 @@ async function sendQuo(to: string, message: string): Promise<SendResult> {
   const userId = process.env.QUO_USER_ID || "";
   if (!key) return { ok: false, provider: "quo", detail: "QUO_API_KEY is not set" };
   if (!from) return { ok: false, provider: "quo", detail: "QUO_FROM is not set" };
+  // Quo can't text a number from itself; it fails as an opaque 500 rather than a
+  // validation error, so catch it here where we can say what's actually wrong.
+  if (to === from) {
+    return {
+      ok: false,
+      provider: "quo",
+      to,
+      detail: `That number (${to}) is the same as your sending number, so Quo can't text it. Use a different phone.`,
+    };
+  }
   const res = await fetch("https://api.openphone.com/v1/messages", {
     method: "POST",
     headers: { Authorization: key, "Content-Type": "application/json" },
     body: JSON.stringify({ content: message, from, to: [to], ...(userId ? { userId } : {}) }),
   });
-  const detail = res.ok ? undefined : await res.text().catch(() => "");
-  return { ok: res.ok, provider: "quo", to, status: res.status, detail };
+  let detail = res.ok ? undefined : await res.text().catch(() => "");
+  // Their 500 "Unknown" says nothing useful on its own; add the two things that
+  // actually cause it so the message is actionable.
+  if (!res.ok && res.status >= 500) {
+    detail = `${detail ?? ""}\n\nQuo returned a server error. Usually this means the destination number can't receive texts (landline/VoIP), or your workspace can't message it. Check the number, then try another one in Settings → Text notifications.`;
+  }
+  return { ok: res.ok, provider: "quo", to, from, status: res.status, detail };
 }
 
 async function sendTwilio(to: string, message: string): Promise<SendResult> {
@@ -86,7 +109,15 @@ export async function sendSmsResult(toRaw: string, message: string): Promise<Sen
     if (SMS_PROVIDER === "quo" || SMS_PROVIDER === "openphone") r = await sendQuo(to, message);
     else if (SMS_PROVIDER === "custom") r = await sendCustom(to, message);
     else r = await sendTwilio(to, message);
-    if (!r.ok) console.error("[sms] send failed", { provider: r.provider, to, status: r.status, detail: r.detail });
+    if (!r.ok) {
+      console.error("[sms] send failed", {
+        provider: r.provider,
+        from: r.from,
+        to,
+        status: r.status,
+        detail: r.detail,
+      });
+    }
     return r;
   } catch (e) {
     console.error("[sms] threw", e);

@@ -85,6 +85,7 @@ export function TestSms({
                 <span className={`crm-badge ${r.ok ? "crm-badge-success" : "crm-badge-danger"}`}>
                   {r.ok ? "Accepted" : "Failed"}
                 </span>
+                {r.from && <span className="crm-muted crm-sm">from {r.from}</span>}
                 {r.status != null && <span className="crm-muted crm-sm">HTTP {r.status}</span>}
               </div>
               {r.detail && <pre className="sms-detail">{r.detail}</pre>}
