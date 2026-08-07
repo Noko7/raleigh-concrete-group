@@ -7,6 +7,12 @@ export type AddState = {
   smsNote?: string;
 };
 
+export type ContactState = {
+  ok: boolean;
+  error?: string;
+  phone?: string | null;
+};
+
 export type ResetState = {
   ok: boolean;
   error?: string;

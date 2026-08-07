@@ -3,10 +3,19 @@ import { listAllAgreements, listStaff } from "@/lib/crm/queries";
 import { AddAgreement } from "../agreements/add-agreement";
 import { AgreementList, AgreementStatusBadge } from "../agreements/agreement-list";
 import { AddContractor } from "./add-contractor";
+import { EditContact } from "./edit-contact";
 import { ResetPassword } from "./reset-password";
 import { setContractorActive } from "./actions";
 
 export const dynamic = "force-dynamic";
+
+// Numbers are stored E.164 (+19198733919) so the SMS providers accept them;
+// show them the way you'd read them out loud.
+function prettyPhone(raw: string | null): string {
+  if (!raw) return "N/A";
+  const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(raw.trim());
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : raw;
+}
 
 export default async function ContractorsPage() {
   const session = await requireOwner();
@@ -54,7 +63,7 @@ export default async function ContractorsPage() {
                   <tr key={c.id}>
                     <td>{c.full_name || "N/A"}</td>
                     <td>{c.email}</td>
-                    <td>{c.phone || "N/A"}</td>
+                    <td>{prettyPhone(c.phone)}</td>
                     <td>
                       {c.active ? (
                         <span className="crm-badge crm-badge-won">Active</span>
@@ -82,6 +91,7 @@ export default async function ContractorsPage() {
                           {c.active ? "Deactivate" : "Reactivate"}
                         </button>
                       </form>
+                      <EditContact id={c.id} name={c.full_name ?? ""} phone={c.phone} />
                       <ResetPassword id={c.id} name={c.full_name || c.email || "this contractor"} />
                     </td>
                   </tr>

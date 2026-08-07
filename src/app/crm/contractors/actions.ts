@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
 import { SITE_ORIGIN } from "@/lib/crm/env";
-import { sendSmsResult } from "@/lib/crm/notify";
+import { sendSmsResult, toE164 } from "@/lib/crm/notify";
+import { getStaffById, updateStaff } from "@/lib/crm/queries";
 import { adminCreateUser, adminUpdatePassword, pgAdmin } from "@/lib/crm/rest";
-import type { AddState, ResetState } from "./types";
+import type { AddState, ContactState, ResetState } from "./types";
 
 function tempPassword(): string {
   return `Rcg-${crypto.randomUUID().slice(0, 8)}-${crypto.randomUUID().slice(0, 4)}`;
@@ -102,6 +103,40 @@ export async function resetContractorPassword(_prev: ResetState, formData: FormD
 
   revalidatePath("/crm/contractors");
   return { ok: true, password, smsSent, smsNote };
+}
+
+// Owner-only: fix a contractor's name or alert number. Their phone is what every
+// job notification is sent to, so this needs to be editable without asking them
+// to log in and update it themselves.
+export async function updateContractorContact(
+  _prev: ContactState,
+  formData: FormData,
+): Promise<ContactState> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) return { ok: false, error: "Missing contractor." };
+
+  // Scope to contractors so this can't be pointed at another owner's row.
+  const target = await getStaffById(session, id);
+  if (!target || target.role !== "contractor") return { ok: false, error: "That contractor no longer exists." };
+
+  const fullName = String(formData.get("full_name") ?? "").trim().slice(0, 120);
+  const rawPhone = String(formData.get("phone") ?? "").trim();
+
+  let phone: string | null = null;
+  if (rawPhone !== "") {
+    phone = toE164(rawPhone);
+    if (!phone) return { ok: false, error: "Enter a valid US number, e.g. (919) 555-1234." };
+  }
+
+  const ok = await updateStaff(session, id, { full_name: fullName || null, phone });
+  if (!ok) return { ok: false, error: "Could not save. Please try again." };
+
+  revalidatePath("/crm/contractors");
+  revalidatePath("/crm");
+  return { ok: true, phone };
 }
 
 export async function setContractorActive(formData: FormData): Promise<void> {
