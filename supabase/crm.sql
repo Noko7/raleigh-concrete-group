@@ -114,6 +114,14 @@ alter table public.quote_requests add column if not exists confirmed_at         
 alter table public.quote_requests add column if not exists completed_at         timestamptz;
 alter table public.quote_requests add column if not exists payment_requested_at timestamptz;
 alter table public.quote_requests add column if not exists paid_at              timestamptz;
+
+-- Soft delete: "deleting" a lead from the CRM only sets this timestamp. The row
+-- (and every related quote_event) stays in the database untouched - listQuotes
+-- just hides archived rows from the pipeline/customers views by default, and
+-- an owner can restore one from /crm/archived. Nothing is ever hard-deleted.
+alter table public.quote_requests add column if not exists archived_at timestamptz;
+create index if not exists qr_archived_idx on public.quote_requests(archived_at);
+
 create index if not exists qr_scheduled_date_idx on public.quote_requests(scheduled_date);
 create index if not exists qr_visit_date_idx      on public.quote_requests(visit_date);
 -- Hard guarantee: at most one accepted/booked job per calendar day.

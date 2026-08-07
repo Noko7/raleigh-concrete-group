@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/constants";
-import { assignQuote, moveQuote } from "./board-actions";
+import { assignQuote, deleteQuote, moveQuote } from "./board-actions";
 
 export type BoardQuote = {
   id: string;
@@ -113,6 +113,22 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
         setQuotes(prev);
         flash(res.error ?? "Could not move that quote.");
       } else {
+        router.refresh();
+      }
+    });
+  }
+
+  function remove(id: string, name: string) {
+    if (!window.confirm(`Delete ${name}'s lead from the pipeline? You can restore it later from Archived.`)) return;
+    const prev = quotes;
+    setQuotes((qs) => qs.filter((q) => q.id !== id));
+    startTransition(async () => {
+      const res = await deleteQuote(id);
+      if (!res.ok) {
+        setQuotes(prev);
+        flash(res.error ?? "Could not delete that lead.");
+      } else {
+        flash("Lead deleted. Restore it anytime from Archived.");
         router.refresh();
       }
     });
@@ -247,6 +263,16 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
                             ))}
                           </select>
                         </label>
+                      )}
+                      {role === "owner" && (
+                        <button
+                          type="button"
+                          className="kb-delete-btn"
+                          aria-label={`Delete ${q.name}'s lead`}
+                          onClick={() => remove(q.id, q.name)}
+                        >
+                          Delete
+                        </button>
                       )}
                     </div>
                   </article>

@@ -50,6 +50,7 @@ export type Quote = {
   completed_at: string | null;
   paid_at: string | null;
   payment_requested_at: string | null;
+  archived_at: string | null;
 };
 
 export type QuoteEvent = {

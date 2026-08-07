@@ -80,3 +80,48 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
   revalidatePath("/crm");
   return { ok: true };
 }
+
+// Owner-only "delete" from the pipeline. This never removes the row or any of
+// its quote_events - it just stamps archived_at, which listQuotes filters out
+// by default. The lead can always be brought back from /crm/archived.
+export async function deleteQuote(id: string): Promise<MoveResult> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "Quote not found." };
+  if (current.archived_at) return { ok: true };
+
+  const updated = await updateQuote(session, id, { archived_at: new Date().toISOString() });
+  if (!updated) return { ok: false, error: "Could not delete this lead." };
+
+  await addEvent(session, id, "archived", { by: session.staff.full_name || session.staff.email });
+  revalidatePath("/crm");
+  revalidatePath("/crm/archived");
+  return { ok: true };
+}
+
+// Undo a delete: clears archived_at so the lead reappears in the pipeline.
+export async function restoreQuote(id: string): Promise<MoveResult> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "Quote not found." };
+  if (!current.archived_at) return { ok: true };
+
+  const updated = await updateQuote(session, id, { archived_at: null });
+  if (!updated) return { ok: false, error: "Could not restore this lead." };
+
+  await addEvent(session, id, "restored", { by: session.staff.full_name || session.staff.email });
+  revalidatePath("/crm");
+  revalidatePath("/crm/archived");
+  return { ok: true };
+}
+
+// Plain <form action={...}> wrapper for the Archived page (server-rendered, no
+// client JS needed there).
+export async function restoreQuoteForm(formData: FormData): Promise<void> {
+  const id = String(formData.get("id") ?? "");
+  if (id) await restoreQuote(id);
+}

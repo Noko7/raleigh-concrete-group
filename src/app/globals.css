@@ -1493,6 +1493,8 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .kb-move > span { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--crm-muted); }
 .kb-move select { width: 100%; background: #1a1f24; color: var(--crm-text); border: 1px solid var(--crm-border); border-radius: 0.4rem; padding: 0.4rem; font-size: 0.8rem; color-scheme: dark; }
 .kb-move select option { background-color: #20262e; color: #f7f5f1; }
+.kb-delete-btn { flex: none; align-self: flex-end; background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.4); color: #f87171; border-radius: 0.4rem; padding: 0.4rem 0.65rem; font-size: 0.72rem; font-weight: 800; cursor: pointer; }
+.kb-delete-btn:hover { background: #f87171; border-color: #f87171; color: #fff; }
 .kb-toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: #2b1416; border: 1px solid #f87171; color: #fecaca; padding: 0.7rem 1.1rem; border-radius: 0.6rem; z-index: 50; font-weight: 600; font-size: 0.85rem; }
 
 /* Mobile: stack the pipeline vertically, hide empty stages, fatten tap targets */
@@ -1505,6 +1507,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .kb-card-name { font-size: 1.3rem; }
   .kb-move select { padding: 0.6rem; font-size: 0.95rem; }
   .kb-quick-btn { padding: 0.6rem; font-size: 0.9rem; }
+  .kb-delete-btn { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
 }
 
 /* ── Job calculator ── */

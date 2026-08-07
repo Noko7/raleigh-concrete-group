@@ -6,12 +6,15 @@ import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
 import type { Quote, QuoteEvent, Session, Staff } from "./types";
 
-export type QuoteFilters = { status?: string; assignedTo?: string; search?: string };
+export type QuoteFilters = { status?: string; assignedTo?: string; search?: string; archived?: boolean };
 
+// Archived (soft-deleted) leads are hidden from the pipeline/customers views by
+// default - pass { archived: true } to see only the ones someone deleted.
 export async function listQuotes(session: Session, filters: QuoteFilters = {}): Promise<Quote[]> {
   const params = new URLSearchParams();
   params.set("select", "*");
   params.set("order", "created_at.desc");
+  params.set("archived_at", filters.archived ? "not.is.null" : "is.null");
   if (filters.status) params.set("status", `eq.${filters.status}`);
   if (filters.assignedTo === "unassigned") params.set("assigned_to", "is.null");
   else if (filters.assignedTo) params.set("assigned_to", `eq.${filters.assignedTo}`);
