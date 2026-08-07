@@ -2,9 +2,9 @@
 // Edit content here; the homepage, location pages, header and SEO all read from it.
 
 export const businessName = "Raleigh Concrete Group";
-export const phoneDisplay = "(919) 897-7695";
-export const phoneHref = "tel:+19198977695";
-export const textHref = "sms:+19198977695";
+export const phoneDisplay = "(919) 873-3919";
+export const phoneHref = "tel:+19198733919";
+export const textHref = "sms:+19198733919";
 
 export type LocationKey =
   | "raleigh"

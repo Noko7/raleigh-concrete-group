@@ -19,7 +19,7 @@ export const SERVICE_AREAS = [
   "Knightdale",
 ];
 
-const PHONE_E164 = "+19198977695";
+const PHONE_E164 = "+19198733919";
 
 export function localBusinessSchema() {
   return {
