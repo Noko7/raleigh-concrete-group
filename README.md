@@ -80,7 +80,7 @@ All of it runs over Supabase's REST/Auth APIs (no extra packages).
 - **Login + roles** (`/crm/login`): owners see everything; contractors see only jobs assigned to them (enforced by Postgres Row-Level Security).
 - **Quotes dashboard** (`/crm`): filter by status / assignee / search; pipeline `New → Quoted → Booked → Confirmed → Complete` (plus `Lost`).
 - **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos via short-lived signed URLs**, status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, copyable share links, and a **Mark complete + paid** button.
-- **Contractors** (`/crm/contractors`, owner only): create a crew login (returns a one-time temp password), deactivate/reactivate.
+- **Contractors** (`/crm/contractors`, owner only): **text an invite** and let them set up their own login, edit their details, reset a password, deactivate/reactivate, or delete.
 - **Settings** (`/crm/settings`): your name + alert number; owners also pick the **primary contractor** that new quotes auto-assign to.
 - **Customers** (`/crm/customers`): quotes auto-grouped by phone/email with won-value totals.
 - **Calendar** (`/crm/calendar`): a month view of booked jobs (`scheduled_date`) and in-person quote visits (`visit_date`). Click any item to open the deal. Owners can connect Google Calendar here.
@@ -110,7 +110,7 @@ approved, declined, date confirmed or moved, can't-confirm, completed, and paid.
 You're never texted about an action you performed yourself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, then `supabase/scheduling.sql` in the SQL Editor.
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/scheduling.sql` and `supabase/invites.sql` in the SQL Editor.
 2. Confirm Vercel env vars exist: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (the CRM needs the service-role key).
 3. Create your owner login: Supabase → **Authentication → Users → Add user** (email + password), then run the promote snippet at the bottom of `supabase/crm.sql`.
 4. **Subdomain:** in Vercel → Project → **Domains**, add `crm.raleighconcrete.net`; in your DNS registrar add the **CNAME** Vercel shows (typically `crm` → `cname.vercel-dns.com`). Routing to the CRM is already wired in `src/middleware.ts`. (Until DNS is live you can also reach it at `raleighconcrete.net/crm`.)
@@ -120,6 +120,25 @@ Your Supabase automation already fires on new `quote_requests` rows. Each row no
 `public_token` and `job_token` columns — build the URLs in your message template:
 - Contractor text (with photos): `https://raleighconcrete.net/job/{{ job_token }}`
 - Customer text (their quote): `https://raleighconcrete.net/q/{{ public_token }}`
+
+**Adding a contractor**
+Preferred way: **CRM → Contractors → Invite a contractor**. Enter their phone number and they get a
+one-time link to `/join/<token>` where they fill in their own name and email and choose their own
+password. Nothing is created until they finish, so a mistyped number just expires.
+- The link is **single-use**, expires in **7 days**, and can be cancelled from the Pending invites list.
+- Their alert number comes from the invite you sent, not the form, so it can't be pointed elsewhere.
+- The invite is valid even if the text fails — the link is always shown in the CRM so you can pass it
+  on another way.
+- Manual creation (you set a temp password) is still there under "Or add a contractor manually".
+
+**Their email must be allowed to sign in.** `CRM_ALLOWED_EMAILS` / `CRM_ALLOWED_DOMAINS` gate CRM
+access, and with neither set the fallback is your own site domain only. Both the invite form and
+manual creation now refuse an address that would be blocked at login, rather than creating an account
+that can't be used — if your crew use personal addresses, add their domain(s) first.
+
+**Deleting** is permanent and asks you to type the contractor's name. Their agreements go with them
+and any assigned jobs become unassigned. **Deactivate** is the reversible option and is usually what
+you want.
 
 **Agreements (DocuSeal)**
 Signing itself happens in **DocuSeal**, which you manage separately: you build the template there,

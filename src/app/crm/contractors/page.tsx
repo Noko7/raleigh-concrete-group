@@ -1,11 +1,13 @@
 import { requireOwner } from "@/lib/crm/auth";
-import { listAllAgreements, listStaff } from "@/lib/crm/queries";
+import { listAllAgreements, listInvites, listStaff } from "@/lib/crm/queries";
 import { AddAgreement } from "../agreements/add-agreement";
 import { AgreementList, AgreementStatusBadge } from "../agreements/agreement-list";
 import { AddContractor } from "./add-contractor";
+import { DeleteContractor } from "./delete-contractor";
 import { EditContact } from "./edit-contact";
+import { InviteContractor } from "./invite-contractor";
 import { ResetPassword } from "./reset-password";
-import { setContractorActive } from "./actions";
+import { revokeContractorInvite, setContractorActive } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,12 @@ export default async function ContractorsPage() {
   const session = await requireOwner();
   const staff = await listStaff(session);
   const contractors = staff.filter((s) => s.role === "contractor");
+
+  // Invites still worth showing: not yet redeemed, cancelled or expired.
+  const now = Date.now();
+  const pendingInvites = (await listInvites(session)).filter(
+    (i) => !i.used_at && !i.revoked_at && new Date(i.expires_at).getTime() > now,
+  );
 
   // One fetch for the whole page, then bucket by contractor.
   const allAgreements = await listAllAgreements(session);
@@ -39,7 +47,52 @@ export default async function ContractorsPage() {
         <p className="crm-muted">Create logins for your crew and assign them jobs. They only see jobs assigned to them.</p>
       </div>
 
-      <AddContractor />
+      <InviteContractor />
+
+      {pendingInvites.length > 0 && (
+        <div className="crm-card">
+          <h2 className="crm-card-title">Pending invites ({pendingInvites.length})</h2>
+          <p className="crm-muted crm-sm">
+            Sent but not completed yet. Cancelling stops the link working immediately.
+          </p>
+          <div className="crm-table-wrap">
+            <table className="crm-table">
+              <thead>
+                <tr>
+                  <th>Sent to</th>
+                  <th>Name</th>
+                  <th>Expires</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingInvites.map((i) => (
+                  <tr key={i.id}>
+                    <td>{prettyPhone(i.phone)}</td>
+                    <td>{i.full_name || <span className="crm-muted">—</span>}</td>
+                    <td className="crm-sm">
+                      {new Date(i.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </td>
+                    <td className="crm-row-actions">
+                      <form action={revokeContractorInvite}>
+                        <input type="hidden" name="id" value={i.id} />
+                        <button type="submit" className="crm-btn crm-btn-ghost">
+                          Cancel
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <details className="crm-manual-add">
+        <summary>Or add a contractor manually</summary>
+        <AddContractor />
+      </details>
 
       <div className="crm-card">
         <h2 className="crm-card-title">Your crew ({contractors.length})</h2>
@@ -93,6 +146,7 @@ export default async function ContractorsPage() {
                       </form>
                       <EditContact id={c.id} name={c.full_name ?? ""} email={c.email ?? ""} phone={c.phone} />
                       <ResetPassword id={c.id} name={c.full_name || c.email || "this contractor"} />
+                      <DeleteContractor id={c.id} name={c.full_name || c.email || "Contractor"} />
                     </td>
                   </tr>
                 ))}

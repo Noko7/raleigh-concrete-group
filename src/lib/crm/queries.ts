@@ -4,7 +4,15 @@
 import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
-import type { Agreement, LoginAttempt, Quote, QuoteEvent, Session, Staff } from "./types";
+import type {
+  Agreement,
+  ContractorInvite,
+  LoginAttempt,
+  Quote,
+  QuoteEvent,
+  Session,
+  Staff,
+} from "./types";
 
 export type QuoteFilters = { status?: string; assignedTo?: string; search?: string; archived?: boolean };
 
@@ -444,6 +452,87 @@ export async function signFile(storagePath: string, expiresIn = 3600): Promise<s
 
 export async function signFiles(paths: string[], expiresIn = 3600): Promise<{ path: string; url: string | null }[]> {
   return Promise.all(paths.map(async (p) => ({ path: p, url: await signFile(p, expiresIn) })));
+}
+
+// ── Contractor invites ──────────────────────────────────────────────────────
+// The token is a capability: whoever holds it can create one contractor
+// account. It is long, random, single-use and expiring, and every lookup below
+// re-checks all three conditions rather than trusting the caller.
+
+export const INVITE_TTL_DAYS = 7;
+const INVITE_TOKEN_RE = /^[a-f0-9]{32}$/;
+
+export function newInviteToken(): string {
+  return crypto.randomUUID().replace(/-/g, "");
+}
+
+export async function createInvite(input: {
+  token: string;
+  phone: string;
+  fullName?: string | null;
+  createdBy: string;
+}): Promise<boolean> {
+  const expires = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const res = await pgAdmin("contractor_invites", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      token: input.token,
+      phone: input.phone,
+      full_name: input.fullName || null,
+      created_by: input.createdBy,
+      expires_at: expires,
+    }),
+  });
+  return res.ok;
+}
+
+// Service-role lookup for the public onboarding page - there is no session at
+// that point. Returns null for anything unusable (unknown, revoked, already
+// used, expired) so the caller can't tell those cases apart and probe for
+// valid tokens.
+export async function getUsableInvite(token: string): Promise<ContractorInvite | null> {
+  if (!INVITE_TOKEN_RE.test(token)) return null;
+  const res = await pgAdmin(`contractor_invites?token=eq.${token}&select=*&limit=1`);
+  if (!res.ok) return null;
+  const rows = (await res.json()) as ContractorInvite[];
+  const invite = rows[0];
+  if (!invite) return null;
+  if (invite.used_at || invite.revoked_at) return null;
+  if (new Date(invite.expires_at).getTime() < Date.now()) return null;
+  return invite;
+}
+
+// Burn the invite. Conditional on used_at still being null so two submissions
+// racing each other can't both create an account: PostgREST returns the rows it
+// actually changed, so an empty result means someone else got there first.
+export async function consumeInvite(id: string, staffId: string): Promise<boolean> {
+  const res = await pgAdmin(`contractor_invites?id=eq.${encodeURIComponent(id)}&used_at=is.null`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ used_at: new Date().toISOString(), used_by: staffId }),
+  });
+  if (!res.ok) return false;
+  const rows = (await res.json()) as unknown[];
+  return rows.length > 0;
+}
+
+export async function listInvites(session: Session, limit = 50): Promise<ContractorInvite[]> {
+  const res = await pgUser(
+    `contractor_invites?select=*&order=created_at.desc&limit=${limit}`,
+    session.accessToken,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as ContractorInvite[];
+}
+
+export async function revokeInvite(id: string): Promise<boolean> {
+  const res = await pgAdmin(`contractor_invites?id=eq.${encodeURIComponent(id)}&used_at=is.null`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ revoked_at: new Date().toISOString() }),
+  });
+  return res.ok;
 }
 
 // ── Agreements (contracts sent for signature through DocuSeal) ──────────────

@@ -162,6 +162,9 @@ minus whoever performed the action.
 
 | Trigger | What they get |
 |---------|---------------|
+| Invited to the crew | One-time `/join/<token>` link to set up their own login. Single-use, expires in 7 days |
+| Account created manually | Sign-in URL, username, temporary password |
+| Password reset by owner | Same format, new temporary password |
 | Assigned a job | Full brief: customer, phone, service, address, timing, job link, "sign in to open" |
 | Customer approves | Same brief + the customer's preferred days + "confirm the day that works" |
 | Date confirmed / moved | JOB BOOKED or DATE CHANGED + brief |

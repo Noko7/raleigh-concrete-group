@@ -66,6 +66,20 @@ export type QuoteEvent = {
   created_at: string;
 };
 
+// A one-time link that lets a contractor create their own account.
+export type ContractorInvite = {
+  id: string;
+  token: string;
+  phone: string;
+  full_name: string | null;
+  created_by: string | null;
+  created_at: string;
+  expires_at: string;
+  used_at: string | null;
+  used_by: string | null;
+  revoked_at: string | null;
+};
+
 export type AgreementKind = "contractor" | "customer";
 export type AgreementStatus = "pending" | "sent" | "signed" | "declined" | "void";
 

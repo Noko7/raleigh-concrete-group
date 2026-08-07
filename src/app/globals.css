@@ -1524,6 +1524,18 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 
 /* Inline contact edit on the Contractors table */
 .contact-form { min-width: 240px; text-align: left; }
+.delete-form { min-width: 260px; text-align: left; }
+.crm-manual-add > summary { cursor: pointer; color: var(--crm-muted); font-size: 0.9rem; margin-bottom: 0.6rem; }
+.crm-manual-add > summary:hover { color: var(--crm-text); }
+
+/* Contractor onboarding form (/join/[token]) — light card, dark text */
+.join-form { display: flex; flex-direction: column; gap: 0.85rem; }
+.join-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; font-weight: 700; color: #2b1a12; }
+.join-field input { padding: 0.7rem 0.75rem; border: 2px solid rgba(43, 26, 18, 0.2); border-radius: 0.6rem; font: inherit; font-weight: 400; background: #fff; color: #2b1a12; }
+.join-field input:focus { outline: none; border-color: var(--amber); }
+.join-note { font-size: 0.85rem; color: rgba(43, 26, 18, 0.7); background: #fff; border-radius: 0.6rem; padding: 0.6rem 0.75rem; }
+.join-submit { width: 100%; display: block; cursor: pointer; border: none; font: inherit; font-weight: 800; }
+.join-signin { display: inline-block; margin-top: 0.6rem; text-decoration: none; }
 
 /* ── Scheduling card (confirm / move the work day) ── */
 .sched-picks { margin: 0.9rem 0 0.4rem; }

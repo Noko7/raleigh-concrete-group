@@ -119,6 +119,9 @@ export async function middleware(request: NextRequest) {
     // token pages and API endpoints out of search with a noindex header.
     const keepPrivate =
       pathname.startsWith("/q/") ||
+      // Contractor onboarding: public by design (they have no login yet), but a
+      // capability link that must never be indexed.
+      pathname.startsWith("/join/") ||
       pathname.startsWith("/confirm") ||
       pathname.startsWith("/api/");
     return keepPrivate ? withNoIndex(NextResponse.next()) : NextResponse.next();

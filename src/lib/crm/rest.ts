@@ -115,6 +115,19 @@ export async function adminUpdateEmail(
   return { ok: false, error: friendly };
 }
 
+// Owner-only: permanently remove a contractor's login. The staff row is keyed on
+// auth.users(id) with on delete cascade, so removing the auth user takes the
+// profile with it - and via the staff FKs, their agreements, while assigned jobs
+// fall back to unassigned rather than disappearing.
+export async function adminDeleteUser(userId: string): Promise<boolean> {
+  const res = await fetch(`${AUTH}/admin/users/${userId}`, {
+    method: "DELETE",
+    cache: "no-store",
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+  });
+  return res.ok;
+}
+
 // Set a user's password with the service-role key (used for the forced
 // first-login reset, after we've verified the caller's own session).
 export async function adminUpdatePassword(userId: string, password: string): Promise<boolean> {
