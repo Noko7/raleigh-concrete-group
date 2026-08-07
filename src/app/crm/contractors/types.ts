@@ -11,6 +11,7 @@ export type ContactState = {
   ok: boolean;
   error?: string;
   phone?: string | null;
+  emailChanged?: boolean;
 };
 
 export type ResetState = {

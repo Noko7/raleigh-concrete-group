@@ -91,6 +91,30 @@ export async function adminCreateUser(
   return { id: json.id };
 }
 
+// Owner-only: change the address a contractor signs in with. This has to update
+// Supabase Auth, not just the staff row - the staff table is a profile, the auth
+// user is the identity. email_confirm skips the verification round-trip, which
+// the contractor can't complete anyway since the owner is making the change.
+export async function adminUpdateEmail(
+  userId: string,
+  email: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await fetch(`${AUTH}/admin/users/${userId}`, {
+    method: "PUT",
+    cache: "no-store",
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, email_confirm: true }),
+  });
+  if (res.ok) return { ok: true };
+  const json = (await res.json().catch(() => ({}))) as { msg?: string; message?: string };
+  const raw = json.msg || json.message || "Could not update the email.";
+  // The common failure is the address already belonging to another account.
+  const friendly = /already|exists|registered/i.test(raw)
+    ? "Another account already uses that email."
+    : raw;
+  return { ok: false, error: friendly };
+}
+
 // Set a user's password with the service-role key (used for the forced
 // first-login reset, after we've verified the caller's own session).
 export async function adminUpdatePassword(userId: string, password: string): Promise<boolean> {

@@ -91,7 +91,7 @@ export default async function ContractorsPage() {
                           {c.active ? "Deactivate" : "Reactivate"}
                         </button>
                       </form>
-                      <EditContact id={c.id} name={c.full_name ?? ""} phone={c.phone} />
+                      <EditContact id={c.id} name={c.full_name ?? ""} email={c.email ?? ""} phone={c.phone} />
                       <ResetPassword id={c.id} name={c.full_name || c.email || "this contractor"} />
                     </td>
                   </tr>

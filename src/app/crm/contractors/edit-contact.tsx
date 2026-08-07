@@ -5,15 +5,18 @@ import { useActionState, useEffect, useState } from "react";
 import { updateContractorContact } from "./actions";
 import type { ContactState } from "./types";
 
-// Their phone is where every job alert goes, so the owner needs to be able to
-// correct it directly rather than asking the contractor to sign in and do it.
+// Everything about a contractor an owner can change without involving them:
+// their name, the address they sign in with, and the number job alerts go to.
+// Password lives in Reset password; active/inactive is the row's own button.
 export function EditContact({
   id,
   name,
+  email,
   phone,
 }: {
   id: string;
   name: string;
+  email: string;
   phone: string | null;
 }) {
   const [state, formAction, pending] = useActionState<ContactState, FormData>(updateContractorContact, { ok: false });
@@ -27,7 +30,7 @@ export function EditContact({
   if (!open) {
     return (
       <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setOpen(true)}>
-        Edit contact
+        Edit details
       </button>
     );
   }
@@ -40,6 +43,10 @@ export function EditContact({
         <input name="full_name" className="crm-input" defaultValue={name} />
       </label>
       <label className="crm-field">
+        <span>Email (their login)</span>
+        <input name="email" type="email" className="crm-input" defaultValue={email} required />
+      </label>
+      <label className="crm-field">
         <span>Alert number</span>
         <input
           name="phone"
@@ -49,7 +56,10 @@ export function EditContact({
           placeholder="(919) 555-1234"
         />
       </label>
-      <p className="crm-muted crm-sm">Leave the number blank to stop texting them job alerts.</p>
+      <p className="crm-muted crm-sm">
+        Changing the email changes what they sign in with — tell them, or their old address stops working. Leave the
+        number blank to stop texting them job alerts.
+      </p>
       <div className="crm-editor-foot">
         <button type="submit" className="crm-btn crm-btn-primary" disabled={pending}>
           {pending ? "Saving…" : "Save"}
