@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import { dict, LOCALES, LOCALE_LABELS, type Locale } from "@/lib/crm/i18n";
 import { saveSettings } from "./actions";
 import type { SaveState } from "./types";
 
@@ -10,12 +11,14 @@ type Props = {
   phone: string;
   email: string;
   role: "owner" | "contractor";
+  locale: Locale;
 };
 
 const initial: SaveState = { ok: true };
 
-export function SettingsForm({ fullName, phone, email, role }: Props) {
+export function SettingsForm({ fullName, phone, email, role, locale }: Props) {
   const [state, formAction, pending] = useActionState(saveSettings, initial);
+  const t = dict(locale);
 
   return (
     <form action={formAction} className="crm-card crm-settings">
@@ -23,18 +26,30 @@ export function SettingsForm({ fullName, phone, email, role }: Props) {
         <div>
           <div className="crm-settings-email">{email || "No email on file"}</div>
           <span className={`crm-badge crm-badge-${role === "owner" ? "owner" : "contractor"}`}>
-            {role === "owner" ? "Owner" : "Contractor"}
+            {role === "owner" ? t.nav.owner : t.nav.contractor}
           </span>
         </div>
       </div>
 
       <label className="crm-field">
-        <span>Your name</span>
+        <span>{t.settings.yourName}</span>
         <input className="crm-input" name="full_name" defaultValue={fullName} maxLength={120} autoComplete="name" />
       </label>
 
       <label className="crm-field">
-        <span>Mobile number for text alerts</span>
+        <span>{t.settings.language}</span>
+        <select className="crm-input" name="locale" defaultValue={locale}>
+          {LOCALES.map((l) => (
+            <option key={l} value={l}>
+              {LOCALE_LABELS[l]}
+            </option>
+          ))}
+        </select>
+        <small className="crm-muted crm-sm">{t.settings.languageHint}</small>
+      </label>
+
+      <label className="crm-field">
+        <span>{t.settings.alertNumber}</span>
         <input
           className="crm-input"
           name="phone"
@@ -53,10 +68,10 @@ export function SettingsForm({ fullName, phone, email, role }: Props) {
       </label>
 
       {state.error && <p className="crm-auth-error">{state.error}</p>}
-      {state.saved && !state.error && <p className="crm-saved">Saved.</p>}
+      {state.saved && !state.error && <p className="crm-saved">{t.settings.saved}</p>}
 
       <button type="submit" className="crm-btn crm-btn-primary" disabled={pending}>
-        {pending ? "Saving…" : "Save settings"}
+        {pending ? t.settings.saving : t.settings.save}
       </button>
     </form>
   );

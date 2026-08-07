@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
+import { isLocale } from "@/lib/crm/i18n";
 import { ownerRecipients, sendSmsResult, toE164 } from "@/lib/crm/notify";
 import { setPrimaryContractorId, updateOwnProfile } from "@/lib/crm/queries";
 import { rateLimit } from "@/lib/rate-limit";
@@ -32,7 +33,12 @@ export async function saveSettings(_prev: SaveState, formData: FormData): Promis
     return { ok: false, error: "Enter a valid US phone number, e.g. (919) 555-1234." };
   }
 
-  const ok = await updateOwnProfile(session, { full_name: fullName || null, phone });
+  // Ignore anything that isn't a language we ship, so a tampered form can't
+  // write a value the locale check constraint would reject.
+  const rawLocale = String(formData.get("locale") ?? "");
+  const locale = isLocale(rawLocale) ? rawLocale : undefined;
+
+  const ok = await updateOwnProfile(session, { full_name: fullName || null, phone, locale });
   if (!ok) return { ok: false, error: "Could not save your settings. Please try again." };
 
   revalidatePath("/crm/settings");

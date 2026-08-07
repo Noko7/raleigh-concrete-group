@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { requireSession } from "@/lib/crm/auth";
+import { dict } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { listAllAgreements, listQuotes, listStaff } from "@/lib/crm/queries";
 import { AgreementStatusBadge } from "./agreement-list";
@@ -15,6 +16,7 @@ export default async function AgreementsPage() {
   const session = await requireSession();
   const base = await crmBase();
   const isOwner = session.staff.role === "owner";
+  const t = dict(session.staff.locale);
 
   // RLS already scopes these: a contractor only sees their own agreement and the
   // jobs assigned to them, so this page works for both roles unchanged.
@@ -35,45 +37,42 @@ export default async function AgreementsPage() {
     <main className="crm-page">
       <div className="crm-page-head">
         <div>
-          <h1>Agreements</h1>
-          <p className="crm-muted">
-            Every contract you track, for contractors and for jobs. Signing happens in DocuSeal; this is the record.
-          </p>
+          <h1>{t.agreements.title}</h1>
+          <p className="crm-muted">{t.agreements.subtitle}</p>
         </div>
       </div>
 
       <div className="crm-stats">
         <div className="crm-stat">
-          <span>Total</span>
+          <span>{t.agreements.total}</span>
           <strong>{agreements.length}</strong>
         </div>
         <div className="crm-stat">
-          <span>Signed</span>
+          <span>{t.agreements.signed}</span>
           <strong>{counts.signed ?? 0}</strong>
         </div>
         <div className="crm-stat">
-          <span>Outstanding</span>
+          <span>{t.agreements.outstanding}</span>
           <strong>{outstanding}</strong>
         </div>
       </div>
 
       <div className="crm-card">
-        <h2 className="crm-card-title">All agreements ({agreements.length})</h2>
+        <h2 className="crm-card-title">
+          {t.agreements.all} ({agreements.length})
+        </h2>
         {agreements.length === 0 ? (
-          <p className="crm-muted">
-            Nothing tracked yet. Add a contractor agreement from the Contractors page, or a customer agreement from a
-            job.
-          </p>
+          <p className="crm-muted">{t.agreements.none}</p>
         ) : (
           <div className="crm-table-wrap">
             <table className="crm-table">
               <thead>
                 <tr>
-                  <th>Title</th>
-                  <th>Type</th>
-                  <th>Who</th>
-                  <th>Status</th>
-                  <th>Added</th>
+                  <th>{t.agreements.titleCol}</th>
+                  <th>{t.agreements.typeCol}</th>
+                  <th>{t.agreements.whoCol}</th>
+                  <th>{t.agreements.statusCol}</th>
+                  <th>{t.agreements.addedCol}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -86,7 +85,7 @@ export default async function AgreementsPage() {
                   return (
                     <tr key={a.id}>
                       <td>{a.title}</td>
-                      <td>{a.kind === "contractor" ? "Contractor" : "Customer"}</td>
+                      <td>{a.kind === "contractor" ? t.agreements.contractor : t.agreements.customer}</td>
                       <td>
                         {a.kind === "customer" && a.quote_id ? (
                           <Link href={`${base}/quotes/${a.quote_id}`} className="crm-link-strong">

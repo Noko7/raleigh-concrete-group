@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/constants";
+import { STATUSES, type Status } from "@/lib/crm/constants";
+import { dict, type Locale } from "@/lib/crm/i18n";
 import { assignQuote, deleteQuote, moveQuote } from "./board-actions";
 
 export type BoardQuote = {
@@ -55,13 +56,18 @@ type Props = {
   initialQuotes: BoardQuote[];
   contractors: ContractorOption[];
   nameMap: Record<string, string>;
+  locale: Locale;
 };
 
 function money(n: number | null): string {
   return n == null ? "" : `$${Number(n).toLocaleString("en-US")}`;
 }
 
-export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }: Props) {
+export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, locale }: Props) {
+  const t = dict(locale);
+  // Column headings and the Move menu read from the translated status names, so
+  // the board doesn't end up half-Spanish.
+  const statusLabel = (s: Status) => t.status[s];
   const router = useRouter();
   const [quotes, setQuotes] = useState<BoardQuote[]>(initialQuotes);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -173,7 +179,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
               }}
             >
               <header className={`kb-col-head kb-accent-${status}`}>
-                <span className="kb-col-title">{STATUS_LABELS[status]}</span>
+                <span className="kb-col-title">{statusLabel(status)}</span>
                 <span className="kb-col-count">{cards.length}</span>
               </header>
 
@@ -242,11 +248,11 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
 
                     <div className="kb-card-actions" onClick={(e) => e.stopPropagation()}>
                       <label className="kb-move">
-                        <span>Move</span>
+                        <span>{t.pipeline.move}</span>
                         <select value={q.status} onChange={(e) => move(q.id, e.target.value as Status)}>
                           {STATUSES.map((s) => (
                             <option key={s} value={s}>
-                              {STATUS_LABELS[s]}
+                              {statusLabel(s)}
                             </option>
                           ))}
                         </select>
@@ -255,7 +261,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap }:
                         <label className="kb-move">
                           <span>Crew</span>
                           <select value={q.assigned_to ?? ""} onChange={(e) => assign(q.id, e.target.value)}>
-                            <option value="">Unassigned</option>
+                            <option value="">{t.pipeline.unassignedCard}</option>
                             {contractors.map((c) => (
                               <option key={c.id} value={c.id}>
                                 {c.label}

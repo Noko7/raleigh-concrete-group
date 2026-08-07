@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { requireSession } from "@/lib/crm/auth";
+import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { listQuotes, listStaff } from "@/lib/crm/queries";
 import { KanbanBoard, type BoardQuote } from "./kanban-board";
@@ -14,6 +15,8 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
   const base = await crmBase();
   const sp = await searchParams;
   const isOwner = session.staff.role === "owner";
+  const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
+  const t = dict(locale);
 
   const quotes = await listQuotes(session, { search: sp.search, assignedTo: sp.assignedTo });
   const staff = await listStaff(session);
@@ -44,20 +47,20 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
     <main className="crm-page crm-page-wide">
       <div className="crm-page-head">
         <div>
-          <h1>Pipeline</h1>
+          <h1>{t.pipeline.title}</h1>
           <p className="crm-muted">
-            {board.length} {board.length === 1 ? "quote" : "quotes"}
-            {isOwner ? "" : " assigned to you"} · drag a card or use Move to update it
+            {board.length} {board.length === 1 ? t.pipeline.quote : t.pipeline.quotes}
+            {isOwner ? "" : ` ${t.pipeline.assignedToYou}`} · {t.pipeline.dragHint}
           </p>
         </div>
       </div>
 
       <form className="crm-filters" method="get" action={`${base}/`}>
-        <input className="crm-input" type="search" name="search" placeholder="Search name, phone, address…" defaultValue={sp.search ?? ""} />
+        <input className="crm-input" type="search" name="search" placeholder={t.pipeline.search} defaultValue={sp.search ?? ""} />
         {isOwner && (
           <select className="crm-input" name="assignedTo" defaultValue={sp.assignedTo ?? ""}>
-            <option value="">Any assignee</option>
-            <option value="unassigned">Unassigned</option>
+            <option value="">{t.pipeline.anyAssignee}</option>
+            <option value="unassigned">{t.pipeline.unassigned}</option>
             {contractors.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.full_name || c.email}
@@ -66,17 +69,17 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
           </select>
         )}
         <button type="submit" className="crm-btn crm-btn-ghost">
-          Search
+          {t.pipeline.filter}
         </button>
         {(sp.search || sp.assignedTo) && (
           <Link href={`${base}/`} className="crm-btn crm-btn-ghost">
-            Clear
+            {t.pipeline.clear}
           </Link>
         )}
       </form>
 
       {board.length === 0 ? (
-        <div className="crm-empty">No quotes yet. New leads from the website will land in the New column.</div>
+        <div className="crm-empty">{t.pipeline.empty}</div>
       ) : (
         <KanbanBoard
           base={base}
@@ -84,6 +87,7 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
           initialQuotes={board}
           contractors={contractors.map((c) => ({ id: c.id, label: c.full_name || c.email || "Contractor" }))}
           nameMap={nameMap}
+          locale={locale}
         />
       )}
     </main>

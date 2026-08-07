@@ -1,4 +1,5 @@
 import { requireSession } from "@/lib/crm/auth";
+import { dict } from "@/lib/crm/i18n";
 import { googleConfigured, googleStatus } from "@/lib/crm/gcal";
 import { crmBase } from "@/lib/crm/nav";
 import { listScheduled } from "@/lib/crm/queries";
@@ -23,6 +24,7 @@ export default async function CalendarPage({
   const session = await requireSession();
   const base = await crmBase();
   const isOwner = session.staff.role === "owner";
+  const t = dict(session.staff.locale);
   const { google } = await searchParams;
 
   const quotes = await listScheduled(session);
@@ -54,11 +56,8 @@ export default async function CalendarPage({
     <main className="crm-page">
       <div className="crm-page-head">
         <div>
-          <h1>Calendar</h1>
-          <p className="crm-muted">
-            Job installs, in-person quotes and online quotes, color-coded. Tap a color below to filter; click any item
-            to open the deal.
-          </p>
+          <h1>{t.calendar.title}</h1>
+          <p className="crm-muted">{t.calendar.subtitle}</p>
         </div>
       </div>
 

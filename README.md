@@ -110,7 +110,7 @@ approved, declined, date confirmed or moved, can't-confirm, completed, and paid.
 You're never texted about an action you performed yourself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/scheduling.sql` and `supabase/invites.sql` in the SQL Editor.
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/scheduling.sql`, `supabase/invites.sql` and `supabase/locale.sql` in the SQL Editor.
 2. Confirm Vercel env vars exist: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (the CRM needs the service-role key).
 3. Create your owner login: Supabase → **Authentication → Users → Add user** (email + password), then run the promote snippet at the bottom of `supabase/crm.sql`.
 4. **Subdomain:** in Vercel → Project → **Domains**, add `crm.raleighconcrete.net`; in your DNS registrar add the **CNAME** Vercel shows (typically `crm` → `cname.vercel-dns.com`). Routing to the CRM is already wired in `src/middleware.ts`. (Until DNS is live you can also reach it at `raleighconcrete.net/crm`.)
@@ -120,6 +120,18 @@ Your Supabase automation already fires on new `quote_requests` rows. Each row no
 `public_token` and `job_token` columns — build the URLs in your message template:
 - Contractor text (with photos): `https://raleighconcrete.net/job/{{ job_token }}`
 - Customer text (their quote): `https://raleighconcrete.net/q/{{ public_token }}`
+
+**English / Spanish**
+Every CRM screen a contractor can reach renders in **English or Spanish**, per person. They choose
+on the onboarding form before their account exists, and can change it any time under **Settings →
+Language**. The choice lives on their staff row, so it follows them to any device.
+- The **login screen** has English/Español links, since there's no account to read a preference from
+  yet (`/crm/login?lang=es`).
+- Translations live in `src/lib/crm/i18n.ts`. There's no i18n package — the Spanish dictionary is
+  typed as `typeof en`, so **a missing translation fails the build** rather than silently showing
+  English to a Spanish speaker.
+- Owner-only admin screens (Contractors, Security, Archived) are English only — no contractor sees
+  them. Customer-facing pages are unchanged.
 
 **Adding a contractor**
 Preferred way: **CRM → Contractors → Invite a contractor**. Enter their phone number and they get a

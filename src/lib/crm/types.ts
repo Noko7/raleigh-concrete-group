@@ -10,6 +10,8 @@ export type Staff = {
   role: Role;
   active: boolean;
   must_reset_password: boolean;
+  // Which language the CRM renders in for this person.
+  locale: string;
   created_at: string;
 };
 

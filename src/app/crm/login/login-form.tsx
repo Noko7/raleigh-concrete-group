@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 
-export function LoginForm({ base, next }: { base: string; next?: string }) {
+import { dict, type Locale } from "@/lib/crm/i18n";
+
+export function LoginForm({ base, next, locale = "en" }: { base: string; next?: string; locale?: Locale }) {
+  const t = dict(locale);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -23,9 +26,9 @@ export function LoginForm({ base, next }: { base: string; next?: string }) {
         window.location.href = next || `${base}/`;
         return;
       }
-      setError(json.error || "Could not sign in.");
+      setError(json.error || t.login.failed);
     } catch {
-      setError("Network error. Please try again.");
+      setError(t.login.network);
     } finally {
       setBusy(false);
     }
@@ -34,11 +37,11 @@ export function LoginForm({ base, next }: { base: string; next?: string }) {
   return (
     <form className="crm-auth-form" onSubmit={onSubmit}>
       <label className="crm-field">
-        <span>Email</span>
+        <span>{t.login.email}</span>
         <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
       </label>
       <label className="crm-field">
-        <span>Password</span>
+        <span>{t.login.password}</span>
         <input
           type="password"
           autoComplete="current-password"
@@ -49,7 +52,7 @@ export function LoginForm({ base, next }: { base: string; next?: string }) {
       </label>
       {error && <p className="crm-auth-error">{error}</p>}
       <button type="submit" className="crm-btn crm-btn-primary" disabled={busy}>
-        {busy ? "Signing in…" : "Sign In"}
+        {busy ? t.login.submitting : t.login.submit}
       </button>
     </form>
   );

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { isEmailAllowed } from "@/lib/crm/access";
+import { isLocale } from "@/lib/crm/i18n";
 import { consumeInvite, getUsableInvite } from "@/lib/crm/queries";
 import { adminCreateUser, pgAdmin } from "@/lib/crm/rest";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -22,7 +23,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Too many attempts. Please wait a few minutes." }, { status: 429 });
   }
 
-  let body: { token?: unknown; full_name?: unknown; email?: unknown; password?: unknown; phone?: unknown };
+  let body: {
+    token?: unknown;
+    full_name?: unknown;
+    email?: unknown;
+    password?: unknown;
+    locale?: unknown;
+  };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -35,6 +42,9 @@ export async function POST(request: Request) {
   const fullName = (typeof body.full_name === "string" ? body.full_name : "").trim().slice(0, 120);
   const email = (typeof body.email === "string" ? body.email : "").trim().toLowerCase().slice(0, 254);
   const password = typeof body.password === "string" ? body.password : "";
+  // Whatever they picked on the form becomes their CRM language. Anything we
+  // don't ship falls back to English rather than failing the check constraint.
+  const locale = isLocale(body.locale) ? body.locale : "en";
 
   if (fullName.length < 2) {
     return NextResponse.json({ ok: false, error: "Enter your full name." }, { status: 400 });
@@ -91,6 +101,7 @@ export async function POST(request: Request) {
       role: "contractor",
       active: true,
       must_reset_password: false,
+      locale,
     }),
   });
   if (!res.ok) {

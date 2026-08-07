@@ -3,10 +3,12 @@
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+import { dict, type Locale } from "@/lib/crm/i18n";
 import { setNewPassword } from "./reset/actions";
 import type { ResetState } from "./reset/types";
 
-export function ForceReset() {
+export function ForceReset({ locale = "en" }: { locale?: Locale }) {
+  const t = dict(locale);
   const router = useRouter();
   const [state, formAction, pending] = useActionState<ResetState, FormData>(setNewPassword, { ok: false });
 
@@ -17,22 +19,22 @@ export function ForceReset() {
   return (
     <main className="crm-page crm-page-narrow">
       <div className="crm-card">
-        <h1 className="crm-card-title">Set your password</h1>
+        <h1 className="crm-card-title">{t.reset.title}</h1>
         <p className="crm-muted crm-sm" style={{ marginBottom: "1rem" }}>
-          Welcome aboard. For security, pick a new password before you start using the CRM.
+          {t.reset.subtitle}
         </p>
         <form action={formAction} className="crm-editor">
           <label className="crm-field">
-            <span>New password</span>
+            <span>{t.reset.newPassword}</span>
             <input name="password" type="password" className="crm-input" autoComplete="new-password" minLength={8} required />
           </label>
           <label className="crm-field">
-            <span>Confirm password</span>
+            <span>{t.reset.confirm}</span>
             <input name="confirm" type="password" className="crm-input" autoComplete="new-password" minLength={8} required />
           </label>
           <div className="crm-editor-foot">
             <button type="submit" className="crm-btn crm-btn-primary" disabled={pending}>
-              {pending ? "Saving…" : "Save password"}
+              {pending ? t.reset.submitting : t.reset.submit}
             </button>
             {state.error && <span className="crm-auth-error">{state.error}</span>}
           </div>

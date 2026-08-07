@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 
+import { dict } from "@/lib/crm/i18n";
 import { getUsableInvite } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { JoinForm } from "./join-form";
@@ -15,6 +16,9 @@ export const metadata: Metadata = {
 export default async function JoinPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const invite = await getUsableInvite(token);
+  // The shell renders in English; the form itself re-renders in whichever
+  // language they pick, since they have no account to read a preference from.
+  const t = dict("en");
 
   // One message for every unusable case - unknown, revoked, used, expired - so
   // this page can't be used to work out which tokens exist.
@@ -22,11 +26,10 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
     return (
       <main className="cq-wrap">
         <div className="cq-confirm">
-          <p className="cq-confirm-eyebrow cq-confirm-eyebrow-muted">Invite unavailable</p>
-          <h1 className="cq-confirm-title">This link isn&apos;t valid</h1>
+          <p className="cq-confirm-eyebrow cq-confirm-eyebrow-muted">{t.join.invalidEyebrow}</p>
+          <h1 className="cq-confirm-title">{t.join.invalidTitle}</h1>
           <p className="cq-confirm-note">
-            It may have already been used, been cancelled, or expired. Ask Raleigh Concrete Group to text you a new
-            one.
+            {t.join.invalidNote}
           </p>
           <Image
             src="/images/logo_horizontal.png"

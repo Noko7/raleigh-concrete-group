@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
 import { SITE_ORIGIN } from "@/lib/crm/env";
-import { LEAD_TIME_DAYS, STATUS_LABELS } from "@/lib/crm/constants";
+import { LEAD_TIME_DAYS } from "@/lib/crm/constants";
+import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText } from "@/lib/crm/events";
 import { getQuote, listAgreementsForQuote, listContractors, listEvents, listStaff } from "@/lib/crm/queries";
@@ -34,6 +35,8 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   if (!quote) notFound();
 
   const isOwner = session.staff.role === "owner";
+  const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
+  const t = dict(locale);
   const allStaff = await listStaff(session);
   const contractors = (isOwner ? allStaff : await listContractors(session)).filter((s) => s.role === "contractor");
   const nameMap = new Map(allStaff.map((s) => [s.id, s.full_name || s.email || "Staff"]));
@@ -56,91 +59,91 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   return (
     <main className="crm-page">
       <div className="crm-breadcrumb">
-        <Link href={`${base}/`}>← All quotes</Link>
+        <Link href={`${base}/`}>{t.job.backToAll}</Link>
       </div>
 
       <div className="crm-page-head">
         <h1>{quote.name}</h1>
-        <span className={`crm-badge crm-badge-${quote.status}`}>{STATUS_LABELS[quote.status] ?? quote.status}</span>
+        <span className={`crm-badge crm-badge-${quote.status}`}>{t.status[quote.status] ?? quote.status}</span>
       </div>
 
       <div className="crm-grid">
         <section className="crm-col">
           <div className="crm-card">
-            <h2 className="crm-card-title">Customer</h2>
+            <h2 className="crm-card-title">{t.job.customer}</h2>
             <dl className="crm-dl">
               <div>
-                <dt>Phone</dt>
+                <dt>{t.job.phone}</dt>
                 <dd>
                   <a href={`tel:${quote.phone.replace(/[^0-9+]/g, "")}`}>{quote.phone}</a>
                 </dd>
               </div>
               {quote.email && (
                 <div>
-                  <dt>Email</dt>
+                  <dt>{t.job.email}</dt>
                   <dd>
                     <a href={`mailto:${quote.email}`}>{quote.email}</a>
                   </dd>
                 </div>
               )}
               <div>
-                <dt>Service</dt>
-                <dd>{quote.service || "N/A"}</dd>
+                <dt>{t.job.service}</dt>
+                <dd>{quote.service || t.job.na}</dd>
               </div>
               <div>
-                <dt>Type</dt>
-                <dd>{quote.quote_type === "online" ? "Online (photos)" : quote.quote_type === "inperson" ? "In-person" : "N/A"}</dd>
+                <dt>{t.job.type}</dt>
+                <dd>{quote.quote_type === "online" ? t.job.typeOnline : quote.quote_type === "inperson" ? t.job.typeInPerson : t.job.na}</dd>
               </div>
               {quote.visit_date && (
                 <div>
-                  <dt>Requested visit</dt>
+                  <dt>{t.job.requestedVisit}</dt>
                   <dd>
                     <strong className="crm-link-strong">{prettyDate(quote.visit_date)}</strong>
-                    {quote.visit_time ? ` at ${quote.visit_time}` : ""}
+                    {quote.visit_time ? ` ${t.contractorJob.at} ${quote.visit_time}` : ""}
                   </dd>
                 </div>
               )}
               {!quote.visit_date && quote.preferred_time && (
                 <div>
-                  <dt>Preferred time</dt>
+                  <dt>{t.job.preferredTime}</dt>
                   <dd>{quote.preferred_time}</dd>
                 </div>
               )}
               <div>
-                <dt>Address</dt>
+                <dt>{t.job.address}</dt>
                 <dd>
-                  {quote.address || "N/A"}
+                  {quote.address || t.job.na}
                   {mapsLink && (
                     <>
                       {" "}
                       <a href={mapsLink} target="_blank" rel="noreferrer" className="crm-link-strong">
-                        Map
+                        {t.job.map}
                       </a>
                     </>
                   )}
                 </dd>
               </div>
               <div>
-                <dt>Received</dt>
+                <dt>{t.job.received}</dt>
                 <dd>{fmt(quote.created_at)}</dd>
               </div>
               <div>
-                <dt>Customer views</dt>
+                <dt>{t.job.customerViews}</dt>
                 <dd>
-                  {quote.view_count} {quote.viewed_at ? `· first ${fmt(quote.viewed_at)}` : "· not opened yet"}
+                  {quote.view_count} {quote.viewed_at ? `· ${t.job.firstViewed} ${fmt(quote.viewed_at)}` : `· ${t.job.notOpened}`}
                 </dd>
               </div>
               {quote.customer_response && (
                 <div>
-                  <dt>Customer response</dt>
+                  <dt>{t.job.customerResponse}</dt>
                   <dd>
                     {quote.customer_response === "accepted" ? (
                       <strong className="crm-link-strong">
-                        Accepted{quote.discount_accepted ? " ($150 credit)" : ""}
+                        {t.job.accepted}{quote.discount_accepted ? " ($150)" : ""}
                         {quote.scheduled_date ? ` · ${prettyDate(quote.scheduled_date)}` : ""}
                       </strong>
                     ) : (
-                      "Declined"
+                      t.job.declined
                     )}
                   </dd>
                 </div>
@@ -148,19 +151,19 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             </dl>
             {quote.details && (
               <div className="crm-details-block">
-                <h3>Project details</h3>
+                <h3>{t.job.projectDetails}</h3>
                 <p>{quote.details}</p>
               </div>
             )}
           </div>
 
           <div className="crm-card">
-            <h2 className="crm-card-title">Photos &amp; video ({photoUrls.length})</h2>
+            <h2 className="crm-card-title">{t.job.photos} ({photoUrls.length})</h2>
             {photoUrls.length === 0 ? (
               <p className="crm-muted">
                 {quote.quote_type === "online"
-                  ? "No files were uploaded with this request."
-                  : "This was an in-person request, so no photos were uploaded."}
+                  ? t.job.noFiles
+                  : t.job.noFilesInPerson}
               </p>
             ) : (
               <PhotoGrid urls={photoUrls} />
@@ -184,7 +187,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
 
           {events.length > 0 && (
             <div className="crm-card">
-              <h2 className="crm-card-title">Activity</h2>
+              <h2 className="crm-card-title">{t.job.activity}</h2>
               <ul className="crm-timeline">
                 {events.map((e) => (
                   <li key={e.id}>
@@ -223,21 +226,21 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               scheduledDate={quote.scheduled_date}
               preferredDates={quote.preferred_dates ?? []}
               minDate={minJobDate}
+              locale={locale}
             />
           )}
 
           {quote.status === "scheduled" && (
             <div className="crm-card">
-              <h2 className="crm-card-title">Finish the job</h2>
+              <h2 className="crm-card-title">{t.finish.title}</h2>
               <p className="crm-muted crm-sm">
-                {quote.confirmed_at ? "Customer confirmed the date." : "Waiting on the customer's confirmation."}{" "}
-                When the work is done on site, mark it completed to thank the customer and request a review. You&apos;ll
-                collect payment in the next step.
+                {quote.confirmed_at ? t.finish.confirmed : t.finish.awaitingConfirm}{" "}
+                {t.finish.hint}
               </p>
               <form action={completeJob}>
                 <input type="hidden" name="id" value={quote.id} />
                 <button type="submit" className="crm-btn crm-btn-primary">
-                  Mark completed
+                  {t.finish.markCompleted}
                 </button>
               </form>
             </div>
@@ -245,23 +248,23 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
 
           {quote.status === "completed" && (
             <div className="crm-card">
-              <h2 className="crm-card-title">Get paid</h2>
+              <h2 className="crm-card-title">{t.finish.payTitle}</h2>
               <p className="crm-muted crm-sm">
                 {quote.payment_requested_at
-                  ? "Payment instructions were texted to the customer. Mark it paid once the money lands."
-                  : "Text the customer how to pay (Zelle / deposit), then mark it paid once the money lands."}
+                  ? t.finish.paySent
+                  : t.finish.payHint}
               </p>
               <div className="crm-editor-foot">
                 <form action={requestPayment}>
                   <input type="hidden" name="id" value={quote.id} />
                   <button type="submit" className="crm-btn crm-btn-ghost">
-                    {quote.payment_requested_at ? "Resend payment text" : "Request payment"}
+                    {quote.payment_requested_at ? t.finish.resendPayment : t.finish.requestPayment}
                   </button>
                 </form>
                 <form action={markPaid}>
                   <input type="hidden" name="id" value={quote.id} />
                   <button type="submit" className="crm-btn crm-btn-primary">
-                    Mark paid
+                    {t.finish.markPaid}
                   </button>
                 </form>
               </div>
@@ -270,7 +273,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
 
           {quote.status === "paid" && (
             <div className="crm-card">
-              <h2 className="crm-card-title">Paid</h2>
+              <h2 className="crm-card-title">{t.finish.paidTitle}</h2>
               <p className="crm-muted crm-sm">
                 This job is paid and closed out{quote.paid_at ? ` (${fmt(quote.paid_at)})` : ""}. Nothing else to do.
               </p>
@@ -278,21 +281,20 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
           )}
 
           <div className="crm-card">
-            <h2 className="crm-card-title">Shareable links</h2>
+            <h2 className="crm-card-title">{t.links.title}</h2>
             <p className="crm-muted crm-sm">
-              Text the customer link after you set an amount and summary. The job link shows photos and address to the
-              assigned contractor, who has to be signed in to open it.
+              {t.links.hint}
             </p>
-            <CopyField label="Customer quote (branded, tracked)" value={customerLink} />
-            <CopyField label="Contractor job link (photos + address)" value={jobLink} />
+            <CopyField label={t.links.customerLink} value={customerLink} />
+            <CopyField label={t.links.jobLink} value={jobLink} />
             <div className="crm-editor-foot">
               <form action={rotateTokens}>
                 <input type="hidden" name="id" value={quote.id} />
                 <button type="submit" className="crm-btn crm-btn-ghost">
-                  Regenerate links
+                  {t.links.regenerate}
                 </button>
               </form>
-              <span className="crm-muted crm-sm">Invalidates the current links if one was shared too widely.</span>
+              <span className="crm-muted crm-sm">{t.links.regenerateHint}</span>
             </div>
           </div>
         </section>

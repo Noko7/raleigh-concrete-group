@@ -1,4 +1,5 @@
 import { requireSession } from "@/lib/crm/auth";
+import { dict, isLocale } from "@/lib/crm/i18n";
 import { ownerRecipients, smsDiagnostics } from "@/lib/crm/notify";
 import { getPrimaryContractorId, listContractors } from "@/lib/crm/queries";
 import { SettingsForm } from "./settings-form";
@@ -16,13 +17,14 @@ export default async function SettingsPage() {
   const primaryId = isOwner ? await getPrimaryContractorId() : null;
   const sms = isOwner ? smsDiagnostics() : null;
   const alertTargets = isOwner ? await ownerRecipients() : [];
+  const t = dict(staff.locale);
 
   return (
     <main className="crm-page crm-page-narrow">
       <div className="crm-page-head">
         <div>
-          <h1>Settings</h1>
-          <p className="crm-muted">Update your name and the number we text for job alerts.</p>
+          <h1>{t.settings.title}</h1>
+          <p className="crm-muted">{t.settings.subtitle}</p>
         </div>
       </div>
       <SettingsForm
@@ -30,6 +32,7 @@ export default async function SettingsPage() {
         phone={staff.phone ?? ""}
         email={staff.email ?? session.user.email ?? ""}
         role={staff.role}
+        locale={isLocale(staff.locale) ? staff.locale : "en"}
       />
       {isOwner && (
         <PrimaryContractorForm

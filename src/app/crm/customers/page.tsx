@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { requireSession } from "@/lib/crm/auth";
 import { STATUS_LABELS, type Status } from "@/lib/crm/constants";
+import { dict } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { listQuotes } from "@/lib/crm/queries";
 
@@ -24,6 +25,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const session = await requireSession();
   const base = await crmBase();
   const sp = await searchParams;
+  const t = dict(session.staff.locale);
 
   const quotes = await listQuotes(session, { search: sp.search });
 
@@ -61,10 +63,8 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   return (
     <main className="crm-page">
       <div className="crm-page-head">
-        <h1>Customers</h1>
-        <p className="crm-muted">
-          {customers.length} {customers.length === 1 ? "customer" : "customers"} · grouped by phone/email
-        </p>
+        <h1>{t.customers.title}</h1>
+        <p className="crm-muted">{t.customers.subtitle}</p>
       </div>
 
       <form className="crm-filters" method="get" action={`${base}/customers`}>

@@ -1522,6 +1522,12 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .kb-delete-btn { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
 }
 
+/* Language links on the login screen (no session yet, so they're plain links) */
+.crm-auth-langs { display: flex; gap: 0.6rem; justify-content: center; margin-top: 1rem; font-size: 0.85rem; }
+.crm-auth-langs a { color: var(--crm-muted); text-decoration: none; }
+.crm-auth-langs a:hover { color: var(--crm-text); }
+.crm-auth-langs a.on { color: var(--amber); font-weight: 700; }
+
 /* Inline contact edit on the Contractors table */
 .contact-form { min-width: 240px; text-align: left; }
 .delete-form { min-width: 260px; text-align: left; }

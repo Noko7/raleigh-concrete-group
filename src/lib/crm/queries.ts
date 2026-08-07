@@ -118,11 +118,12 @@ export async function getStaffById(session: Session, id: string): Promise<Staff 
 // name/phone columns only - role and active can never be changed here.
 export async function updateOwnProfile(
   session: Session,
-  patch: { full_name?: string | null; phone?: string | null },
+  patch: { full_name?: string | null; phone?: string | null; locale?: string },
 ): Promise<boolean> {
   const body: Record<string, unknown> = {};
   if (patch.full_name !== undefined) body.full_name = patch.full_name;
   if (patch.phone !== undefined) body.phone = patch.phone;
+  if (patch.locale !== undefined) body.locale = patch.locale;
   if (Object.keys(body).length === 0) return true;
   const res = await pgAdmin(`staff?id=eq.${encodeURIComponent(session.staff.id)}`, {
     method: "PATCH",
