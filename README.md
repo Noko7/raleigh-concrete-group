@@ -111,10 +111,10 @@ Your Supabase automation already fires on new `quote_requests` rows. Each row no
 The app texts you and your crew automatically: a **new lead** texts the owner; **assigning** a job
 texts that contractor their job link; and when a contractor advances a job the owner gets a heads-up.
 Add these Vercel env vars (no SQL needed):
-- `OWNER_PHONE` — your number for owner alerts (e.g. `+19198977695`).
+- `OWNER_PHONE` — your number for owner alerts (e.g. `+19198733919`).
 - **Quo (OpenPhone)** — the default when `QUO_API_KEY` is set:
   - `QUO_API_KEY` — from Quo → Settings → API (used as the `Authorization` header).
-  - `QUO_FROM` — your Quo number in E.164 (e.g. `+19198977695`).
+  - `QUO_FROM` — your Quo number in E.164 (e.g. `+19198733919`).
   - `QUO_USER_ID` *(optional)* — send as a specific workspace member.
   - Note: Quo requires completed **US carrier (A2P) registration** to text US numbers.
 - `SMS_PROVIDER` *(optional override)* — `quo`, `twilio`, or `custom`.
