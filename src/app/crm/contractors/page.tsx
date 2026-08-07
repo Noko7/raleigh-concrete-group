@@ -1,5 +1,7 @@
 import { requireOwner } from "@/lib/crm/auth";
-import { listStaff } from "@/lib/crm/queries";
+import { listAllAgreements, listStaff } from "@/lib/crm/queries";
+import { AddAgreement } from "../agreements/add-agreement";
+import { AgreementList, AgreementStatusBadge } from "../agreements/agreement-list";
 import { AddContractor } from "./add-contractor";
 import { ResetPassword } from "./reset-password";
 import { setContractorActive } from "./actions";
@@ -10,6 +12,16 @@ export default async function ContractorsPage() {
   const session = await requireOwner();
   const staff = await listStaff(session);
   const contractors = staff.filter((s) => s.role === "contractor");
+
+  // One fetch for the whole page, then bucket by contractor.
+  const allAgreements = await listAllAgreements(session);
+  const byStaff = new Map<string, typeof allAgreements>();
+  for (const a of allAgreements) {
+    if (a.kind !== "contractor" || !a.staff_id) continue;
+    const list = byStaff.get(a.staff_id) ?? [];
+    list.push(a);
+    byStaff.set(a.staff_id, list);
+  }
 
   return (
     <main className="crm-page">
@@ -33,6 +45,7 @@ export default async function ContractorsPage() {
                   <th>Email</th>
                   <th>Phone</th>
                   <th>Status</th>
+                  <th>Agreement</th>
                   <th></th>
                 </tr>
               </thead>
@@ -48,6 +61,18 @@ export default async function ContractorsPage() {
                       ) : (
                         <span className="crm-badge crm-badge-lost">Inactive</span>
                       )}
+                    </td>
+                    <td>
+                      {(() => {
+                        const list = byStaff.get(c.id) ?? [];
+                        // Show the signed one if there is one, otherwise the most recent.
+                        const headline = list.find((a) => a.status === "signed") ?? list[0];
+                        return headline ? (
+                          <AgreementStatusBadge status={headline.status} />
+                        ) : (
+                          <span className="crm-muted crm-sm">None</span>
+                        );
+                      })()}
                     </td>
                     <td className="crm-row-actions">
                       <form action={setContractorActive}>
@@ -66,6 +91,33 @@ export default async function ContractorsPage() {
           </div>
         )}
       </div>
+
+      {contractors.length > 0 && (
+        <div className="crm-card">
+          <h2 className="crm-card-title">Onboarding agreements</h2>
+          <p className="crm-muted crm-sm">
+            One signed agreement per crew member. Send it from DocuSeal, then record it here so you can see at a glance
+            who is covered. Contractors can view their own agreement in the CRM but can&apos;t change its status.
+          </p>
+          <div className="ag-groups">
+            {contractors.map((c) => (
+              <div key={c.id} className="ag-group">
+                <div className="ag-group-head">
+                  <strong>{c.full_name || c.email || "Contractor"}</strong>
+                </div>
+                <AgreementList agreements={byStaff.get(c.id) ?? []} isOwner />
+                <div className="ag-add">
+                  <AddAgreement
+                    kind="contractor"
+                    targetId={c.id}
+                    defaultTitle={`Contractor agreement — ${c.full_name || c.email || "Contractor"}`}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -23,6 +23,10 @@ export const RT_COOKIE = "rcg_rt";
 
 export const UPLOAD_BUCKET = "quote-uploads";
 
+// Private bucket holding signed contracts. Served only through
+// /crm/api/agreement, which scopes access with RLS.
+export const AGREEMENT_BUCKET = "agreements";
+
 // Public site origin used to build the customer/contractor links you text out.
 export const SITE_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL || "https://raleighconcrete.net").replace(/\/$/, "");
 

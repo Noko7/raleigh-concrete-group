@@ -62,6 +62,28 @@ export type QuoteEvent = {
   created_at: string;
 };
 
+export type AgreementKind = "contractor" | "customer";
+export type AgreementStatus = "pending" | "sent" | "signed" | "declined" | "void";
+
+// One contract we track in the CRM. The signing itself happens in DocuSeal
+// (managed separately); this is the record of it, plus the stored file.
+export type Agreement = {
+  id: string;
+  kind: AgreementKind;
+  staff_id: string | null;
+  quote_id: string | null;
+  title: string;
+  status: AgreementStatus;
+  file_path: string | null;
+  docuseal_url: string | null;
+  sent_at: string | null;
+  signed_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type LoginAttempt = {
   id: string;
   created_at: string;

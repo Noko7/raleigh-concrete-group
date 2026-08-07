@@ -96,7 +96,7 @@ All of it runs over Supabase's REST/Auth APIs (no extra packages).
 5. Contractor hits **Mark complete + paid** → customer gets a thank-you + Google review link (**Complete**).
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql` in the SQL Editor.
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql` in the SQL Editor.
 2. Confirm Vercel env vars exist: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (the CRM needs the service-role key).
 3. Create your owner login: Supabase → **Authentication → Users → Add user** (email + password), then run the promote snippet at the bottom of `supabase/crm.sql`.
 4. **Subdomain:** in Vercel → Project → **Domains**, add `crm.raleighconcrete.net`; in your DNS registrar add the **CNAME** Vercel shows (typically `crm` → `cname.vercel-dns.com`). Routing to the CRM is already wired in `src/middleware.ts`. (Until DNS is live you can also reach it at `raleighconcrete.net/crm`.)
@@ -106,6 +106,21 @@ Your Supabase automation already fires on new `quote_requests` rows. Each row no
 `public_token` and `job_token` columns — build the URLs in your message template:
 - Contractor text (with photos): `https://raleighconcrete.net/job/{{ job_token }}`
 - Customer text (their quote): `https://raleighconcrete.net/q/{{ public_token }}`
+
+**Agreements (DocuSeal)**
+Signing itself happens in **DocuSeal**, which you manage separately: you build the template there,
+send it, and DocuSeal emails the signer and hosts the signing page. The CRM is the *record* of it —
+**CRM → Agreements** (`/crm/agreements`) tracks status, and stores the signed file.
+- **Contractor agreements** — one onboarding doc per crew member, added from **CRM → Contractors**.
+- **Customer agreements** — one per job, added from that job's page.
+- Statuses: Not sent → Awaiting signature → Signed (or Declined / Void). You set these yourself,
+  since DocuSeal isn't wired into the app.
+- Files live in a **private** `agreements` storage bucket and are only ever served through
+  `/crm/api/agreement`, which scopes access with RLS: an owner sees everything, a contractor sees
+  only their own agreement and jobs assigned to them.
+- Requires `supabase/agreements.sql` (step 1 above). No new env vars, no npm packages.
+- Note: a customer with no email on file can't be emailed by DocuSeal — the quote form makes email
+  optional, so check the job page before sending.
 
 **Built-in SMS alerts (owner + contractor)**
 The app texts you and your crew automatically: a **new lead** texts the owner; **assigning** a job

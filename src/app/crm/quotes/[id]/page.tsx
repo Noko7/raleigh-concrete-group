@@ -6,7 +6,9 @@ import { SITE_ORIGIN } from "@/lib/crm/env";
 import { STATUS_LABELS } from "@/lib/crm/constants";
 import { crmBase } from "@/lib/crm/nav";
 import type { QuoteEvent } from "@/lib/crm/types";
-import { getQuote, listContractors, listEvents, listStaff } from "@/lib/crm/queries";
+import { getQuote, listAgreementsForQuote, listContractors, listEvents, listStaff } from "@/lib/crm/queries";
+import { AddAgreement } from "../../agreements/add-agreement";
+import { AgreementList } from "../../agreements/agreement-list";
 import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
 import { QuoteEditor } from "./quote-editor";
@@ -85,6 +87,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const contractors = (isOwner ? allStaff : await listContractors(session)).filter((s) => s.role === "contractor");
   const nameMap = new Map(allStaff.map((s) => [s.id, s.full_name || s.email || "Staff"]));
   const events = await listEvents(session, id);
+  const agreements = await listAgreementsForQuote(session, id);
   const photoUrls = (quote.file_urls ?? []).map((p) => `${base}/api/file?p=${encodeURIComponent(p)}`);
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
@@ -207,6 +210,21 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             )}
           </div>
 
+          <div className="crm-card">
+            <h2 className="crm-card-title">Customer agreement ({agreements.length})</h2>
+            <p className="crm-muted crm-sm">
+              Send the agreement from DocuSeal, then track it here. {quote.email
+                ? `DocuSeal will email ${quote.email}.`
+                : "This customer has no email on file, so DocuSeal can't email them — share the signing link another way."}
+            </p>
+            <AgreementList agreements={agreements} isOwner={isOwner} />
+            {isOwner && (
+              <div className="ag-add">
+                <AddAgreement kind="customer" targetId={quote.id} defaultTitle={`Customer agreement — ${quote.name}`} />
+              </div>
+            )}
+          </div>
+
           {events.length > 0 && (
             <div className="crm-card">
               <h2 className="crm-card-title">Activity</h2>
@@ -296,8 +314,8 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
           <div className="crm-card">
             <h2 className="crm-card-title">Shareable links</h2>
             <p className="crm-muted crm-sm">
-              Text the customer link after you set an amount and summary. The job link shows photos and address to a
-              contractor without a login.
+              Text the customer link after you set an amount and summary. The job link shows photos and address to the
+              assigned contractor, who has to be signed in to open it.
             </p>
             <CopyField label="Customer quote (branded, tracked)" value={customerLink} />
             <CopyField label="Contractor job link (photos + address)" value={jobLink} />

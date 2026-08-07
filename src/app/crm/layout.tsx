@@ -32,6 +32,7 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
               <Link href={`${base}/`}>Pipeline</Link>
               <Link href={`${base}/calendar`}>Calendar</Link>
               <Link href={`${base}/customers`}>Customers</Link>
+              <Link href={`${base}/agreements`}>Agreements</Link>
               {isOwner && <Link href={`${base}/contractors`}>Contractors</Link>}
               {isOwner && <Link href={`${base}/archived`}>Archived</Link>}
               {isOwner && <Link href={`${base}/security`}>Security</Link>}
