@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isEmailAllowed } from "@/lib/crm/access";
 import { isLocale } from "@/lib/crm/i18n";
+import { toE164 } from "@/lib/crm/notify";
 import { consumeInvite, getUsableInvite } from "@/lib/crm/queries";
 import { adminCreateUser, pgAdmin } from "@/lib/crm/rest";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
     email?: unknown;
     password?: unknown;
     locale?: unknown;
+    phone?: unknown;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -57,6 +59,17 @@ export async function POST(request: Request) {
   }
   if (password.length > 72) {
     return NextResponse.json({ ok: false, error: "That password is too long." }, { status: 400 });
+  }
+  // The number they want alerts on. Normalised here because the SMS providers
+  // require E.164 - a raw "919-555-1234" would be rejected at send time, long
+  // after they'd have any way to fix it.
+  const rawPhone = typeof body.phone === "string" ? body.phone : "";
+  const phone = rawPhone.trim() ? toE164(rawPhone) : null;
+  if (rawPhone.trim() && !phone) {
+    return NextResponse.json(
+      { ok: false, error: "Enter a valid US mobile number, e.g. (919) 555-1234." },
+      { status: 400 },
+    );
   }
   // An address outside the allowlist would produce an account that exists but is
   // refused at login, so stop here rather than building something unusable.
@@ -95,9 +108,9 @@ export async function POST(request: Request) {
     body: JSON.stringify({
       full_name: fullName,
       email,
-      // Their number comes from the invite the owner sent, not from the form,
-      // so it can't be swapped for someone else's.
-      phone: invite.phone,
+      // The number they entered, falling back to the one the owner invited if
+      // they cleared the field - never end up with no way to reach them.
+      phone: phone ?? invite.phone,
       role: "contractor",
       active: true,
       must_reset_password: false,
