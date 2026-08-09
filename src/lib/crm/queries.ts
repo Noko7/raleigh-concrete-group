@@ -57,15 +57,54 @@ export async function getQuote(session: Session, id: string): Promise<Quote | nu
   return rows[0] ?? null;
 }
 
-export async function updateQuote(session: Session, id: string, patch: Partial<Quote>): Promise<Quote | null> {
+// Same update, but it says why it failed. A bare null can't distinguish "the
+// database is missing a column" from "RLS blocked you", and both used to surface
+// to the crew as "Could not save that date. Please try again." - advice that
+// never works, for a problem retrying can't fix.
+export async function updateQuoteResult(
+  session: Session,
+  id: string,
+  patch: Partial<Quote>,
+): Promise<{ quote: Quote | null; error?: string }> {
   const res = await pgUser(`quote_requests?id=eq.${encodeURIComponent(id)}`, session.accessToken, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify(patch),
   });
-  if (!res.ok) return null;
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[updateQuote] failed", { id, status: res.status, body, patch: Object.keys(patch) });
+
+    // PGRST204 = "column ... does not exist": a migration hasn't been run yet.
+    // Name the file, because that's the only thing that fixes it.
+    const missing = body.match(/'([a-z_]+)' column/i)?.[1] ?? body.match(/column "([a-z_]+)"/i)?.[1];
+    if (body.includes("PGRST204") || /column .* does not exist/i.test(body)) {
+      return {
+        quote: null,
+        error: `The database is missing the "${missing ?? "scheduled"}" column. Run the SQL in supabase/ (see README) and try again.`,
+      };
+    }
+    if (res.status === 409) {
+      return { quote: null, error: "Another job is already booked on that day." };
+    }
+    return { quote: null, error: `Could not save (error ${res.status}). Please try again or call the office.` };
+  }
+
   const rows = (await res.json()) as Quote[];
-  return rows[0] ?? null;
+  // A successful PATCH that changed nothing means RLS filtered the row out:
+  // the job isn't assigned to this user any more.
+  if (!rows[0]) {
+    return {
+      quote: null,
+      error: "You can't change this job. It may have been reassigned to someone else.",
+    };
+  }
+  return { quote: rows[0] };
+}
+
+export async function updateQuote(session: Session, id: string, patch: Partial<Quote>): Promise<Quote | null> {
+  return (await updateQuoteResult(session, id, patch)).quote;
 }
 
 // id → display name for showing assignees without a PostgREST join.
@@ -228,6 +267,40 @@ export async function markReminderSent(id: string): Promise<void> {
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ reminder_sent_at: new Date().toISOString() }),
   });
+}
+
+// ── Crew reminders (cron) ───────────────────────────────────────────────────
+// Booked jobs landing on `date`, whatever their confirmation state. Unlike the
+// customer reminder there's no "sent" column to filter on here: which stages
+// have gone out is tracked per job in crew_reminders, checked by the caller.
+export async function listJobsOn(date: string): Promise<Quote[]> {
+  if (!ISO_DATE.test(date)) return [];
+  const res = await pgAdmin(`quote_requests?status=eq.scheduled&scheduled_date=eq.${date}&select=*`);
+  if (!res.ok) return [];
+  return (await res.json()) as Quote[];
+}
+
+// Wipe the countdown so a newly booked (or moved) date gets its own full run of
+// crew reminders. Best-effort by design - see confirmSchedule.
+export async function clearCrewReminders(id: string): Promise<void> {
+  await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ crew_reminders: null }),
+  }).catch(() => {});
+}
+
+// Record that the crew has had the reminder for this stage ("3", "1", "0").
+// Stored as an array rather than three columns so adding a stage later is a
+// constant change, not a migration. Re-confirming a date clears it.
+export async function markCrewReminded(quote: Quote, stage: string): Promise<void> {
+  const already = quote.crew_reminders ?? [];
+  if (already.includes(stage)) return;
+  await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(quote.id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ crew_reminders: [...already, stage] }),
+  }).catch(() => {});
 }
 
 // Activity-log entry written by automatic/server-only processes (no session).
@@ -429,7 +502,7 @@ export async function confirmSchedule(
     return { ok: false, error: "Another job is already booked that day." };
   }
 
-  const updated = await updateQuote(session, id, {
+  const { quote: updated, error } = await updateQuoteResult(session, id, {
     scheduled_date: date,
     scheduled_time: cleanTime,
     status: current.status === "completed" || current.status === "paid" ? current.status : "scheduled",
@@ -439,7 +512,12 @@ export async function confirmSchedule(
     confirmed_at: null,
     reminder_sent_at: null,
   });
-  if (!updated) return { ok: false, error: "Could not save that date. Please try again." };
+  if (!updated) return { ok: false, error: error ?? "Could not save that date. Please try again." };
+
+  // Re-arm the crew countdown for the new date. Deliberately a separate,
+  // best-effort write: booking the job is the thing that must not fail, and it
+  // shouldn't start depending on a column added later for reminders.
+  await clearCrewReminders(id);
 
   return { ok: true, previous: current.scheduled_date, previousTime: current.scheduled_time };
 }

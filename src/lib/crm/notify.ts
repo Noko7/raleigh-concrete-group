@@ -205,6 +205,29 @@ export function confirmLink(token: string): string {
 // The owner's first name used to sign customer-facing texts.
 const OWNER_NAME = (process.env.OWNER_NAME || "Noah").trim();
 const REVIEW_URL = (process.env.GOOGLE_REVIEW_URL || "").trim();
+const BUSINESS = "Raleigh Concrete Group";
+// The number the crew should call when they can't make an appointment. Falls
+// back to the main business line so this is never an empty sentence.
+const CALL_NUMBER = (process.env.OWNER_CALL_NUMBER || "(919) 873-3919").trim();
+
+// Every message in this file is built from lines, not sentences. A text arrives
+// as one wall of grey on a phone unless the important parts are given their own
+// line, and the crew reads these on a job site while holding something else.
+// `block("Label:", value)` is the shape used throughout: label, value, blank.
+function block(label: string, ...values: (string | null | undefined)[]): string[] {
+  const clean = values.filter((v): v is string => Boolean(v && v.trim()));
+  return clean.length ? [label, ...clean, ""] : [];
+}
+
+// Joins lines and collapses any run of blank lines to one, so an omitted block
+// never leaves a gap in the middle of a message.
+function text(lines: (string | null | undefined)[]): string {
+  return lines
+    .filter((l): l is string => l !== null && l !== undefined)
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 type QuoteInfo = {
   name: string;
@@ -224,21 +247,36 @@ type QuoteInfo = {
 };
 
 const firstName = (full: string) => full.trim().split(/\s+/)[0] || "there";
+const usd = (n?: number | null) => (n != null ? `$${Number(n).toLocaleString("en-US")}` : null);
 const money = (n?: number | null) => (n != null ? ` for $${Number(n).toLocaleString("en-US")}` : "");
-function prettyDay(ymd?: string | null): string {
-  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "your scheduled day";
-  return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+// 1st, 2nd, 3rd, 4th... Spelled-out dates read as a date rather than as data,
+// which matters when the whole message is one line on a lock screen.
+function ordinal(day: number): string {
+  if (day % 100 >= 11 && day % 100 <= 13) return `${day}th`;
+  return `${day}${["th", "st", "nd", "rd"][day % 10] ?? "th"}`;
 }
 
-// Same date, but honest when there isn't one - a crew text shouldn't say "your
-// scheduled day" for a job nobody has booked yet.
+// "Friday, August 29th". Honest when there isn't a date: a crew text shouldn't
+// say "your scheduled day" for a job nobody has booked yet.
 function dayOrNull(ymd?: string | null): string | null {
   if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
-  return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const d = new Date(`${ymd}T00:00:00`);
+  const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
+  const month = d.toLocaleDateString("en-US", { month: "long" });
+  return `${weekday}, ${month} ${ordinal(d.getDate())}`;
 }
 
-// The customer block shared by every crew-facing text. Only lines we actually
-// have are included, so a sparse lead doesn't produce "Address: null".
+function prettyDay(ymd?: string | null): string {
+  return dayOrNull(ymd) ?? "your scheduled day";
+}
+
+// The customer block shared by every crew-facing text. One field per line, not
+// full label-above-value blocks: this is embedded inside longer messages, and
+// spacing out five fields would push a crew reminder past four SMS segments for
+// no gain in readability. The important thing is that nothing runs together.
+// Only fields we actually have are included, so a sparse lead doesn't produce
+// "Address: null".
 function customerBrief(q: QuoteInfo): string {
   const lines = [`Customer: ${q.name}`, `Phone: ${q.phone}`];
   if (q.service?.trim()) lines.push(`Service: ${q.service.trim()}`);
@@ -248,7 +286,7 @@ function customerBrief(q: QuoteInfo): string {
   const visitDay = dayOrNull(q.visit_date);
   if (jobDay) lines.push(`Scheduled: ${jobDay}${q.scheduled_time ? ` at ${q.scheduled_time}` : ""}`);
   else if (visitDay) lines.push(`Quote visit: ${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}`);
-  else lines.push("Not scheduled yet");
+  else lines.push("Scheduled: not yet");
 
   return lines.join("\n");
 }
@@ -258,25 +296,21 @@ function customerBrief(q: QuoteInfo): string {
 // line: a new lead is usually read on a phone while doing something else, and
 // the name and number need to be scannable without parsing a sentence.
 export function newQuoteMessage(q: QuoteInfo): string {
-  const lines = [
-    "New Quote Request for:",
-    q.name,
-    "",
-    "Job Type:",
-    q.service?.trim() || "Not specified",
-    "",
-    "Customer Phone:",
-    q.phone,
-  ];
-  if (q.address?.trim()) lines.push("", "Address:", q.address.trim());
   // Free text from the customer, so cap it - an essay shouldn't turn one alert
   // into a ten-part text.
-  const details = q.details?.trim();
-  if (details) {
-    lines.push("", "Details:", details.length > 400 ? `${details.slice(0, 400)}…` : details);
-  }
-  if (q.job_token) lines.push("", jobLink(q.job_token));
-  return lines.join("\n");
+  const raw = q.details?.trim();
+  const details = raw ? (raw.length > 400 ? `${raw.slice(0, 400)}…` : raw) : null;
+  const visitDay = dayOrNull(q.visit_date);
+
+  return text([
+    ...block("New Quote Request for:", q.name),
+    ...block("Job Type:", q.service?.trim() || "Not specified"),
+    ...block("Customer Phone:", q.phone),
+    ...block("Address:", q.address?.trim()),
+    ...block("Requested Visit:", visitDay ? `${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}` : null),
+    ...block("Details:", details),
+    q.job_token ? jobLink(q.job_token) : null,
+  ]);
 }
 
 export async function notifyNewQuote(
@@ -294,15 +328,25 @@ export async function notifyNewQuote(
 
 // ── 3. Acknowledge the customer the moment their request lands ──────────────
 export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
-  let msg: string;
-  if (q.quote_type === "inperson") {
-    msg = `Hi ${firstName(q.name)}, this is ${OWNER_NAME} with Raleigh Concrete Group. You're set for an in-person quote on ${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}. We look forward to meeting you. Reply or call if anything changes.`;
-  } else {
-    // Deliberately promises a follow-up, not a price or a timeframe. Pricing
-    // depends on the project, and committing to "your price shortly" up front
-    // sets an expectation the job can't always meet.
-    msg = `Hi ${firstName(q.name)}, this is ${OWNER_NAME} with Raleigh Concrete Group. Thanks for reaching out. We got your request and we're looking over the details now. We'll follow up soon with next steps, and reach out if we need anything else about the project.`;
-  }
+  const msg =
+    q.quote_type === "inperson"
+      ? text([
+          `Hi ${firstName(q.name)},`,
+          `this is ${OWNER_NAME} with ${BUSINESS}. You're set for your free in-person quote:`,
+          "",
+          `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`,
+          "",
+          "We look forward to meeting you. Reply or call if anything changes.",
+        ])
+      : // Deliberately promises a follow-up, not a price or a timeframe. Pricing
+        // depends on the project, and committing to "your price shortly" up
+        // front sets an expectation the job can't always meet.
+        text([
+          `Hi ${firstName(q.name)},`,
+          `this is ${OWNER_NAME} with ${BUSINESS}. Thanks for reaching out.`,
+          "",
+          "We got your request and we're looking over the details now. We'll follow up soon with next steps, and reach out if we need anything else about the project.",
+        ]);
   await sendSms(q.phone, msg).catch(() => {});
 }
 
@@ -310,7 +354,15 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
 export async function notifyQuoteReady(q: QuoteInfo): Promise<SendResult> {
   return sendSmsResult(
     q.phone,
-    `Hi ${firstName(q.name)}, our team reviewed your project and your quote is ready. View it here: ${quoteLink(q.public_token ?? "")}`,
+    text([
+      `Hi ${firstName(q.name)},`,
+      `our team reviewed your project and your quote is ready.`,
+      "",
+      "View it here:",
+      quoteLink(q.public_token ?? ""),
+      "",
+      BUSINESS,
+    ]),
   );
 }
 
@@ -320,28 +372,49 @@ export async function notifyQuoteReady(q: QuoteInfo): Promise<SendResult> {
 export async function notifyCustomerApproved(q: QuoteInfo): Promise<void> {
   await sendSms(
     q.phone,
-    `Thanks for approving your quote, ${firstName(q.name)}. We're checking the crew's schedule against the days you picked and will text you shortly to confirm your installation date.`,
+    text([
+      `Hi ${firstName(q.name)},`,
+      "thanks for approving your quote.",
+      "",
+      "We're checking the crew's schedule against the days you picked and will text you shortly to confirm your project date and time.",
+      "",
+      BUSINESS,
+    ]),
   ).catch(() => {});
 }
 
 // ── 6b. Approved: tell the owner + crew it needs a date ─────────────────────
 export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: string | null): Promise<void> {
-  const picks = (q.preferred_dates ?? []).map((d) => dayOrNull(d)).filter(Boolean);
-  const wanted = picks.length ? `Customer prefers: ${picks.join(", ")}.` : "No preferred days given.";
-  await alertOwner(`APPROVED: ${q.name}${money(q.quote_amount)}. ${wanted} Needs a confirmed date.`);
+  const picks = (q.preferred_dates ?? []).map((d) => dayOrNull(d)).filter((d): d is string => Boolean(d));
+  const wanted = picks.length ? block("Customer prefers:", ...picks) : block("Customer prefers:", "No days given");
+
+  await alertOwner(
+    text([
+      "QUOTE APPROVED",
+      "",
+      ...block("Customer:", q.name),
+      ...block("Amount:", usd(q.quote_amount)),
+      ...wanted,
+      "Needs a confirmed date and time.",
+      "",
+      q.job_token ? jobLink(q.job_token) : null,
+    ]),
+  );
+
   if (contractorPhone) {
     await sendSms(
       contractorPhone,
-      [
-        `${q.name} approved their quote — we need a date confirmed.`,
+      text([
+        `${q.name} approved their quote. We need a date confirmed.`,
         "",
         customerBrief(q),
         "",
-        wanted,
+        ...wanted,
+        "Confirm the day that works:",
+        jobLink(q.job_token ?? ""),
         "",
-        `Confirm the day that works: ${jobLink(q.job_token ?? "")}`,
         "Sign in with your CRM login to pick it.",
-      ].join("\n"),
+      ]),
     ).catch(() => {});
   }
 }
@@ -357,12 +430,21 @@ function dayAndTime(q: QuoteInfo): string {
 export async function notifyCustomerScheduled(q: QuoteInfo): Promise<void> {
   await sendSms(
     q.phone,
-    `Hi ${firstName(q.name)}, your project date and time are confirmed by our team: ${dayAndTime(q)}. We look forward to it! We'll text a reminder before we arrive. Raleigh Concrete Group`,
+    text([
+      `Hi ${firstName(q.name)},`,
+      `your project with ${BUSINESS} is confirmed for:`,
+      "",
+      dayAndTime(q),
+      "",
+      "We look forward to it! We'll text you a reminder before we arrive.",
+    ]),
   ).catch(() => {});
 }
 
 // The date moved. Say so plainly rather than re-sending the "booked" text, which
-// reads as a mistake when the customer already had a different day.
+// reads as a mistake when the customer already had a different day. The old and
+// new times each get their own line: this is the message most likely to be
+// misread, and a customer skimming it has to come away with the right day.
 export async function notifyCustomerRescheduled(
   q: QuoteInfo,
   previous?: string | null,
@@ -370,9 +452,21 @@ export async function notifyCustomerRescheduled(
 ): Promise<void> {
   const wasDay = dayOrNull(previous);
   const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
+
+  // No previous date on file: there's nothing to move "from", so state the new
+  // one rather than printing a dangling "from:".
+  const body = was
+    ? [`your project with ${BUSINESS} has been moved from:`, "", was, "to:", dayAndTime(q)]
+    : [`your project with ${BUSINESS} has been moved to:`, "", dayAndTime(q)];
+
   await sendSms(
     q.phone,
-    `Hi ${firstName(q.name)}, your project with Raleigh Concrete Group has been moved${was ? ` from ${was}` : ""} to ${dayAndTime(q)}. Sorry for the change. Call or text us if that doesn't work.`,
+    text([
+      `Hi ${firstName(q.name)},`,
+      ...body,
+      "",
+      "Sorry for the change, call or text us if that day doesn't work.",
+    ]),
   ).catch(() => {});
 }
 
@@ -380,17 +474,34 @@ export async function notifyBooked(
   q: QuoteInfo,
   contractorPhone?: string | null,
   previous?: string | null,
+  previousTime?: string | null,
 ): Promise<void> {
-  const was = dayOrNull(previous);
-  const headline = was ? `DATE CHANGED (${was} → ${prettyDay(q.scheduled_date)})` : `JOB BOOKED: ${prettyDay(q.scheduled_date)}`;
-  const msg = [`${headline} — ${q.name}${money(q.quote_amount)}`, "", customerBrief(q), "", jobLink(q.job_token ?? "")].join("\n");
+  const wasDay = dayOrNull(previous);
+  const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
+
+  const msg = text([
+    was ? "DATE CHANGED" : "JOB BOOKED",
+    "",
+    ...(was ? [...block("From:", was), ...block("To:", dayAndTime(q))] : block("When:", dayAndTime(q))),
+    ...block("Amount:", usd(q.quote_amount)),
+    customerBrief(q),
+    "",
+    jobLink(q.job_token ?? ""),
+  ]);
+
   await alertOwner(msg);
   if (contractorPhone) await sendSms(contractorPhone, msg).catch(() => {});
 }
 
 // ── 6. Customer declined ────────────────────────────────────────────────────
 export async function notifyDeclined(q: QuoteInfo, contractorPhone?: string | null): Promise<void> {
-  const msg = `${q.name} declined their quote. ${q.phone}`;
+  const msg = text([
+    "QUOTE DECLINED",
+    "",
+    ...block("Customer:", q.name),
+    ...block("Phone:", q.phone),
+    ...block("Amount:", usd(q.quote_amount)),
+  ]);
   await alertOwner(msg);
   if (contractorPhone) await sendSms(contractorPhone, msg).catch(() => {});
 }
@@ -399,21 +510,77 @@ export async function notifyDeclined(q: QuoteInfo, contractorPhone?: string | nu
 export async function notifyReminder(q: QuoteInfo): Promise<SendResult> {
   return sendSmsResult(
     q.phone,
-    `Hi ${firstName(q.name)}, this is Raleigh Concrete Group. Please confirm your job on ${dayAndTime(q)}: ${confirmLink(q.public_token ?? "")}`,
+    text([
+      `Hi ${firstName(q.name)},`,
+      `this is ${BUSINESS}. Your project is coming up:`,
+      "",
+      dayAndTime(q),
+      "",
+      "Please confirm it here:",
+      confirmLink(q.public_token ?? ""),
+    ]),
   );
 }
 export async function notifyUnconfirmed(q: QuoteInfo, contractorPhone?: string | null): Promise<void> {
-  const msg = `${q.name} could not confirm their job on ${prettyDay(q.scheduled_date)}. Please reach out: ${q.phone}`;
+  const msg = text([
+    "CUSTOMER COULD NOT CONFIRM",
+    "",
+    ...block("Customer:", q.name),
+    ...block("Phone:", q.phone),
+    ...block("Was booked for:", dayAndTime(q)),
+    "Please reach out to reschedule.",
+  ]);
   await alertOwner(msg);
   if (contractorPhone) await sendSms(contractorPhone, msg).catch(() => {});
 }
 
+// ── 10. Crew reminders ahead of a booked job ────────────────────────────────
+// Sent 3 days out, 1 day out and the morning of. Every one of them repeats the
+// address, the start time and how to bail out, because the whole point is that
+// a crew member who can't make it says so while there's still time to cover it,
+// rather than the customer finding out by nobody showing up.
+export function crewReminderMessage(q: QuoteInfo, daysOut: number, contractorName?: string | null): string {
+  const when = daysOut === 0 ? "TODAY" : daysOut === 1 ? "TOMORROW" : `IN ${daysOut} DAYS`;
+  const greeting = contractorName?.trim() ? `Hi ${firstName(contractorName)},` : "Hi,";
+
+  return text([
+    `JOB REMINDER: ${when}`,
+    "",
+    greeting,
+    "you're scheduled for this job:",
+    "",
+    ...block("When:", dayAndTime(q)),
+    customerBrief(q),
+    "",
+    `If you can't make it, or anything about the schedule changes, call ${OWNER_NAME} right away at ${CALL_NUMBER}.`,
+    "",
+    q.job_token ? jobLink(q.job_token) : null,
+  ]);
+}
+
+export async function notifyCrewReminder(
+  contractorPhone: string | null | undefined,
+  q: QuoteInfo,
+  daysOut: number,
+  contractorName?: string | null,
+): Promise<SendResult | null> {
+  if (!contractorPhone) return null;
+  return sendSmsResult(contractorPhone, crewReminderMessage(q, daysOut, contractorName)).catch(() => null);
+}
+
 // ── 11. Job complete + paid: thank the customer and ask for a review ────────
 export async function notifyComplete(q: QuoteInfo): Promise<void> {
-  const review = REVIEW_URL ? ` If you were happy with the work, we'd love a quick review: ${REVIEW_URL}` : "";
   await sendSms(
     q.phone,
-    `Thanks so much for your business and for supporting local, ${firstName(q.name)}.${review}`,
+    text([
+      `Hi ${firstName(q.name)},`,
+      "thanks so much for your business and for supporting local.",
+      ...(REVIEW_URL
+        ? ["", "If you were happy with the work, we'd love a quick review:", REVIEW_URL]
+        : []),
+      "",
+      BUSINESS,
+    ]),
   ).catch(() => {});
 }
 
@@ -426,7 +593,15 @@ export async function notifyPaymentRequest(q: QuoteInfo): Promise<SendResult> {
   const how = PAYMENT_INSTRUCTIONS || "Reply here and we'll send your payment details.";
   return sendSmsResult(
     q.phone,
-    `Hi ${firstName(q.name)}, your project with Raleigh Concrete Group is complete${money(q.quote_amount)}. ${how} Thank you for your business.`,
+    text([
+      `Hi ${firstName(q.name)},`,
+      `your project with ${BUSINESS} is complete${money(q.quote_amount)}.`,
+      "",
+      "How to pay:",
+      how,
+      "",
+      "Thank you for your business.",
+    ]),
   );
 }
 
@@ -436,16 +611,19 @@ export async function notifyPaymentRequest(q: QuoteInfo): Promise<SendResult> {
 // than letting them tap through to a login screen with no explanation.
 export function assignmentMessage(q: QuoteInfo, contractorName?: string | null): string {
   const greeting = contractorName?.trim() ? `Hi ${firstName(contractorName)},` : "Hi,";
-  return [
-    `${greeting} you've been assigned a new job with Raleigh Concrete Group.`,
+  return text([
+    greeting,
+    `you've been assigned a new job with ${BUSINESS}.`,
     "",
     customerBrief(q),
     "",
-    `Full details and photos: ${jobLink(q.job_token ?? "")}`,
+    "Full details and photos:",
+    jobLink(q.job_token ?? ""),
+    "",
     "Sign in with your CRM login to open it.",
     "",
     `Please give ${firstName(q.name)} a call to introduce yourself and confirm the details.`,
-  ].join("\n");
+  ]);
 }
 
 export async function notifyAssignment(

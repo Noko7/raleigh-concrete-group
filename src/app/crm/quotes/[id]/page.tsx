@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
 import { SITE_ORIGIN } from "@/lib/crm/env";
-import { LEAD_TIME_DAYS } from "@/lib/crm/constants";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText } from "@/lib/crm/events";
@@ -35,6 +34,12 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   if (!quote) notFound();
 
   const isOwner = session.staff.role === "owner";
+  // The crew has one job page, not two. Everything a contractor can do lives on
+  // /job/<token> - the URL that's already in every text we send them - so this
+  // page is the owner's view and anyone else gets sent to theirs. Without this
+  // the same job has two different-looking screens depending on how you got to
+  // it, which is exactly the confusion this removes.
+  if (!isOwner && quote.job_token) redirect(`/job/${quote.job_token}`);
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
   const t = dict(locale);
   const allStaff = await listStaff(session);
@@ -44,9 +49,10 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const agreements = await listAgreementsForQuote(session, id);
   const photoUrls = (quote.file_urls ?? []).map((p) => `${base}/api/file?p=${encodeURIComponent(p)}`);
 
-  // Earliest day the crew can realistically start, matching what the customer
-  // was shown when they picked their preferred days.
-  const minJobDate = new Date(Date.now() + LEAD_TIME_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // The lead time governs what a CUSTOMER may request, not what the business
+  // may agree to. You can book any day from today, including a rush job someone
+  // arranged over the phone.
+  const minJobDate = new Date().toISOString().slice(0, 10);
   // Scheduling only makes sense once the customer has actually said yes.
   const showSchedule = quote.customer_response === "accepted" && quote.status !== "lost";
 
@@ -140,7 +146,9 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                     {quote.customer_response === "accepted" ? (
                       <strong className="crm-link-strong">
                         {t.job.accepted}{quote.discount_accepted ? " ($150)" : ""}
-                        {quote.scheduled_date ? ` · ${prettyDate(quote.scheduled_date)}` : ""}
+                        {quote.scheduled_date
+                          ? ` · ${prettyDate(quote.scheduled_date)}${quote.scheduled_time ? ` ${t.contractorJob.at} ${quote.scheduled_time}` : ""}`
+                          : ""}
                       </strong>
                     ) : (
                       t.job.declined

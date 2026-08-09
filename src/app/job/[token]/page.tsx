@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { LEAD_TIME_DAYS } from "@/lib/crm/constants";
+import { STATUS_LABELS } from "@/lib/crm/constants";
 import { dict, isLocale } from "@/lib/crm/i18n";
+import { crmBase } from "@/lib/crm/nav";
 import { getQuoteByToken, signFiles } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
+import { JobFinish } from "./job-finish";
+import { JobQuote } from "./job-quote";
 import { JobSchedule } from "./job-schedule";
 
 export const dynamic = "force-dynamic";
@@ -26,10 +30,20 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
 
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
   const t = dict(locale);
-  // Scheduling appears once the customer has approved; before that there's
-  // nothing for the crew to confirm.
+  const base = await crmBase();
+
+  // This page is the crew's whole job: quote it, schedule it, finish it. Which
+  // cards appear is driven by where the job actually is, so there's only ever
+  // one obvious next action on screen.
   const showSchedule = quote.customer_response === "accepted" && quote.status !== "lost";
-  const minJobDate = new Date(Date.now() + LEAD_TIME_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const showQuote = !showSchedule && quote.status !== "lost" && quote.status !== "completed" && quote.status !== "paid";
+  const showFinish = quote.status === "scheduled";
+  const isDone = quote.status === "completed" || quote.status === "paid";
+
+  // The crew books against their own schedule, so their picker starts today.
+  // The 7-day floor applies to what a customer may request, not to what the
+  // people doing the work are allowed to agree to.
+  const minJobDate = new Date().toISOString().slice(0, 10);
   const photos = quote.file_urls?.length ? await signFiles(quote.file_urls, 7200) : [];
   const prettyVisit = quote.visit_date
     ? new Date(`${quote.visit_date}T00:00:00`).toLocaleDateString("en-US", {
@@ -53,10 +67,18 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
     <main className="job-wrap">
       <div className="job-card">
         <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="job-logo" priority />
-        <h1 className="job-title">{t.contractorJob.title}</h1>
+
+        <div className="job-head">
+          <h1 className="job-title">{t.contractorJob.title}</h1>
+          <span className={`crm-badge crm-badge-${quote.status}`}>{t.status[quote.status] ?? STATUS_LABELS[quote.status]}</span>
+        </div>
+        <Link href={`${base}/`} className="job-back">
+          {t.contractorJob.backToJobs}
+        </Link>
 
         {/* The one action this page exists for goes first - a contractor opening
-            this from a text is here to confirm the day, not to scroll. */}
+            this from a text is here to act, not to scroll. Which action that is
+            depends on the stage: price it, book it, or close it out. */}
         {showSchedule && (
           <JobSchedule
             id={quote.id}
@@ -66,6 +88,26 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             minDate={minJobDate}
             locale={locale}
           />
+        )}
+
+        {showQuote && (
+          <JobQuote
+            id={quote.id}
+            locale={locale}
+            amount={quote.quote_amount}
+            summary={quote.quote_summary}
+            alreadySent={Boolean(quote.quote_sent_at)}
+            customerFirstName={quote.name.trim().split(/\s+/)[0] || quote.name}
+          />
+        )}
+
+        {showFinish && <JobFinish id={quote.id} locale={locale} />}
+
+        {isDone && (
+          <section className="js-card jf-done">
+            <h2 className="js-title">{t.contractorJob.doneTitle}</h2>
+            <p className="js-lead">{t.contractorJob.doneNote}</p>
+          </section>
         )}
 
         <dl className="job-meta">

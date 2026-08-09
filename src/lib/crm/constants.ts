@@ -25,7 +25,21 @@ export const STATUS_LABELS: Record<Status, string> = {
 };
 
 // How many days the customer may propose, and how far out the earliest is.
-// Four days is the floor for the crew to actually get it scheduled - the
-// customer picks from there, and the crew confirms one of their days.
+// Seven days is the floor for a customer-requested install day: it's long
+// enough to line up crew and materials before committing to anything.
 export const MAX_PREFERRED_DATES = 3;
-export const LEAD_TIME_DAYS = 4;
+export const LEAD_TIME_DAYS = 7;
+
+// Earliest an in-person quote VISIT can be requested. Shorter than the install
+// lead time on purpose - a visit is one person for an hour, not a crew and a
+// truck, so it can happen sooner.
+export const VISIT_LEAD_DAYS = 4;
+
+// The visit slots offered on the public quote form. Shared with the server so a
+// tampered form can't book "3:00 AM"; both sides check the same list.
+export const VISIT_TIME_SLOTS = ["8:00 AM", "10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM"];
+
+// How many days before a booked job the crew gets a reminder text. 0 is the
+// morning of. The daily cron fires ~10am ET, so the morning-of text still lands
+// before a typical start time.
+export const CREW_REMINDER_DAYS = [3, 1, 0];

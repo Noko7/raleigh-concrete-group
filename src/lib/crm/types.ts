@@ -54,6 +54,9 @@ export type Quote = {
   visit_time: string | null;
   gcal_event_id: string | null;
   reminder_sent_at: string | null;
+  // Which crew countdown texts have gone out for this booking ("3", "1", "0").
+  // Cleared whenever the date moves so the new date gets its own run.
+  crew_reminders: string[] | null;
   confirmed_at: string | null;
   completed_at: string | null;
   paid_at: string | null;

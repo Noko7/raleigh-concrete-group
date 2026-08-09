@@ -40,9 +40,14 @@ function loginMessage(lead: string, email: string | null, password: string): str
   return [
     lead,
     "",
+    "Sign in here:",
     `${SITE_ORIGIN}/crm`,
-    `username: ${email ?? ""}`,
-    `password: ${password}`,
+    "",
+    "Username:",
+    email ?? "",
+    "",
+    "Password:",
+    password,
     "",
     "You'll set your own password the first time you sign in.",
   ].join("\n");

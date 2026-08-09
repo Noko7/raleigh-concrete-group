@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
+import { VISIT_LEAD_DAYS, VISIT_TIME_SLOTS } from "@/lib/crm/constants";
 import { notifyCustomerReceived, notifyNewQuote } from "@/lib/crm/notify";
 import {
   MAX_VISITS_PER_DAY,
@@ -81,12 +83,22 @@ export async function POST(request: Request) {
   if (name.length < 2) errors.push("name");
   if (!(phoneDigits.length === 10 || (phoneDigits.length === 11 && phoneDigits.startsWith("1")))) errors.push("phone");
   if (email && !EMAIL_RE.test(email)) errors.push("email");
-  if (address.length < 5 || !/\d/.test(address)) errors.push("address");
+  // Must be findable on a map: house number, street, city and state. The form
+  // checks this too, but the form is the part an attacker controls.
+  if (!isFullAddress(address)) errors.push("address");
   if (quoteType && !QUOTE_TYPES.has(quoteType)) errors.push("quote_type");
   // In-person quotes must pick a real date + time so the crew can calendar it.
   if (quoteType === "inperson") {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) errors.push("visit_date");
-    if (visitTime.length < 1) errors.push("visit_time");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
+      errors.push("visit_date");
+    } else {
+      // No visits in the past, and none inside the lead time. One day of slack
+      // for time zones, matching how preferred install days are checked.
+      const earliest = Date.now() + (VISIT_LEAD_DAYS - 1) * 24 * 60 * 60 * 1000;
+      const picked = new Date(`${visitDate}T00:00:00Z`).getTime();
+      if (!Number.isFinite(picked) || picked < earliest) errors.push("visit_date");
+    }
+    if (!VISIT_TIME_SLOTS.includes(visitTime)) errors.push("visit_time");
   }
 
   // file_urls: only accept paths we created in our own bucket.
@@ -101,7 +113,16 @@ export async function POST(request: Request) {
   }
 
   if (errors.length) {
-    return NextResponse.json({ ok: false, error: "Please check your details.", fields: errors }, { status: 422 });
+    // Name the actual problem. "Please check your details" on a form the
+    // customer thinks they filled in correctly is a dead end.
+    const message = errors.includes("address")
+      ? ADDRESS_HINT
+      : errors.includes("visit_date")
+        ? `Please pick a visit date at least ${VISIT_LEAD_DAYS} days from today.`
+        : errors.includes("phone")
+          ? "Please enter a 10-digit US phone number."
+          : "Please check your details.";
+    return NextResponse.json({ ok: false, error: message, fields: errors }, { status: 422 });
   }
 
   if (!CONFIGURED) {

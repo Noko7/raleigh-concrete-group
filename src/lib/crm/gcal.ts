@@ -141,6 +141,10 @@ type GEvent = {
   attendees?: GAttendee[];
 };
 
+// How long a booked job blocks the calendar for, in hours. A concrete job is a
+// day's work; this keeps the slot from looking free at 10am.
+const JOB_HOURS = 8;
+
 function addDays(ymd: string, n: number): string {
   const d = new Date(`${ymd}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -169,6 +173,7 @@ function describe(q: Quote, isVisit: boolean): string {
     q.address ? `Address: ${q.address}` : "",
     q.quote_amount != null ? `Quote: $${Number(q.quote_amount).toLocaleString("en-US")}` : "",
     isVisit && q.visit_time ? `Requested time: ${q.visit_time}` : "",
+    !isVisit && q.scheduled_time ? `Start time: ${q.scheduled_time}` : "",
     q.details ? `\nProject notes: ${q.details}` : "",
   ];
   return lines.filter(Boolean).join("\n");
@@ -177,13 +182,31 @@ function describe(q: Quote, isVisit: boolean): string {
 function buildEvent(q: Quote, attendees: GAttendee[]): GEvent | null {
   const base = { attendees: attendees.length ? attendees : undefined };
 
-  // A booked work day takes precedence (all-day event).
+  // A booked work day takes precedence. Timed when the crew picked a start
+  // time, so the calendar agrees with what the customer was told; all-day only
+  // for older bookings made before start times existed.
   if (q.scheduled_date) {
-    return {
+    const job = {
       ...base,
       summary: `Concrete job: ${q.name}`,
       description: describe(q, false),
       location: q.address ?? undefined,
+    };
+    const clock = parseClock(q.scheduled_time);
+    if (clock) {
+      const hh = String(clock.h).padStart(2, "0");
+      const mm = String(clock.m).padStart(2, "0");
+      // Blocks the working day from the start time, so nothing else gets
+      // booked on top of a crew that's already out on a pour.
+      const endH = String(Math.min(clock.h + JOB_HOURS, 23)).padStart(2, "0");
+      return {
+        ...job,
+        start: { dateTime: `${q.scheduled_date}T${hh}:${mm}:00`, timeZone: TZ },
+        end: { dateTime: `${q.scheduled_date}T${endH}:${mm}:00`, timeZone: TZ },
+      };
+    }
+    return {
+      ...job,
       start: { date: q.scheduled_date },
       end: { date: addDays(q.scheduled_date, 1) },
     };

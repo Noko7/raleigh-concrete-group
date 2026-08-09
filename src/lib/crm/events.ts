@@ -47,6 +47,13 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "Customer declined the quote";
     case "reminder_sent":
       return "Confirmation reminder texted to the customer";
+    case "crew_reminded": {
+      const d = Number(m.days_out);
+      const when = d === 0 ? "morning of" : d === 1 ? "day before" : `${d} days out`;
+      return m.delivered
+        ? `Crew reminder texted (${when})`
+        : `Crew reminder FAILED (${when}) to ${String(m.to ?? "the crew")}`;
+    }
     case "customer_confirmed":
       return "Customer confirmed their job";
     case "customer_unconfirmed":

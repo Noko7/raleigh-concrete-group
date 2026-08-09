@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
+import { VISIT_LEAD_DAYS, VISIT_TIME_SLOTS } from "@/lib/crm/constants";
 import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
 
 // Supabase via REST (no SDK). Set these in Vercel → Settings → Environment Variables:
@@ -38,12 +40,14 @@ const EMPTY: FormState = {
 
 const STEPS = ["contact", "service", "schedule"] as const;
 
-const TIME_SLOTS = ["8:00 AM", "10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM"];
+const TIME_SLOTS = VISIT_TIME_SLOTS;
 
-// Soonest an in-person visit can be requested: two days out, as YYYY-MM-DD.
+// Soonest an in-person visit can be requested, as YYYY-MM-DD. The server checks
+// this too: `min` on a date input is a convenience, not a rule, and picking a
+// day in the past used to sail straight through.
 function minVisitDate(): string {
   const d = new Date();
-  d.setDate(d.getDate() + 2);
+  d.setDate(d.getDate() + VISIT_LEAD_DAYS);
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${m}-${day}`;
@@ -161,6 +165,9 @@ function AddressAutocomplete({
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reqId = useRef(0);
   const boxRef = useRef<HTMLDivElement>(null);
+  // Typed something that already reads as a full address, even if they haven't
+  // tapped a suggestion. Both paths are accepted, so both get a green light.
+  const complete = isFullAddress(value);
 
   const lookup = useCallback((q: string) => {
     if (debounce.current) clearTimeout(debounce.current);
@@ -211,15 +218,25 @@ function AddressAutocomplete({
         autoComplete="off"
         inputMode="text"
       />
-      {loading && <span className="qm-ac-status">Looking up addresses…</span>}
-      {!loading && verified && (
-        <span className="qm-ac-status qm-ac-ok">
-          <IconCheck className="qm-ac-check" /> Verified address
-        </span>
-      )}
-      {!loading && !verified && searchedEmpty && (
-        <span className="qm-ac-status">No exact match yet, keep typing your full street, city and state.</span>
-      )}
+      {/* One status element that always exists, rather than three that appear
+          and disappear. Swapping the text inside a fixed slot means the fields
+          below never shift while someone is typing, which is what made this
+          form jump around on a phone. */}
+      <span className={`qm-ac-status qm-slot${verified && !loading ? " qm-ac-ok" : ""}`}>
+        {loading ? (
+          "Looking up addresses…"
+        ) : verified ? (
+          <>
+            <IconCheck className="qm-ac-check" /> Verified address
+          </>
+        ) : complete ? (
+          "Looks good. Pick a match above if you see yours."
+        ) : searchedEmpty ? (
+          "No exact match yet. Keep typing your street, city and state."
+        ) : (
+          ADDRESS_HINT
+        )}
+      </span>
       {showList && suggestions.length > 0 && (
         <ul className="qm-suggestions">
           {suggestions.map((s) => (
@@ -313,13 +330,14 @@ function Modal({ onClose }: { onClose: () => void }) {
 
   function canProceed(): boolean {
     if (current === "contact") {
-      const hasHouseNumber = /^\s*\d+\s+\S/.test(data.address);
+      // A quote needs an address we can actually find: either one picked from
+      // the search, or one typed out in full with city and state. A bare house
+      // number and street used to be enough, which cost a phone call to chase.
       return (
         data.name.trim().length >= 2 &&
         isValidPhone(data.phone) &&
         isValidEmail(data.email) &&
-        (addressVerified || hasHouseNumber) &&
-        data.address.trim().length > 8
+        (addressVerified || isFullAddress(data.address))
       );
     }
     if (current === "service") return data.service !== "";
@@ -328,13 +346,17 @@ function Modal({ onClose }: { onClose: () => void }) {
     return false;
   }
 
+  // Moving between steps clears any stale complaint from the last submit, so a
+  // fixed field doesn't keep showing the old reason it was rejected.
   function back() {
+    setErrorMsg("");
     if (stepIndex === 0) setMode(null);
     else setStepIndex((i) => i - 1);
   }
 
   function next() {
     if (!canProceed()) return;
+    setErrorMsg("");
     if (stepIndex < STEPS.length - 1) setStepIndex((i) => i + 1);
     else submit();
   }
@@ -419,12 +441,20 @@ function Modal({ onClose }: { onClose: () => void }) {
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string; fields?: string[] };
       if (res.ok && json.ok) {
         setStatus("success");
+      } else if (json.fields?.includes("address") || json.fields?.includes("phone") || json.fields?.includes("name")) {
+        // Rejected on the contact details: take them back to that step rather
+        // than showing the reason on a screen that can't fix it.
+        setStatus("idle");
+        setStepIndex(STEPS.indexOf("contact"));
+        setAddressVerified(false);
+        setErrorMsg(json.error || "Please check your contact details.");
       } else if (res.status === 409 || json.fields?.includes("visit_date")) {
-        // That day filled up between picking it and submitting - send them back.
-        setDateFull(true);
+        // That day filled up (or is too soon) between picking it and
+        // submitting - send them back.
+        setDateFull(res.status === 409);
         setStatus("idle");
         setStepIndex(STEPS.indexOf("schedule"));
-        setErrorMsg("");
+        setErrorMsg(res.status === 409 ? "" : json.error || "");
       } else {
         setErrorMsg(json.error || `Something went wrong saving your request. Please call us at ${phoneDisplay}.`);
         setStatus("error");
@@ -532,17 +562,19 @@ function Modal({ onClose }: { onClose: () => void }) {
                   inputMode="tel"
                   placeholder="(919) 555-0123"
                 />
-                {data.phone.trim() !== "" && !isValidPhone(data.phone) && (
-                  <span className="qm-ac-status">Enter a 10-digit US phone number.</span>
-                )}
-                <label className="qm-label qm-mt">Property address</label>
+                {/* Fixed-height slot: the message swaps in and out without
+                    moving the address field below it. */}
+                <span className="qm-ac-status qm-slot">
+                  {data.phone.trim() !== "" && !isValidPhone(data.phone) ? "Enter a 10-digit US phone number." : ""}
+                </span>
+                <label className="qm-label">Property address</label>
                 <AddressAutocomplete
                   value={data.address}
                   verified={addressVerified}
                   onChange={(v) => set({ address: v })}
                   onVerifiedChange={setAddressVerified}
                 />
-                <label className="qm-label qm-mt">Email (optional)</label>
+                <label className="qm-label">Email (optional)</label>
                 <input
                   className="qm-input"
                   type="email"
@@ -552,7 +584,13 @@ function Modal({ onClose }: { onClose: () => void }) {
                   maxLength={200}
                   placeholder="you@email.com"
                 />
-                {!isValidEmail(data.email) && <span className="qm-ac-status">Enter a valid email address.</span>}
+                <span className="qm-ac-status qm-slot">
+                  {!isValidEmail(data.email) ? "Enter a valid email address." : ""}
+                </span>
+
+                {/* A server-side rejection of the contact details lands here,
+                    on the step that can actually fix it. */}
+                {errorMsg && <p className="qm-err">{errorMsg}</p>}
 
                 {/* Honeypot: hidden from real users; bots fill it and get dropped. */}
                 <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: "auto", height: 0, width: 0, overflow: "hidden" }}>
@@ -652,16 +690,24 @@ function Modal({ onClose }: { onClose: () => void }) {
                     checkVisitDate(e.target.value);
                   }}
                 />
-                {dateChecking && <span className="qm-ac-status">Checking that day…</span>}
-                {!dateChecking && dateFull && (
-                  <span className="qm-ac-status qm-ac-full">That day is fully booked, please pick another.</span>
-                )}
-                {!dateChecking && !dateFull && data.visitDate && (
-                  <span className="qm-ac-status qm-ac-ok">
-                    <IconCheck className="qm-ac-check" /> {prettyDay(data.visitDate)} is open
-                  </span>
-                )}
-                <label className="qm-label qm-mt">Time</label>
+                <span
+                  className={`qm-ac-status qm-slot${
+                    dateChecking ? "" : dateFull ? " qm-ac-full" : data.visitDate ? " qm-ac-ok" : ""
+                  }`}
+                >
+                  {dateChecking ? (
+                    "Checking that day…"
+                  ) : dateFull ? (
+                    "That day is fully booked, please pick another."
+                  ) : data.visitDate ? (
+                    <>
+                      <IconCheck className="qm-ac-check" /> {prettyDay(data.visitDate)} is open
+                    </>
+                  ) : (
+                    `Earliest we can come out is ${VISIT_LEAD_DAYS} days from today.`
+                  )}
+                </span>
+                <label className="qm-label">Time</label>
                 <div className="qm-chips">
                   {TIME_SLOTS.map((t) => (
                     <button
@@ -675,7 +721,10 @@ function Modal({ onClose }: { onClose: () => void }) {
                   ))}
                 </div>
 
-                {status === "error" && (
+                {/* Shown whenever there's a message, not only in the "error"
+                    status: a rejected date bounces back here as idle, and the
+                    reason has to come with it. */}
+                {(status === "error" || errorMsg) && (
                   <p className="qm-err">{errorMsg || `Something went wrong. Please call us at ${phoneDisplay} instead.`}</p>
                 )}
               </div>

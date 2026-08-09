@@ -170,6 +170,9 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
 
     revalidatePath(`/crm/quotes/${id}`);
     revalidatePath("/crm");
+    // Contractors quote from their own job page, so it has to pick up the new
+    // price and status too.
+    revalidatePath("/job/[token]", "page");
     return {
       ok: true,
       sent: sending,
@@ -226,7 +229,7 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
   const contractor = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
   if (moved) await notifyCustomerRescheduled(info, result.previous, result.previousTime).catch(() => {});
   else await notifyCustomerScheduled(info).catch(() => {});
-  await notifyBooked(info, contractor?.phone, result.previous).catch(() => {});
+  await notifyBooked(info, contractor?.phone, result.previous, result.previousTime).catch(() => {});
   await syncQuoteToCalendar(id);
 
   revalidatePath(`/crm/quotes/${id}`);
@@ -255,12 +258,24 @@ export async function completeJob(formData: FormData): Promise<void> {
   await addEvent(session, id, "job_completed");
   await notifyComplete({ name: current.name, phone: current.phone }).catch(() => {});
   await alertOwner(
-    `Job completed: ${current.name}, by ${session.staff.full_name || "crew"}.`,
+    [
+      "JOB COMPLETED",
+      "",
+      "Customer:",
+      current.name,
+      "",
+      "Completed by:",
+      session.staff.full_name || "crew",
+      "",
+      "Request payment when you're ready.",
+    ].join("\n"),
     session.staff.phone,
   ).catch(() => {});
 
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
+  // The crew marks jobs done from their own job page.
+  revalidatePath("/job/[token]", "page");
 }
 
 // Text the customer how to pay (Zelle / bank deposit). The actual instructions
@@ -308,7 +323,18 @@ export async function markPaid(formData: FormData): Promise<void> {
   await addEvent(session, id, "status_changed", { from: current.status, to: "paid" });
   await addEvent(session, id, "job_paid", { amount: current.quote_amount });
   await alertOwner(
-    `Paid: ${current.name}${current.quote_amount != null ? ` ($${Number(current.quote_amount).toLocaleString("en-US")})` : ""}, recorded by ${session.staff.full_name || "crew"}.`,
+    [
+      "PAID",
+      "",
+      "Customer:",
+      current.name,
+      ...(current.quote_amount != null
+        ? ["", "Amount:", `$${Number(current.quote_amount).toLocaleString("en-US")}`]
+        : []),
+      "",
+      "Recorded by:",
+      session.staff.full_name || "crew",
+    ].join("\n"),
     session.staff.phone,
   ).catch(() => {});
 

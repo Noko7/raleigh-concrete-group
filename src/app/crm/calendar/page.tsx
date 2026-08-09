@@ -33,7 +33,7 @@ export default async function CalendarPage({
     const label = q.name || "Customer";
     // Booked work day = a job install (only ever set once a customer accepts).
     if (q.scheduled_date) {
-      events.push({ id: q.id, date: q.scheduled_date, kind: "job", title: label, time: null });
+      events.push({ id: q.id, date: q.scheduled_date, kind: "job", title: label, time: q.scheduled_time });
     }
     // The appointment the customer picked: an on-site visit (in-person) or a
     // remote photo review (online). Color them separately so the day reads clearly.

@@ -21,9 +21,11 @@ export type BoardQuote = {
   quote_type: string | null;
   created_at: string;
   scheduled_date: string | null;
+  scheduled_time: string | null;
   visit_date: string | null;
   visit_time: string | null;
   confirmed_at: string | null;
+  job_token: string | null;
 };
 
 function shortDate(ymd: string | null): string {
@@ -65,6 +67,10 @@ function money(n: number | null): string {
 
 export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, locale }: Props) {
   const t = dict(locale);
+  // Contractors get their own job page - the same URL their texts link to - so a
+  // job looks the same however they reach it. Owners get the full editor.
+  const cardHref = (q: BoardQuote) =>
+    role === "contractor" && q.job_token ? `/job/${q.job_token}` : `${base}/quotes/${q.id}`;
   // Column headings and the Move menu read from the translated status names, so
   // the board doesn't end up half-Spanish.
   const statusLabel = (s: Status) => t.status[s];
@@ -196,11 +202,11 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                       setDragId(q.id);
                     }}
                     onDragEnd={() => setDragId(null)}
-                    onClick={() => router.push(`${base}/quotes/${q.id}`)}
+                    onClick={() => router.push(cardHref(q))}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") router.push(`${base}/quotes/${q.id}`);
+                      if (e.key === "Enter") router.push(cardHref(q));
                     }}
                   >
                     <div className="kb-card-top">
@@ -218,7 +224,12 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                       return (
                         <div className="kb-card-meta">
                           <span className={`kb-pill kb-pill-${t.cls}`}>{t.text}</span>
-                          {jobDate && <span className="kb-pill kb-pill-date">Job {jobDate}</span>}
+                          {jobDate && (
+                            <span className="kb-pill kb-pill-date">
+                              Job {jobDate}
+                              {q.scheduled_time ? ` ${q.scheduled_time}` : ""}
+                            </span>
+                          )}
                           {!jobDate && visitDate && (
                             <span className="kb-pill kb-pill-date">
                               Visit {visitDate}

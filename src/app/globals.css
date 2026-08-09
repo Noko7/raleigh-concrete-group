@@ -837,7 +837,10 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   inset: 0;
   z-index: 100;
   display: flex;
-  align-items: flex-end;
+  /* Full screen on a phone. A partial sheet fights the on-screen keyboard: the
+     sheet resizes as the keyboard opens and closes, which is what made the form
+     lurch between fields. Owning the whole viewport means nothing moves. */
+  align-items: stretch;
   justify-content: center;
   background: rgba(10, 12, 14, 0.72);
   backdrop-filter: blur(6px);
@@ -853,16 +856,29 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   position: relative;
   width: 100%;
   max-width: 33rem;
-  max-height: 94vh;
-  overflow-y: auto;
+  /* dvh, not vh: on mobile Safari vh is the *largest* viewport, so a vh-sized
+     card sits partly under the browser chrome and the footer button ends up
+     off screen. */
+  height: 100dvh;
+  max-height: 100dvh;
   background: var(--ivory);
   color: #2b1a12;
-  border-radius: 1.5rem 1.5rem 0 0;
+  border-radius: 0;
   box-shadow: 0 -10px 50px rgba(0, 0, 0, 0.5);
   animation: qm-rise 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* The card is the frame; only .qm-body scrolls inside it. That keeps the
+     close button and the Continue button pinned instead of scrolling away. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 @media (min-width: 768px) {
-  .qm-card { border-radius: 1.5rem; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55); }
+  .qm-card {
+    height: auto;
+    max-height: 92vh;
+    border-radius: 1.5rem;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  }
 }
 
 .qm-close {
@@ -888,6 +904,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-progress {
   height: 4px;
   width: 100%;
+  flex: 0 0 auto;
   background: rgba(43, 26, 18, 0.1);
   border-radius: 1.5rem 1.5rem 0 0;
   overflow: hidden;
@@ -898,8 +915,30 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   transition: width 280ms ease;
 }
 
-.qm-body { padding: 1.6rem 1.5rem 0.5rem; }
+.qm-body {
+  padding: 1.6rem 1.5rem 0.5rem;
+  /* The only scrolling region. min-height:0 is what actually lets a flex child
+     scroll instead of stretching its parent. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
 @media (min-width: 768px) { .qm-body { padding: 2rem 2rem 0.75rem; } }
+
+/* Inputs keep clear of the sticky footer when the keyboard scrolls them up. */
+.qm-body input,
+.qm-body select,
+.qm-body textarea { scroll-margin-block: 1.5rem 6rem; }
+
+/* A validation/status line that always occupies its space, whether or not it
+   has anything to say. Messages that appear and disappear reflow everything
+   under them, which on a phone reads as the form jumping while you type. */
+.qm-slot {
+  min-height: 1.2rem;
+  margin-bottom: 0.65rem;
+}
 
 .qm-step-head {
   display: flex;
@@ -1140,17 +1179,25 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 
 /* Footer nav */
 .qm-footer {
-  position: sticky;
-  bottom: 0;
+  /* Pinned by the card's flex column rather than by position:sticky. Sticky
+     inside a scroller re-lays-out constantly while a mobile keyboard animates,
+     which is visible as the button skittering around. */
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 1rem 1.5rem 1.3rem;
-  margin-top: 0.75rem;
-  background: linear-gradient(to top, var(--ivory) 70%, rgba(245, 243, 239, 0));
+  padding: 1rem 1.5rem calc(1.3rem + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(43, 26, 18, 0.1);
+  background: var(--ivory);
 }
-@media (min-width: 768px) { .qm-footer { padding: 1rem 2rem 1.5rem; } }
+@media (min-width: 768px) {
+  .qm-footer {
+    padding: 1rem 2rem 1.5rem;
+    border-top: none;
+  }
+}
+.qm-consent { flex: 0 0 auto; }
 .qm-back {
   background: none;
   border: none;
@@ -1500,6 +1547,26 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .js-confirm:disabled { opacity: 0.55; }
 .js-err { margin-top: 0.7rem; color: #b91c1c; font-weight: 700; font-size: 0.9rem; }
 .js-ok { margin-top: 0.7rem; color: #15803d; font-weight: 700; font-size: 0.9rem; }
+
+/* Job page header: title and pipeline stage side by side, then a way back. */
+.job-head { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }
+.job-head .job-title { margin-bottom: 0.35rem; }
+.job-back { display: inline-block; color: #6b7280; font-weight: 700; font-size: 0.9rem; text-decoration: none; margin-bottom: 1.1rem; }
+.job-back:hover { color: var(--amber); }
+
+/* Quoting and finishing from the job page. Muted borders so the amber schedule
+   card stays the loudest thing on screen when a date still needs confirming. */
+.jq-card, .jf-card, .jf-done { border-color: #d1d5db; }
+.jq-form { display: flex; flex-direction: column; gap: 0.85rem; }
+.jq-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; font-weight: 800; color: #374151; }
+.jq-field input, .jq-field textarea {
+  padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem;
+  font: inherit; font-weight: 500; color: #1f2328; background: #fff; min-height: 48px;
+}
+.jq-field textarea { min-height: 96px; resize: vertical; }
+.jq-field input:focus, .jq-field textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+.jq-cancel { background: none; border: none; color: #6b7280; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0.6rem 0; min-height: 44px; }
+.jf-done { background: #f0fdf4; border-color: #86efac; }
 
 /* ── Kanban board ── */
 .kb { position: relative; }
