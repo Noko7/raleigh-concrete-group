@@ -349,7 +349,7 @@ export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: stri
 export async function notifyCustomerScheduled(q: QuoteInfo): Promise<void> {
   await sendSms(
     q.phone,
-    `Good news ${firstName(q.name)} — your project with Raleigh Concrete Group is booked for ${prettyDay(q.scheduled_date)}. We'll text a reminder before we arrive. Thanks for your business.`,
+    `Hi ${firstName(q.name)} — your project date is confirmed by our team: ${prettyDay(q.scheduled_date)}. We look forward to it! We'll text a reminder before we arrive. — Raleigh Concrete Group`,
   ).catch(() => {});
 }
 

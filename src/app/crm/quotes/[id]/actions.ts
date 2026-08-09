@@ -228,6 +228,8 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
   revalidatePath("/crm/calendar");
+  // The contractor's own job page schedules through this action too.
+  revalidatePath("/job/[token]", "page");
   return { ok: true, message: moved ? "Date changed and everyone notified." : "Date confirmed and customer texted." };
 }
 

@@ -34,22 +34,28 @@ export const metadata: Metadata = {
     url: "https://www.raleighconcrete.net",
     siteName: "Raleigh Concrete Group",
     type: "website",
+    // The square logo on a white background. Solid white rather than a
+    // transparent PNG on purpose: iMessage and WhatsApp composite previews onto
+    // their own surface, and a transparent logo turns into a black square in
+    // dark mode.
     images: [
       {
-        url: "/images/imessage-preview.jpg",
-        width: 1200,
-        height: 1200,
-        type: "image/jpeg",
-        alt: "Raleigh Concrete Group: concrete driveways, patios and pavers in the Triangle",
+        url: "/images/logo_white_background.png",
+        width: 2000,
+        height: 2000,
+        type: "image/png",
+        alt: "Raleigh Concrete Group",
       },
     ],
   },
   twitter: {
-    card: "summary_large_image",
+    // summary (not summary_large_image) - the artwork is square, and the large
+    // card would crop the logo top and bottom.
+    card: "summary",
     title: "Raleigh Concrete Group",
     description:
       "Driveways, patios, retaining walls and pavers across the Triangle, built to last.",
-    images: ["/images/imessage-preview.jpg"],
+    images: ["/images/logo_white_background.png"],
   },
 };
 

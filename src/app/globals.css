@@ -1461,6 +1461,37 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .job-photo { display: block; border-radius: 0.6rem; overflow: hidden; border: 1px solid #e2e5ea; aspect-ratio: 1; }
 .job-photo img { width: 100%; height: 100%; object-fit: cover; }
 
+/* Mobile: read on a phone at the job site. Tap-to-call sized targets. */
+@media (max-width: 640px) {
+  .job-wrap { padding: 0.75rem; }
+  .job-card { padding: 1.2rem 1rem; }
+  .job-meta > div { grid-template-columns: 1fr; gap: 0.1rem; }
+  .job-meta dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .job-meta dd { font-size: 1.05rem; margin-bottom: 0.35rem; }
+  .job-meta a { font-weight: 700; }
+  .job-photos { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+}
+
+/* ── Contractor job page: schedule confirm (light card, phone-first) ── */
+.js-card { background: #fff; border: 2px solid var(--amber); border-radius: 0.9rem; padding: 1.1rem 1.15rem; margin-bottom: 1.4rem; }
+.js-title { font-size: 1.15rem; font-weight: 800; margin-bottom: 0.4rem; }
+.js-lead { color: #374151; font-size: 0.95rem; margin-bottom: 0.9rem; line-height: 1.45; }
+.js-booked { color: var(--amber-dark); }
+.js-hint { color: #6b7280; font-size: 0.85rem; }
+.js-choices { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 0.9rem; }
+.js-choice { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; width: 100%; text-align: left; background: #fff; border: 2px solid var(--amber); border-radius: 0.7rem; padding: 0.85rem 1rem; cursor: pointer; font: inherit; min-height: 56px; }
+.js-choice:active { background: rgba(194, 104, 42, 0.08); }
+.js-choice:disabled { opacity: 0.55; }
+.js-choice-date { font-weight: 800; color: #1f2328; }
+.js-choice-cta { flex: none; background: var(--amber); color: #fff; font-weight: 800; font-size: 0.8rem; border-radius: 999px; padding: 0.45rem 0.85rem; white-space: nowrap; }
+.js-other > summary { cursor: pointer; color: #6b7280; font-size: 0.88rem; font-weight: 700; }
+.js-other-form { display: flex; gap: 0.55rem; margin-top: 0.7rem; flex-wrap: wrap; }
+.js-date { flex: 1; min-width: 150px; padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; min-height: 48px; }
+.js-confirm { background: var(--amber); color: #fff; border: none; border-radius: 999px; padding: 0.7rem 1.2rem; font: inherit; font-weight: 800; cursor: pointer; min-height: 48px; }
+.js-confirm:disabled { opacity: 0.55; }
+.js-err { margin-top: 0.7rem; color: #b91c1c; font-weight: 700; font-size: 0.9rem; }
+.js-ok { margin-top: 0.7rem; color: #15803d; font-weight: 700; font-size: 0.9rem; }
+
 /* ── Kanban board ── */
 .kb { position: relative; }
 .kb-cols { display: flex; gap: 0.9rem; overflow-x: auto; padding-bottom: 1rem; scroll-snap-type: x proximity; }
@@ -1558,12 +1589,27 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .sched-ok { color: #4ade80; font-weight: 600; }
 
 /* Customer's preferred-day chips on the quote page (light card, dark text) */
-.cq-picks { list-style: none; margin: 0 0 0.8rem; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
-.cq-pick { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; background: #fff; border: 2px solid var(--amber); border-radius: 0.6rem; padding: 0.55rem 0.75rem; font-size: 0.92rem; text-align: left; }
-.cq-pick em { font-style: normal; color: #b45309; font-size: 0.82rem; }
+.cq-picks { list-style: none; margin: 0 0 0.8rem; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.cq-pick { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; background: #fff; border: 2px solid var(--amber); border-radius: 0.7rem; padding: 0.75rem 0.9rem; font-size: 0.95rem; text-align: left; min-height: 52px; }
+.cq-pick em { display: block; font-style: normal; color: #b45309; font-size: 0.82rem; }
 .cq-pick-taken { border-color: rgba(43, 26, 18, 0.25); }
-.cq-pick button { background: none; border: none; font-size: 1.25rem; line-height: 1; cursor: pointer; color: rgba(43, 26, 18, 0.55); padding: 0 0.2rem; }
-.cq-pick button:hover { color: #2b1a12; }
+.cq-pick button { background: rgba(43, 26, 18, 0.06); border: none; border-radius: 50%; width: 36px; height: 36px; flex: none; font-size: 1.2rem; line-height: 1; cursor: pointer; color: rgba(43, 26, 18, 0.6); }
+.cq-pick button:hover { color: #2b1a12; background: rgba(43, 26, 18, 0.12); }
+
+/* Mobile: the quote page is used almost exclusively on a phone. Full-bleed
+   card, thumb-sized targets, and the price impossible to miss. */
+@media (max-width: 640px) {
+  .cq-wrap { padding: 0.75rem; align-items: flex-start; }
+  .cq-card, .cq-confirm { padding: 1.35rem 1.1rem; border-radius: 1rem; }
+  .cq-title { font-size: 1.7rem; }
+  .cq-price { flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 1rem 1.1rem; }
+  .cq-price-value { font-size: 2.6rem; }
+  .cq-btn { min-height: 52px; display: inline-flex; align-items: center; justify-content: center; }
+  .cq-actions { flex-direction: column; }
+  .cq-actions .cq-btn { width: 100%; }
+  .cq-date { min-height: 52px; font-size: 1rem; }
+  .cq-meta > div { grid-template-columns: 80px 1fr; }
+}
 
 /* ── SMS test panel (Settings) ── */
 .sms-diag { margin-bottom: 1rem; }

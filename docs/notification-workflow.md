@@ -21,8 +21,8 @@ Who gets told what, and when. Every message in the system is listed here.
 │ ① LEAD ARRIVES                                        status: New   │
 │    Customer submits the quote form                                  │
 ├─────────────────────────────────────────────────────────────────────┤
-│ CUSTOMER  "Thanks for reaching out. We're reviewing and will text   │
-│            your price shortly."                                     │
+│ CUSTOMER  "Thanks for reaching out — we got your request and we're  │
+│            looking over the details. We'll follow up soon."         │
 │            (in-person requests instead confirm the visit day/time)  │
 │ OWNER     Labelled block: name, job type, phone, address,           │
 │            details, job link (see "Owner: new lead format" below)   │
@@ -65,11 +65,13 @@ Who gets told what, and when. Every message in the system is listed here.
                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │ ④ CREW CONFIRMS THE DAY                         status: Scheduled   │
-│    Assigned contractor OR an owner picks one of the customer's      │
-│    days (one click) or any other day. THIS IS WHAT BOOKS THE JOB.   │
+│    One tap on the customer's days — from the CRM job page OR from   │
+│    the contractor's own /job/<token> page (in their language).      │
+│    THIS IS WHAT BOOKS THE JOB.                                      │
 ├─────────────────────────────────────────────────────────────────────┤
-│ CUSTOMER  "Good news — your project is booked for Mon, Aug 17.      │
-│            We'll text a reminder before we arrive."                 │
+│ CUSTOMER  "Your project date is confirmed by our team: Mon,         │
+│            Aug 17. We look forward to it! We'll text a reminder     │
+│            before we arrive."                                       │
 │ OWNER     JOB BOOKED + full brief                                   │
 │ CREW      JOB BOOKED + full brief                                   │
 │ CALENDAR  Event created, assigned contractor invited                │
@@ -118,9 +120,10 @@ on the quote page and it went straight onto the calendar. That committed the
 crew to days nobody had checked, and the only way to fix a clash was a phone
 call — which is where scheduling used to stall.
 
-Now the customer **proposes** (up to 3 days, earliest ~11 days out, each checked
+Now the customer **proposes** (up to 3 days, earliest 4 days out, each checked
 against the one-job-per-day rule as they pick) and the crew **disposes**. The
-contractor sees those days in the CRM and confirms one with a single click.
+contractor sees those days on their own job page — in their language — and
+confirms one with a single tap; owners can do the same from the CRM.
 
 Net effect: one text each way instead of a phone-tag loop, and the crew is never
 committed to a day they haven't agreed to.

@@ -3,9 +3,11 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { dict } from "@/lib/crm/i18n";
+import { LEAD_TIME_DAYS } from "@/lib/crm/constants";
+import { dict, isLocale } from "@/lib/crm/i18n";
 import { getQuoteByToken, signFiles } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
+import { JobSchedule } from "./job-schedule";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +24,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // Contractors only see jobs assigned to them; owners can see any job.
   if (session.staff.role !== "owner" && quote.assigned_to !== session.staff.id) notFound();
 
-  const t = dict(session.staff.locale);
+  const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
+  const t = dict(locale);
+  // Scheduling appears once the customer has approved; before that there's
+  // nothing for the crew to confirm.
+  const showSchedule = quote.customer_response === "accepted" && quote.status !== "lost";
+  const minJobDate = new Date(Date.now() + LEAD_TIME_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const photos = quote.file_urls?.length ? await signFiles(quote.file_urls, 7200) : [];
   const prettyVisit = quote.visit_date
     ? new Date(`${quote.visit_date}T00:00:00`).toLocaleDateString("en-US", {
@@ -47,6 +54,18 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
       <div className="job-card">
         <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="job-logo" priority />
         <h1 className="job-title">{t.contractorJob.title}</h1>
+
+        {/* The one action this page exists for goes first - a contractor opening
+            this from a text is here to confirm the day, not to scroll. */}
+        {showSchedule && (
+          <JobSchedule
+            id={quote.id}
+            scheduledDate={quote.scheduled_date}
+            preferredDates={quote.preferred_dates ?? []}
+            minDate={minJobDate}
+            locale={locale}
+          />
+        )}
 
         <dl className="job-meta">
           <div>
