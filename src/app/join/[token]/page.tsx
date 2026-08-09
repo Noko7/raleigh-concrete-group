@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 
 import { dict } from "@/lib/crm/i18n";
-import { getUsableInvite } from "@/lib/crm/queries";
+import { getUsableInvite, markInviteOpened } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { JoinForm } from "./join-form";
 
@@ -43,6 +43,10 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
       </main>
     );
   }
+
+  // Only counted once the invite is known good, so a mistyped URL doesn't show
+  // up in the CRM as the contractor opening their link.
+  await markInviteOpened(invite);
 
   return (
     <main className="cq-wrap">

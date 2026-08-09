@@ -77,6 +77,10 @@ export type ContractorInvite = {
   created_by: string | null;
   created_at: string;
   expires_at: string;
+  // First time the link was opened, and how many times - the difference between
+  // "never clicked" and "clicked but didn't finish".
+  opened_at: string | null;
+  open_count: number;
   used_at: string | null;
   used_by: string | null;
   revoked_at: string | null;

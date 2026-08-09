@@ -110,7 +110,7 @@ approved, declined, date confirmed or moved, can't-confirm, completed, and paid.
 You're never texted about an action you performed yourself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/scheduling.sql`, `supabase/invites.sql` and `supabase/locale.sql` in the SQL Editor.
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/scheduling.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql` and `supabase/locale.sql` in the SQL Editor.
 2. Confirm Vercel env vars exist: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (the CRM needs the service-role key).
 3. Create your owner login: Supabase → **Authentication → Users → Add user** (email + password), then run the promote snippet at the bottom of `supabase/crm.sql`.
 4. **Subdomain:** in Vercel → Project → **Domains**, add `crm.raleighconcrete.net`; in your DNS registrar add the **CNAME** Vercel shows (typically `crm` → `cname.vercel-dns.com`). Routing to the CRM is already wired in `src/middleware.ts`. (Until DNS is live you can also reach it at `raleighconcrete.net/crm`.)
@@ -137,7 +137,10 @@ Language**. The choice lives on their staff row, so it follows them to any devic
 Preferred way: **CRM → Contractors → Invite a contractor**. Enter their phone number and they get a
 one-time link to `/join/<token>` where they fill in their own name and email and choose their own
 password. Nothing is created until they finish, so a mistyped number just expires.
-- The link is **single-use**, expires in **7 days**, and can be cancelled from the Pending invites list.
+- The link is **single-use**, expires in **7 days**, and can be cancelled from the Signups list.
+- The **Signups** table tracks how far each invite got: *Sent, not opened* → *Opened, not finished* →
+  *Account created*. "Opened, not finished" is the one worth chasing — they tapped the link and got
+  stuck. Repeat opens are counted, so `·3×` means they've tried three times.
 - Their alert number comes from the invite you sent, not the form, so it can't be pointed elsewhere.
 - The invite is valid even if the text fails — the link is always shown in the CRM so you can pass it
   on another way.

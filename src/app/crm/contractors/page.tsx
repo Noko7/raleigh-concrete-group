@@ -24,11 +24,33 @@ export default async function ContractorsPage() {
   const staff = await listStaff(session);
   const contractors = staff.filter((s) => s.role === "contractor");
 
-  // Invites still worth showing: not yet redeemed, cancelled or expired.
+  // Every invite with where it actually got to, so an unfinished signup is
+  // visible instead of just silently missing from the crew list.
   const now = Date.now();
-  const pendingInvites = (await listInvites(session)).filter(
-    (i) => !i.used_at && !i.revoked_at && new Date(i.expires_at).getTime() > now,
-  );
+  const invites = (await listInvites(session)).map((i) => {
+    const expired = new Date(i.expires_at).getTime() <= now;
+    const state: "completed" | "cancelled" | "expired" | "started" | "sent" = i.used_at
+      ? "completed"
+      : i.revoked_at
+        ? "cancelled"
+        : expired
+          ? "expired"
+          : i.opened_at
+            ? "started"
+            : "sent";
+    return { ...i, state };
+  });
+  // Anything still actionable stays at the top; finished/dead ones drop below.
+  const liveInvites = invites.filter((i) => i.state === "sent" || i.state === "started");
+  const doneInvites = invites.filter((i) => i.state !== "sent" && i.state !== "started").slice(0, 15);
+
+  const INVITE_STATE: Record<string, { label: string; cls: string }> = {
+    sent: { label: "Sent, not opened", cls: "ag-badge-pending" },
+    started: { label: "Opened, not finished", cls: "ag-badge-sent" },
+    completed: { label: "Account created", cls: "ag-badge-signed" },
+    cancelled: { label: "Cancelled", cls: "ag-badge-void" },
+    expired: { label: "Expired", cls: "ag-badge-void" },
+  };
 
   // One fetch for the whole page, then bucket by contractor.
   const allAgreements = await listAllAgreements(session);
@@ -49,11 +71,12 @@ export default async function ContractorsPage() {
 
       <InviteContractor />
 
-      {pendingInvites.length > 0 && (
+      {(liveInvites.length > 0 || doneInvites.length > 0) && (
         <div className="crm-card">
-          <h2 className="crm-card-title">Pending invites ({pendingInvites.length})</h2>
+          <h2 className="crm-card-title">Signups ({liveInvites.length} in progress)</h2>
           <p className="crm-muted crm-sm">
-            Sent but not completed yet. Cancelling stops the link working immediately.
+            Where each invite got to. <strong>Opened, not finished</strong> means they tapped the link but never
+            created the account — worth a call. Cancelling stops a link working immediately.
           </p>
           <div className="crm-table-wrap">
             <table className="crm-table">
@@ -61,28 +84,48 @@ export default async function ContractorsPage() {
                 <tr>
                   <th>Sent to</th>
                   <th>Name</th>
+                  <th>Status</th>
+                  <th>Opened</th>
                   <th>Expires</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {pendingInvites.map((i) => (
-                  <tr key={i.id}>
-                    <td>{prettyPhone(i.phone)}</td>
-                    <td>{i.full_name || <span className="crm-muted">—</span>}</td>
-                    <td className="crm-sm">
-                      {new Date(i.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </td>
-                    <td className="crm-row-actions">
-                      <form action={revokeContractorInvite}>
-                        <input type="hidden" name="id" value={i.id} />
-                        <button type="submit" className="crm-btn crm-btn-ghost">
-                          Cancel
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                ))}
+                {[...liveInvites, ...doneInvites].map((i) => {
+                  const s = INVITE_STATE[i.state];
+                  return (
+                    <tr key={i.id}>
+                      <td>{prettyPhone(i.phone)}</td>
+                      <td>{i.full_name || <span className="crm-muted">—</span>}</td>
+                      <td>
+                        <span className={`crm-badge ${s.cls}`}>{s.label}</span>
+                      </td>
+                      <td className="crm-sm">
+                        {i.opened_at ? (
+                          <>
+                            {new Date(i.opened_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            {i.open_count > 1 && <span className="crm-muted"> ·{i.open_count}×</span>}
+                          </>
+                        ) : (
+                          <span className="crm-muted">—</span>
+                        )}
+                      </td>
+                      <td className="crm-sm">
+                        {new Date(i.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </td>
+                      <td className="crm-row-actions">
+                        {(i.state === "sent" || i.state === "started") && (
+                          <form action={revokeContractorInvite}>
+                            <input type="hidden" name="id" value={i.id} />
+                            <button type="submit" className="crm-btn crm-btn-ghost">
+                              Cancel
+                            </button>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -168,7 +168,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
       <div className="cq-schedule">
         <h3>Which days work for you?</h3>
         <p className="cq-fine">
-          Pick up to {MAX_PREFERRED_DATES} days that suit you, starting about {LEAD_TIME_DAYS} days out. Our crew will
+          Pick up to {MAX_PREFERRED_DATES} days that suit you, starting {LEAD_TIME_DAYS} days from now. Our crew will
           confirm one of them and text you back — nothing is booked until then.
         </p>
         {discount && discounted != null && (

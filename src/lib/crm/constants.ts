@@ -25,5 +25,7 @@ export const STATUS_LABELS: Record<Status, string> = {
 };
 
 // How many days the customer may propose, and how far out the earliest is.
+// Four days is the floor for the crew to actually get it scheduled - the
+// customer picks from there, and the crew confirms one of their days.
 export const MAX_PREFERRED_DATES = 3;
-export const LEAD_TIME_DAYS = 11;
+export const LEAD_TIME_DAYS = 4;

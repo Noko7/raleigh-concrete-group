@@ -365,7 +365,7 @@ export async function recordCustomerResponse(
       if (dates.length >= MAX_PREFERRED_DATES) break;
     }
     if (dates.length === 0) {
-      return { ok: false, error: `Please pick at least one date about ${LEAD_TIME_DAYS} days out or later.` };
+      return { ok: false, error: `Please pick at least one date ${LEAD_TIME_DAYS} days from now or later.` };
     }
 
     patch.customer_response = "accepted";
@@ -516,6 +516,19 @@ export async function consumeInvite(id: string, staffId: string): Promise<boolea
   if (!res.ok) return false;
   const rows = (await res.json()) as unknown[];
   return rows.length > 0;
+}
+
+// Record that the link was opened. Best-effort and fire-and-forget: this is
+// telemetry for the owner, so it must never stop a contractor from onboarding.
+export async function markInviteOpened(invite: ContractorInvite): Promise<void> {
+  await pgAdmin(`contractor_invites?id=eq.${encodeURIComponent(invite.id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      opened_at: invite.opened_at ?? new Date().toISOString(),
+      open_count: (invite.open_count ?? 0) + 1,
+    }),
+  }).catch(() => {});
 }
 
 export async function listInvites(session: Session, limit = 50): Promise<ContractorInvite[]> {
