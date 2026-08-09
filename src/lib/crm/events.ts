@@ -28,6 +28,10 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "Internal notes updated";
     case "quote_sent":
       return "Quote sent to the customer";
+    case "quote_delivery":
+      return m.delivered
+        ? `Quote link texted to ${String(m.to ?? "the customer")}`
+        : `Quote text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` — ${String(m.error)}` : ""}`;
     case "customer_viewed":
       return "Customer opened their quote";
     case "customer_accepted": {

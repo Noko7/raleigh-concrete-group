@@ -14,6 +14,7 @@ import {
   notifyCustomerScheduled,
   notifyPaymentRequest,
   notifyQuoteReady,
+  type SendResult,
 } from "@/lib/crm/notify";
 import { addEvent, confirmSchedule, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
@@ -140,20 +141,42 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
 
     let smsDelivered = false;
+    let smsError: string | undefined;
+    let smsTo: string | undefined;
     if (sending) {
+      // Deliberately not swallowed: the whole point of this button is that the
+      // customer receives something, so a failure has to reach the screen with
+      // the provider's own reason rather than a silent false.
       const r = await notifyQuoteReady({
         name: current.name,
         phone: current.phone,
         public_token: current.public_token,
-      }).catch(() => null);
-      smsDelivered = Boolean(r?.ok);
-      // No owner text: sending the quote is always a deliberate click, and the
-      // result already shows in the UI.
+      }).catch((e) => ({ ok: false, provider: "unknown", detail: String(e) }) as SendResult);
+
+      smsDelivered = r.ok;
+      smsTo = r.to ?? current.phone;
+      if (!r.ok) {
+        smsError = [r.detail, r.status ? `(HTTP ${r.status})` : ""].filter(Boolean).join(" ").slice(0, 500);
+      }
+      // The quote is recorded as sent either way - it genuinely was marked sent
+      // and the link is live - but the log keeps whether it actually reached
+      // them, so a silent texting outage is visible afterwards.
+      await addEvent(session, id, "quote_delivery", {
+        delivered: r.ok,
+        to: smsTo,
+        error: smsError ?? null,
+      }).catch(() => {});
     }
 
     revalidatePath(`/crm/quotes/${id}`);
     revalidatePath("/crm");
-    return { ok: true, sent: sending, smsDelivered: sending ? smsDelivered : undefined };
+    return {
+      ok: true,
+      sent: sending,
+      smsDelivered: sending ? smsDelivered : undefined,
+      smsError: sending ? smsError : undefined,
+      smsTo: sending ? smsTo : undefined,
+    };
   } catch (err) {
     console.error("[saveQuote] failed", err);
     return { ok: false, error: "Something went wrong saving this quote. Please try again." };

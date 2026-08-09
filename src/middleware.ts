@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isEmailAllowed, isRoleAllowed } from "@/lib/crm/access";
+import { isStaffAllowed } from "@/lib/crm/access";
 import { AT_COOKIE, RT_COOKIE } from "@/lib/crm/env";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
@@ -181,24 +181,17 @@ export async function middleware(request: NextRequest) {
     return withNoIndex(NextResponse.redirect(url));
   }
 
-  // Restrict by allowlisted email/domain and role for all authenticated CRM
-  // routes, using the VERIFIED identity (never raw token claims).
+  // Authorize every authenticated CRM route from the VERIFIED identity (never
+  // raw token claims). There's no standalone email pre-check any more: the
+  // allowlist only applies to owners, so the role has to be known first, and
+  // that means loading the staff row. It's cached, so this is one lookup per
+  // user per few minutes rather than per request.
   if (hasSession && !isAuthApi && verified) {
     const tokenEmail = (verified.email ?? "").toLowerCase();
-    if (!isEmailAllowed(tokenEmail)) {
-      const url = request.nextUrl.clone();
-      url.pathname = isCrmHost ? "/login" : "/crm/login";
-      url.search = "";
-      const denied = NextResponse.redirect(url);
-      denied.cookies.delete(AT_COOKIE);
-      denied.cookies.delete(RT_COOKIE);
-      return withNoIndex(denied);
-    }
-
     const userId = verified.id;
     if (userId) {
       const staff = await getStaffAccess(userId);
-      if (!staff || !staff.active || !isRoleAllowed(staff.role) || !isEmailAllowed(staff.email ?? tokenEmail)) {
+      if (!staff || !staff.active || !isStaffAllowed(staff.role, staff.email ?? tokenEmail)) {
         const url = request.nextUrl.clone();
         url.pathname = isCrmHost ? "/login" : "/crm/login";
         url.search = "";

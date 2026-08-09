@@ -143,10 +143,14 @@ password. Nothing is created until they finish, so a mistyped number just expire
   on another way.
 - Manual creation (you set a temp password) is still there under "Or add a contractor manually".
 
-**Their email must be allowed to sign in.** `CRM_ALLOWED_EMAILS` / `CRM_ALLOWED_DOMAINS` gate CRM
-access, and with neither set the fallback is your own site domain only. Both the invite form and
-manual creation now refuse an address that would be blocked at login, rather than creating an account
-that can't be used — if your crew use personal addresses, add their domain(s) first.
+**Contractors sign in with their own email** — gmail, icloud, whatever they already use. No
+allowlist applies to them. What authorises a contractor is having an **active contractor staff row**,
+which only an owner can produce: the signup trigger creates staff rows *inactive*, so a stray
+Supabase signup still can't get in on its own.
+
+`CRM_ALLOWED_EMAILS` / `CRM_ALLOWED_DOMAINS` still gate the **owner** role, which is the one that can
+manage staff and see every customer. With neither set, the fallback for owners is your own site
+domain.
 
 **Deleting** is permanent and asks you to type the contractor's name. Their agreements go with them
 and any assigned jobs become unassigned. **Deactivate** is the reversible option and is usually what

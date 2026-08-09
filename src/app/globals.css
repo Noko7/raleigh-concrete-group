@@ -1522,6 +1522,13 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .kb-delete-btn { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
 }
 
+/* Send-quote outcome banner: unmissable green or red */
+.send-result { margin-top: 0.9rem; border-radius: 0.7rem; padding: 0.8rem 0.95rem; border: 1px solid; }
+.send-result-ok { background: rgba(22, 163, 74, 0.12); border-color: rgba(22, 163, 74, 0.55); color: #86efac; }
+.send-result-bad { background: rgba(220, 38, 38, 0.12); border-color: rgba(220, 38, 38, 0.55); color: #fecaca; }
+.send-result p { margin: 0.35rem 0 0; }
+.send-result-detail { margin: 0.55rem 0 0; padding: 0.55rem 0.65rem; background: #15181c; border-radius: 0.45rem; font-family: ui-monospace, monospace; font-size: 0.76rem; color: #fca5a5; white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow-y: auto; }
+
 /* Language links on the login screen (no session yet, so they're plain links) */
 .crm-auth-langs { display: flex; gap: 0.6rem; justify-content: center; margin-top: 1rem; font-size: 0.85rem; }
 .crm-auth-langs a { color: var(--crm-muted); text-decoration: none; }

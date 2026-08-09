@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { isEmailAllowed } from "@/lib/crm/access";
 import { isLocale } from "@/lib/crm/i18n";
 import { toE164 } from "@/lib/crm/notify";
 import { consumeInvite, getUsableInvite } from "@/lib/crm/queries";
@@ -71,14 +70,8 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  // An address outside the allowlist would produce an account that exists but is
-  // refused at login, so stop here rather than building something unusable.
-  if (!isEmailAllowed(email)) {
-    return NextResponse.json(
-      { ok: false, error: "That email can't be used for this CRM. Use your work address, or ask the owner." },
-      { status: 400 },
-    );
-  }
+  // No allowlist check: contractors sign in with their own personal address.
+  // Their authorisation is the invite the owner sent, not their email domain.
 
   // Re-check the token server-side: the page's own check happened earlier and
   // the invite may have been used or revoked in between.

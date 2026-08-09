@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { isEmailAllowed, isRoleAllowed } from "@/lib/crm/access";
+import { isStaffAllowed } from "@/lib/crm/access";
 import { AT_COOKIE, RT_COOKIE, ADMIN_READY } from "@/lib/crm/env";
 import { logLoginAttempt } from "@/lib/crm/queries";
 import { signInWithPassword, pgAdmin } from "@/lib/crm/rest";
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     const res = await pgAdmin(`staff?id=eq.${encodeURIComponent(token.user.id)}&select=active,role,email&limit=1`);
     const rows = res.ok ? ((await res.json()) as Pick<Staff, "active" | "role" | "email">[]) : [];
     const staff = rows[0];
-    if (!staff?.active || !isRoleAllowed(staff.role) || !isEmailAllowed(staff.email ?? token.user.email)) {
+    if (!staff?.active || !isStaffAllowed(staff.role, staff.email ?? token.user.email)) {
       await logLoginAttempt({
         email, success: false, reason: "no_access", staffId: token.user.id, ip, userAgent,
       }).catch(() => {});

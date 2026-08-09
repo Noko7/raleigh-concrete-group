@@ -86,6 +86,13 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
   return (
     <form action={formAction} className="crm-card crm-editor">
       <input type="hidden" name="id" value={id} />
+      {/* The intent rides on a hidden field rather than the submit button's
+          name/value. Relying on the submitter meant that if it didn't reach the
+          server the action silently fell through to "save": no text sent, no
+          activity logged, and a green "Saved" as if it had worked. The confirm
+          panel is only open when sending, so this can't disagree with the
+          button the user actually pressed. */}
+      <input type="hidden" name="intent" value={confirming ? "send" : "save"} />
 
       <div className="crm-editor-row">
         <label className="crm-field">
@@ -180,15 +187,30 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
             <button type="button" className="crm-btn crm-btn-send" onClick={openConfirm} disabled={pending}>
               Send Quote
             </button>
-            {state.sent && state.smsDelivered && !pending && !state.error && (
-              <span className="crm-saved">Quote sent, customer texted</span>
-            )}
-            {state.sent && !state.smsDelivered && !pending && !state.error && (
-              <span className="crm-auth-error">Marked Sent, but the text didn&apos;t go out. Copy the customer link below and send it manually.</span>
-            )}
             {state.ok && !state.sent && !pending && !state.error && <span className="crm-saved">Saved</span>}
             {(localErr || state.error) && <span className="crm-auth-error">{localErr || state.error}</span>}
           </div>
+
+          {/* Sending is the one action with a real-world outcome, so it gets an
+              unambiguous banner rather than a line of grey text. */}
+          {state.sent && !pending && !state.error && (
+            <div className={`send-result ${state.smsDelivered ? "send-result-ok" : "send-result-bad"}`}>
+              <strong>
+                {state.smsDelivered
+                  ? `Quote sent — texted to ${state.smsTo ?? "the customer"}`
+                  : "Quote saved, but the text did NOT go out"}
+              </strong>
+              {!state.smsDelivered && (
+                <>
+                  <p className="crm-sm">
+                    The quote link is live, so copy the customer link below and send it yourself. Then check Settings →
+                    Text notifications.
+                  </p>
+                  {state.smsError && <pre className="send-result-detail">{state.smsError}</pre>}
+                </>
+              )}
+            </div>
+          )}
           <p className="crm-muted crm-sm crm-editor-hint">
             Price and description are required to send. Send Quote texts the customer their link and marks this Sent.
           </p>

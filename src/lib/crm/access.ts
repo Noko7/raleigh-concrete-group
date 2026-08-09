@@ -42,3 +42,23 @@ export function isRoleAllowed(role: string | null | undefined): boolean {
   return allowedRoles.has(role.toLowerCase());
 }
 
+// The single gate every sign-in path uses.
+//
+// Contractors are NOT held to the email allowlist. Crew use personal addresses
+// (gmail, icloud) and requiring a company domain meant an owner could invite
+// someone, text them credentials, and have them rejected at login with no
+// explanation. Their authorisation is the active contractor row itself, which
+// only an owner can produce: the signup trigger creates staff rows inactive, so
+// a stray Supabase signup still can't get in on its own.
+//
+// The allowlist stays on owners, where it's actually load-bearing - that's the
+// role that can manage staff and see every customer.
+export function isStaffAllowed(
+  role: string | null | undefined,
+  email: string | null | undefined,
+): boolean {
+  if (!isRoleAllowed(role)) return false;
+  if (role === "contractor") return true;
+  return isEmailAllowed(email);
+}
+

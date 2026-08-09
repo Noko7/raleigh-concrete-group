@@ -297,7 +297,10 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
   if (q.quote_type === "inperson") {
     msg = `Hi ${firstName(q.name)}, this is ${OWNER_NAME} with Raleigh Concrete Group. You're set for an in-person quote on ${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}. We look forward to meeting you. Reply or call if anything changes.`;
   } else {
-    msg = `Hi ${firstName(q.name)}, this is ${OWNER_NAME} with Raleigh Concrete Group. We got your quote request and are reviewing the details now. We'll text your price shortly. Thanks for reaching out.`;
+    // Deliberately promises a follow-up, not a price or a timeframe. Pricing
+    // depends on the project, and committing to "your price shortly" up front
+    // sets an expectation the job can't always meet.
+    msg = `Hi ${firstName(q.name)}, this is ${OWNER_NAME} with Raleigh Concrete Group. Thanks for reaching out — we got your request and we're looking over the details now. We'll follow up soon with next steps, and reach out if we need anything else about the project.`;
   }
   await sendSms(q.phone, msg).catch(() => {});
 }

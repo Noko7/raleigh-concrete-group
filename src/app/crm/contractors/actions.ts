@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 
-import { isEmailAllowed } from "@/lib/crm/access";
 import { getSession } from "@/lib/crm/auth";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { sendSmsResult, toE164 } from "@/lib/crm/notify";
@@ -30,14 +29,9 @@ function tempPassword(): string {
   return `Rcg-${crypto.randomUUID().slice(0, 8)}-${crypto.randomUUID().slice(0, 4)}`;
 }
 
-// The login route, getSession and the middleware all reject an address outside
-// the CRM allowlist. Without this check an owner can create an account, text out
-// the credentials, and the contractor just gets "no CRM access" - so refuse up
-// front and say what to change instead.
-function accessDenialReason(email: string): string | null {
-  if (isEmailAllowed(email)) return null;
-  return `${email} isn't allowed to sign in to the CRM. Add it to CRM_ALLOWED_EMAILS (or its domain to CRM_ALLOWED_DOMAINS) in Vercel first, otherwise they'll be blocked at login.`;
-}
+// Contractors sign in with whatever address they already use - the CRM
+// allowlist only applies to owners now (see isStaffAllowed), so there's nothing
+// to check here beyond the address being well-formed.
 
 // The credentials text, built in one place so a new account and a password
 // reset can't drift apart. /crm bounces to the login screen when they're signed
@@ -64,8 +58,6 @@ export async function createContractor(_prev: AddState, formData: FormData): Pro
   const notify = String(formData.get("notify") ?? "") === "on";
   if (!EMAIL_RE.test(email)) return { ok: false, error: "Enter a valid email." };
   if (fullName.length < 2) return { ok: false, error: "Enter the contractor's name." };
-  const denied = accessDenialReason(email);
-  if (denied) return { ok: false, error: denied };
 
   const password = tempPassword();
   const created = await adminCreateUser(email, password, fullName);
@@ -175,8 +167,6 @@ export async function updateContractorContact(
   }
 
   if (!EMAIL_RE.test(email)) return { ok: false, error: "Enter a valid email." };
-  const denied = accessDenialReason(email);
-  if (denied) return { ok: false, error: denied };
 
   // Changing the login address means updating Supabase Auth first: if that
   // fails, the staff row must not drift away from the identity they sign in
