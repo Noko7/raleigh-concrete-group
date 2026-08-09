@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     // dark mode.
     images: [
       {
-        url: "/images/logo_white_background.png",
+        url: "/images/imessage-preview-image.png",
         width: 2000,
         height: 2000,
         type: "image/png",
@@ -50,12 +50,12 @@ export const metadata: Metadata = {
   },
   twitter: {
     // summary (not summary_large_image) - the artwork is square, and the large
-    // card would crop the logo top and bottom.
+    // card would crop it top and bottom.
     card: "summary",
     title: "Raleigh Concrete Group",
     description:
       "Driveways, patios, retaining walls and pavers across the Triangle, built to last.",
-    images: ["/images/logo_white_background.png"],
+    images: ["/images/imessage-preview-image.png"],
   },
 };
 

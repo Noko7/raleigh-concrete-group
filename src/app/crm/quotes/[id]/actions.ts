@@ -194,19 +194,22 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
 
   const id = String(formData.get("id") ?? "");
   const date = String(formData.get("date") ?? "").slice(0, 10);
+  const time = String(formData.get("time") ?? "").slice(0, 10);
   if (!id) return { ok: false, error: "Missing job id." };
 
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
 
-  const result = await confirmSchedule(session, id, date);
+  const result = await confirmSchedule(session, id, date, time);
   if (!result.ok) return { ok: false, error: result.error ?? "Could not save that date." };
-  if (result.previous === date) return { ok: true, message: "That date was already set." };
+  if (result.unchanged) return { ok: true, message: "That date and time were already set." };
 
   const moved = Boolean(result.previous);
   await addEvent(session, id, moved ? "date_changed" : "date_confirmed", {
     from: result.previous ?? null,
+    from_time: result.previousTime ?? null,
     to: date,
+    to_time: time,
   });
 
   const info = {
@@ -216,11 +219,12 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
     address: current.address,
     quote_amount: current.quote_amount,
     scheduled_date: date,
+    scheduled_time: time,
     job_token: current.job_token,
   };
 
   const contractor = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
-  if (moved) await notifyCustomerRescheduled(info, result.previous).catch(() => {});
+  if (moved) await notifyCustomerRescheduled(info, result.previous, result.previousTime).catch(() => {});
   else await notifyCustomerScheduled(info).catch(() => {});
   await notifyBooked(info, contractor?.phone, result.previous).catch(() => {});
   await syncQuoteToCalendar(id);

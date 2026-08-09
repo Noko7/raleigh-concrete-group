@@ -40,9 +40,9 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return `Customer approved the quote${wanted}${m.discount ? " ($150 credit)" : ""}`;
     }
     case "date_confirmed":
-      return `Work day confirmed for ${String(m.to ?? "a date")}`;
+      return `Work day confirmed for ${String(m.to ?? "a date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
     case "date_changed":
-      return `Work day moved${m.from ? ` from ${String(m.from)}` : ""} to ${String(m.to ?? "a new date")}`;
+      return `Work day moved${m.from ? ` from ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""}` : ""} to ${String(m.to ?? "a new date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
     case "customer_declined":
       return "Customer declined the quote";
     case "reminder_sent":

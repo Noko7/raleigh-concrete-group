@@ -42,8 +42,12 @@ export default async function ConfirmJobPage({ params }: { params: Promise<{ tok
 
         {quote.scheduled_date ? (
           <p className="cq-lead">
-            Your concrete job is scheduled for <strong>{prettyDate(quote.scheduled_date)}</strong>. Please confirm you&apos;re
-            still good for that day.
+            Your concrete job is scheduled for{" "}
+            <strong>
+              {prettyDate(quote.scheduled_date)}
+              {quote.scheduled_time ? ` at ${quote.scheduled_time}` : ""}
+            </strong>
+            . Please confirm you&apos;re still good for that day.
           </p>
         ) : (
           <p className="cq-lead">Please confirm your upcoming concrete job.</p>

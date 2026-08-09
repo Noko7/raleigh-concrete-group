@@ -1398,6 +1398,13 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cq-btn-secondary { background: var(--amber); color: #fff; border: 2px solid var(--amber); }
 .cq-btn-secondary:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
 .cq-fine { margin-top: 1rem; font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); text-align: center; }
+.cq-price-sub { display: block; width: 100%; font-size: 0.78rem; color: rgba(43, 26, 18, 0.6); }
+.cq-trust { list-style: none; margin: 0 0 1.25rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; }
+.cq-trust li { font-size: 0.82rem; font-weight: 700; color: rgba(43, 26, 18, 0.75); display: flex; align-items: center; gap: 0.35rem; }
+.cq-trust li::before { content: "✓"; color: var(--amber); font-weight: 800; }
+.cq-review { margin: 1.1rem 0 0; padding: 0.9rem 1rem; background: #fff; border-left: 3px solid var(--amber); border-radius: 0.6rem; }
+.cq-review p { font-size: 0.9rem; color: rgba(43, 26, 18, 0.85); font-style: italic; }
+.cq-review footer { margin-top: 0.4rem; font-size: 0.78rem; font-weight: 700; color: rgba(43, 26, 18, 0.6); }
 
 /* Full-screen booking confirmation / declined page */
 .cq-confirm { width: 100%; max-width: 520px; background: var(--ivory); border-radius: 1.25rem; padding: 2.5rem 2rem; color: #2b1a12; text-align: center; }
@@ -1478,6 +1485,8 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .js-lead { color: #374151; font-size: 0.95rem; margin-bottom: 0.9rem; line-height: 1.45; }
 .js-booked { color: var(--amber-dark); }
 .js-hint { color: #6b7280; font-size: 0.85rem; }
+.js-time { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.8rem; font-size: 0.85rem; font-weight: 800; color: #374151; }
+.js-time select { padding: 0.65rem 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; font-weight: 600; background: #fff; min-height: 48px; }
 .js-choices { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 0.9rem; }
 .js-choice { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; width: 100%; text-align: left; background: #fff; border: 2px solid var(--amber); border-radius: 0.7rem; padding: 0.85rem 1rem; cursor: pointer; font: inherit; min-height: 56px; }
 .js-choice:active { background: rgba(194, 104, 42, 0.08); }
@@ -1582,6 +1591,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .join-signin { display: inline-block; margin-top: 0.6rem; text-decoration: none; }
 
 /* ── Scheduling card (confirm / move the work day) ── */
+.sched-time { max-width: 220px; margin-top: 0.6rem; }
 .sched-picks { margin: 0.9rem 0 0.4rem; }
 .sched-picks-label { color: var(--crm-muted); margin-bottom: 0.4rem; }
 .sched-pick-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }

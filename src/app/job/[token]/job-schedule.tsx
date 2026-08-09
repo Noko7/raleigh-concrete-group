@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { dict, type Locale } from "@/lib/crm/i18n";
 import { setJobDate } from "@/app/crm/quotes/[id]/actions";
+import { START_TIMES } from "@/app/crm/quotes/[id]/schedule-card";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
 
 // Scheduling from the crew's own job page. Same server action the CRM uses, so
@@ -21,12 +22,14 @@ function pretty(s: string, locale: Locale): string {
 export function JobSchedule({
   id,
   scheduledDate,
+  scheduledTime,
   preferredDates,
   minDate,
   locale,
 }: {
   id: string;
   scheduledDate: string | null;
+  scheduledTime: string | null;
   preferredDates: string[];
   minDate: string;
   locale: Locale;
@@ -34,6 +37,8 @@ export function JobSchedule({
   const [state, formAction, pending] = useActionState<ScheduleState, FormData>(setJobDate, { ok: false });
   const t = dict(locale);
   const booked = Boolean(scheduledDate);
+  // The start time rides along with whichever day gets tapped.
+  const [time, setTime] = useState(scheduledTime ?? "9:00 AM");
 
   // Days still worth offering as a one-tap choice: the customer's picks, minus
   // whichever one is already booked.
@@ -46,7 +51,10 @@ export function JobSchedule({
       {booked ? (
         <p className="js-lead">
           {t.contractorJob.schedBookedFor}{" "}
-          <strong className="js-booked">{pretty(scheduledDate as string, locale)}</strong>
+          <strong className="js-booked">
+            {pretty(scheduledDate as string, locale)}
+            {scheduledTime ? ` · ${scheduledTime}` : ""}
+          </strong>
           <br />
           <span className="js-hint">{t.contractorJob.schedChangeHint}</span>
         </p>
@@ -58,12 +66,24 @@ export function JobSchedule({
         </p>
       )}
 
+      <label className="js-time">
+        <span>{t.contractorJob.schedStartTime}</span>
+        <select value={time} onChange={(e) => setTime(e.target.value)}>
+          {START_TIMES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      </label>
+
       {choices.length > 0 && (
         <div className="js-choices">
           {choices.map((d) => (
             <form action={formAction} key={d}>
               <input type="hidden" name="id" value={id} />
               <input type="hidden" name="date" value={d} />
+              <input type="hidden" name="time" value={time} />
               <button type="submit" className="js-choice" disabled={pending}>
                 <span className="js-choice-date">{pretty(d, locale)}</span>
                 <span className="js-choice-cta">
@@ -79,6 +99,7 @@ export function JobSchedule({
         <summary>{t.contractorJob.schedOther}</summary>
         <form action={formAction} className="js-other-form">
           <input type="hidden" name="id" value={id} />
+          <input type="hidden" name="time" value={time} />
           <input
             type="date"
             name="date"

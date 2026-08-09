@@ -61,6 +61,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           <JobSchedule
             id={quote.id}
             scheduledDate={quote.scheduled_date}
+            scheduledTime={quote.scheduled_time}
             preferredDates={quote.preferred_dates ?? []}
             minDate={minJobDate}
             locale={locale}
@@ -104,7 +105,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             <div>
               <dt>{t.contractorJob.scheduledJob}</dt>
               <dd>
-                <strong>{prettyJob}</strong>
+                <strong>{prettyJob}{quote.scheduled_time ? ` ${t.contractorJob.at} ${quote.scheduled_time}` : ""}</strong>
               </dd>
             </div>
           )}

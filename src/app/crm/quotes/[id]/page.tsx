@@ -224,6 +224,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             <ScheduleCard
               id={quote.id}
               scheduledDate={quote.scheduled_date}
+              scheduledTime={quote.scheduled_time}
               preferredDates={quote.preferred_dates ?? []}
               minDate={minJobDate}
               locale={locale}

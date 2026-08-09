@@ -407,12 +407,21 @@ export async function confirmSchedule(
   session: Session,
   id: string,
   date: string,
-): Promise<{ ok: boolean; error?: string; previous?: string | null }> {
+  time: string,
+): Promise<{ ok: boolean; error?: string; previous?: string | null; previousTime?: string | null; unchanged?: boolean }> {
   if (!ISO_DATE.test(date)) return { ok: false, error: "Pick a valid date." };
+  // Display copy like "9:00 AM" - validated by shape so a tampered form can't
+  // inject a paragraph into every text we send afterwards.
+  if (!/^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(time.trim())) return { ok: false, error: "Pick a start time." };
+  const cleanTime = time.trim().toUpperCase().replace(/\s+/, " ");
 
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
-  if (current.scheduled_date === date) return { ok: true, previous: date };
+  // A changed time on the same day is still a real change the customer needs to
+  // hear about, so only short-circuit when both halves match.
+  if (current.scheduled_date === date && current.scheduled_time === cleanTime) {
+    return { ok: true, previous: date, previousTime: cleanTime, unchanged: true };
+  }
 
   // One job per day - the DB enforces this too, but checking here gives a clear
   // message instead of a constraint violation.
@@ -422,6 +431,7 @@ export async function confirmSchedule(
 
   const updated = await updateQuote(session, id, {
     scheduled_date: date,
+    scheduled_time: cleanTime,
     status: current.status === "completed" || current.status === "paid" ? current.status : "scheduled",
     scheduled_by: session.staff.id,
     scheduled_at: new Date().toISOString(),
@@ -431,7 +441,7 @@ export async function confirmSchedule(
   });
   if (!updated) return { ok: false, error: "Could not save that date. Please try again." };
 
-  return { ok: true, previous: current.scheduled_date };
+  return { ok: true, previous: current.scheduled_date, previousTime: current.scheduled_time };
 }
 
 // Short-lived signed URL for one private storage object (path = "bucket/obj").

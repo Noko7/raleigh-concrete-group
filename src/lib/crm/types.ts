@@ -43,6 +43,8 @@ export type Quote = {
   customer_response: "accepted" | "declined" | null;
   customer_responded_at: string | null;
   scheduled_date: string | null;
+  // Crew-chosen start time for the booked day, display copy like "9:00 AM".
+  scheduled_time: string | null;
   // Days the customer said work for them; the crew confirms one of these.
   preferred_dates: string[] | null;
   scheduled_by: string | null;

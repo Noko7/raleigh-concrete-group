@@ -215,6 +215,7 @@ type QuoteInfo = {
   quote_type?: string | null;
   quote_amount?: number | null;
   scheduled_date?: string | null;
+  scheduled_time?: string | null;
   preferred_dates?: string[] | null;
   visit_date?: string | null;
   visit_time?: string | null;
@@ -245,7 +246,7 @@ function customerBrief(q: QuoteInfo): string {
 
   const jobDay = dayOrNull(q.scheduled_date);
   const visitDay = dayOrNull(q.visit_date);
-  if (jobDay) lines.push(`Scheduled: ${jobDay}`);
+  if (jobDay) lines.push(`Scheduled: ${jobDay}${q.scheduled_time ? ` at ${q.scheduled_time}` : ""}`);
   else if (visitDay) lines.push(`Quote visit: ${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}`);
   else lines.push("Not scheduled yet");
 
@@ -300,7 +301,7 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
     // Deliberately promises a follow-up, not a price or a timeframe. Pricing
     // depends on the project, and committing to "your price shortly" up front
     // sets an expectation the job can't always meet.
-    msg = `Hi ${firstName(q.name)}, this is ${OWNER_NAME} with Raleigh Concrete Group. Thanks for reaching out — we got your request and we're looking over the details now. We'll follow up soon with next steps, and reach out if we need anything else about the project.`;
+    msg = `Hi ${firstName(q.name)}, this is ${OWNER_NAME} with Raleigh Concrete Group. Thanks for reaching out. We got your request and we're looking over the details now. We'll follow up soon with next steps, and reach out if we need anything else about the project.`;
   }
   await sendSms(q.phone, msg).catch(() => {});
 }
@@ -345,21 +346,33 @@ export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: stri
   }
 }
 
+// The day plus the crew's start time, e.g. "Monday, August 17 at 9:00 AM".
+// Every customer-facing mention of the appointment goes through this so the
+// time can never silently drop out of one message but not another.
+function dayAndTime(q: QuoteInfo): string {
+  return `${prettyDay(q.scheduled_date)}${q.scheduled_time ? ` at ${q.scheduled_time}` : ""}`;
+}
+
 // ── 7. Date confirmed by the crew: now we can promise the customer a day ────
 export async function notifyCustomerScheduled(q: QuoteInfo): Promise<void> {
   await sendSms(
     q.phone,
-    `Hi ${firstName(q.name)} — your project date is confirmed by our team: ${prettyDay(q.scheduled_date)}. We look forward to it! We'll text a reminder before we arrive. — Raleigh Concrete Group`,
+    `Hi ${firstName(q.name)}, your project date and time are confirmed by our team: ${dayAndTime(q)}. We look forward to it! We'll text a reminder before we arrive. Raleigh Concrete Group`,
   ).catch(() => {});
 }
 
 // The date moved. Say so plainly rather than re-sending the "booked" text, which
 // reads as a mistake when the customer already had a different day.
-export async function notifyCustomerRescheduled(q: QuoteInfo, previous?: string | null): Promise<void> {
-  const was = dayOrNull(previous);
+export async function notifyCustomerRescheduled(
+  q: QuoteInfo,
+  previous?: string | null,
+  previousTime?: string | null,
+): Promise<void> {
+  const wasDay = dayOrNull(previous);
+  const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
   await sendSms(
     q.phone,
-    `Hi ${firstName(q.name)}, your project with Raleigh Concrete Group has been moved${was ? ` from ${was}` : ""} to ${prettyDay(q.scheduled_date)}. Sorry for the change — call or text us if that day doesn't work.`,
+    `Hi ${firstName(q.name)}, your project with Raleigh Concrete Group has been moved${was ? ` from ${was}` : ""} to ${dayAndTime(q)}. Sorry for the change. Call or text us if that doesn't work.`,
   ).catch(() => {});
 }
 
@@ -386,7 +399,7 @@ export async function notifyDeclined(q: QuoteInfo, contractorPhone?: string | nu
 export async function notifyReminder(q: QuoteInfo): Promise<SendResult> {
   return sendSmsResult(
     q.phone,
-    `Hi ${firstName(q.name)}, this is Raleigh Concrete Group. Please confirm your job on ${prettyDay(q.scheduled_date)}: ${confirmLink(q.public_token ?? "")}`,
+    `Hi ${firstName(q.name)}, this is Raleigh Concrete Group. Please confirm your job on ${dayAndTime(q)}: ${confirmLink(q.public_token ?? "")}`,
   );
 }
 export async function notifyUnconfirmed(q: QuoteInfo, contractorPhone?: string | null): Promise<void> {

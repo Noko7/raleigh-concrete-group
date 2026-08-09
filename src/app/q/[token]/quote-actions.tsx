@@ -106,7 +106,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
     return (
       <div className="cq-result cq-result-ok">
         <p className="cq-result-eyebrow">Quote approved</p>
-        <h3>Thanks — we&apos;ll confirm your date shortly</h3>
+        <h3>Thanks! We&apos;ll confirm your date shortly</h3>
         {finalPrice != null && (
           <p className="cq-result-price">
             {discount && <span className="cq-result-save">${DECLINE_CREDIT} credit applied</span>}
@@ -169,7 +169,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
         <h3>Which days work for you?</h3>
         <p className="cq-fine">
           Pick up to {MAX_PREFERRED_DATES} days that suit you, starting {LEAD_TIME_DAYS} days from now. Our crew will
-          confirm one of them and text you back — nothing is booked until then.
+          confirm one of them and text you back. Nothing is booked until then.
         </p>
         {discount && discounted != null && (
           <p className="cq-offer-price">
@@ -183,7 +183,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
               <li key={d} className={taken.includes(d) ? "cq-pick cq-pick-taken" : "cq-pick"}>
                 <span>
                   {pretty(d)}
-                  {taken.includes(d) && <em> — likely full, we&apos;ll suggest another</em>}
+                  {taken.includes(d) && <em> (likely full, we&apos;ll suggest another)</em>}
                 </span>
                 <button type="button" onClick={() => removeDate(d)} disabled={busy} aria-label={`Remove ${pretty(d)}`}>
                   ×

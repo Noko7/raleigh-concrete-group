@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import { DECLINE_CREDIT } from "@/lib/crm/constants";
 import { getQuoteByToken } from "@/lib/crm/queries";
-import { businessName, links, phoneDisplay } from "@/lib/site-data";
+import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
 import { QuoteActions } from "./quote-actions";
 import { ViewBeacon } from "./view-beacon";
 
@@ -81,7 +81,11 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             </p>
           ) : (
             <p className="cq-confirm-date">
-              We&apos;ve got you booked for <strong>{prettyDate(quote.scheduled_date as string)}</strong>
+              We&apos;ve got you booked for{" "}
+              <strong>
+                {prettyDate(quote.scheduled_date as string)}
+                {quote.scheduled_time ? ` at ${quote.scheduled_time}` : ""}
+              </strong>
             </p>
           )}
           {amount && (
@@ -151,9 +155,18 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               Here&apos;s your quote{quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We&apos;d love to do the work for you.
             </p>
             <div className="cq-price">
-              <span className="cq-price-label">Your price</span>
+              <span className="cq-price-label">Your price, all in</span>
               <span className="cq-price-value">{amount}</span>
+              <span className="cq-price-sub">Free quote · no obligation until you approve</span>
             </div>
+            {/* Trust markers echo the site's own published copy (clear pricing,
+                on time, local) - no warranty or licensing claims per business
+                policy in site-data.ts. */}
+            <ul className="cq-trust">
+              <li>Local Raleigh crew</li>
+              <li>Clear pricing, no surprises</li>
+              <li>We show up when we say</li>
+            </ul>
           </>
         ) : (
           <p className="cq-lead">
@@ -184,6 +197,18 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
         )}
 
         {hasPrice ? <QuoteActions token={token} amount={Number(quote.quote_amount)} /> : null}
+
+        {/* One real review from the site's testimonials, right below the
+            decision point - the moment a nervous customer looks for a reason
+            to trust the number above. */}
+        {hasPrice && (
+          <blockquote className="cq-review">
+            <p>&ldquo;{testimonials[0].quote}&rdquo;</p>
+            <footer>
+              {testimonials[0].name}, {testimonials[0].city}
+            </footer>
+          </blockquote>
+        )}
 
         <ContactButtons />
         <p className="cq-fine">Questions about your quote? Just call or text. We&apos;re happy to walk you through it.</p>

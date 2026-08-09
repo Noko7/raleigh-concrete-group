@@ -64,14 +64,14 @@ Who gets told what, and when. Every message in the system is listed here.
         ── crew checks their own schedule ──
                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ ④ CREW CONFIRMS THE DAY                         status: Scheduled   │
-│    One tap on the customer's days — from the CRM job page OR from   │
-│    the contractor's own /job/<token> page (in their language).      │
-│    THIS IS WHAT BOOKS THE JOB.                                      │
+│ ④ CREW CONFIRMS THE DAY + START TIME            status: Scheduled   │
+│    Pick a start time, then one tap on the customer's days — from    │
+│    the CRM job page OR the contractor's own /job/<token> page (in   │
+│    their language). THIS IS WHAT BOOKS THE JOB.                     │
 ├─────────────────────────────────────────────────────────────────────┤
-│ CUSTOMER  "Your project date is confirmed by our team: Mon,         │
-│            Aug 17. We look forward to it! We'll text a reminder     │
-│            before we arrive."                                       │
+│ CUSTOMER  "Your project date and time are confirmed by our team:    │
+│            Monday, August 17 at 9:00 AM. We look forward to it!     │
+│            We'll text a reminder before we arrive."                 │
 │ OWNER     JOB BOOKED + full brief                                   │
 │ CREW      JOB BOOKED + full brief                                   │
 │ CALENDAR  Event created, assigned contractor invited                │
@@ -82,8 +82,9 @@ Who gets told what, and when. Every message in the system is listed here.
 │ ⑤ DATE MOVES (any time after ④)                                     │
 │    Same card, "Change date"                                         │
 ├─────────────────────────────────────────────────────────────────────┤
-│ CUSTOMER  "Your project has been moved from Mon Aug 17 to Thu Aug   │
-│            20. Sorry for the change — call us if that doesn't work."│
+│ CUSTOMER  "Your project has been moved from Mon Aug 17 at 9:00 AM   │
+│            to Thu Aug 20 at 8:00 AM. Sorry for the change."         │
+│            (time-only changes on the same day notify too)           │
 │ OWNER     DATE CHANGED (Aug 17 → Aug 20) + brief                    │
 │ CREW      DATE CHANGED + brief                                      │
 │ CALENDAR  Updated                                                   │
