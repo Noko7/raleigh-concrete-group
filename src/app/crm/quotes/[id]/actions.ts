@@ -297,6 +297,7 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   const clash = await findVisitConflict(current.assigned_to, date, time, id);
   if (clash) return { ok: false, error: conflictMessage(clash) };
 
+  const wasOnline = current.quote_type === "online";
   const { quote: updated, error } = await updateQuoteResult(session, id, {
     quote_type: "inperson",
     visit_date: date,
@@ -333,6 +334,9 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
     // What they originally asked for, so the customer text can own up to it if
     // the crew put them on a different day.
     { date: current.visit_date, time: current.visit_time },
+    // Read before the update above flipped it. An in-person request being given
+    // a date is not the same story as an online one being converted.
+    wasOnline,
   ).catch(() => {});
   await syncQuoteToCalendar(id);
 

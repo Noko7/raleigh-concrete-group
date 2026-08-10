@@ -333,6 +333,9 @@ const en = {
     visitTitle: "Need to see it in person?",
     visitLead:
       "This came in as an online quote, so price it from the photos if you can. If the job is too big to call from pictures, confirm a visit and we'll text the customer.",
+    visitScheduleTitle: "Schedule the on-site quote",
+    visitScheduleLead:
+      "This is an in-person quote with no date on it yet. Pick a day and time to go out and measure, and we'll text the customer to confirm.",
     visitAsked: "Customer offered",
     visitNotConfirmed: "Not confirmed yet",
     visitConfirm: "Confirm this visit",
@@ -715,6 +718,9 @@ const es: typeof en = {
     visitTitle: "¿Necesitas verlo en persona?",
     visitLead:
       "Esta llegó como cotización en línea, así que cotízala con las fotos si puedes. Si el trabajo es muy grande para calcularlo por fotos, confirma una visita y le avisamos al cliente por mensaje.",
+    visitScheduleTitle: "Agenda la visita de cotización",
+    visitScheduleLead:
+      "Es una cotización en persona y todavía no tiene fecha. Elige el día y la hora para ir a medir, y le avisamos al cliente por mensaje.",
     visitAsked: "El cliente propuso",
     visitNotConfirmed: "Todavía sin confirmar",
     visitConfirm: "Confirmar esta visita",

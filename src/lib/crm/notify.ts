@@ -514,6 +514,7 @@ export async function notifyVisitConfirmed(
   crewPhone?: string | null,
   crewName?: string | null,
   requested?: { date?: string | null; time?: string | null },
+  fromOnline = true,
 ): Promise<void> {
   const when = `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`;
 
@@ -538,7 +539,13 @@ export async function notifyVisitConfirmed(
       `Hi ${firstName(q.name)},`,
       `this is ${BUSINESS}.`,
       "",
-      "For a job like this we want to make sure you get an accurate estimate, so rather than price it off the photos we'd like to come measure it in person. We have you down for:",
+      // "Rather than price it off the photos" only makes sense to someone who
+      // sent photos. A customer who booked an in-person quote from the start
+      // never did, and telling them we've decided against a photo quote they
+      // never asked for reads as a different job.
+      fromOnline
+        ? "For a job like this we want to make sure you get an accurate estimate, so rather than price it off the photos we'd like to come measure it in person. We have you down for:"
+        : "To make sure you get an accurate estimate we'd like to come measure the job in person. We have you down for:",
       "",
       when,
       "",

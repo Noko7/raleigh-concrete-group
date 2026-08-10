@@ -40,11 +40,24 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   const showQuote = !showSchedule && quote.status !== "lost" && quote.status !== "completed" && quote.status !== "paid";
   const showFinish = quote.status === "scheduled";
   const isDone = quote.status === "completed" || quote.status === "paid";
-  // Still an online request, so the crew hasn't decided yet whether the photos
-  // are enough. Sits alongside the quote card, not instead of it: pricing it
-  // remotely is still the faster path and stays one tap away.
+
+  // The same column read two ways: a booked appointment on an in-person request,
+  // or the slot an online customer offered in case photos aren't enough.
+  const visitDate = visitDateOf(quote);
+  // The visit card covers two different situations, both of which end in the
+  // crew putting a real appointment on the calendar:
+  //
+  //   online    they haven't decided whether the photos are enough, and the
+  //             customer offered a slot in case they aren't
+  //   schedule  an in-person request with no date on the books - either the
+  //             visit was cancelled off the calendar or it predates the form
+  //             asking - so somebody has to pick one
+  //
+  // It sits above the quote form rather than instead of it: on an online job,
+  // pricing it remotely is still the faster path and stays available below.
   const requestedVisit = requestedVisitOf(quote);
-  const showVisit = showQuote && quote.quote_type === "online";
+  const needsVisitDate = quote.quote_type === "inperson" && !visitDate;
+  const showVisit = showQuote && (quote.quote_type === "online" || needsVisitDate);
 
   // The crew books against their own schedule, so their picker starts today.
   // The 7-day floor applies to what a customer may request, not to what the
@@ -59,7 +72,6 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
       month: "long",
       day: "numeric",
     });
-  const visitDate = visitDateOf(quote);
   const prettyVisit = visitDate ? fmtDay(visitDate) : null;
   const prettyJob = quote.scheduled_date ? fmtDay(quote.scheduled_date) : null;
 
@@ -102,9 +114,9 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           {t.contractorJob.backToJobs}
         </Link>
 
-        {/* Reversed out of a dark block on purpose. This is read on a phone at
-            arm's length, often outdoors, and these are the two facts worth
-            shouting. */}
+        {/* Read on a phone at arm's length, often outdoors, so these two facts
+            are set large and heavy. They shout through size rather than through
+            a colour of their own - this is one card in a stack, not a banner. */}
         <div className="job-key">
           <span className={`job-type job-type-${isInPerson ? "inperson" : "online"}`}>
             {isInPerson ? t.contractorJob.typeInPerson : t.contractorJob.typeOnline}
@@ -126,9 +138,11 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           )}
         </div>
 
-        {/* The one action this page exists for goes first - a contractor opening
-            this from a text is here to act, not to scroll. Which action that is
-            depends on the stage: price it, book it, or close it out. */}
+        {/* Appointments go at the top: they're the time-critical decisions and
+            they need nothing from further down the page. Pricing is the one
+            action that does need the photos and notes below, so it waits at the
+            bottom rather than sitting here asking for a number you can't give
+            yet. Which cards appear depends on the stage. */}
         {showSchedule && (
           <JobSchedule
             id={quote.id}
@@ -143,21 +157,11 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         {showVisit && (
           <JobVisit
             id={quote.id}
+            mode={needsVisitDate ? "schedule" : "online"}
             requestedDate={requestedVisit}
             requestedTime={quote.visit_time}
             minDate={minJobDate}
             locale={locale}
-          />
-        )}
-
-        {showQuote && (
-          <JobQuote
-            id={quote.id}
-            locale={locale}
-            amount={quote.quote_amount}
-            summary={quote.quote_summary}
-            alreadySent={Boolean(quote.quote_sent_at)}
-            customerFirstName={quote.name.trim().split(/\s+/)[0] || quote.name}
           />
         )}
 
@@ -245,6 +249,20 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               ) : null,
             )}
           </div>
+        )}
+
+        {/* Pricing goes last on purpose. It needs the photos, the notes and the
+            address that sit above it, so putting it here means reading the job
+            and then quoting it, rather than scrolling past the form twice. */}
+        {showQuote && (
+          <JobQuote
+            id={quote.id}
+            locale={locale}
+            amount={quote.quote_amount}
+            summary={quote.quote_summary}
+            alreadySent={Boolean(quote.quote_sent_at)}
+            customerFirstName={quote.name.trim().split(/\s+/)[0] || quote.name}
+          />
         )}
       </div>
     </main>
