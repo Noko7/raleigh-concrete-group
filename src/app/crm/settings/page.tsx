@@ -1,6 +1,6 @@
 import { requireSession } from "@/lib/crm/auth";
 import { dict, isLocale } from "@/lib/crm/i18n";
-import { ownerRecipients, smsDiagnostics } from "@/lib/crm/notify";
+import { ownerRecipientDetails, smsDiagnostics } from "@/lib/crm/notify";
 import { getPrimaryContractorId, listContractors } from "@/lib/crm/queries";
 import { SettingsForm } from "./settings-form";
 import { PrimaryContractorForm } from "./primary-contractor-form";
@@ -16,7 +16,7 @@ export default async function SettingsPage() {
   const contractors = isOwner ? await listContractors(session) : [];
   const primaryId = isOwner ? await getPrimaryContractorId() : null;
   const sms = isOwner ? smsDiagnostics() : null;
-  const alertTargets = isOwner ? await ownerRecipients() : [];
+  const alertTargets = isOwner ? await ownerRecipientDetails() : [];
   const t = dict(staff.locale);
 
   return (

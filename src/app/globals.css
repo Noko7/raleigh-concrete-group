@@ -1933,6 +1933,12 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-panel-check em { display: block; font-style: normal; color: var(--crm-muted); font-size: 0.8rem; margin-top: 0.15rem; }
 .cal-panel-link { color: var(--crm-muted); font-size: 0.85rem; text-decoration: underline; margin-top: auto; }
 .cal-panel-link:hover { color: var(--crm-accent); }
+/* Alert recipients, each with where it came from. */
+.sms-targets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.sms-targets li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+.sms-envnote { margin-top: 0.6rem; }
+.sms-envnote code { background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 0.3rem; padding: 0.05rem 0.3rem; font-size: 0.78rem; }
+
 .cal-panel-when { font-size: 1.05rem; font-weight: 800; color: var(--crm-text); }
 /* Call and directions sit above the detail list: on site they're the reason
    the panel got opened at all. */

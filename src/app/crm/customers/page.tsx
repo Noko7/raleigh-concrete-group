@@ -68,27 +68,33 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       </div>
 
       <form className="crm-filters" method="get" action={`${base}/customers`}>
-        <input className="crm-input" type="search" name="search" placeholder="Search name, phone, email…" defaultValue={sp.search ?? ""} />
+        <input
+          className="crm-input"
+          type="search"
+          name="search"
+          placeholder={t.customers.searchPlaceholder}
+          defaultValue={sp.search ?? ""}
+        />
         <button type="submit" className="crm-btn crm-btn-primary">
-          Search
+          {t.customers.search}
         </button>
         <Link href={`${base}/customers`} className="crm-btn crm-btn-ghost">
-          Reset
+          {t.customers.reset}
         </Link>
       </form>
 
       {customers.length === 0 ? (
-        <div className="crm-empty">No customers yet.</div>
+        <div className="crm-empty">{t.customers.empty}</div>
       ) : (
         <div className="crm-table-wrap">
           <table className="crm-table">
             <thead>
               <tr>
-                <th>Customer</th>
-                <th>Contact</th>
-                <th>Quotes</th>
-                <th>Latest</th>
-                <th>Won value</th>
+                <th>{t.customers.colCustomer}</th>
+                <th>{t.customers.colContact}</th>
+                <th>{t.customers.colQuotes}</th>
+                <th>{t.customers.colLatest}</th>
+                <th>{t.customers.wonValue}</th>
                 <th></th>
               </tr>
             </thead>
@@ -102,12 +108,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   </td>
                   <td>{c.count}</td>
                   <td>
-                    <span className={`crm-badge crm-badge-${c.lastStatus}`}>{STATUS_LABELS[c.lastStatus]}</span>
+                    <span className={`crm-badge crm-badge-${c.lastStatus}`}>
+                      {t.status[c.lastStatus] ?? STATUS_LABELS[c.lastStatus]}
+                    </span>
                   </td>
-                  <td>{c.wonValue > 0 ? `$${c.wonValue.toLocaleString()}` : "N/A"}</td>
+                  <td>{c.wonValue > 0 ? `$${c.wonValue.toLocaleString()}` : t.common.na}</td>
                   <td className="crm-row-actions">
                     <Link href={`${base}/?search=${encodeURIComponent(c.phone)}`} className="crm-btn crm-btn-ghost">
-                      View quotes
+                      {t.customers.viewQuotes}
                     </Link>
                   </td>
                 </tr>

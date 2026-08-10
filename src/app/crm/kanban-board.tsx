@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { STATUSES, type Status } from "@/lib/crm/constants";
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { assignQuote, deleteQuote, moveQuote } from "./board-actions";
 
 export type BoardQuote = {
@@ -28,16 +28,19 @@ export type BoardQuote = {
   job_token: string | null;
 };
 
-function shortDate(ymd: string | null): string {
+function shortDate(ymd: string | null, locale: Locale): string {
   if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "";
-  return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(`${ymd}T00:00:00`).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 // One clear label per lead type so a card reads at a glance.
-function typeLabel(q: BoardQuote): { text: string; cls: string } {
-  if (q.quote_type === "online") return { text: "Online quote", cls: "online" };
-  if (q.quote_type === "inperson") return { text: "In-person quote", cls: "inperson" };
-  return { text: "Lead", cls: "inperson" };
+function typeLabel(q: BoardQuote, t: Dict): { text: string; cls: string } {
+  if (q.quote_type === "online") return { text: t.pipeline.typeOnline, cls: "online" };
+  if (q.quote_type === "inperson") return { text: t.pipeline.typeInPerson, cls: "inperson" };
+  return { text: t.pipeline.typeLead, cls: "inperson" };
 }
 
 function telHref(phone: string): string {
@@ -123,7 +126,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
       const res = await moveQuote(id, status);
       if (!res.ok) {
         setQuotes(prev);
-        flash(res.error ?? "Could not move that quote.");
+        flash(res.error ?? t.pipeline.errMove);
       } else {
         router.refresh();
       }
@@ -131,16 +134,16 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
   }
 
   function remove(id: string, name: string) {
-    if (!window.confirm(`Delete ${name}'s lead from the pipeline? You can restore it later from Archived.`)) return;
+    if (!window.confirm(fill(t.pipeline.deleteConfirm, { name }))) return;
     const prev = quotes;
     setQuotes((qs) => qs.filter((q) => q.id !== id));
     startTransition(async () => {
       const res = await deleteQuote(id);
       if (!res.ok) {
         setQuotes(prev);
-        flash(res.error ?? "Could not delete that lead.");
+        flash(res.error ?? t.pipeline.errDelete);
       } else {
-        flash("Lead deleted. Restore it anytime from Archived.");
+        flash(t.pipeline.deleted);
         router.refresh();
       }
     });
@@ -155,7 +158,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
       const res = await assignQuote(id, contractorId);
       if (!res.ok) {
         setQuotes(prev);
-        flash(res.error ?? "Could not assign.");
+        flash(res.error ?? t.pipeline.errAssign);
       } else {
         router.refresh();
       }
@@ -190,7 +193,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
               </header>
 
               <div className="kb-col-body">
-                {cards.length === 0 && <p className="kb-empty">Drop here</p>}
+                {cards.length === 0 && <p className="kb-empty">{t.pipeline.dropHere}</p>}
                 {cards.map((q) => (
                   <article
                     key={q.id}
@@ -214,45 +217,49 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                       {q.quote_amount != null && <span className="kb-card-amount">{money(q.quote_amount)}</span>}
                     </div>
                     <p className="kb-card-sub">
-                      {q.service || "Service TBD"}
+                      {q.service || t.pipeline.serviceTBD}
                       {q.city ? ` \u00b7 ${q.city}` : ""}
                     </p>
                     {(() => {
-                      const t = typeLabel(q);
-                      const jobDate = shortDate(q.scheduled_date);
-                      const visitDate = shortDate(q.visit_date);
+                      const kind = typeLabel(q, t);
+                      const jobDate = shortDate(q.scheduled_date, locale);
+                      const visitDate = shortDate(q.visit_date, locale);
                       return (
                         <div className="kb-card-meta">
-                          <span className={`kb-pill kb-pill-${t.cls}`}>{t.text}</span>
+                          <span className={`kb-pill kb-pill-${kind.cls}`}>{kind.text}</span>
                           {jobDate && (
                             <span className="kb-pill kb-pill-date">
-                              Job {jobDate}
+                              {t.pipeline.pillJob} {jobDate}
                               {q.scheduled_time ? ` ${q.scheduled_time}` : ""}
                             </span>
                           )}
                           {!jobDate && visitDate && (
                             <span className="kb-pill kb-pill-date">
-                              Visit {visitDate}
+                              {t.pipeline.pillVisit} {visitDate}
                               {q.visit_time ? ` ${q.visit_time}` : ""}
                             </span>
                           )}
-                          {q.confirmed_at && <span className="kb-pill kb-pill-confirmed">Confirmed</span>}
-                          {q.view_count > 0 && <span className="kb-pill kb-pill-view">Viewed {q.view_count}x</span>}
-                          {q.assigned_to && <span className="kb-pill kb-pill-assigned">{nameMap[q.assigned_to] ?? "Assigned"}</span>}
+                          {q.confirmed_at && <span className="kb-pill kb-pill-confirmed">{t.pipeline.pillConfirmed}</span>}
+                          {q.view_count > 0 && (
+                            <span className="kb-pill kb-pill-view">
+                              {t.pipeline.pillViewed} {q.view_count}x
+                            </span>
+                          )}
+                          {q.assigned_to && <span className="kb-pill kb-pill-assigned">{nameMap[q.assigned_to] ?? t.pipeline.crew}</span>}
                         </div>
                       );
                     })()}
 
                     <div className="kb-quick" onClick={(e) => e.stopPropagation()}>
-                      <a href={telHref(q.phone)} className="kb-quick-btn" aria-label={`Call ${q.name}`}>
-                        Call
+                      <a href={telHref(q.phone)} className="kb-quick-btn" aria-label={`${t.calendar.call} ${q.name}`}>
+                        {t.calendar.call}
                       </a>
-                      <a href={smsHref(q.phone)} className="kb-quick-btn" aria-label={`Text ${q.name}`}>
-                        Text
+                      <a href={smsHref(q.phone)} className="kb-quick-btn" aria-label={`${t.pipeline.textBtn} ${q.name}`}>
+                        {t.pipeline.textBtn}
                       </a>
                       {q.address && (
                         <a href={mapsHref(q.address)} target="_blank" rel="noreferrer" className="kb-quick-btn">
-                          Map
+                          {t.calendar.map}
                         </a>
                       )}
                     </div>
@@ -270,7 +277,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                       </label>
                       {role === "owner" && (
                         <label className="kb-move">
-                          <span>Crew</span>
+                          <span>{t.pipeline.crew}</span>
                           <select value={q.assigned_to ?? ""} onChange={(e) => assign(q.id, e.target.value)}>
                             <option value="">{t.pipeline.unassignedCard}</option>
                             {contractors.map((c) => (
@@ -285,10 +292,10 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                         <button
                           type="button"
                           className="kb-delete-btn"
-                          aria-label={`Delete ${q.name}'s lead`}
+                          aria-label={`${t.pipeline.deleteLead} ${q.name}`}
                           onClick={() => remove(q.id, q.name)}
                         >
-                          Delete
+                          {t.pipeline.deleteLead}
                         </button>
                       )}
                     </div>

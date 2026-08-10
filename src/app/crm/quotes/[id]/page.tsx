@@ -185,7 +185,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 ? `DocuSeal will email ${quote.email}.`
                 : "This customer has no email on file, so DocuSeal can't email them — share the signing link another way."}
             </p>
-            <AgreementList agreements={agreements} isOwner={isOwner} />
+            <AgreementList agreements={agreements} isOwner={isOwner} locale={locale} />
             {isOwner && (
               <div className="ag-add">
                 <AddAgreement kind="customer" targetId={quote.id} defaultTitle={`Customer agreement — ${quote.name}`} />

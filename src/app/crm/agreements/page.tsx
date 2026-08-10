@@ -1,22 +1,28 @@
 import Link from "next/link";
 
 import { requireSession } from "@/lib/crm/auth";
-import { dict } from "@/lib/crm/i18n";
+import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { listAllAgreements, listQuotes, listStaff } from "@/lib/crm/queries";
 import { AgreementStatusBadge } from "./agreement-list";
 
 export const dynamic = "force-dynamic";
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+function fmt(iso: string, locale: string) {
+  return new Date(iso).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export default async function AgreementsPage() {
   const session = await requireSession();
   const base = await crmBase();
   const isOwner = session.staff.role === "owner";
-  const t = dict(session.staff.locale);
+  const rawLocale = session.staff.locale;
+  const locale = isLocale(rawLocale) ? rawLocale : "en";
+  const t = dict(locale);
 
   // RLS already scopes these: a contractor only sees their own agreement and the
   // jobs assigned to them, so this page works for both roles unchanged.
@@ -80,8 +86,8 @@ export default async function AgreementsPage() {
                 {agreements.map((a) => {
                   const who =
                     a.kind === "contractor"
-                      ? staffNames.get(a.staff_id ?? "") ?? "Contractor"
-                      : quoteNames.get(a.quote_id ?? "") ?? "Customer";
+                      ? staffNames.get(a.staff_id ?? "") ?? t.agreements.contractor
+                      : quoteNames.get(a.quote_id ?? "") ?? t.agreements.customer;
                   return (
                     <tr key={a.id}>
                       <td>{a.title}</td>
@@ -96,9 +102,9 @@ export default async function AgreementsPage() {
                         )}
                       </td>
                       <td>
-                        <AgreementStatusBadge status={a.status} />
+                        <AgreementStatusBadge status={a.status} locale={locale} />
                       </td>
-                      <td>{fmt(a.created_at)}</td>
+                      <td>{fmt(a.created_at, locale)}</td>
                       <td className="crm-row-actions">
                         {a.file_path && (
                           <a
@@ -107,12 +113,12 @@ export default async function AgreementsPage() {
                             target="_blank"
                             rel="noreferrer"
                           >
-                            File
+                            {t.agreements.viewFile}
                           </a>
                         )}
                         {a.docuseal_url && (
                           <a className="crm-btn crm-btn-ghost" href={a.docuseal_url} target="_blank" rel="noreferrer">
-                            DocuSeal
+                            {t.agreements.openDocuseal}
                           </a>
                         )}
                       </td>
@@ -127,8 +133,7 @@ export default async function AgreementsPage() {
 
       {isOwner && (
         <p className="crm-muted crm-sm">
-          Add a contractor agreement on the <Link href={`${base}/contractors`}>Contractors</Link> page, or a customer
-          agreement from that job&apos;s page.
+          <Link href={`${base}/contractors`}>{t.nav.contractors}</Link> · {t.agreements.ownerHint}
         </p>
       )}
     </main>

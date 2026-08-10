@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import type { OwnerRecipient } from "@/lib/crm/notify";
 import { sendTestSms } from "./actions";
 import type { TestSmsState } from "./types";
 
@@ -16,7 +17,7 @@ export function TestSms({
   from: string | null;
   missing: string[];
   ready: boolean;
-  recipients: string[];
+  recipients: OwnerRecipient[];
 }) {
   const [state, formAction, pending] = useActionState<TestSmsState, FormData>(sendTestSms, { ok: false });
 
@@ -54,14 +55,33 @@ export function TestSms({
         <div>
           <dt>Owner alerts go to</dt>
           <dd>
-            {recipients.length > 0 ? (
-              recipients.join(", ")
-            ) : (
+            {recipients.length === 0 ? (
               <span className="crm-muted">Nobody — save your phone above or set OWNER_PHONE</span>
+            ) : (
+              <ul className="sms-targets">
+                {recipients.map((r) => (
+                  <li key={r.phone}>
+                    <strong>{r.phone}</strong>
+                    <span className="crm-muted crm-sm">{r.who}</span>
+                  </li>
+                ))}
+              </ul>
             )}
           </dd>
         </div>
       </dl>
+
+      {/* Every one of these numbers gets texted on every money moment, so an
+          unrecognised one is worth chasing down. Naming the source is the
+          difference between "why is this number here" and knowing which knob
+          to turn: env vars live in Vercel, profiles are editable in the CRM. */}
+      {recipients.some((r) => r.source === "env") && (
+        <p className="crm-muted crm-sm sms-envnote">
+          A number listed as <code>OWNER_PHONE env var</code> comes from Vercel, not from this app. To stop it
+          receiving alerts, remove or change <code>OWNER_PHONE</code> in Vercel → Settings → Environment Variables and
+          redeploy. Owner profile numbers are changed here in the CRM.
+        </p>
+      )}
 
       <form action={formAction} className="crm-editor">
         <label className="crm-field">

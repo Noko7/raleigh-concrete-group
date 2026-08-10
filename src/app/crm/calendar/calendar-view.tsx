@@ -3,7 +3,8 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { STATUS_LABELS, VISIT_TIME_SLOTS, type Status } from "@/lib/crm/constants";
+import { VISIT_TIME_SLOTS } from "@/lib/crm/constants";
+import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { START_TIMES } from "@/app/crm/quotes/[id]/schedule-card";
 import { deleteEvent, moveEvent, type CalActionState } from "./actions";
 
@@ -21,21 +22,33 @@ export type CalEvent = {
   status: string;
 };
 
-const KIND_LABEL: Record<CalKind, string> = {
-  job: "Job",
-  inperson: "In-person quote",
-  online: "Online quote",
-};
+const kindLabel = (t: Dict, k: CalKind) =>
+  k === "job" ? t.calendar.kindJob : k === "inperson" ? t.calendar.kindInPerson : t.calendar.kindOnline;
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-// Both spellings render; CSS picks one. A single letter is all that fits over a
-// 45px column, and "Sun" is what you want when the columns are 140px wide.
-const DOW: [string, string][] = [
-  ["Sun", "S"], ["Mon", "M"], ["Tue", "T"], ["Wed", "W"], ["Thu", "T"], ["Fri", "F"], ["Sat", "S"],
-];
+// Month names and weekday initials come from the browser rather than a hand
+// written list, so Spanish gets "enero" and "L M X J V S D" without a second
+// table to keep in sync.
+const intlLocale = (l: Locale) => (l === "es" ? "es-US" : "en-US");
+
+function monthNames(locale: Locale): string[] {
+  const f = new Intl.DateTimeFormat(intlLocale(locale), { month: "long" });
+  return Array.from({ length: 12 }, (_, m) => {
+    const name = f.format(new Date(2024, m, 1));
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  });
+}
+
+// [full, initial] per weekday, starting Sunday. CSS picks which one shows: a
+// single letter is all that fits over a 45px column.
+function weekdayNames(locale: Locale): [string, string][] {
+  const long = new Intl.DateTimeFormat(intlLocale(locale), { weekday: "short" });
+  const narrow = new Intl.DateTimeFormat(intlLocale(locale), { weekday: "narrow" });
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(2024, 8, 1 + i); // 2024-09-01 was a Sunday
+    const full = long.format(d);
+    return [full.charAt(0).toUpperCase() + full.slice(1), narrow.format(d).toUpperCase()];
+  });
+}
 
 // How many chips fit in a month cell before it collapses into "+N more".
 const MAX_CHIPS = 3;
@@ -45,8 +58,8 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function longDate(s: string): string {
-  return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
+function longDate(s: string, locale: Locale): string {
+  return new Date(`${s}T00:00:00`).toLocaleDateString(intlLocale(locale), {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -62,21 +75,22 @@ function daysBetween(from: string, to: string): number {
 
 // "Today", "Tomorrow", "Yesterday", then the date. On a job site the only
 // questions are "is this now" and "is this next", so those get words.
-function dayHeading(date: string, todayStr: string): { main: string; sub: string } {
+function dayHeading(date: string, todayStr: string, t: Dict, locale: Locale): { main: string; sub: string } {
   const diff = daysBetween(todayStr, date);
   const d = new Date(`${date}T00:00:00`);
   const sameYear = d.getFullYear() === new Date(`${todayStr}T00:00:00`).getFullYear();
-  const full = d.toLocaleDateString("en-US", {
+  const raw = d.toLocaleDateString(intlLocale(locale), {
     weekday: "long",
     month: "short",
     day: "numeric",
     ...(sameYear ? {} : { year: "numeric" }),
   });
-  if (diff === 0) return { main: "Today", sub: full };
-  if (diff === 1) return { main: "Tomorrow", sub: full };
-  if (diff === -1) return { main: "Yesterday", sub: full };
-  if (diff > 1 && diff < 7) return { main: full, sub: `in ${diff} days` };
-  if (diff < -1 && diff > -7) return { main: full, sub: `${-diff} days ago` };
+  const full = raw.charAt(0).toUpperCase() + raw.slice(1);
+  if (diff === 0) return { main: t.calendar.today, sub: full };
+  if (diff === 1) return { main: t.calendar.tomorrow, sub: full };
+  if (diff === -1) return { main: t.calendar.yesterday, sub: full };
+  if (diff > 1 && diff < 7) return { main: full, sub: fill(t.calendar.inDays, { n: diff }) };
+  if (diff < -1 && diff > -7) return { main: full, sub: fill(t.calendar.daysAgo, { n: -diff }) };
   return { main: full, sub: "" };
 }
 
@@ -99,8 +113,11 @@ function timeKey(t: string | null): number {
 const telHref = (p: string) => `tel:${p.replace(/[^0-9+]/g, "")}`;
 const mapHref = (a: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a)}`;
 
-export function CalendarView({ events, base }: { events: CalEvent[]; base: string }) {
+export function CalendarView({ events, base, locale }: { events: CalEvent[]; base: string; locale: Locale }) {
   const router = useRouter();
+  const t = dict(locale);
+  const MONTHS = useMemo(() => monthNames(locale), [locale]);
+  const DOW = useMemo(() => weekdayNames(locale), [locale]);
   const today = new Date();
   const todayStr = ymd(today);
 
@@ -248,14 +265,14 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
       )}
 
       <div className="cal-bar">
-        <div className="cal-views" role="group" aria-label="Calendar view">
+        <div className="cal-views" role="group" aria-label={t.calendar.viewLabel}>
           <button
             type="button"
             aria-pressed={view === "list"}
             className={`cal-view${view === "list" ? " cal-view-on" : ""}`}
             onClick={() => pickView("list")}
           >
-            Schedule
+            {t.calendar.viewSchedule}
           </button>
           <button
             type="button"
@@ -263,19 +280,19 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
             className={`cal-view${view === "month" ? " cal-view-on" : ""}`}
             onClick={() => pickView("month")}
           >
-            Month
+            {t.calendar.viewMonth}
           </button>
         </div>
 
         {view === "month" && (
           <div className="cal-month-nav">
-            <button type="button" className="cal-nav" onClick={() => shift(-1)} aria-label="Previous month">
+            <button type="button" className="cal-nav" onClick={() => shift(-1)} aria-label={t.calendar.prevMonth}>
               ‹
             </button>
             <strong className="cal-month-name">
               {MONTHS[cursor.m]} {cursor.y}
             </strong>
-            <button type="button" className="cal-nav" onClick={() => shift(1)} aria-label="Next month">
+            <button type="button" className="cal-nav" onClick={() => shift(1)} aria-label={t.calendar.nextMonth}>
               ›
             </button>
             <button
@@ -283,7 +300,7 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
               className="cal-nav cal-nav-today"
               onClick={() => setCursor({ y: today.getFullYear(), m: today.getMonth() })}
             >
-              Today
+              {t.calendar.today}
             </button>
           </div>
         )}
@@ -298,29 +315,27 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
             onClick={() => setShow((s) => ({ ...s, [k]: !s[k] }))}
             aria-pressed={show[k]}
           >
-            {KIND_LABEL[k]}
+            {kindLabel(t, k)}
           </button>
         ))}
       </div>
 
       {view === "list" ? (
         <div className={`cal-agenda${busy ? " cal-busy" : ""}`}>
-          {upcoming.length === 0 && earlier.length === 0 && (
-            <p className="cal-empty">Nothing scheduled yet. Booked jobs and quote visits show up here.</p>
-          )}
+          {upcoming.length === 0 && earlier.length === 0 && <p className="cal-empty">{t.calendar.empty}</p>}
 
           {upcoming.map((g) => (
-            <DayGroup key={g.date} group={g} todayStr={todayStr} onPick={setSelected} />
+            <DayGroup key={g.date} group={g} todayStr={todayStr} t={t} locale={locale} onPick={setSelected} />
           ))}
 
           {earlier.length > 0 && (
             <>
               <h4 className="cal-section">
-                Earlier
+                {t.calendar.earlier}
                 <span>{earlier.reduce((n, g) => n + g.items.length, 0)}</span>
               </h4>
               {earlier.map((g) => (
-                <DayGroup key={g.date} group={g} todayStr={todayStr} past onPick={setSelected} />
+                <DayGroup key={g.date} group={g} todayStr={todayStr} t={t} locale={locale} past onPick={setSelected} />
               ))}
             </>
           )}
@@ -387,7 +402,7 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
                         }}
                         onDragEnd={() => setDragId(null)}
                         onClick={() => setSelected(e)}
-                        title={`${KIND_LABEL[e.kind]}: ${e.title}${e.time ? ` at ${e.time}` : ""}`}
+                        title={`${kindLabel(t, e.kind)}: ${e.title}${e.time ? ` · ${e.time}` : ""}`}
                       >
                         {e.time && <span className="cal-chip-time">{e.time}</span>}
                         <span className="cal-chip-title">{e.title}</span>
@@ -405,7 +420,7 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
                       type="button"
                       className="cal-dots"
                       onClick={() => setOpenDay(key)}
-                      aria-label={`${dayEvents.length} on ${longDate(key)}`}
+                      aria-label={`${dayEvents.length} · ${longDate(key, locale)}`}
                     >
                       {dayEvents.slice(0, 4).map((e, i) => (
                         <i key={e.id + e.kind + i} className={`cal-dot cal-dot-${e.kind}`} />
@@ -417,7 +432,7 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
             })}
           </div>
 
-          <p className="cal-help crm-muted crm-sm">Drag an appointment to another day to reschedule it.</p>
+          <p className="cal-help crm-muted crm-sm">{t.calendar.dragHint}</p>
         </>
       )}
 
@@ -425,8 +440,8 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
         <div className="cal-scrim" onClick={() => setOpenDay(null)} role="presentation">
           <div className="cal-daypanel" onClick={(e) => e.stopPropagation()}>
             <div className="cal-panel-head">
-              <h3>{longDate(openDay)}</h3>
-              <button type="button" className="cal-panel-x" onClick={() => setOpenDay(null)} aria-label="Close">
+              <h3>{longDate(openDay, locale)}</h3>
+              <button type="button" className="cal-panel-x" onClick={() => setOpenDay(null)} aria-label={t.common.close}>
                 ×
               </button>
             </div>
@@ -441,10 +456,10 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
                       setOpenDay(null);
                     }}
                   >
-                    <span className="cal-row-time">{e.time ?? "All day"}</span>
+                    <span className="cal-row-time">{e.time ?? t.calendar.allDay}</span>
                     <span className="cal-row-body">
                       <span className="cal-row-name">{e.title}</span>
-                      <span className="cal-row-kind">{KIND_LABEL[e.kind]}</span>
+                      <span className="cal-row-kind">{kindLabel(t, e.kind)}</span>
                     </span>
                   </button>
                 </article>
@@ -459,6 +474,8 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
           event={selected}
           base={base}
           busy={busy}
+          t={t}
+          locale={locale}
           error={moveState.error || delState.error}
           onClose={() => setSelected(null)}
           onOpen={() => router.push(`${base}/quotes/${selected.id}`)}
@@ -475,15 +492,19 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
 function DayGroup({
   group,
   todayStr,
+  t,
+  locale,
   past = false,
   onPick,
 }: {
   group: { date: string; items: CalEvent[] };
   todayStr: string;
+  t: Dict;
+  locale: Locale;
   past?: boolean;
   onPick: (e: CalEvent) => void;
 }) {
-  const h = dayHeading(group.date, todayStr);
+  const h = dayHeading(group.date, todayStr, t, locale);
   return (
     <section className={`cal-day${past ? " cal-day-past" : ""}`}>
       <h3 className={`cal-day-head${group.date === todayStr ? " cal-day-today" : ""}`}>
@@ -494,20 +515,20 @@ function DayGroup({
       {group.items.map((e) => (
         <article key={e.id + e.kind} className={`cal-row cal-row-${e.kind}`}>
           <button type="button" className="cal-row-main" onClick={() => onPick(e)}>
-            <span className="cal-row-time">{e.time ?? "All day"}</span>
+            <span className="cal-row-time">{e.time ?? t.calendar.allDay}</span>
             <span className="cal-row-body">
               <span className="cal-row-name">{e.title}</span>
-              <span className="cal-row-kind">{KIND_LABEL[e.kind]}</span>
+              <span className="cal-row-kind">{kindLabel(t, e.kind)}</span>
               {e.address && <span className="cal-row-addr">{e.address}</span>}
             </span>
           </button>
           <div className="cal-row-acts">
-            <a href={telHref(e.phone)} className="cal-act" aria-label={`Call ${e.title}`}>
-              Call
+            <a href={telHref(e.phone)} className="cal-act" aria-label={`${t.calendar.call} ${e.title}`}>
+              {t.calendar.call}
             </a>
             {e.address && (
               <a href={mapHref(e.address)} target="_blank" rel="noreferrer" className="cal-act">
-                Map
+                {t.calendar.map}
               </a>
             )}
           </div>
@@ -524,6 +545,8 @@ function EventPanel({
   event,
   base,
   busy,
+  t,
+  locale,
   error,
   onClose,
   onOpen,
@@ -533,6 +556,8 @@ function EventPanel({
   event: CalEvent;
   base: string;
   busy: boolean;
+  t: Dict;
+  locale: Locale;
   error?: string;
   onClose: () => void;
   onOpen: () => void;
@@ -549,49 +574,49 @@ function EventPanel({
 
   return (
     <div className="cal-scrim" onClick={onClose} role="presentation">
-      <aside className="cal-panel" onClick={(e) => e.stopPropagation()} aria-label="Appointment">
+      <aside className="cal-panel" onClick={(e) => e.stopPropagation()} aria-label={t.calendar.appointment}>
         <div className="cal-panel-head">
           <div>
-            <span className={`cal-panel-kind cal-bg-${event.kind}`}>{KIND_LABEL[event.kind]}</span>
+            <span className={`cal-panel-kind cal-bg-${event.kind}`}>{kindLabel(t, event.kind)}</span>
             <h3>{event.title}</h3>
           </div>
-          <button type="button" className="cal-panel-x" onClick={onClose} aria-label="Close">
+          <button type="button" className="cal-panel-x" onClick={onClose} aria-label={t.common.close}>
             ×
           </button>
         </div>
 
         <p className="cal-panel-when">
-          {longDate(event.date)}
-          {event.time ? ` at ${event.time}` : ""}
+          {longDate(event.date, locale)}
+          {event.time ? ` · ${event.time}` : ""}
         </p>
 
         {mode === "view" && (
           <>
             <div className="cal-panel-quick">
               <a href={telHref(event.phone)} className="crm-btn crm-btn-ghost">
-                Call {event.phone}
+                {t.calendar.call} {event.phone}
               </a>
               {event.address && (
                 <a href={mapHref(event.address)} target="_blank" rel="noreferrer" className="crm-btn crm-btn-ghost">
-                  Directions
+                  {t.calendar.directions}
                 </a>
               )}
             </div>
 
             <dl className="cal-panel-dl">
               <div>
-                <dt>Stage</dt>
-                <dd>{STATUS_LABELS[event.status as Status] ?? event.status}</dd>
+                <dt>{t.calendar.stage}</dt>
+                <dd>{t.status[event.status as keyof typeof t.status] ?? event.status}</dd>
               </div>
               {event.service && (
                 <div>
-                  <dt>Service</dt>
+                  <dt>{t.calendar.service}</dt>
                   <dd>{event.service}</dd>
                 </div>
               )}
               {event.address && (
                 <div>
-                  <dt>Address</dt>
+                  <dt>{t.calendar.address}</dt>
                   <dd>{event.address}</dd>
                 </div>
               )}
@@ -599,13 +624,13 @@ function EventPanel({
 
             <div className="cal-panel-actions">
               <button type="button" className="crm-btn crm-btn-primary" onClick={onOpen}>
-                Open job
+                {t.calendar.openJob}
               </button>
               <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setMode("move")} disabled={busy}>
-                Reschedule
+                {t.calendar.reschedule}
               </button>
               <button type="button" className="crm-btn cal-btn-danger" onClick={() => setMode("delete")} disabled={busy}>
-                Delete
+                {t.calendar.remove}
               </button>
             </div>
           </>
@@ -621,7 +646,7 @@ function EventPanel({
             }}
           >
             <label className="crm-field">
-              <span>Date</span>
+              <span>{t.calendar.date}</span>
               <input
                 type="date"
                 name="date"
@@ -632,7 +657,7 @@ function EventPanel({
               />
             </label>
             <label className="crm-field">
-              <span>Time</span>
+              <span>{t.calendar.time}</span>
               <select name="time" className="crm-input" value={time} onChange={(e) => setTime(e.target.value)}>
                 {times.map((s) => (
                   <option key={s} value={s}>
@@ -641,17 +666,13 @@ function EventPanel({
                 ))}
               </select>
             </label>
-            <p className="crm-muted crm-sm">
-              {isJob
-                ? "The customer gets a text that their project moved, and the crew and calendar are updated."
-                : "The customer gets a text that their quote visit moved."}
-            </p>
+            <p className="crm-muted crm-sm">{isJob ? t.calendar.moveNoteJob : t.calendar.moveNoteVisit}</p>
             <div className="cal-panel-actions">
               <button type="submit" className="crm-btn crm-btn-primary" disabled={busy}>
-                {busy ? "Saving…" : "Save new time"}
+                {busy ? t.calendar.saving : t.calendar.saveNewTime}
               </button>
               <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setMode("view")} disabled={busy}>
-                Cancel
+                {t.common.cancel}
               </button>
             </div>
           </form>
@@ -668,23 +689,21 @@ function EventPanel({
             }}
           >
             <p className="cal-panel-warn">
-              {isJob
-                ? `This releases ${event.title}'s work day. The job goes back to Needs scheduling and stays in your pipeline.`
-                : `This removes ${event.title}'s quote visit. The lead stays in your pipeline.`}
+              {fill(isJob ? t.calendar.warnJob : t.calendar.warnVisit, { name: event.title })}
             </p>
             <label className="cal-panel-check">
               <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
               <span>
-                Text {event.title.split(" ")[0]} that it was cancelled
-                <em>Leave this on unless you have already spoken to them.</em>
+                {fill(t.calendar.notifyLabel, { name: event.title.split(" ")[0] })}
+                <em>{t.calendar.notifyHint}</em>
               </span>
             </label>
             <div className="cal-panel-actions">
               <button type="submit" className="crm-btn cal-btn-danger" disabled={busy}>
-                {busy ? "Removing…" : isJob ? "Release the date" : "Remove the visit"}
+                {busy ? t.calendar.removing : isJob ? t.calendar.releaseDate : t.calendar.removeVisit}
               </button>
               <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setMode("view")} disabled={busy}>
-                Keep it
+                {t.calendar.keepIt}
               </button>
             </div>
           </form>

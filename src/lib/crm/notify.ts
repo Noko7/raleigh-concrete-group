@@ -10,8 +10,9 @@
 // Every send is best-effort: it is wrapped so a texting outage can never break a
 // quote submission or a CRM save. Failures are logged (Vercel → Logs) with an
 // [sms] prefix so they can be diagnosed.
+import { phoneDisplay } from "@/lib/site-data";
 import { SITE_ORIGIN } from "./env";
-import { getOwnerPhones } from "./queries";
+import { getOwnerContacts, getOwnerPhones } from "./queries";
 
 export const SMS_PROVIDER = (process.env.SMS_PROVIDER || (process.env.QUO_API_KEY ? "quo" : "twilio")).toLowerCase();
 const OWNER_PHONE = process.env.OWNER_PHONE || "";
@@ -150,6 +151,32 @@ export async function ownerRecipients(excludeRaw?: string | null): Promise<strin
   return [...recipients.values()];
 }
 
+// The same list, but each number says where it came from. A bare list of digits
+// can't tell you which knob to turn when a number you don't recognise is
+// receiving your alerts: one lives in a Vercel env var, the others are staff
+// profiles you can edit in the CRM.
+export type OwnerRecipient = { phone: string; source: "env" | "profile"; who: string };
+
+export async function ownerRecipientDetails(): Promise<OwnerRecipient[]> {
+  const byPhone = new Map<string, OwnerRecipient>();
+
+  const envPhone = OWNER_PHONE ? toE164(OWNER_PHONE) : null;
+  if (envPhone) byPhone.set(envPhone, { phone: envPhone, source: "env", who: "OWNER_PHONE env var" });
+
+  try {
+    for (const o of await getOwnerContacts()) {
+      const e = toE164(o.phone);
+      if (!e) continue;
+      // A profile number is the more useful attribution when it's both.
+      byPhone.set(e, { phone: e, source: "profile", who: o.name });
+    }
+  } catch {
+    // ignore - the env entry above still stands
+  }
+
+  return [...byPhone.values()];
+}
+
 // Every active owner gets a copy, with the acting user excluded so they aren't
 // texted about their own clicks.
 export async function alertOwner(message: string, excludeRaw?: string | null): Promise<void> {
@@ -207,8 +234,9 @@ const OWNER_NAME = (process.env.OWNER_NAME || "Noah").trim();
 const REVIEW_URL = (process.env.GOOGLE_REVIEW_URL || "").trim();
 const BUSINESS = "Raleigh Concrete Group";
 // The number the crew should call when they can't make an appointment. Falls
-// back to the main business line so this is never an empty sentence.
-const CALL_NUMBER = (process.env.OWNER_CALL_NUMBER || "(919) 873-3919").trim();
+// back to the main business line from site-data rather than a second copy of
+// the digits, so there's one place a phone number is ever written down.
+const CALL_NUMBER = (process.env.OWNER_CALL_NUMBER || phoneDisplay).trim();
 
 // Every message in this file is built from lines, not sentences. A text arrives
 // as one wall of grey on a phone unless the important parts are given their own

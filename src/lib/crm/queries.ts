@@ -175,10 +175,18 @@ export async function updateOwnProfile(
 // Phones of every active owner - they receive all notifications. Service role so
 // this works from /api/quote (no user session) too.
 export async function getOwnerPhones(): Promise<string[]> {
-  const res = await pgAdmin("staff?role=eq.owner&active=eq.true&select=phone");
+  return (await getOwnerContacts()).map((o) => o.phone);
+}
+
+// Same list with the name attached, so the Settings panel can say which person
+// a number belongs to instead of showing a bare list you can't act on.
+export async function getOwnerContacts(): Promise<{ name: string; phone: string }[]> {
+  const res = await pgAdmin("staff?role=eq.owner&active=eq.true&select=full_name,email,phone");
   if (!res.ok) return [];
-  const rows = (await res.json()) as { phone: string | null }[];
-  return rows.map((r) => r.phone).filter((p): p is string => typeof p === "string" && p.trim() !== "");
+  const rows = (await res.json()) as { full_name: string | null; email: string | null; phone: string | null }[];
+  return rows
+    .filter((r) => typeof r.phone === "string" && r.phone.trim() !== "")
+    .map((r) => ({ name: r.full_name || r.email || "Owner", phone: r.phone as string }));
 }
 
 // ── Booking capacity ────────────────────────────────────────────────────────

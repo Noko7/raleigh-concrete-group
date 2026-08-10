@@ -1,5 +1,5 @@
 import { requireSession } from "@/lib/crm/auth";
-import { dict } from "@/lib/crm/i18n";
+import { dict, isLocale } from "@/lib/crm/i18n";
 import { googleConfigured, googleStatus } from "@/lib/crm/gcal";
 import { crmBase } from "@/lib/crm/nav";
 import { listScheduled } from "@/lib/crm/queries";
@@ -24,7 +24,9 @@ export default async function CalendarPage({
   const session = await requireSession();
   const base = await crmBase();
   const isOwner = session.staff.role === "owner";
-  const t = dict(session.staff.locale);
+  const rawLocale = session.staff.locale;
+  const locale = isLocale(rawLocale) ? rawLocale : "en";
+  const t = dict(locale);
   const { google } = await searchParams;
 
   const quotes = await listScheduled(session);
@@ -121,7 +123,7 @@ export default async function CalendarPage({
         </details>
       )}
 
-      <CalendarView events={events} base={base} />
+      <CalendarView events={events} base={base} locale={locale} />
     </main>
   );
 }
