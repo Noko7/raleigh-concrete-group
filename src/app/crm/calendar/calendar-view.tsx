@@ -60,15 +60,24 @@ function daysBetween(from: string, to: string): number {
   return Math.round((b - a) / 86_400_000);
 }
 
-// "Today", "Tomorrow", then the date. On a job site the only questions are "is
-// this now" and "is this next", so those two get words instead of a date.
+// "Today", "Tomorrow", "Yesterday", then the date. On a job site the only
+// questions are "is this now" and "is this next", so those get words.
 function dayHeading(date: string, todayStr: string): { main: string; sub: string } {
   const diff = daysBetween(todayStr, date);
   const d = new Date(`${date}T00:00:00`);
-  const full = d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  const sameYear = d.getFullYear() === new Date(`${todayStr}T00:00:00`).getFullYear();
+  const full = d.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
   if (diff === 0) return { main: "Today", sub: full };
   if (diff === 1) return { main: "Tomorrow", sub: full };
-  return { main: full, sub: diff < 7 ? `in ${diff} days` : "" };
+  if (diff === -1) return { main: "Yesterday", sub: full };
+  if (diff > 1 && diff < 7) return { main: full, sub: `in ${diff} days` };
+  if (diff < -1 && diff > -7) return { main: full, sub: `${-diff} days ago` };
+  return { main: full, sub: "" };
 }
 
 // A job's date lives in a different column from a visit's, so the server needs
@@ -173,13 +182,29 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
     return map;
   }, [visible]);
 
-  // The agenda: everything from today forward, grouped by day. Past work lives
-  // in Month view, so the list never makes you scroll through history to reach
-  // the thing you're driving to next.
-  const agenda = useMemo(() => {
-    const days = [...byDate.keys()].filter((d) => d >= todayStr).sort();
-    return days.map((d) => ({ date: d, items: byDate.get(d) ?? [] }));
-  }, [byDate, todayStr]);
+  // Everything shows, nothing is hidden. What's coming leads, because that's
+  // what you open this for, and finished work follows under its own heading,
+  // newest first. An earlier version cut off anything before today, which meant
+  // a customer whose only visit had already happened looked like no customer
+  // at all.
+  const upcoming = useMemo(
+    () =>
+      [...byDate.keys()]
+        .filter((d) => d >= todayStr)
+        .sort()
+        .map((d) => ({ date: d, items: byDate.get(d) ?? [] })),
+    [byDate, todayStr],
+  );
+
+  const earlier = useMemo(
+    () =>
+      [...byDate.keys()]
+        .filter((d) => d < todayStr)
+        .sort()
+        .reverse()
+        .map((d) => ({ date: d, items: byDate.get(d) ?? [] })),
+    [byDate, todayStr],
+  );
 
   const cells = useMemo(() => {
     const first = new Date(cursor.y, cursor.m, 1);
@@ -280,43 +305,24 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
 
       {view === "list" ? (
         <div className={`cal-agenda${busy ? " cal-busy" : ""}`}>
-          {agenda.length === 0 ? (
-            <p className="cal-empty">Nothing scheduled. Booked jobs and quote visits show up here.</p>
-          ) : (
-            agenda.map(({ date, items }) => {
-              const h = dayHeading(date, todayStr);
-              return (
-                <section key={date} className="cal-day">
-                  <h3 className={`cal-day-head${date === todayStr ? " cal-day-today" : ""}`}>
-                    <span className="cal-day-main">{h.main}</span>
-                    {h.sub && <span className="cal-day-sub">{h.sub}</span>}
-                  </h3>
+          {upcoming.length === 0 && earlier.length === 0 && (
+            <p className="cal-empty">Nothing scheduled yet. Booked jobs and quote visits show up here.</p>
+          )}
 
-                  {items.map((e) => (
-                    <article key={e.id + e.kind} className={`cal-row cal-row-${e.kind}`}>
-                      <button type="button" className="cal-row-main" onClick={() => setSelected(e)}>
-                        <span className="cal-row-time">{e.time ?? "All day"}</span>
-                        <span className="cal-row-body">
-                          <span className="cal-row-name">{e.title}</span>
-                          <span className="cal-row-kind">{KIND_LABEL[e.kind]}</span>
-                          {e.address && <span className="cal-row-addr">{e.address}</span>}
-                        </span>
-                      </button>
-                      <div className="cal-row-acts">
-                        <a href={telHref(e.phone)} className="cal-act" aria-label={`Call ${e.title}`}>
-                          Call
-                        </a>
-                        {e.address && (
-                          <a href={mapHref(e.address)} target="_blank" rel="noreferrer" className="cal-act">
-                            Map
-                          </a>
-                        )}
-                      </div>
-                    </article>
-                  ))}
-                </section>
-              );
-            })
+          {upcoming.map((g) => (
+            <DayGroup key={g.date} group={g} todayStr={todayStr} onPick={setSelected} />
+          ))}
+
+          {earlier.length > 0 && (
+            <>
+              <h4 className="cal-section">
+                Earlier
+                <span>{earlier.reduce((n, g) => n + g.items.length, 0)}</span>
+              </h4>
+              {earlier.map((g) => (
+                <DayGroup key={g.date} group={g} todayStr={todayStr} past onPick={setSelected} />
+              ))}
+            </>
           )}
         </div>
       ) : (
@@ -461,6 +467,53 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
         />
       )}
     </div>
+  );
+}
+
+/* One day in the schedule list. Rows are full-width tap targets with Call and
+   Map on the row itself, since those are what actually get used from a truck. */
+function DayGroup({
+  group,
+  todayStr,
+  past = false,
+  onPick,
+}: {
+  group: { date: string; items: CalEvent[] };
+  todayStr: string;
+  past?: boolean;
+  onPick: (e: CalEvent) => void;
+}) {
+  const h = dayHeading(group.date, todayStr);
+  return (
+    <section className={`cal-day${past ? " cal-day-past" : ""}`}>
+      <h3 className={`cal-day-head${group.date === todayStr ? " cal-day-today" : ""}`}>
+        <span className="cal-day-main">{h.main}</span>
+        {h.sub && <span className="cal-day-sub">{h.sub}</span>}
+      </h3>
+
+      {group.items.map((e) => (
+        <article key={e.id + e.kind} className={`cal-row cal-row-${e.kind}`}>
+          <button type="button" className="cal-row-main" onClick={() => onPick(e)}>
+            <span className="cal-row-time">{e.time ?? "All day"}</span>
+            <span className="cal-row-body">
+              <span className="cal-row-name">{e.title}</span>
+              <span className="cal-row-kind">{KIND_LABEL[e.kind]}</span>
+              {e.address && <span className="cal-row-addr">{e.address}</span>}
+            </span>
+          </button>
+          <div className="cal-row-acts">
+            <a href={telHref(e.phone)} className="cal-act" aria-label={`Call ${e.title}`}>
+              Call
+            </a>
+            {e.address && (
+              <a href={mapHref(e.address)} target="_blank" rel="noreferrer" className="cal-act">
+                Map
+              </a>
+            )}
+          </div>
+        </article>
+      ))}
+    </section>
   );
 }
 

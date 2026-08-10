@@ -1815,6 +1815,18 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-day-main { font-size: 1.05rem; font-weight: 900; color: var(--crm-text); }
 .cal-day-sub { font-size: 0.8rem; color: var(--crm-muted); font-weight: 600; }
 .cal-day-today .cal-day-main { color: var(--crm-accent); }
+/* Finished work stays visible but steps back, so what's coming reads first. */
+.cal-day-past .cal-row { opacity: 0.62; }
+.cal-day-past .cal-row:hover, .cal-day-past .cal-row:focus-within { opacity: 1; }
+.cal-section {
+  display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem;
+  font-size: 0.75rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.09em; color: var(--crm-muted);
+}
+.cal-section::after { content: ""; flex: 1; height: 1px; background: var(--crm-border); order: 1; }
+.cal-section span {
+  background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 999px;
+  padding: 0.1rem 0.5rem; font-size: 0.72rem; letter-spacing: 0; order: 2;
+}
 
 .cal-row { display: flex; align-items: stretch; background: var(--crm-bg2); border: 1px solid var(--crm-border); border-left: 4px solid var(--crm-border); border-radius: 0.6rem; overflow: hidden; }
 .cal-row-job { border-left-color: #16a34a; }
