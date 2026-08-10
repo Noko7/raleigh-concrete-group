@@ -1501,11 +1501,31 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .job-card { max-width: 760px; margin: 0 auto; background: #fff; border-radius: 1rem; padding: 1.75rem; border: 1px solid #e2e5ea; }
 .job-brand { font-weight: 800; color: var(--amber); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; }
 .job-title { font-size: 1.7rem; font-weight: 800; margin-bottom: 1.1rem; }
-.job-meta { display: grid; gap: 0.5rem; margin-bottom: 1.25rem; }
-.job-meta > div { display: grid; grid-template-columns: 130px 1fr; font-size: 0.95rem; }
-.job-meta dt { color: #6b7280; font-weight: 700; }
-.job-meta dd { margin: 0; }
-.job-meta a { color: var(--amber); text-decoration: none; }
+/* Key facts, reversed out of near-black. Everything else on this page is dark
+   text on white; making these two facts the one inverted block is what makes
+   them findable in a glance rather than something you have to read for. */
+.job-key {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.7rem;
+  background: #111827; border-radius: 0.9rem; padding: 1.05rem 1.15rem; margin-bottom: 1.4rem;
+}
+.job-type {
+  font-size: 0.8rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em;
+  border-radius: 999px; padding: 0.4rem 0.9rem; color: #fff; line-height: 1;
+}
+.job-type-inperson { background: var(--amber); }
+.job-type-online { background: #2563eb; }
+.job-when { display: flex; flex-direction: column; gap: 0.1rem; }
+.job-when-label { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: #9ca3af; }
+.job-when-day { font-size: 1.6rem; font-weight: 900; line-height: 1.15; color: #fff; letter-spacing: -0.01em; }
+.job-when-time { font-size: 1.6rem; font-weight: 900; line-height: 1.15; color: #fbbf24; letter-spacing: -0.01em; }
+.job-when-none { font-size: 1.15rem; font-weight: 800; color: #d1d5db; }
+
+.job-meta { display: grid; gap: 0; margin-bottom: 1.4rem; }
+.job-meta > div { display: grid; grid-template-columns: 132px 1fr; gap: 0.5rem; font-size: 1rem; padding: 0.6rem 0; border-bottom: 1px solid #e5e7eb; }
+.job-meta > div:last-child { border-bottom: none; }
+.job-meta dt { color: #374151; font-weight: 800; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; align-self: center; }
+.job-meta dd { margin: 0; color: #0f172a; font-weight: 600; }
+.job-meta a { color: #b45309; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
 .job-details { background: #f8f9fa; border-radius: 0.7rem; padding: 1rem; margin-bottom: 1.25rem; }
 .job-details h2 { font-weight: 800; font-size: 0.9rem; margin-bottom: 0.3rem; }
 .job-details p { white-space: pre-wrap; color: #374151; }
@@ -1515,14 +1535,18 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .job-photo { display: block; border-radius: 0.6rem; overflow: hidden; border: 1px solid #e2e5ea; aspect-ratio: 1; }
 .job-photo img { width: 100%; height: 100%; object-fit: cover; }
 
-/* Mobile: read on a phone at the job site. Tap-to-call sized targets. */
+/* Mobile: read on a phone at the job site. Tap-to-call sized targets, and
+   values set bigger than their labels so the eye lands on the answer. */
 @media (max-width: 640px) {
   .job-wrap { padding: 0.75rem; }
   .job-card { padding: 1.2rem 1rem; }
-  .job-meta > div { grid-template-columns: 1fr; gap: 0.1rem; }
-  .job-meta dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
-  .job-meta dd { font-size: 1.05rem; margin-bottom: 0.35rem; }
-  .job-meta a { font-weight: 700; }
+  .job-key { padding: 0.95rem 1rem; }
+  .job-when-day, .job-when-time { font-size: 1.45rem; }
+  .job-meta > div { grid-template-columns: 1fr; gap: 0.15rem; padding: 0.65rem 0; }
+  .job-meta dt { font-size: 0.72rem; }
+  .job-meta dd { font-size: 1.12rem; font-weight: 700; }
+  .job-meta a { display: inline-block; padding: 0.15rem 0; }
+  .job-details p { font-size: 1.02rem; color: #1f2937; }
   .job-photos { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 }
 

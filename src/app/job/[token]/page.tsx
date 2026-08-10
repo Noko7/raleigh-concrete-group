@@ -45,20 +45,28 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // people doing the work are allowed to agree to.
   const minJobDate = new Date().toISOString().slice(0, 10);
   const photos = quote.file_urls?.length ? await signFiles(quote.file_urls, 7200) : [];
-  const prettyVisit = quote.visit_date
-    ? new Date(`${quote.visit_date}T00:00:00`).toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      })
-    : null;
-  const prettyJob = quote.scheduled_date
-    ? new Date(`${quote.scheduled_date}T00:00:00`).toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      })
-    : null;
+
+  // Dates read in the contractor's own language, same as the rest of the page.
+  const fmtDay = (ymd: string) =>
+    new Date(`${ymd}T00:00:00`).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    });
+  const prettyVisit = quote.visit_date ? fmtDay(quote.visit_date) : null;
+  const prettyJob = quote.scheduled_date ? fmtDay(quote.scheduled_date) : null;
+
+  // The two things a contractor needs off this page in one glance, standing
+  // outside holding a phone: what kind of appointment this is, and when it is.
+  // A booked work day always wins over a quote visit - once the job is on, the
+  // visit that produced it stops being the thing they're driving to.
+  const isInPerson = quote.quote_type === "inperson";
+  const when = prettyJob
+    ? { label: t.contractorJob.scheduledJob, day: prettyJob, time: quote.scheduled_time }
+    : prettyVisit
+      ? { label: t.contractorJob.quoteVisit, day: prettyVisit, time: quote.visit_time }
+      : null;
+
   const mapsLink = quote.address
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(quote.address)}`
     : null;
@@ -75,6 +83,24 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         <Link href={`${base}/`} className="job-back">
           {t.contractorJob.backToJobs}
         </Link>
+
+        {/* Reversed out of a dark block on purpose. This is read on a phone at
+            arm's length, often outdoors, and these are the two facts worth
+            shouting. */}
+        <div className="job-key">
+          <span className={`job-type job-type-${isInPerson ? "inperson" : "online"}`}>
+            {isInPerson ? t.contractorJob.typeInPerson : t.contractorJob.typeOnline}
+          </span>
+          {when ? (
+            <div className="job-when">
+              <span className="job-when-label">{when.label}</span>
+              <strong className="job-when-day">{when.day}</strong>
+              {when.time && <strong className="job-when-time">{when.time}</strong>}
+            </div>
+          ) : (
+            <span className="job-when-none">{t.contractorJob.notScheduled}</span>
+          )}
+        </div>
 
         {/* The one action this page exists for goes first - a contractor opening
             this from a text is here to act, not to scroll. Which action that is
@@ -143,19 +169,15 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               </dd>
             </div>
           )}
-          {prettyJob && (
-            <div>
-              <dt>{t.contractorJob.scheduledJob}</dt>
-              <dd>
-                <strong>{prettyJob}{quote.scheduled_time ? ` ${t.contractorJob.at} ${quote.scheduled_time}` : ""}</strong>
-              </dd>
-            </div>
-          )}
-          {prettyVisit && (
+          {/* The work day and the visit are in the block at the top of the
+              page, so they're not repeated here. This one still shows the
+              visit when a job is booked, since the block only has room for
+              whichever is the live appointment. */}
+          {prettyJob && prettyVisit && (
             <div>
               <dt>{t.contractorJob.quoteVisit}</dt>
               <dd>
-                <strong>{prettyVisit}</strong>
+                {prettyVisit}
                 {quote.visit_time ? ` ${t.contractorJob.at} ${quote.visit_time}` : ""}
               </dd>
             </div>
