@@ -1743,8 +1743,16 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .crm-banner-warn { background: rgba(194, 104, 42, 0.16); border-color: rgba(194, 104, 42, 0.55); color: #f3d8c4; }
 
 /* Google Calendar connect card */
-.cal-gcal { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
-.cal-gcal-main { flex: 1; min-width: 240px; }
+.cal-gcal { background: var(--crm-surface); border: 1px solid var(--crm-border); border-radius: 0.6rem; margin-bottom: 1rem; }
+.cal-gcal > summary { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.85rem; cursor: pointer; font-weight: 700; font-size: 0.88rem; color: var(--crm-text); list-style: none; }
+.cal-gcal > summary::-webkit-details-marker { display: none; }
+.cal-gcal > summary::after { content: "▾"; margin-left: auto; color: var(--crm-muted); font-size: 0.75rem; }
+.cal-gcal[open] > summary::after { content: "▴"; }
+.cal-gcal > summary em { font-style: normal; font-weight: 500; color: var(--crm-muted); font-size: 0.82rem; }
+.cal-gcal-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--crm-muted); flex: none; }
+.cal-gcal-on { background: #16a34a; }
+.cal-gcal-body { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0 0.85rem 0.85rem; }
+.cal-gcal-body p { flex: 1; min-width: 240px; margin: 0; }
 .cal-gcal code { background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.3rem; padding: 0.05rem 0.35rem; font-size: 0.78rem; }
 
 /* CRM calendar */
@@ -1756,7 +1764,8 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-dow { margin-bottom: 4px; }
 .cal-dow-cell { text-align: center; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--crm-muted); padding: 0.3rem 0; }
-.cal-cell { background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 0.5rem; min-height: 96px; padding: 0.35rem; display: flex; flex-direction: column; gap: 0.25rem; }
+/* Tall enough for three chips plus a "+N more" row without clipping. */
+.cal-cell { background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 0.5rem; min-height: 112px; padding: 0.35rem; display: flex; flex-direction: column; gap: 0.25rem; }
 .cal-cell-dim { opacity: 0.4; }
 .cal-cell-today { border-color: var(--crm-accent); box-shadow: inset 0 0 0 1px var(--crm-accent); }
 .cal-daynum { font-size: 0.78rem; font-weight: 700; color: var(--crm-text); }
@@ -1768,7 +1777,62 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-chip-online { background: #3b82f6; }
 .cal-chip-time { font-weight: 800; font-size: 0.66rem; opacity: 0.95; }
 .cal-chip-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal-legend { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.85rem; font-size: 0.8rem; color: var(--crm-muted); }
+.cal-cell-weekend { background: color-mix(in srgb, var(--crm-bg2) 88%, #000); }
+.cal-cell-over { border-color: var(--crm-accent); box-shadow: inset 0 0 0 2px var(--crm-accent); }
+.cal-chip[draggable="true"] { cursor: grab; }
+.cal-chip-dragging { opacity: 0.4; }
+.cal-grid-busy { opacity: 0.6; pointer-events: none; }
+.cal-more { background: none; border: none; text-align: left; color: var(--crm-muted); font-size: 0.7rem; font-weight: 700; cursor: pointer; padding: 0.1rem 0.4rem; }
+.cal-more:hover { color: var(--crm-accent); }
+.cal-help { margin-bottom: 0.7rem; }
+
+/* Toast for the result of a drag, a reschedule or a delete. */
+.cal-toast {
+  position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); z-index: 60;
+  background: #16a34a; color: #fff; font-weight: 700; font-size: 0.88rem;
+  padding: 0.65rem 1.1rem; border-radius: 999px; box-shadow: 0 12px 30px rgba(0,0,0,0.35); max-width: 92vw;
+}
+.cal-toast-bad { background: #b91c1c; }
+
+/* Appointment / day panel */
+.cal-scrim {
+  position: fixed; inset: 0; z-index: 70; background: rgba(8, 10, 12, 0.6);
+  display: flex; align-items: flex-end; justify-content: flex-end;
+}
+@media (min-width: 768px) { .cal-scrim { align-items: stretch; } }
+.cal-panel, .cal-daypanel {
+  background: var(--crm-surface-solid); border-left: 1px solid var(--crm-border);
+  width: 100%; max-width: 26rem; padding: 1.1rem 1.15rem calc(1.4rem + env(safe-area-inset-bottom));
+  overflow-y: auto; max-height: 88dvh; border-radius: 1rem 1rem 0 0;
+  display: flex; flex-direction: column; gap: 0.85rem;
+}
+@media (min-width: 768px) { .cal-panel, .cal-daypanel { max-height: 100dvh; border-radius: 0; } }
+.cal-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; }
+.cal-panel-head h3 { font-size: 1.25rem; font-weight: 800; color: var(--crm-text); }
+.cal-panel-kind { display: inline-block; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #fff; border-radius: 999px; padding: 0.12rem 0.5rem; margin-bottom: 0.35rem; width: auto; height: auto; }
+.cal-panel-x { background: none; border: none; color: var(--crm-muted); font-size: 1.6rem; line-height: 1; cursor: pointer; padding: 0 0.2rem; }
+.cal-panel-x:hover { color: var(--crm-text); }
+.cal-panel-dl { display: grid; gap: 0.55rem; }
+.cal-panel-dl dt { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--crm-muted); }
+.cal-panel-dl dd { margin: 0; color: var(--crm-text); font-size: 0.95rem; }
+.cal-panel-dl a { color: var(--crm-accent); }
+.cal-panel-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.cal-panel-actions .crm-btn { flex: 1; min-width: 8rem; min-height: 44px; }
+.cal-panel-form { display: flex; flex-direction: column; gap: 0.7rem; }
+.cal-btn-danger { background: #b91c1c; color: #fff; border-color: #b91c1c; }
+.cal-btn-danger:hover { background: #991b1b; }
+.cal-panel-warn { background: rgba(185, 28, 28, 0.12); border: 1px solid rgba(185, 28, 28, 0.4); border-radius: 0.5rem; padding: 0.7rem 0.8rem; font-size: 0.88rem; color: var(--crm-text); }
+.cal-panel-check { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.88rem; color: var(--crm-text); cursor: pointer; }
+.cal-panel-check input { margin-top: 0.2rem; width: 18px; height: 18px; flex: none; }
+.cal-panel-check em { display: block; font-style: normal; color: var(--crm-muted); font-size: 0.8rem; margin-top: 0.15rem; }
+.cal-panel-link { color: var(--crm-muted); font-size: 0.85rem; text-decoration: underline; margin-top: auto; }
+.cal-panel-link:hover { color: var(--crm-accent); }
+.cal-daylist { display: flex; flex-direction: column; gap: 0.4rem; }
+.cal-daylist .cal-chip { padding: 0.55rem 0.7rem; font-size: 0.9rem; }
+
+/* Lives in the month bar now, so it sits beside the nav rather than orphaned
+   under a six-week grid where it was easy to miss. */
+.cal-legend { display: flex; flex-wrap: wrap; gap: 0.6rem; font-size: 0.8rem; color: var(--crm-muted); }
 .cal-legend-item { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 999px; padding: 0.3rem 0.7rem; color: var(--crm-text); cursor: pointer; font-size: 0.78rem; }
 .cal-legend-item:hover { border-color: var(--crm-accent); }
 .cal-legend-off { opacity: 0.4; }

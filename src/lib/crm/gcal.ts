@@ -251,6 +251,41 @@ async function staffEmail(id: string): Promise<string | null> {
   return rows[0]?.email ?? null;
 }
 
+// Pull a quote's event off the calendar. Used when an appointment is deleted in
+// the CRM: without this the invite lingers on everyone's calendar and the crew
+// shows up to a job that isn't happening. Best-effort - never throws.
+export async function removeQuoteFromCalendar(quoteId: string): Promise<void> {
+  try {
+    if (!googleConfigured()) return;
+    const res = await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(quoteId)}&select=gcal_event_id&limit=1`);
+    if (!res.ok) return;
+    const eventId = ((await res.json()) as { gcal_event_id: string | null }[])[0]?.gcal_event_id;
+    if (!eventId) return;
+
+    const token = await accessToken();
+    if (token) {
+      // 404/410 means it's already gone, which is the state we wanted anyway.
+      const del = await fetch(`${CAL_BASE}/${encodeURIComponent(eventId)}?sendUpdates=all`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!del.ok && del.status !== 404 && del.status !== 410) {
+        console.error("[gcal] delete failed", del.status, await del.text().catch(() => ""));
+      }
+    }
+
+    // Clear the id regardless: a stale id would make the next booking try to
+    // PATCH an event that no longer exists.
+    await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(quoteId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ gcal_event_id: null }),
+    });
+  } catch (e) {
+    console.error("[gcal] remove threw", e);
+  }
+}
+
 // Create or update the calendar invite for a quote. Idempotent: stores the
 // Google event id on the quote so subsequent calls update the same event (and
 // invite any newly-assigned contractor). Best-effort - never throws.

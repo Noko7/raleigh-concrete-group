@@ -30,19 +30,27 @@ export default async function CalendarPage({
   const quotes = await listScheduled(session);
   const events: CalEvent[] = [];
   for (const q of quotes) {
-    const label = q.name || "Customer";
+    // Enough on each event to act without opening the job: the panel shows the
+    // phone and address so you can call or navigate straight from the calendar.
+    const common = {
+      id: q.id,
+      title: q.name || "Customer",
+      phone: q.phone,
+      service: q.service,
+      address: q.address,
+      status: q.status,
+    };
     // Booked work day = a job install (only ever set once a customer accepts).
     if (q.scheduled_date) {
-      events.push({ id: q.id, date: q.scheduled_date, kind: "job", title: label, time: q.scheduled_time });
+      events.push({ ...common, date: q.scheduled_date, kind: "job", time: q.scheduled_time });
     }
     // The appointment the customer picked: an on-site visit (in-person) or a
     // remote photo review (online). Color them separately so the day reads clearly.
     if (q.visit_date) {
       events.push({
-        id: q.id,
+        ...common,
         date: q.visit_date,
         kind: q.quote_type === "online" ? "online" : "inperson",
-        title: label,
         time: q.visit_time,
       });
     }
@@ -63,10 +71,23 @@ export default async function CalendarPage({
 
       {notice && <div className={`crm-banner crm-banner-${notice.tone}`}>{notice.text}</div>}
 
+      {/* One line rather than a card. Google sync is set up once and then never
+          thought about again, so it shouldn't take the top third of the page
+          above the thing you actually came here to look at. */}
       {isOwner && (
-        <div className="crm-card cal-gcal">
-          <div className="cal-gcal-main">
-            <h2 className="crm-card-title">Google Calendar</h2>
+        <details className="cal-gcal" open={!status.connected && configured}>
+          <summary>
+            <span className={`cal-gcal-dot${status.connected ? " cal-gcal-on" : ""}`} />
+            Google Calendar
+            <em>
+              {!configured
+                ? "not configured"
+                : status.connected
+                  ? `connected${status.email ? ` as ${status.email}` : ""}`
+                  : "not connected"}
+            </em>
+          </summary>
+          <div className="cal-gcal-body">
             {!configured ? (
               <p className="crm-muted crm-sm">
                 Add <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> and{" "}
@@ -74,31 +95,30 @@ export default async function CalendarPage({
               </p>
             ) : status.connected ? (
               <p className="crm-muted crm-sm">
-                Connected{status.email ? ` as ${status.email}` : ""}. When a job is booked or you assign a contractor to a
-                dated job, everyone gets a Google Calendar invite.
+                When a job is booked or you assign a contractor to a dated job, everyone gets a Google Calendar invite.
               </p>
             ) : (
               <p className="crm-muted crm-sm">
                 Connect your Google account so booked jobs and assigned visits send calendar invites to your crew.
               </p>
             )}
+            {configured && (
+              <div className="cal-gcal-action">
+                {status.connected ? (
+                  <form action={disconnectGoogle}>
+                    <button type="submit" className="crm-btn crm-btn-ghost">
+                      Disconnect
+                    </button>
+                  </form>
+                ) : (
+                  <a href={`${base}/api/google/connect`} className="crm-btn crm-btn-primary">
+                    Connect Google Calendar
+                  </a>
+                )}
+              </div>
+            )}
           </div>
-          {configured && (
-            <div className="cal-gcal-action">
-              {status.connected ? (
-                <form action={disconnectGoogle}>
-                  <button type="submit" className="crm-btn crm-btn-ghost">
-                    Disconnect
-                  </button>
-                </form>
-              ) : (
-                <a href={`${base}/api/google/connect`} className="crm-btn crm-btn-primary">
-                  Connect Google Calendar
-                </a>
-              )}
-            </div>
-          )}
-        </div>
+        </details>
       )}
 
       <CalendarView events={events} base={base} />

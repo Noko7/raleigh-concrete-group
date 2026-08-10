@@ -470,6 +470,63 @@ export async function notifyCustomerRescheduled(
   ).catch(() => {});
 }
 
+// ── Quote visits: moved or cancelled from the calendar ─────────────────────
+// The visit is an appointment the customer set aside time for, so moving or
+// dropping it gets the same courtesy as a booked job.
+export async function notifyVisitMoved(
+  q: QuoteInfo,
+  previous?: string | null,
+  previousTime?: string | null,
+): Promise<void> {
+  const wasDay = dayOrNull(previous);
+  const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
+  const now = `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`;
+
+  const body = was
+    ? [`your free quote visit with ${BUSINESS} has been moved from:`, "", was, "to:", now]
+    : [`your free quote visit with ${BUSINESS} has been moved to:`, "", now];
+
+  await sendSms(
+    q.phone,
+    text([`Hi ${firstName(q.name)},`, ...body, "", "Sorry for the change, call or text us if that time doesn't work."]),
+  ).catch(() => {});
+}
+
+export async function notifyVisitCancelled(q: QuoteInfo): Promise<void> {
+  await sendSms(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      `we've had to cancel your quote visit with ${BUSINESS}${
+        dayOrNull(q.visit_date) ? ` on ${dayOrNull(q.visit_date)}` : ""
+      }.`,
+      "",
+      "We're sorry for the trouble. Call or text us and we'll get you booked back in.",
+    ]),
+  ).catch(() => {});
+}
+
+// A booked work day was removed. The customer is expecting a crew, so this is
+// the one cancellation that must never be silent.
+export async function notifyBookingCancelled(q: QuoteInfo, previous?: string | null, previousTime?: string | null): Promise<void> {
+  const wasDay = dayOrNull(previous);
+  const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
+  await sendSms(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      was
+        ? `we've had to release your project date with ${BUSINESS}:`
+        : `we've had to release your project date with ${BUSINESS}.`,
+      ...(was ? ["", was] : []),
+      "",
+      "Your project is still on. We're working out a new date and will text you as soon as we have one.",
+      "",
+      "Sorry for the change, call or text us any time.",
+    ]),
+  ).catch(() => {});
+}
+
 export async function notifyBooked(
   q: QuoteInfo,
   contractorPhone?: string | null,

@@ -522,6 +522,79 @@ export async function confirmSchedule(
   return { ok: true, previous: current.scheduled_date, previousTime: current.scheduled_time };
 }
 
+// ── Quote visits (the in-person/online appointment, not the work day) ───────
+// Booked work days go through confirmSchedule; this is the other kind of date
+// on a quote. Kept separate because the rules differ: several visits can share
+// a day, and moving one never touches the pipeline status.
+export async function rescheduleVisit(
+  session: Session,
+  id: string,
+  date: string,
+  time: string,
+): Promise<{ ok: boolean; error?: string; previous?: string | null; previousTime?: string | null; unchanged?: boolean }> {
+  if (!ISO_DATE.test(date)) return { ok: false, error: "Pick a valid date." };
+  const cleanTime = time.trim().toUpperCase().replace(/\s+/, " ");
+  if (cleanTime && !/^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(cleanTime)) return { ok: false, error: "Pick a valid time." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this quote." };
+  if (current.visit_date === date && (current.visit_time ?? "") === cleanTime) {
+    return { ok: true, previous: date, previousTime: cleanTime, unchanged: true };
+  }
+
+  // Don't overbook the day, same rule the public form enforces. Moving a visit
+  // onto its own existing day is fine, so the current row is excluded.
+  if (current.visit_date !== date) {
+    const used = await countVisitsOn(date);
+    if (used >= MAX_VISITS_PER_DAY) return { ok: false, error: "That day is already full for quote visits." };
+  }
+
+  const { quote: updated, error } = await updateQuoteResult(session, id, {
+    visit_date: date,
+    visit_time: cleanTime || null,
+  });
+  if (!updated) return { ok: false, error: error ?? "Could not move that visit." };
+
+  return { ok: true, previous: current.visit_date, previousTime: current.visit_time };
+}
+
+// Take an appointment off the calendar. `kind` decides which pair of columns is
+// cleared. A booked job also drops back to "approved" (needs scheduling) so it
+// resurfaces in the pipeline rather than vanishing into a dateless "scheduled"
+// state nobody looks at.
+export async function clearAppointment(
+  session: Session,
+  id: string,
+  kind: "job" | "visit",
+): Promise<{ ok: boolean; error?: string; previous?: string | null; previousTime?: string | null }> {
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this quote." };
+
+  const patch: Partial<Quote> =
+    kind === "job"
+      ? {
+          scheduled_date: null,
+          scheduled_time: null,
+          scheduled_by: null,
+          scheduled_at: null,
+          confirmed_at: null,
+          reminder_sent_at: null,
+          status: current.status === "scheduled" ? "approved" : current.status,
+        }
+      : { visit_date: null, visit_time: null };
+
+  const { quote: updated, error } = await updateQuoteResult(session, id, patch);
+  if (!updated) return { ok: false, error: error ?? "Could not remove that appointment." };
+
+  if (kind === "job") await clearCrewReminders(id);
+
+  return {
+    ok: true,
+    previous: kind === "job" ? current.scheduled_date : current.visit_date,
+    previousTime: kind === "job" ? current.scheduled_time : current.visit_time,
+  };
+}
+
 // Short-lived signed URL for one private storage object (path = "bucket/obj").
 export async function signFile(storagePath: string, expiresIn = 3600): Promise<string | null> {
   const prefix = `${UPLOAD_BUCKET}/`;

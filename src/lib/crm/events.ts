@@ -43,6 +43,12 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return `Work day confirmed for ${String(m.to ?? "a date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
     case "date_changed":
       return `Work day moved${m.from ? ` from ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""}` : ""} to ${String(m.to ?? "a new date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
+    case "visit_moved":
+      return `Quote visit moved${m.from ? ` from ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""}` : ""} to ${String(m.to ?? "a new date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
+    case "visit_cancelled":
+      return `Quote visit cancelled${m.from ? ` (was ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""})` : ""}${m.notified ? ", customer texted" : ""}`;
+    case "booking_cancelled":
+      return `Work day released${m.from ? ` (was ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""})` : ""}${m.notified ? ", customer texted" : ""}`;
     case "customer_declined":
       return "Customer declined the quote";
     case "reminder_sent":
