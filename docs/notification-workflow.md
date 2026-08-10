@@ -194,6 +194,38 @@ picker, because `min` on an input is a convenience, not a rule. The crew's
 picker deliberately has no floor: the lead time exists to stop a customer
 booking something you can't staff, not to stop you agreeing to a rush job.
 
+### One contractor, one place at a time
+
+The per-day caps (`MAX_JOBS_PER_DAY`, `MAX_VISITS_PER_DAY`) are about the
+business. They say nothing about whether the *person* is free, and five visits
+a day is plenty of room to book the same crew twice in one slot.
+
+Every path that commits a date now checks the assigned contractor first:
+
+| Booking | Blocked by |
+|---------|-----------|
+| A work day | **Anything** else that contractor has that date — another job, or a quote visit |
+| A quote visit | A job that day (they're on site all day), or another visit **at the same time** |
+
+A work day blocks the whole date because a pour is a full day on site; a visit
+is about an hour, so visits only clash with each other at the same slot. An
+online request's `visit_date` never blocks anything — it's a slot the customer
+offered, not an appointment anyone agreed to.
+
+Enforced in `confirmSchedule`, `rescheduleVisit`, `confirmVisit` and the public
+form, so it holds whether the date comes from a customer, the crew's job page,
+the CRM, or a drag on the calendar. The public quote form also greys out slots
+the crew already has, but that is a courtesy, not the guard: two people can be
+on the form at once, so the server re-checks on submit.
+
+Staff-facing screens name the customer already in that slot (`conflictMessage`),
+because that is what makes the clash resolvable. The public endpoint deliberately
+does not — "already with Jane Smith at 10am" would hand a stranger a customer's
+name and schedule.
+
+With no primary contractor set, there is nobody to double-book and only the
+per-day caps apply.
+
 ### The date on an online request means something different
 
 Both quote types ask for a day and a time, and `quote_type` is the only thing

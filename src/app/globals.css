@@ -1144,6 +1144,13 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 }
 .qm-chip:hover { border-color: var(--amber); }
 .qm-chip--active { background: var(--amber); border-color: var(--amber); color: #fff; }
+/* Already booked. Shown rather than hidden so the choice on offer doesn't
+   silently change shape between one visit to this step and the next. */
+.qm-chip--taken {
+  opacity: 0.4; cursor: not-allowed; text-decoration: line-through;
+  background: rgba(43, 26, 18, 0.06);
+}
+.qm-chip--taken:hover { border-color: rgba(43, 26, 18, 0.22); }
 
 .qm-err { color: #b3402f; font-size: 0.85rem; font-weight: 600; margin: 0.6rem 0 0; }
 

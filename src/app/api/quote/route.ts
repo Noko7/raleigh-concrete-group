@@ -6,6 +6,7 @@ import { notifyCustomerReceived, notifyNewQuote } from "@/lib/crm/notify";
 import {
   MAX_VISITS_PER_DAY,
   countVisitsOn,
+  findVisitConflict,
   getPrimaryContractorId,
   getStaffContactById,
 } from "@/lib/crm/queries";
@@ -130,12 +131,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, demo: true });
   }
 
-  // Don't overbook in-person quote visits (max per day).
+  // Don't overbook in-person quote visits (max per day), and don't put the crew
+  // in two places. The message stays vague on purpose: this endpoint answers to
+  // anyone, and "already with Jane Smith at 10am" would hand a stranger a
+  // customer's name and schedule. Staff screens get the specific version.
   if (quoteType === "inperson") {
     const used = await countVisitsOn(visitDate);
     if (used >= MAX_VISITS_PER_DAY) {
       return NextResponse.json(
         { ok: false, error: "That day is fully booked for visits. Please choose another date.", fields: ["visit_date"] },
+        { status: 409 },
+      );
+    }
+    const clash = await findVisitConflict(await getPrimaryContractorId(), visitDate, visitTime);
+    if (clash) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            clash.kind === "job"
+              ? "We're booked on a job that day. Please choose another date."
+              : "That time has just been taken. Please choose another time.",
+          fields: ["visit_time"],
+        },
         { status: 409 },
       );
     }

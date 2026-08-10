@@ -22,7 +22,9 @@ import {
   MAX_VISITS_PER_DAY,
   addEvent,
   confirmSchedule,
+  conflictMessage,
   countVisitsOn,
+  findVisitConflict,
   getQuote,
   getStaffById,
   updateQuote,
@@ -288,6 +290,12 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   if (!alreadyOnThisDay && (await countVisitsOn(date)) >= MAX_VISITS_PER_DAY) {
     return { ok: false, error: "That day is already full for quote visits. Pick another." };
   }
+
+  // Whoever this job belongs to has to actually be free. Confirming here is the
+  // moment an offered slot becomes somewhere a person has to be, so it's the
+  // moment to find out they're already booked - not on the morning.
+  const clash = await findVisitConflict(current.assigned_to, date, time, id);
+  if (clash) return { ok: false, error: conflictMessage(clash) };
 
   const { quote: updated, error } = await updateQuoteResult(session, id, {
     quote_type: "inperson",

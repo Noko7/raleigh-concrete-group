@@ -294,6 +294,111 @@ export async function countVisitsOn(date: string): Promise<number> {
   return ((await res.json()) as unknown[]).length;
 }
 
+// ── Double-booking: one contractor, one place at a time ─────────────────────
+// The per-day caps above are about the business as a whole. These are about a
+// person: whatever the caps allow, the same contractor cannot be on a pour and
+// at a quote across town, and two quote visits in one slot means one of them
+// gets missed. Every path that commits a date runs one of these first.
+
+export type Commitment = {
+  id: string;
+  name: string;
+  kind: "job" | "visit";
+  time: string | null;
+};
+
+// Everything one contractor is already committed to on a date.
+//
+// Two things deliberately don't count. An online request's visit_date is a slot
+// the customer offered, not an appointment anyone agreed to, so it can't block
+// a real booking. And a lost job isn't happening at all.
+export async function contractorCommitments(
+  staffId: string,
+  date: string,
+  excludeId?: string,
+): Promise<Commitment[]> {
+  if (!ISO_DATE.test(date) || !/^[0-9a-fA-F-]{36}$/.test(staffId)) return [];
+  const res = await pgAdmin(
+    `quote_requests?assigned_to=eq.${staffId}&status=neq.lost` +
+      `&or=(scheduled_date.eq.${date},visit_date.eq.${date})` +
+      `&select=id,name,quote_type,customer_response,scheduled_date,scheduled_time,visit_date,visit_time`,
+  );
+  if (!res.ok) return [];
+  const rows = (await res.json()) as {
+    id: string;
+    name: string;
+    quote_type: string | null;
+    customer_response: string | null;
+    scheduled_date: string | null;
+    scheduled_time: string | null;
+    visit_date: string | null;
+    visit_time: string | null;
+  }[];
+
+  const out: Commitment[] = [];
+  for (const r of rows) {
+    if (excludeId && r.id === excludeId) continue;
+    if (r.scheduled_date === date && r.customer_response === "accepted") {
+      out.push({ id: r.id, name: r.name, kind: "job", time: r.scheduled_time });
+    }
+    if (r.visit_date === date && r.quote_type !== "online") {
+      out.push({ id: r.id, name: r.name, kind: "visit", time: r.visit_time });
+    }
+  }
+  return out;
+}
+
+const clockKey = (t?: string | null) => (t ?? "").trim().toUpperCase().replace(/\s+/g, " ");
+
+// A booked work day is a full day on site, so anything else already on that
+// contractor's date blocks it - including a quote visit, which would otherwise
+// sit in the middle of a pour.
+export async function findJobConflict(
+  staffId: string | null | undefined,
+  date: string,
+  excludeId?: string,
+): Promise<Commitment | null> {
+  if (!staffId) return null;
+  return (await contractorCommitments(staffId, date, excludeId))[0] ?? null;
+}
+
+// A visit is about an hour, so another visit only clashes at the same time. A
+// job that day still blocks every slot.
+export async function findVisitConflict(
+  staffId: string | null | undefined,
+  date: string,
+  time: string,
+  excludeId?: string,
+): Promise<Commitment | null> {
+  if (!staffId) return null;
+  const busy = await contractorCommitments(staffId, date, excludeId);
+  return busy.find((c) => c.kind === "job" || clockKey(c.time) === clockKey(time)) ?? null;
+}
+
+// For staff-facing screens only. Names the customer already in that slot, which
+// is what makes the clash resolvable - never show this to the public.
+export function conflictMessage(c: Commitment): string {
+  const when = c.time ? ` at ${c.time}` : "";
+  return c.kind === "job"
+    ? `That crew is already booked on ${c.name}'s job that day${when}. Pick another day, or assign this to someone else first.`
+    : `That crew already has a quote visit with ${c.name}${when}. Pick another time, or assign this to someone else first.`;
+}
+
+// Which visit slots a contractor has already spoken for on a date, for the
+// public booking form. Returns times only - no names - because this answer is
+// served to anyone who asks. `wholeDay` means they're on a job and no slot works.
+export async function takenVisitTimes(
+  staffId: string | null | undefined,
+  date: string,
+): Promise<{ times: string[]; wholeDay: boolean }> {
+  // With nobody assigned there is no personal calendar to clash with; the
+  // per-day cap is the only limit that applies.
+  if (!staffId) return { times: [], wholeDay: false };
+  const busy = await contractorCommitments(staffId, date);
+  if (busy.some((c) => c.kind === "job")) return { times: [], wholeDay: true };
+  return { times: busy.map((c) => c.time).filter((t): t is string => Boolean(t)), wholeDay: false };
+}
+
 // Service-role phone lookup for one staff member (used by token-gated server code
 // that has no session, e.g. notifying an assigned contractor on customer accept).
 export async function getStaffPhoneById(id: string): Promise<string | null> {
@@ -584,11 +689,17 @@ export async function confirmSchedule(
     return { ok: true, previous: date, previousTime: cleanTime, unchanged: true };
   }
 
-  // One job per day - the DB enforces this too, but checking here gives a clear
-  // message instead of a constraint violation.
+  // One job per day for the business - the DB enforces this too, but checking
+  // here gives a clear message instead of a constraint violation.
   if ((await countJobsOn(date, id)) >= MAX_JOBS_PER_DAY) {
     return { ok: false, error: "Another job is already booked that day." };
   }
+
+  // ...and one place at a time for the person doing it. The cap above is about
+  // the business; this is about the crew, and it catches the case the cap can't:
+  // a quote visit already sitting on their calendar that day.
+  const clash = await findJobConflict(current.assigned_to, date, id);
+  if (clash) return { ok: false, error: conflictMessage(clash) };
 
   const { quote: updated, error } = await updateQuoteResult(session, id, {
     scheduled_date: date,
@@ -636,6 +747,11 @@ export async function rescheduleVisit(
     const used = await countVisitsOn(date);
     if (used >= MAX_VISITS_PER_DAY) return { ok: false, error: "That day is already full for quote visits." };
   }
+
+  // The day having room doesn't mean the crew does. Another visit only clashes
+  // at the same time; a job that day blocks every slot.
+  const clash = await findVisitConflict(current.assigned_to, date, cleanTime, id);
+  if (clash) return { ok: false, error: conflictMessage(clash) };
 
   const { quote: updated, error } = await updateQuoteResult(session, id, {
     visit_date: date,

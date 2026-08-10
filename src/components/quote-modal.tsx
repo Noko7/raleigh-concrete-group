@@ -285,16 +285,27 @@ function Modal({ onClose }: { onClose: () => void }) {
   const [honeypot, setHoneypot] = useState("");
   const [dateChecking, setDateChecking] = useState(false);
   const [dateFull, setDateFull] = useState(false);
+  // Slots the crew already has on the chosen day. Greying these out is nicer
+  // than letting someone pick one and bounce off a 409 two screens later, but
+  // it is not the guard - the server re-checks, because two people can be on
+  // this form at once and the browser's copy of "free" goes stale immediately.
+  const [takenTimes, setTakenTimes] = useState<string[]>([]);
   const minDate = useRef(minVisitDate()).current;
 
   async function checkVisitDate(date: string) {
     setDateFull(false);
+    setTakenTimes([]);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     setDateChecking(true);
     try {
       const res = await fetch(`/api/availability?type=quote&date=${date}`);
-      const json = (await res.json()) as { available?: boolean };
+      const json = (await res.json()) as { available?: boolean; taken?: string[] };
       setDateFull(json.available === false);
+      const taken = Array.isArray(json.taken) ? json.taken : [];
+      setTakenTimes(taken);
+      // If they had already chosen a time and it's gone, drop it rather than
+      // leaving a selected chip that will be rejected on submit.
+      setData((d) => (d.visitTime && taken.includes(d.visitTime) ? { ...d, visitTime: "" } : d));
     } catch {
       setDateFull(false); // don't block on a network hiccup; server re-checks
     } finally {
@@ -461,13 +472,19 @@ function Modal({ onClose }: { onClose: () => void }) {
         setStepIndex(STEPS.indexOf("contact"));
         setAddressVerified(false);
         setErrorMsg(json.error || "Please check your contact details.");
-      } else if (res.status === 409 || json.fields?.includes("visit_date")) {
-        // That day filled up (or is too soon) between picking it and
-        // submitting - send them back.
-        setDateFull(res.status === 409);
+      } else if (
+        res.status === 409 ||
+        json.fields?.includes("visit_date") ||
+        json.fields?.includes("visit_time")
+      ) {
+        // The day filled up, the slot went, or the date is too soon - all of
+        // them mean "go back and pick again". Re-check the day on the way so
+        // the chips redraw against what's actually left rather than the
+        // snapshot they chose from.
         setStatus("idle");
         setStepIndex(STEPS.indexOf("schedule"));
-        setErrorMsg(res.status === 409 ? "" : json.error || "");
+        setErrorMsg(json.error || "");
+        void checkVisitDate(data.visitDate);
       } else {
         setErrorMsg(json.error || `Something went wrong saving your request. Please call us at ${phoneDisplay}.`);
         setStatus("error");
@@ -741,17 +758,27 @@ function Modal({ onClose }: { onClose: () => void }) {
                 </span>
                 <label className="qm-label">Time</label>
                 <div className="qm-chips">
-                  {TIME_SLOTS.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={`qm-chip${data.visitTime === t ? " qm-chip--active" : ""}`}
-                      onClick={() => set({ visitTime: t })}
-                    >
-                      {t}
-                    </button>
-                  ))}
+                  {TIME_SLOTS.map((t) => {
+                    const taken = takenTimes.includes(t);
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        disabled={taken}
+                        title={taken ? "Already booked" : undefined}
+                        className={`qm-chip${data.visitTime === t ? " qm-chip--active" : ""}${
+                          taken ? " qm-chip--taken" : ""
+                        }`}
+                        onClick={() => set({ visitTime: t })}
+                      >
+                        {t}
+                      </button>
+                    );
+                  })}
                 </div>
+                {takenTimes.length > 0 && !dateFull && (
+                  <span className="qm-ac-status qm-slot">Greyed-out times are already booked that day.</span>
+                )}
 
                 {/* Shown whenever there's a message, not only in the "error"
                     status: a rejected date bounces back here as idle, and the
