@@ -156,6 +156,30 @@ confirms one with a single tap; owners can do the same from the CRM.
 Net effect: one text each way instead of a phone-tag loop, and the crew is never
 committed to a day they haven't agreed to.
 
+### Every text is logged against the job
+
+Sends are best-effort on purpose — a texting outage must never fail a customer's
+quote submission — but "best-effort" used to mean "silent". A lead could land
+with nobody notified, and the only trace was a line in the Vercel logs.
+
+Every attempt now writes a row to `quote_messages` (`supabase/message-log.sql`),
+including the ones that never reach the provider: an unparseable number, an
+empty message, or an owner alert with no owner phone configured. Those are the
+failures worth catching, because from the outside they look exactly like
+success. The log appears on the job page above the activity log — the activity
+log says what happened, the message log says whether anyone was told.
+
+`Accepted` means your SMS provider took the message. Carrier delivery is a
+separate step nobody tells us about, so that badge is the line between "our
+problem" and "not our problem", which is the question actually being asked. A
+failed row carries the provider's own error text rather than a generic
+"couldn't send".
+
+Sends carry their context through `SmsLog { quoteId, kind, role }`, so adding a
+notification means passing that object to `sendSms` and adding a label to
+`MESSAGE_LABELS` in `src/lib/crm/messages.ts`. A kind with no label falls back
+to its raw key rather than rendering blank.
+
 ### Lead times, and who they apply to
 
 | Date | Earliest | Who it binds |

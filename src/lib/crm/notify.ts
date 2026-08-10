@@ -13,7 +13,7 @@
 import { phoneDisplay } from "@/lib/site-data";
 import { visitDateOf } from "./constants";
 import { SITE_ORIGIN } from "./env";
-import { getOwnerContacts, getOwnerPhones } from "./queries";
+import { getOwnerContacts, getOwnerPhones, logMessage, type SmsLog } from "./queries";
 
 export const SMS_PROVIDER = (process.env.SMS_PROVIDER || (process.env.QUO_API_KEY ? "quo" : "twilio")).toLowerCase();
 const OWNER_PHONE = process.env.OWNER_PHONE || "";
@@ -101,11 +101,40 @@ async function sendCustom(to: string, message: string): Promise<SendResult> {
   return { ok: res.ok, provider: "custom", to, status: res.status, detail };
 }
 
+// Write the attempt to the message log. Every exit path from sendSmsResult goes
+// through here, including the ones that never reach the provider: "we never
+// tried, the number was unparseable" is exactly the kind of failure that used to
+// vanish, and it looks identical to success from the outside.
+async function record(log: SmsLog | undefined, r: SendResult, to: string, body: string): Promise<void> {
+  if (!log) return;
+  await logMessage({
+    quote_id: log.quoteId ?? null,
+    kind: log.kind,
+    role: log.role,
+    to_phone: to,
+    body,
+    ok: r.ok,
+    provider: r.provider,
+    status: r.status ?? null,
+    detail: r.detail ?? null,
+  });
+}
+
 // Detailed send - returns why it failed (used by the diagnostic endpoint).
-export async function sendSmsResult(toRaw: string, message: string): Promise<SendResult> {
+// Pass `log` and the attempt is recorded against the job; omit it for sends that
+// belong to no job, like the Settings test text.
+export async function sendSmsResult(toRaw: string, message: string, log?: SmsLog): Promise<SendResult> {
   const to = toE164(toRaw);
-  if (!to) return { ok: false, provider: SMS_PROVIDER, detail: `Invalid phone number: "${toRaw}"` };
-  if (!message) return { ok: false, provider: SMS_PROVIDER, to, detail: "Empty message" };
+  if (!to) {
+    const bad: SendResult = { ok: false, provider: SMS_PROVIDER, detail: `Invalid phone number: "${toRaw}"` };
+    await record(log, bad, toRaw, message);
+    return bad;
+  }
+  if (!message) {
+    const empty: SendResult = { ok: false, provider: SMS_PROVIDER, to, detail: "Empty message" };
+    await record(log, empty, to, message);
+    return empty;
+  }
   try {
     let r: SendResult;
     if (SMS_PROVIDER === "quo" || SMS_PROVIDER === "openphone") r = await sendQuo(to, message);
@@ -120,15 +149,18 @@ export async function sendSmsResult(toRaw: string, message: string): Promise<Sen
         detail: r.detail,
       });
     }
+    await record(log, r, to, message);
     return r;
   } catch (e) {
     console.error("[sms] threw", e);
-    return { ok: false, provider: SMS_PROVIDER, to, detail: String(e) };
+    const thrown: SendResult = { ok: false, provider: SMS_PROVIDER, to, detail: String(e) };
+    await record(log, thrown, to, message);
+    return thrown;
   }
 }
 
-export async function sendSms(toRaw: string, message: string): Promise<boolean> {
-  return (await sendSmsResult(toRaw, message)).ok;
+export async function sendSms(toRaw: string, message: string, log?: SmsLog): Promise<boolean> {
+  return (await sendSmsResult(toRaw, message, log)).ok;
 }
 
 // Everyone who receives an owner alert: the OWNER_PHONE env plus every active
@@ -196,13 +228,33 @@ export async function ownerRecipientDetails(): Promise<OwnerRecipient[]> {
 
 // Every active owner gets a copy, with the acting user excluded so they aren't
 // texted about their own clicks.
-export async function alertOwner(message: string, excludeRaw?: string | null): Promise<void> {
+export async function alertOwner(
+  message: string,
+  excludeRaw?: string | null,
+  log?: Omit<SmsLog, "role">,
+): Promise<void> {
   const recipients = await ownerRecipients(excludeRaw);
   if (recipients.length === 0) {
     console.error("[sms] alertOwner: no owner recipients (set OWNER_PHONE or an owner's phone in Settings)");
+    // Record the miss. An alert that was never addressed to anyone is the
+    // hardest failure to notice, because nothing errored and nothing arrived.
+    if (log) {
+      await logMessage({
+        quote_id: log.quoteId ?? null,
+        kind: log.kind,
+        role: "owner",
+        to_phone: null,
+        body: message,
+        ok: false,
+        provider: SMS_PROVIDER,
+        detail: "Not sent: no owner phone is configured. Add one in Settings, or set OWNER_PHONE in Vercel.",
+      });
+    }
     return;
   }
-  await Promise.all(recipients.map((p) => sendSms(p, message).catch(() => {})));
+  await Promise.all(
+    recipients.map((p) => sendSms(p, message, log ? { ...log, role: "owner" } : undefined).catch(() => {})),
+  );
 }
 
 // What's configured right now, for the Settings → Notifications panel. Never
@@ -284,6 +336,10 @@ function text(lines: (string | null | undefined)[]): string {
 }
 
 type QuoteInfo = {
+  // The job this message belongs to, so the send can be logged against it and
+  // read back on the job page. Optional only because a couple of callers text
+  // about something that isn't a job yet.
+  id?: string | null;
   name: string;
   phone: string;
   service?: string | null;
@@ -392,11 +448,15 @@ export async function notifyNewQuote(
   contractorPhone?: string | null,
   contractorName?: string | null,
 ): Promise<void> {
-  await alertOwner(newQuoteMessage(q));
+  await alertOwner(newQuoteMessage(q), null, { quoteId: q.id, kind: "new_quote" });
   if (contractorPhone) {
     // Same full brief as a manual assignment - from the crew's side this is the
     // same event, so it shouldn't read differently.
-    await sendSms(contractorPhone, assignmentMessage(q, contractorName)).catch(() => {});
+    await sendSms(contractorPhone, assignmentMessage(q, contractorName), {
+      quoteId: q.id,
+      kind: "new_quote_crew",
+      role: "crew",
+    }).catch(() => {});
   }
 }
 
@@ -438,7 +498,7 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
           "",
           OPT_OUT_LINE,
         ]);
-  await sendSms(q.phone, msg).catch(() => {});
+  await sendSms(q.phone, msg, { quoteId: q.id, kind: "received", role: "customer" }).catch(() => {});
 }
 
 // ── 4. Contractor confirms the visit an online customer offered ─────────────
@@ -484,6 +544,7 @@ export async function notifyVisitConfirmed(
       "",
       `It's still free and there's no obligation. Reply to this text or call us at ${phoneDisplay} if another day or time works better for you.`,
     ]),
+    { quoteId: q.id, kind: "visit_confirmed", role: "customer" },
   ).catch(() => {});
 
   if (crewPhone) {
@@ -499,6 +560,7 @@ export async function notifyVisitConfirmed(
         "",
         q.job_token ? jobLink(q.job_token) : null,
       ]),
+      { quoteId: q.id, kind: "visit_confirmed", role: "crew" },
     ).catch(() => {});
   }
 
@@ -511,6 +573,7 @@ export async function notifyVisitConfirmed(
       customerBrief(q),
     ]),
     crewPhone,
+    { quoteId: q.id, kind: "visit_confirmed" },
   ).catch(() => {});
 }
 
@@ -527,6 +590,7 @@ export async function notifyQuoteReady(q: QuoteInfo): Promise<SendResult> {
       "",
       BUSINESS,
     ]),
+    { quoteId: q.id, kind: "quote_ready", role: "customer" },
   );
 }
 
@@ -544,6 +608,7 @@ export async function notifyCustomerApproved(q: QuoteInfo): Promise<void> {
       "",
       BUSINESS,
     ]),
+    { quoteId: q.id, kind: "approved", role: "customer" },
   ).catch(() => {});
 }
 
@@ -563,6 +628,8 @@ export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: stri
       "",
       q.job_token ? jobLink(q.job_token) : null,
     ]),
+    null,
+    { quoteId: q.id, kind: "needs_scheduling" },
   );
 
   if (contractorPhone) {
@@ -579,6 +646,7 @@ export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: stri
         "",
         "Sign in with your CRM login to pick it.",
       ]),
+      { quoteId: q.id, kind: "needs_scheduling", role: "crew" },
     ).catch(() => {});
   }
 }
@@ -602,6 +670,7 @@ export async function notifyCustomerScheduled(q: QuoteInfo): Promise<void> {
       "",
       "We look forward to it! We'll text you a reminder before we arrive.",
     ]),
+    { quoteId: q.id, kind: "scheduled", role: "customer" },
   ).catch(() => {});
 }
 
@@ -631,6 +700,7 @@ export async function notifyCustomerRescheduled(
       "",
       "Sorry for the change, call or text us if that day doesn't work.",
     ]),
+    { quoteId: q.id, kind: "rescheduled", role: "customer" },
   ).catch(() => {});
 }
 
@@ -653,6 +723,7 @@ export async function notifyVisitMoved(
   await sendSms(
     q.phone,
     text([`Hi ${firstName(q.name)},`, ...body, "", "Sorry for the change, call or text us if that time doesn't work."]),
+    { quoteId: q.id, kind: "visit_moved", role: "customer" },
   ).catch(() => {});
 }
 
@@ -667,6 +738,7 @@ export async function notifyVisitCancelled(q: QuoteInfo): Promise<void> {
       "",
       "We're sorry for the trouble. Call or text us and we'll get you booked back in.",
     ]),
+    { quoteId: q.id, kind: "visit_cancelled", role: "customer" },
   ).catch(() => {});
 }
 
@@ -688,6 +760,7 @@ export async function notifyBookingCancelled(q: QuoteInfo, previous?: string | n
       "",
       "Sorry for the change, call or text us any time.",
     ]),
+    { quoteId: q.id, kind: "booking_cancelled", role: "customer" },
   ).catch(() => {});
 }
 
@@ -710,8 +783,10 @@ export async function notifyBooked(
     jobLink(q.job_token ?? ""),
   ]);
 
-  await alertOwner(msg);
-  if (contractorPhone) await sendSms(contractorPhone, msg).catch(() => {});
+  await alertOwner(msg, null, { quoteId: q.id, kind: "booked" });
+  if (contractorPhone) {
+    await sendSms(contractorPhone, msg, { quoteId: q.id, kind: "booked", role: "crew" }).catch(() => {});
+  }
 }
 
 // ── 6. Customer declined ────────────────────────────────────────────────────
@@ -723,8 +798,10 @@ export async function notifyDeclined(q: QuoteInfo, contractorPhone?: string | nu
     ...block("Phone:", q.phone),
     ...block("Amount:", usd(q.quote_amount)),
   ]);
-  await alertOwner(msg);
-  if (contractorPhone) await sendSms(contractorPhone, msg).catch(() => {});
+  await alertOwner(msg, null, { quoteId: q.id, kind: "declined" });
+  if (contractorPhone) {
+    await sendSms(contractorPhone, msg, { quoteId: q.id, kind: "declined", role: "crew" }).catch(() => {});
+  }
 }
 
 // ── 9. Two days out: ask the customer to confirm ────────────────────────────
@@ -740,6 +817,7 @@ export async function notifyReminder(q: QuoteInfo): Promise<SendResult> {
       "Please confirm it here:",
       confirmLink(q.public_token ?? ""),
     ]),
+    { quoteId: q.id, kind: "reminder", role: "customer" },
   );
 }
 export async function notifyUnconfirmed(q: QuoteInfo, contractorPhone?: string | null): Promise<void> {
@@ -751,8 +829,10 @@ export async function notifyUnconfirmed(q: QuoteInfo, contractorPhone?: string |
     ...block("Was booked for:", dayAndTime(q)),
     "Please reach out to reschedule.",
   ]);
-  await alertOwner(msg);
-  if (contractorPhone) await sendSms(contractorPhone, msg).catch(() => {});
+  await alertOwner(msg, null, { quoteId: q.id, kind: "unconfirmed" });
+  if (contractorPhone) {
+    await sendSms(contractorPhone, msg, { quoteId: q.id, kind: "unconfirmed", role: "crew" }).catch(() => {});
+  }
 }
 
 // ── 10. Crew reminders ahead of a booked job ────────────────────────────────
@@ -786,7 +866,11 @@ export async function notifyCrewReminder(
   contractorName?: string | null,
 ): Promise<SendResult | null> {
   if (!contractorPhone) return null;
-  return sendSmsResult(contractorPhone, crewReminderMessage(q, daysOut, contractorName)).catch(() => null);
+  return sendSmsResult(contractorPhone, crewReminderMessage(q, daysOut, contractorName), {
+    quoteId: q.id,
+    kind: `crew_reminder_${daysOut}`,
+    role: "crew",
+  }).catch(() => null);
 }
 
 // ── 11. Job complete + paid: thank the customer and ask for a review ────────
@@ -802,6 +886,7 @@ export async function notifyComplete(q: QuoteInfo): Promise<void> {
       "",
       BUSINESS,
     ]),
+    { quoteId: q.id, kind: "complete", role: "customer" },
   ).catch(() => {});
 }
 
@@ -823,6 +908,7 @@ export async function notifyPaymentRequest(q: QuoteInfo): Promise<SendResult> {
       "",
       "Thank you for your business.",
     ]),
+    { quoteId: q.id, kind: "payment_request", role: "customer" },
   );
 }
 
@@ -837,11 +923,11 @@ export function assignmentMessage(q: QuoteInfo, contractorName?: string | null):
     `you've been assigned a new job with ${BUSINESS}.`,
     "",
     customerBrief(q),
-    "",
-    "Full details and photos:",
-    jobLink(q.job_token ?? ""),
-    "",
-    "Sign in with your CRM login to open it.",
+    // The link is skipped rather than half-built when there's no token. A bare
+    // ".../job/" is worse than no link: it looks tappable and goes nowhere.
+    ...(q.job_token
+      ? ["", "Full details and photos:", jobLink(q.job_token), "", "Sign in with your CRM login to open it."]
+      : []),
     "",
     `Please give ${firstName(q.name)} a call to introduce yourself and confirm the details.`,
   ]);
@@ -853,5 +939,9 @@ export async function notifyAssignment(
   contractorName?: string | null,
 ): Promise<void> {
   if (!contractorPhone) return;
-  await sendSms(contractorPhone, assignmentMessage(q, contractorName)).catch(() => {});
+  await sendSms(contractorPhone, assignmentMessage(q, contractorName), {
+    quoteId: q.id,
+    kind: "assignment",
+    role: "crew",
+  }).catch(() => {});
 }

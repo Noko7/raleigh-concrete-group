@@ -69,6 +69,7 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
 
   await notifyVisitMoved(
     {
+      id,
       name: current.name,
       phone: current.phone,
       visit_date: date,
@@ -109,7 +110,7 @@ export async function deleteEvent(_prev: CalActionState, formData: FormData): Pr
   });
 
   if (notify) {
-    const info = { name: current.name, phone: current.phone, visit_date: result.previous, visit_time: result.previousTime };
+    const info = { id, name: current.name, phone: current.phone, visit_date: result.previous, visit_time: result.previousTime };
     if (kind === "job") await notifyBookingCancelled(info, result.previous, result.previousTime).catch(() => {});
     else await notifyVisitCancelled(info).catch(() => {});
   }

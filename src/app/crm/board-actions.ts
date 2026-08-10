@@ -34,7 +34,7 @@ export async function moveQuote(id: string, status: string): Promise<MoveResult>
 
   // Marking a job Completed thanks the customer and asks for a review.
   if (status === "completed" && current.status !== "completed") {
-    await notifyComplete({ name: current.name, phone: current.phone }).catch(() => {});
+    await notifyComplete({ id, name: current.name, phone: current.phone }).catch(() => {});
   }
 
   // Only the stages worth interrupting someone for. Dragging a card between the
@@ -70,6 +70,7 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
     await notifyAssignment(
       contractor?.phone,
       {
+        id,
         name: current.name,
         phone: current.phone,
         service: current.service,

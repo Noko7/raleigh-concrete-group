@@ -7,11 +7,19 @@ import { SITE_ORIGIN } from "@/lib/crm/env";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText } from "@/lib/crm/events";
-import { getQuote, listAgreementsForQuote, listContractors, listEvents, listStaff } from "@/lib/crm/queries";
+import {
+  getQuote,
+  listAgreementsForQuote,
+  listContractors,
+  listEvents,
+  listMessages,
+  listStaff,
+} from "@/lib/crm/queries";
 import { AddAgreement } from "../../agreements/add-agreement";
 import { AgreementList } from "../../agreements/agreement-list";
 import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
+import { MessageLog } from "./message-log";
 import { QuoteEditor } from "./quote-editor";
 import { ScheduleCard } from "./schedule-card";
 import { completeJob, markPaid, requestPayment, rotateTokens } from "./actions";
@@ -47,6 +55,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const contractors = (isOwner ? allStaff : await listContractors(session)).filter((s) => s.role === "contractor");
   const nameMap = new Map(allStaff.map((s) => [s.id, s.full_name || s.email || "Staff"]));
   const events = await listEvents(session, id);
+  const messages = await listMessages(session, id);
   const agreements = await listAgreementsForQuote(session, id);
   const photoUrls = (quote.file_urls ?? []).map((p) => `${base}/api/file?p=${encodeURIComponent(p)}`);
   // The same column, read two ways: a booked visit on an in-person request, or
@@ -208,6 +217,10 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               </div>
             )}
           </div>
+
+          {/* Above the activity log on purpose: the activity log says what
+              happened, this says whether anyone was told. */}
+          <MessageLog messages={messages} />
 
           {events.length > 0 && (
             <div className="crm-card">

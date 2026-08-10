@@ -1769,6 +1769,34 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .sms-result-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
 .sms-detail { margin: 0.6rem 0 0; padding: 0.6rem 0.7rem; background: #15181c; border-radius: 0.45rem; font-family: ui-monospace, monospace; font-size: 0.78rem; color: #fca5a5; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto; }
 
+/* ── Message log (job page): every text this job produced ── */
+.msg-log { list-style: none; margin: 0.9rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.msg-log > li {
+  border: 1px solid var(--crm-border); border-left: 3px solid rgba(22, 163, 74, 0.55);
+  border-radius: 0.7rem; padding: 0.75rem 0.85rem; background: var(--crm-surface-solid);
+}
+/* A failure is the only reason to scan this list, so it gets the loud edge. */
+.msg-log > li.msg-bad { border-left-color: #dc2626; }
+.msg-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.msg-kind { font-size: 0.95rem; }
+.msg-to { flex: 1 1 auto; }
+.msg-when { flex: none; }
+.msg-detail {
+  margin: 0.55rem 0 0; padding: 0.55rem 0.7rem; background: #15181c; border-radius: 0.45rem;
+  font-family: ui-monospace, monospace; font-size: 0.76rem; color: #fca5a5;
+  white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto;
+}
+.msg-body { margin-top: 0.5rem; }
+.msg-body > summary { cursor: pointer; color: var(--crm-muted); font-size: 0.8rem; font-weight: 700; }
+.msg-body pre {
+  margin: 0.5rem 0 0; padding: 0.6rem 0.7rem; background: #15181c; border-radius: 0.45rem;
+  font-family: inherit; font-size: 0.85rem; white-space: pre-wrap; word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .msg-when { width: 100%; }
+}
+
 /* ── Security dashboard ── */
 .sec-inline-badge { margin-left: 0.45rem; }
 .sec-failed { color: #f87171; font-weight: 700; }

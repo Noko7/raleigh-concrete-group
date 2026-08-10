@@ -184,11 +184,21 @@ export async function POST(request: Request) {
     }>;
     const newRow = created[0];
 
-    // Auto-assign to the primary contractor (owner-selectable in Settings), then
-    // text the owner + contractor and acknowledge the customer. All best-effort.
+    // These two are the difference between a lead you know about and one you
+    // don't, so when either is missing say so loudly in the logs. Both used to
+    // gate the whole notification block, which meant a missing service key
+    // turned every new lead into silence that looked exactly like success.
+    if (!newRow?.id) {
+      console.error("[quote] saved, but the row could not be read back - alerts will have no job link");
+    }
+    if (!SERVICE_KEY) {
+      console.error("[quote] SUPABASE_SERVICE_ROLE_KEY is not set - cannot auto-assign or look up owner numbers");
+    }
+
+    // Auto-assign to the primary contractor (owner-selectable in Settings).
+    let contractorPhone: string | null = null;
+    let contractorName: string | null = null;
     if (newRow?.id && SERVICE_KEY) {
-      let contractorPhone: string | null = null;
-      let contractorName: string | null = null;
       try {
         const primaryId = await getPrimaryContractorId();
         if (primaryId) {
@@ -209,22 +219,31 @@ export async function POST(request: Request) {
       } catch {
         // assignment is best-effort; the quote is already saved
       }
-
-      const info = {
-        name,
-        phone: phoneRaw,
-        service,
-        address,
-        details,
-        quote_type: row.quote_type ?? undefined,
-        visit_date: row.visit_date,
-        visit_time: row.visit_time,
-        public_token: newRow.public_token,
-        job_token: newRow.job_token,
-      };
-      await notifyNewQuote(info, contractorPhone, contractorName).catch(() => {});
-      await notifyCustomerReceived(info).catch(() => {});
     }
+
+    // Text regardless of whether the two steps above worked. An alert naming the
+    // customer and their number is worth sending even with no job link attached:
+    // you can still call them back, which is the entire point of the alert.
+    const info = {
+      id: newRow?.id,
+      name,
+      phone: phoneRaw,
+      service,
+      address,
+      details,
+      quote_type: row.quote_type ?? undefined,
+      visit_date: row.visit_date,
+      visit_time: row.visit_time,
+      public_token: newRow?.public_token,
+      job_token: newRow?.job_token,
+    };
+    await notifyNewQuote(info, contractorPhone, contractorName).catch((e) => {
+      console.error("[quote] new-lead alert failed", e);
+    });
+    await notifyCustomerReceived(info).catch((e) => {
+      console.error("[quote] customer acknowledgement failed", e);
+    });
+
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 502 });

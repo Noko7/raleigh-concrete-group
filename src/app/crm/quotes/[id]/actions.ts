@@ -131,6 +131,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       await notifyAssignment(
         contractor?.phone,
         {
+          id,
           name: current.name,
           phone: current.phone,
           service: current.service,
@@ -151,7 +152,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
     // Marking the job Completed here (via the status dropdown) also thanks the customer.
     if (patch.status === "completed" && current.status !== "completed") {
-      await notifyComplete({ name: current.name, phone: current.phone }).catch(() => {});
+      await notifyComplete({ id, name: current.name, phone: current.phone }).catch(() => {});
     }
 
     let smsDelivered = false;
@@ -162,6 +163,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       // customer receives something, so a failure has to reach the screen with
       // the provider's own reason rather than a silent false.
       const r = await notifyQuoteReady({
+        id,
         name: current.name,
         phone: current.phone,
         public_token: current.public_token,
@@ -230,6 +232,7 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
   });
 
   const info = {
+    id,
     name: current.name,
     phone: current.phone,
     service: current.service,
@@ -307,6 +310,7 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   const crew = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
   await notifyVisitConfirmed(
     {
+      id,
       name: current.name,
       phone: current.phone,
       service: current.service,
@@ -397,6 +401,7 @@ export async function requestPayment(formData: FormData): Promise<void> {
   if (!current) return;
 
   const sent = await notifyPaymentRequest({
+    id,
     name: current.name,
     phone: current.phone,
     quote_amount: current.quote_amount,

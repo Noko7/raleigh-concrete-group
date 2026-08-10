@@ -189,6 +189,80 @@ export async function getOwnerContacts(): Promise<{ name: string; phone: string 
     .map((r) => ({ name: r.full_name || r.email || "Owner", phone: r.phone as string }));
 }
 
+// ── Message log ─────────────────────────────────────────────────────────────
+// Every text we attempt gets a row, sent or not. Sends are best-effort by design
+// - a texting outage must never fail a quote submission - but "best-effort" used
+// to mean "silent", and a lead could land with nobody notified and no trace of
+// why. This is that trace, and it sits next to the job rather than in a log file.
+
+// Context a send carries so its row can be attributed. `kind` names the
+// notification; `role` is who it was aimed at.
+export type SmsLog = { quoteId?: string | null; kind: string; role: "customer" | "owner" | "crew" };
+
+export type QuoteMessage = {
+  id: string;
+  quote_id: string | null;
+  created_at: string;
+  kind: string;
+  role: string;
+  to_phone: string | null;
+  body: string | null;
+  ok: boolean;
+  provider: string | null;
+  status: number | null;
+  detail: string | null;
+};
+
+// Service-role: sends happen from the public quote endpoint and from cron, where
+// there is no session. Never throws - a logging failure must not take a send
+// down with it, which would be the tail wagging the dog.
+export async function logMessage(row: {
+  quote_id?: string | null;
+  kind: string;
+  role: string;
+  to_phone?: string | null;
+  body?: string | null;
+  ok: boolean;
+  provider?: string | null;
+  status?: number | null;
+  detail?: string | null;
+}): Promise<void> {
+  try {
+    const res = await pgAdmin("quote_messages", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        quote_id: row.quote_id ?? null,
+        kind: row.kind,
+        role: row.role,
+        to_phone: row.to_phone ?? null,
+        // Capped: a log row is for reading back, not for archiving an essay.
+        body: row.body ? row.body.slice(0, 4000) : null,
+        ok: row.ok,
+        provider: row.provider ?? null,
+        status: row.status ?? null,
+        detail: row.detail ? row.detail.slice(0, 2000) : null,
+      }),
+    });
+    if (!res.ok) {
+      // Worth a log line of its own: if the table is missing, every send looks
+      // fine in the app while nothing is being recorded.
+      console.error("[sms-log] could not record message", { status: res.status, kind: row.kind });
+    }
+  } catch (e) {
+    console.error("[sms-log] threw", e);
+  }
+}
+
+export async function listMessages(session: Session, quoteId: string): Promise<QuoteMessage[]> {
+  const res = await pgUser(
+    `quote_messages?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=created_at.desc&limit=200`,
+    session.accessToken,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as QuoteMessage[];
+}
+
 // ── Booking capacity ────────────────────────────────────────────────────────
 // One booked job per day; up to five in-person quote visits per day.
 export const MAX_JOBS_PER_DAY = 1;
