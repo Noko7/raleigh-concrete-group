@@ -1592,6 +1592,24 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .jq-cancel { background: none; border: none; color: #6b7280; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0.6rem 0; min-height: 44px; }
 .jf-done { background: #f0fdf4; border-color: #86efac; }
 
+/* Close-out checklist. Rows are full-width and 52px tall because these get
+   tapped with work gloves on, and a 20px checkbox is the target. */
+.jf-checks { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.jf-check {
+  display: flex; align-items: center; gap: 0.7rem; cursor: pointer;
+  background: #f8f9fa; border: 1px solid #d1d5db; border-radius: 0.6rem;
+  padding: 0.7rem 0.8rem; min-height: 52px; font-size: 0.98rem; color: #1f2328;
+}
+.jf-check input { width: 22px; height: 22px; flex: none; accent-color: var(--amber); }
+.jf-check:has(input:checked) { background: #f0fdf4; border-color: #86efac; font-weight: 700; }
+.jf-note { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.9rem; font-size: 0.85rem; font-weight: 800; color: #374151; }
+.jf-note textarea {
+  padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem;
+  font: inherit; font-weight: 500; color: #1f2328; background: #fff; min-height: 84px; resize: vertical;
+}
+.jf-note textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+.jf-warn { margin-bottom: 0.8rem; }
+
 /* ── Kanban board ── */
 .kb { position: relative; }
 .kb-cols { display: flex; gap: 0.9rem; overflow-x: auto; padding-bottom: 1rem; scroll-snap-type: x proximity; }
@@ -1936,6 +1954,11 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 /* Alert recipients, each with where it came from. */
 .sms-targets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
 .sms-targets li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+.sms-target-off strong { text-decoration: line-through; opacity: 0.6; }
+.sms-off-tag {
+  font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--crm-muted); border: 1px solid var(--crm-border); border-radius: 999px; padding: 0.05rem 0.45rem;
+}
 .sms-envnote { margin-top: 0.6rem; }
 .sms-envnote code { background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 0.3rem; padding: 0.05rem 0.3rem; font-size: 0.78rem; }
 

@@ -60,9 +60,10 @@ export function TestSms({
             ) : (
               <ul className="sms-targets">
                 {recipients.map((r) => (
-                  <li key={r.phone}>
+                  <li key={r.phone} className={r.active ? "" : "sms-target-off"}>
                     <strong>{r.phone}</strong>
                     <span className="crm-muted crm-sm">{r.who}</span>
+                    {!r.active && <span className="sms-off-tag">not used</span>}
                   </li>
                 ))}
               </ul>
@@ -77,9 +78,10 @@ export function TestSms({
           to turn: env vars live in Vercel, profiles are editable in the CRM. */}
       {recipients.some((r) => r.source === "env") && (
         <p className="crm-muted crm-sm sms-envnote">
-          A number listed as <code>OWNER_PHONE env var</code> comes from Vercel, not from this app. To stop it
-          receiving alerts, remove or change <code>OWNER_PHONE</code> in Vercel → Settings → Environment Variables and
-          redeploy. Owner profile numbers are changed here in the CRM.
+          A number listed as <code>OWNER_PHONE env var</code> comes from Vercel, not from this app. Owner profile
+          numbers win: <code>OWNER_PHONE</code> is only used while no owner has a number saved above, which is why it
+          can show as <em>not used</em>. To remove it entirely, change it in Vercel → Settings → Environment Variables
+          and redeploy.
         </p>
       )}
 

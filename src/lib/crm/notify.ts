@@ -140,12 +140,18 @@ export async function ownerRecipients(excludeRaw?: string | null): Promise<strin
     const e = raw ? toE164(raw) : null;
     if (e) recipients.set(e, e);
   };
-  add(OWNER_PHONE);
+
+  // Saved owner profiles win outright. OWNER_PHONE is a bootstrap for before
+  // anyone has saved a number, not a permanent extra recipient: previously the
+  // two were unioned, so a stale env var kept texting a number nobody could see
+  // or remove from inside the app.
   try {
     for (const p of await getOwnerPhones()) add(p);
   } catch {
-    // ignore - fall back to OWNER_PHONE
+    // ignore - the env fallback below still applies
   }
+  if (recipients.size === 0) add(OWNER_PHONE);
+
   const exclude = excludeRaw ? toE164(excludeRaw) : null;
   if (exclude) recipients.delete(exclude);
   return [...recipients.values()];
@@ -155,23 +161,33 @@ export async function ownerRecipients(excludeRaw?: string | null): Promise<strin
 // can't tell you which knob to turn when a number you don't recognise is
 // receiving your alerts: one lives in a Vercel env var, the others are staff
 // profiles you can edit in the CRM.
-export type OwnerRecipient = { phone: string; source: "env" | "profile"; who: string };
+// `active` is false for a number that is configured but no longer used, which
+// is the case for OWNER_PHONE once any owner has saved a number in their
+// profile. Showing it greyed out beats hiding it: a number in an env var you've
+// forgotten about is exactly the thing you want the app to point at.
+export type OwnerRecipient = { phone: string; source: "env" | "profile"; who: string; active: boolean };
 
 export async function ownerRecipientDetails(): Promise<OwnerRecipient[]> {
   const byPhone = new Map<string, OwnerRecipient>();
 
-  const envPhone = OWNER_PHONE ? toE164(OWNER_PHONE) : null;
-  if (envPhone) byPhone.set(envPhone, { phone: envPhone, source: "env", who: "OWNER_PHONE env var" });
-
   try {
     for (const o of await getOwnerContacts()) {
       const e = toE164(o.phone);
-      if (!e) continue;
-      // A profile number is the more useful attribution when it's both.
-      byPhone.set(e, { phone: e, source: "profile", who: o.name });
+      if (e) byPhone.set(e, { phone: e, source: "profile", who: o.name, active: true });
     }
   } catch {
-    // ignore - the env entry above still stands
+    // ignore - the env entry below still applies
+  }
+
+  const envPhone = OWNER_PHONE ? toE164(OWNER_PHONE) : null;
+  if (envPhone && !byPhone.has(envPhone)) {
+    byPhone.set(envPhone, {
+      phone: envPhone,
+      source: "env",
+      who: "OWNER_PHONE env var",
+      // Only used while no owner profile has a number saved.
+      active: byPhone.size === 0,
+    });
   }
 
   return [...byPhone.values()];
@@ -233,6 +249,15 @@ export function confirmLink(token: string): string {
 const OWNER_NAME = (process.env.OWNER_NAME || "Noah").trim();
 const REVIEW_URL = (process.env.GOOGLE_REVIEW_URL || "").trim();
 const BUSINESS = "Raleigh Concrete Group";
+
+// The opt-out notice goes in the FIRST message we ever send someone, and only
+// there. It has to be stated plainly at least once; repeating it on every text
+// trains people to skip past it and makes each message longer for nothing.
+//
+// STOP works on every message regardless of whether we print this line: the
+// carrier and the SMS provider honour it before it ever reaches this app, so a
+// customer is never stuck receiving texts because a later message didn't say so.
+const OPT_OUT_LINE = "Reply STOP any time to stop these texts.";
 // The number the crew should call when they can't make an appointment. Falls
 // back to the main business line from site-data rather than a second copy of
 // the digits, so there's one place a phone number is ever written down.
@@ -365,6 +390,8 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
           `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`,
           "",
           "We look forward to meeting you. Reply or call if anything changes.",
+          "",
+          OPT_OUT_LINE,
         ])
       : // Deliberately promises a follow-up, not a price or a timeframe. Pricing
         // depends on the project, and committing to "your price shortly" up
@@ -374,6 +401,8 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
           `this is ${OWNER_NAME} with ${BUSINESS}. Thanks for reaching out.`,
           "",
           "We got your request and we're looking over the details now. We'll follow up soon with next steps, and reach out if we need anything else about the project.",
+          "",
+          OPT_OUT_LINE,
         ]);
   await sendSms(q.phone, msg).catch(() => {});
 }

@@ -251,11 +251,18 @@ export async function completeJob(formData: FormData): Promise<void> {
   const current = await getQuote(session, id);
   if (!current || current.status === "completed" || current.status === "paid") return;
 
+  // The crew's close-out checklist and any note they left. Optional: the owner's
+  // own Mark completed button on the CRM page sends neither, and shouldn't have
+  // to. What matters is that when they ARE sent, they're recorded and they reach
+  // whoever has to act on them.
+  const checks = formData.getAll("check").map((c) => String(c)).slice(0, 8);
+  const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
+
   const updated = await updateQuote(session, id, { status: "completed", completed_at: new Date().toISOString() });
   if (!updated) return;
 
   await addEvent(session, id, "status_changed", { from: current.status, to: "completed" });
-  await addEvent(session, id, "job_completed");
+  await addEvent(session, id, "job_completed", { checks, note: note || null });
   await notifyComplete({ name: current.name, phone: current.phone }).catch(() => {});
   await alertOwner(
     [
@@ -266,6 +273,9 @@ export async function completeJob(formData: FormData): Promise<void> {
       "",
       "Completed by:",
       session.staff.full_name || "crew",
+      // A note from the crew is the whole reason to read this text, so it goes
+      // above the routine next-step line rather than at the bottom.
+      ...(note ? ["", "Note from the crew:", note] : []),
       "",
       "Request payment when you're ready.",
     ].join("\n"),
