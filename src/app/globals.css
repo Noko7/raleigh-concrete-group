@@ -1779,21 +1779,83 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-gcal-body p { flex: 1; min-width: 240px; margin: 0; }
 .cal-gcal code { background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.3rem; padding: 0.05rem 0.35rem; font-size: 0.78rem; }
 
-/* CRM calendar */
-.cal { background: var(--crm-surface); border: 1px solid var(--crm-border); border-radius: 0.9rem; padding: 1rem; }
-.cal-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; flex-wrap: wrap; }
-.cal-bar h2 { font-family: var(--font-headline), sans-serif; font-size: 1.5rem; }
-.cal-bar-btns { display: flex; gap: 0.4rem; }
-.cal-bar-btns .crm-btn { min-width: 44px; padding: 0.4rem 0.7rem; }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.cal-dow { margin-bottom: 4px; }
-.cal-dow-cell { text-align: center; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--crm-muted); padding: 0.3rem 0; }
-/* Tall enough for three chips plus a "+N more" row without clipping. */
-.cal-cell { background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 0.5rem; min-height: 112px; padding: 0.35rem; display: flex; flex-direction: column; gap: 0.25rem; }
-.cal-cell-dim { opacity: 0.4; }
+/* ─── CRM calendar ──────────────────────────────────────────────────────────
+   Phone first. This gets opened in a truck far more than at a desk, so the
+   default view is a list of what's coming rather than a month grid: seven
+   columns on a 390px screen is 45px per day, which holds neither a name nor a
+   reliable tap target. The grid is still there for planning on a laptop. */
+.cal { background: var(--crm-surface); border: 1px solid var(--crm-border); border-radius: 0.9rem; padding: 0.75rem; }
+@media (min-width: 700px) { .cal { padding: 1rem; } }
+
+.cal-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
+.cal-views { display: inline-flex; background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 999px; padding: 3px; gap: 3px; }
+.cal-view { border: none; background: none; color: var(--crm-muted); font: inherit; font-size: 0.85rem; font-weight: 800; padding: 0.45rem 1.1rem; border-radius: 999px; cursor: pointer; min-height: 40px; }
+.cal-view-on { background: var(--crm-accent); color: #fff; }
+
+.cal-month-nav { display: flex; align-items: center; gap: 0.3rem; }
+.cal-nav { min-width: 42px; min-height: 42px; border: 1px solid var(--crm-border); background: var(--crm-bg2); color: var(--crm-text); border-radius: 0.5rem; font: inherit; font-size: 1.15rem; font-weight: 800; cursor: pointer; }
+.cal-nav:hover { border-color: var(--crm-accent); }
+.cal-nav-today { font-size: 0.8rem; padding: 0 0.75rem; min-width: auto; }
+.cal-month-name { font-size: 1rem; font-weight: 800; color: var(--crm-text); min-width: 8.5rem; text-align: center; }
+
+/* Type filters. Colour-coded and pressed-in when on, so which ones are hidden
+   is obvious without a separate legend to read. */
+.cal-filters { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.9rem; }
+.cal-filter { border: 1px solid var(--crm-border); background: var(--crm-bg2); color: var(--crm-muted); border-radius: 999px; padding: 0.35rem 0.8rem; font: inherit; font-size: 0.78rem; font-weight: 800; cursor: pointer; min-height: 38px; }
+.cal-filter-on { color: #fff; }
+.cal-filter-job.cal-filter-on { background: #16a34a; border-color: #16a34a; }
+.cal-filter-inperson.cal-filter-on { background: var(--crm-accent); border-color: var(--crm-accent); }
+.cal-filter-online.cal-filter-on { background: #3b82f6; border-color: #3b82f6; }
+
+/* ── Schedule view: what's next, grouped by day ── */
+.cal-agenda { display: flex; flex-direction: column; gap: 1.15rem; }
+.cal-empty { color: var(--crm-muted); text-align: center; padding: 2.5rem 1rem; }
+.cal-day { display: flex; flex-direction: column; gap: 0.5rem; }
+.cal-day-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; padding-bottom: 0.35rem; border-bottom: 1px solid var(--crm-border); }
+.cal-day-main { font-size: 1.05rem; font-weight: 900; color: var(--crm-text); }
+.cal-day-sub { font-size: 0.8rem; color: var(--crm-muted); font-weight: 600; }
+.cal-day-today .cal-day-main { color: var(--crm-accent); }
+
+.cal-row { display: flex; align-items: stretch; background: var(--crm-bg2); border: 1px solid var(--crm-border); border-left: 4px solid var(--crm-border); border-radius: 0.6rem; overflow: hidden; }
+.cal-row-job { border-left-color: #16a34a; }
+.cal-row-inperson { border-left-color: var(--crm-accent); }
+.cal-row-online { border-left-color: #3b82f6; }
+.cal-row-main { flex: 1; min-width: 0; display: flex; gap: 0.7rem; align-items: flex-start; text-align: left; background: none; border: none; font: inherit; color: var(--crm-text); cursor: pointer; padding: 0.75rem 0.6rem; min-height: 62px; }
+.cal-row-time { flex: none; width: 4.7rem; font-size: 0.95rem; font-weight: 900; color: var(--crm-text); }
+.cal-row-body { display: flex; flex-direction: column; gap: 0.12rem; min-width: 0; }
+.cal-row-name { font-size: 1.02rem; font-weight: 800; color: var(--crm-text); }
+.cal-row-kind { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--crm-muted); }
+.cal-row-addr { font-size: 0.85rem; color: var(--crm-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Call and Map are the two things done from a truck, so they're on the row
+   itself rather than two taps deep in the panel. */
+.cal-row-acts { display: flex; flex-direction: column; flex: none; }
+.cal-act { display: flex; align-items: center; justify-content: center; min-width: 64px; flex: 1; border-left: 1px solid var(--crm-border); color: var(--crm-accent); font-size: 0.78rem; font-weight: 800; text-decoration: none; padding: 0 0.5rem; }
+.cal-act + .cal-act { border-top: 1px solid var(--crm-border); }
+.cal-act:hover { background: var(--crm-surface-solid); }
+
+/* ── Month view ── */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-dow { margin-bottom: 3px; }
+.cal-dow-cell { text-align: center; font-size: 0.72rem; font-weight: 800; color: var(--crm-muted); padding: 0.25rem 0; }
+.cal-dow-full { display: none; }
+.cal-cell { background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 0.45rem; min-height: 58px; padding: 0.25rem; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+.cal-cell-dim { opacity: 0.35; }
 .cal-cell-today { border-color: var(--crm-accent); box-shadow: inset 0 0 0 1px var(--crm-accent); }
-.cal-daynum { font-size: 0.78rem; font-weight: 700; color: var(--crm-text); }
-.cal-events { display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+.cal-cell-weekend { background: color-mix(in srgb, var(--crm-bg2) 88%, #000); }
+.cal-cell-over { border-color: var(--crm-accent); box-shadow: inset 0 0 0 2px var(--crm-accent); }
+.cal-daynum { font-size: 0.8rem; font-weight: 800; color: var(--crm-text); }
+
+/* Narrow screens show dots and open the day in a sheet. A name clipped to
+   three characters is worse than an honest dot. */
+.cal-events { display: none; }
+.cal-dots { display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center; gap: 3px; background: none; border: none; cursor: pointer; padding: 0.2rem 0.1rem; width: 100%; flex: 1; }
+.cal-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.cal-dot-job { background: #16a34a; }
+.cal-dot-inperson { background: var(--crm-accent); }
+.cal-dot-online { background: #3b82f6; }
+.cal-help { display: none; }
+.cal-busy { opacity: 0.6; pointer-events: none; }
+
 .cal-chip { text-align: left; border: none; border-radius: 0.35rem; padding: 0.18rem 0.4rem; font-size: 0.72rem; line-height: 1.2; cursor: pointer; color: #fff; display: flex; flex-direction: column; }
 .cal-chip:hover { filter: brightness(1.12); }
 .cal-chip-job { background: #16a34a; }
@@ -1801,14 +1863,22 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-chip-online { background: #3b82f6; }
 .cal-chip-time { font-weight: 800; font-size: 0.66rem; opacity: 0.95; }
 .cal-chip-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal-cell-weekend { background: color-mix(in srgb, var(--crm-bg2) 88%, #000); }
-.cal-cell-over { border-color: var(--crm-accent); box-shadow: inset 0 0 0 2px var(--crm-accent); }
 .cal-chip[draggable="true"] { cursor: grab; }
 .cal-chip-dragging { opacity: 0.4; }
-.cal-grid-busy { opacity: 0.6; pointer-events: none; }
 .cal-more { background: none; border: none; text-align: left; color: var(--crm-muted); font-size: 0.7rem; font-weight: 700; cursor: pointer; padding: 0.1rem 0.4rem; }
 .cal-more:hover { color: var(--crm-accent); }
-.cal-help { margin-bottom: 0.7rem; }
+
+/* Wide enough for a real grid: named columns, readable chips, no dots. */
+@media (min-width: 900px) {
+  .cal-cell { min-height: 112px; align-items: stretch; padding: 0.35rem; gap: 0.25rem; }
+  .cal-events { display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+  .cal-dots { display: none; }
+  .cal-dow-full { display: inline; }
+  .cal-dow-short { display: none; }
+  .cal-dow-cell { text-transform: uppercase; letter-spacing: 0.06em; }
+  .cal-help { display: block; margin-top: 0.75rem; }
+  .cal-row-time { width: 5.2rem; }
+}
 
 /* Toast for the result of a drag, a reschedule or a delete. */
 .cal-toast {
@@ -1851,22 +1921,12 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-panel-check em { display: block; font-style: normal; color: var(--crm-muted); font-size: 0.8rem; margin-top: 0.15rem; }
 .cal-panel-link { color: var(--crm-muted); font-size: 0.85rem; text-decoration: underline; margin-top: auto; }
 .cal-panel-link:hover { color: var(--crm-accent); }
-.cal-daylist { display: flex; flex-direction: column; gap: 0.4rem; }
-.cal-daylist .cal-chip { padding: 0.55rem 0.7rem; font-size: 0.9rem; }
-
-/* Lives in the month bar now, so it sits beside the nav rather than orphaned
-   under a six-week grid where it was easy to miss. */
-.cal-legend { display: flex; flex-wrap: wrap; gap: 0.6rem; font-size: 0.8rem; color: var(--crm-muted); }
-.cal-legend-item { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--crm-bg2); border: 1px solid var(--crm-border); border-radius: 999px; padding: 0.3rem 0.7rem; color: var(--crm-text); cursor: pointer; font-size: 0.78rem; }
-.cal-legend-item:hover { border-color: var(--crm-accent); }
-.cal-legend-off { opacity: 0.4; }
-.cal-dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-.cal-dot-job { background: #16a34a; }
-.cal-dot-inperson { background: var(--crm-accent); }
-.cal-dot-online { background: #3b82f6; }
-@media (max-width: 720px) {
-  .cal-cell { min-height: 72px; padding: 0.25rem; }
-  .cal-daynum { font-size: 0.7rem; }
-  .cal-chip { font-size: 0.62rem; padding: 0.12rem 0.25rem; }
-  .cal-chip-title { font-size: 0.62rem; }
-}
+.cal-panel-when { font-size: 1.05rem; font-weight: 800; color: var(--crm-text); }
+/* Call and directions sit above the detail list: on site they're the reason
+   the panel got opened at all. */
+.cal-panel-quick { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.cal-panel-quick .crm-btn { flex: 1; min-width: 9rem; min-height: 46px; }
+.cal-daylist { display: flex; flex-direction: column; gap: 0.45rem; }
+.cal-bg-job { background: #16a34a; }
+.cal-bg-inperson { background: var(--crm-accent); }
+.cal-bg-online { background: #3b82f6; }

@@ -22,7 +22,7 @@ export type CalEvent = {
 };
 
 const KIND_LABEL: Record<CalKind, string> = {
-  job: "Job install",
+  job: "Job",
   inperson: "In-person quote",
   online: "Online quote",
 };
@@ -31,10 +31,15 @@ const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// Both spellings render; CSS picks one. A single letter is all that fits over a
+// 45px column, and "Sun" is what you want when the columns are 140px wide.
+const DOW: [string, string][] = [
+  ["Sun", "S"], ["Mon", "M"], ["Tue", "T"], ["Wed", "W"], ["Thu", "T"], ["Fri", "F"], ["Sat", "S"],
+];
 
-// How many chips fit in a cell before it collapses into "+N more".
+// How many chips fit in a month cell before it collapses into "+N more".
 const MAX_CHIPS = 3;
+const VIEW_KEY = "rcg-cal-view";
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -49,30 +54,79 @@ function longDate(s: string): string {
   });
 }
 
+function daysBetween(from: string, to: string): number {
+  const a = new Date(`${from}T00:00:00`).getTime();
+  const b = new Date(`${to}T00:00:00`).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+// "Today", "Tomorrow", then the date. On a job site the only questions are "is
+// this now" and "is this next", so those two get words instead of a date.
+function dayHeading(date: string, todayStr: string): { main: string; sub: string } {
+  const diff = daysBetween(todayStr, date);
+  const d = new Date(`${date}T00:00:00`);
+  const full = d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  if (diff === 0) return { main: "Today", sub: full };
+  if (diff === 1) return { main: "Tomorrow", sub: full };
+  return { main: full, sub: diff < 7 ? `in ${diff} days` : "" };
+}
+
 // A job's date lives in a different column from a visit's, so the server needs
 // to know which one it's moving.
 const serverKind = (k: CalKind) => (k === "job" ? "job" : "visit");
 
+// Sort key: timed appointments in clock order, untimed last.
+function timeKey(t: string | null): number {
+  if (!t) return 9999;
+  const m = t.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!m) return 9999;
+  let h = Number(m[1]);
+  const ap = m[3]?.toUpperCase();
+  if (ap === "PM" && h < 12) h += 12;
+  if (ap === "AM" && h === 12) h = 0;
+  return h * 60 + Number(m[2]);
+}
+
+const telHref = (p: string) => `tel:${p.replace(/[^0-9+]/g, "")}`;
+const mapHref = (a: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a)}`;
+
 export function CalendarView({ events, base }: { events: CalEvent[]; base: string }) {
   const router = useRouter();
   const today = new Date();
+  const todayStr = ymd(today);
+
+  // List is the default: this is used in the field far more than at a desk, and
+  // a 7-column grid on a phone gives you 45px cells nobody can read or tap. A
+  // wide screen flips to Month on first load, then whatever you last chose.
+  const [view, setView] = useState<"list" | "month">("list");
   const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() });
   const [show, setShow] = useState<Record<CalKind, boolean>>({ job: true, inperson: true, online: true });
 
-  // The appointment open in the side panel, and the day open in the day list.
   const [selected, setSelected] = useState<CalEvent | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
-
   const [dragId, setDragId] = useState<string | null>(null);
   const [overDay, setOverDay] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  // Drag-drop and the panel's buttons both dispatch through these, so a result
-  // shows up the same way however the change was made.
   const [moveState, moveAction, moving] = useActionState<CalActionState, FormData>(moveEvent, { ok: false });
   const [delState, delAction, deleting] = useActionState<CalActionState, FormData>(deleteEvent, { ok: false });
-
   const busy = moving || deleting;
+
+  // Applied after mount, so the server and the first client render agree.
+  useEffect(() => {
+    const saved = window.localStorage.getItem(VIEW_KEY);
+    if (saved === "list" || saved === "month") setView(saved);
+    else if (window.matchMedia("(min-width: 900px)").matches) setView("month");
+  }, []);
+
+  function pickView(v: "list" | "month") {
+    setView(v);
+    try {
+      window.localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      // Private mode: the choice just doesn't persist, which is fine.
+    }
+  }
 
   useEffect(() => {
     const s = moveState.ok ? moveState.message : moveState.error;
@@ -96,7 +150,6 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Escape closes whatever is open, like any other dialog.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -107,24 +160,26 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  function toggle(kind: CalKind) {
-    setShow((s) => ({ ...s, [kind]: !s[kind] }));
-  }
+  const visible = useMemo(() => events.filter((e) => show[e.kind]), [events, show]);
 
   const byDate = useMemo(() => {
     const map = new Map<string, CalEvent[]>();
-    for (const e of events) {
-      if (!show[e.kind]) continue;
+    for (const e of visible) {
       const list = map.get(e.date) ?? [];
       list.push(e);
       map.set(e.date, list);
     }
-    // Timed appointments first, in clock order, so a day reads top to bottom.
-    for (const list of map.values()) {
-      list.sort((a, b) => (a.time ?? "zz").localeCompare(b.time ?? "zz", "en", { numeric: true }));
-    }
+    for (const list of map.values()) list.sort((a, b) => timeKey(a.time) - timeKey(b.time));
     return map;
-  }, [events, show]);
+  }, [visible]);
+
+  // The agenda: everything from today forward, grouped by day. Past work lives
+  // in Month view, so the list never makes you scroll through history to reach
+  // the thing you're driving to next.
+  const agenda = useMemo(() => {
+    const days = [...byDate.keys()].filter((d) => d >= todayStr).sort();
+    return days.map((d) => ({ date: d, items: byDate.get(d) ?? [] }));
+  }, [byDate, todayStr]);
 
   const cells = useMemo(() => {
     const first = new Date(cursor.y, cursor.m, 1);
@@ -137,8 +192,6 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
     });
   }, [cursor]);
 
-  const todayStr = ymd(today);
-
   function shift(delta: number) {
     setCursor((c) => {
       const m = c.m + delta;
@@ -146,13 +199,11 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
     });
   }
 
-  // Dropping a chip on a day keeps its existing time and only moves the date.
   function drop(day: string) {
     const ev = events.find((e) => e.id === dragId);
     setDragId(null);
     setOverDay(null);
     if (!ev || ev.date === day || busy) return;
-
     const fd = new FormData();
     fd.set("id", ev.id);
     fd.set("kind", serverKind(ev.kind));
@@ -172,115 +223,198 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
       )}
 
       <div className="cal-bar">
-        <h2>
-          {MONTHS[cursor.m]} {cursor.y}
-        </h2>
-        <div className="cal-bar-btns">
-          <button type="button" className="crm-btn crm-btn-ghost" onClick={() => shift(-1)} aria-label="Previous month">
-            ‹
+        <div className="cal-views" role="group" aria-label="Calendar view">
+          <button
+            type="button"
+            aria-pressed={view === "list"}
+            className={`cal-view${view === "list" ? " cal-view-on" : ""}`}
+            onClick={() => pickView("list")}
+          >
+            Schedule
           </button>
           <button
             type="button"
-            className="crm-btn crm-btn-ghost"
-            onClick={() => setCursor({ y: today.getFullYear(), m: today.getMonth() })}
+            aria-pressed={view === "month"}
+            className={`cal-view${view === "month" ? " cal-view-on" : ""}`}
+            onClick={() => pickView("month")}
           >
-            Today
-          </button>
-          <button type="button" className="crm-btn crm-btn-ghost" onClick={() => shift(1)} aria-label="Next month">
-            ›
+            Month
           </button>
         </div>
-        <div className="cal-legend">
-          {(["job", "inperson", "online"] as CalKind[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              className={`cal-legend-item${show[k] ? "" : " cal-legend-off"}`}
-              onClick={() => toggle(k)}
-              title={show[k] ? `Hide ${KIND_LABEL[k]}` : `Show ${KIND_LABEL[k]}`}
-            >
-              <i className={`cal-dot cal-dot-${k}`} /> {KIND_LABEL[k]}
+
+        {view === "month" && (
+          <div className="cal-month-nav">
+            <button type="button" className="cal-nav" onClick={() => shift(-1)} aria-label="Previous month">
+              ‹
             </button>
-          ))}
-        </div>
+            <strong className="cal-month-name">
+              {MONTHS[cursor.m]} {cursor.y}
+            </strong>
+            <button type="button" className="cal-nav" onClick={() => shift(1)} aria-label="Next month">
+              ›
+            </button>
+            <button
+              type="button"
+              className="cal-nav cal-nav-today"
+              onClick={() => setCursor({ y: today.getFullYear(), m: today.getMonth() })}
+            >
+              Today
+            </button>
+          </div>
+        )}
       </div>
 
-      <p className="cal-help crm-muted crm-sm">
-        Drag an appointment to another day to reschedule it. Click one to see the details, change the time, or remove it.
-      </p>
-
-      <div className="cal-grid cal-dow">
-        {DOW.map((d) => (
-          <div key={d} className="cal-dow-cell">
-            {d}
-          </div>
+      <div className="cal-filters">
+        {(["job", "inperson", "online"] as CalKind[]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            className={`cal-filter cal-filter-${k}${show[k] ? " cal-filter-on" : ""}`}
+            onClick={() => setShow((s) => ({ ...s, [k]: !s[k] }))}
+            aria-pressed={show[k]}
+          >
+            {KIND_LABEL[k]}
+          </button>
         ))}
       </div>
 
-      <div className={`cal-grid${busy ? " cal-grid-busy" : ""}`}>
-        {cells.map((d) => {
-          const key = ymd(d);
-          const inMonth = d.getMonth() === cursor.m;
-          const weekend = d.getDay() === 0 || d.getDay() === 6;
-          const dayEvents = dayEventsFor(key);
-          const visible = dayEvents.slice(0, MAX_CHIPS);
-          const hidden = dayEvents.length - visible.length;
+      {view === "list" ? (
+        <div className={`cal-agenda${busy ? " cal-busy" : ""}`}>
+          {agenda.length === 0 ? (
+            <p className="cal-empty">Nothing scheduled. Booked jobs and quote visits show up here.</p>
+          ) : (
+            agenda.map(({ date, items }) => {
+              const h = dayHeading(date, todayStr);
+              return (
+                <section key={date} className="cal-day">
+                  <h3 className={`cal-day-head${date === todayStr ? " cal-day-today" : ""}`}>
+                    <span className="cal-day-main">{h.main}</span>
+                    {h.sub && <span className="cal-day-sub">{h.sub}</span>}
+                  </h3>
 
-          return (
-            <div
-              key={key}
-              className={[
-                "cal-cell",
-                inMonth ? "" : "cal-cell-dim",
-                weekend ? "cal-cell-weekend" : "",
-                key === todayStr ? "cal-cell-today" : "",
-                overDay === key ? "cal-cell-over" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setOverDay(key);
-              }}
-              onDragLeave={() => setOverDay((c) => (c === key ? null : c))}
-              onDrop={(e) => {
-                e.preventDefault();
-                drop(key);
-              }}
-            >
-              <span className="cal-daynum">{d.getDate()}</span>
-              <div className="cal-events">
-                {visible.map((e) => (
-                  <button
-                    key={e.id + e.kind}
-                    type="button"
-                    className={`cal-chip cal-chip-${e.kind}${dragId === e.id ? " cal-chip-dragging" : ""}`}
-                    draggable={!busy}
-                    onDragStart={(ev) => {
-                      ev.dataTransfer.setData("text/plain", e.id);
-                      ev.dataTransfer.effectAllowed = "move";
-                      setDragId(e.id);
-                    }}
-                    onDragEnd={() => setDragId(null)}
-                    onClick={() => setSelected(e)}
-                    title={`${KIND_LABEL[e.kind]}: ${e.title}${e.time ? ` at ${e.time}` : ""}`}
-                  >
-                    {e.time && <span className="cal-chip-time">{e.time}</span>}
-                    <span className="cal-chip-title">{e.title}</span>
-                  </button>
-                ))}
-                {hidden > 0 && (
-                  <button type="button" className="cal-more" onClick={() => setOpenDay(key)}>
-                    +{hidden} more
-                  </button>
-                )}
+                  {items.map((e) => (
+                    <article key={e.id + e.kind} className={`cal-row cal-row-${e.kind}`}>
+                      <button type="button" className="cal-row-main" onClick={() => setSelected(e)}>
+                        <span className="cal-row-time">{e.time ?? "All day"}</span>
+                        <span className="cal-row-body">
+                          <span className="cal-row-name">{e.title}</span>
+                          <span className="cal-row-kind">{KIND_LABEL[e.kind]}</span>
+                          {e.address && <span className="cal-row-addr">{e.address}</span>}
+                        </span>
+                      </button>
+                      <div className="cal-row-acts">
+                        <a href={telHref(e.phone)} className="cal-act" aria-label={`Call ${e.title}`}>
+                          Call
+                        </a>
+                        {e.address && (
+                          <a href={mapHref(e.address)} target="_blank" rel="noreferrer" className="cal-act">
+                            Map
+                          </a>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </section>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="cal-grid cal-dow">
+            {DOW.map(([full, short], i) => (
+              <div key={i} className="cal-dow-cell">
+                <span className="cal-dow-full">{full}</span>
+                <span className="cal-dow-short">{short}</span>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            ))}
+          </div>
 
-      {/* All of a day's appointments, for days too full to show inline. */}
+          <div className={`cal-grid${busy ? " cal-busy" : ""}`}>
+            {cells.map((d) => {
+              const key = ymd(d);
+              const inMonth = d.getMonth() === cursor.m;
+              const weekend = d.getDay() === 0 || d.getDay() === 6;
+              const dayEvents = dayEventsFor(key);
+              const chips = dayEvents.slice(0, MAX_CHIPS);
+              const hidden = dayEvents.length - chips.length;
+
+              return (
+                <div
+                  key={key}
+                  className={[
+                    "cal-cell",
+                    inMonth ? "" : "cal-cell-dim",
+                    weekend ? "cal-cell-weekend" : "",
+                    key === todayStr ? "cal-cell-today" : "",
+                    overDay === key ? "cal-cell-over" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setOverDay(key);
+                  }}
+                  onDragLeave={() => setOverDay((c) => (c === key ? null : c))}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    drop(key);
+                  }}
+                >
+                  <span className="cal-daynum">{d.getDate()}</span>
+
+                  {/* Wide screens get readable chips. Narrow screens get dots
+                      and open the whole day in a sheet, because a name never
+                      fits in a 45px cell and a half-rendered one is worse than
+                      an honest dot. */}
+                  <div className="cal-events">
+                    {chips.map((e) => (
+                      <button
+                        key={e.id + e.kind}
+                        type="button"
+                        className={`cal-chip cal-chip-${e.kind}${dragId === e.id ? " cal-chip-dragging" : ""}`}
+                        draggable={!busy}
+                        onDragStart={(ev) => {
+                          ev.dataTransfer.setData("text/plain", e.id);
+                          ev.dataTransfer.effectAllowed = "move";
+                          setDragId(e.id);
+                        }}
+                        onDragEnd={() => setDragId(null)}
+                        onClick={() => setSelected(e)}
+                        title={`${KIND_LABEL[e.kind]}: ${e.title}${e.time ? ` at ${e.time}` : ""}`}
+                      >
+                        {e.time && <span className="cal-chip-time">{e.time}</span>}
+                        <span className="cal-chip-title">{e.title}</span>
+                      </button>
+                    ))}
+                    {hidden > 0 && (
+                      <button type="button" className="cal-more" onClick={() => setOpenDay(key)}>
+                        +{hidden} more
+                      </button>
+                    )}
+                  </div>
+
+                  {dayEvents.length > 0 && (
+                    <button
+                      type="button"
+                      className="cal-dots"
+                      onClick={() => setOpenDay(key)}
+                      aria-label={`${dayEvents.length} on ${longDate(key)}`}
+                    >
+                      {dayEvents.slice(0, 4).map((e, i) => (
+                        <i key={e.id + e.kind + i} className={`cal-dot cal-dot-${e.kind}`} />
+                      ))}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="cal-help crm-muted crm-sm">Drag an appointment to another day to reschedule it.</p>
+        </>
+      )}
+
       {openDay && (
         <div className="cal-scrim" onClick={() => setOpenDay(null)} role="presentation">
           <div className="cal-daypanel" onClick={(e) => e.stopPropagation()}>
@@ -292,18 +426,22 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
             </div>
             <div className="cal-daylist">
               {dayEventsFor(openDay).map((e) => (
-                <button
-                  key={e.id + e.kind}
-                  type="button"
-                  className={`cal-chip cal-chip-${e.kind}`}
-                  onClick={() => {
-                    setSelected(e);
-                    setOpenDay(null);
-                  }}
-                >
-                  {e.time && <span className="cal-chip-time">{e.time}</span>}
-                  <span className="cal-chip-title">{e.title}</span>
-                </button>
+                <article key={e.id + e.kind} className={`cal-row cal-row-${e.kind}`}>
+                  <button
+                    type="button"
+                    className="cal-row-main"
+                    onClick={() => {
+                      setSelected(e);
+                      setOpenDay(null);
+                    }}
+                  >
+                    <span className="cal-row-time">{e.time ?? "All day"}</span>
+                    <span className="cal-row-body">
+                      <span className="cal-row-name">{e.title}</span>
+                      <span className="cal-row-kind">{KIND_LABEL[e.kind]}</span>
+                    </span>
+                  </button>
+                </article>
               ))}
             </div>
           </div>
@@ -327,8 +465,8 @@ export function CalendarView({ events, base }: { events: CalEvent[]; base: strin
 }
 
 /* ── The detail panel: what this appointment is, and the three things you can
-      do to it. Deliberately states what the customer will be told before you
-      do anything irreversible. ─────────────────────────────────────────────── */
+      do to it. States what the customer will be told before anything
+      irreversible happens. ──────────────────────────────────────────────── */
 function EventPanel({
   event,
   base,
@@ -361,7 +499,7 @@ function EventPanel({
       <aside className="cal-panel" onClick={(e) => e.stopPropagation()} aria-label="Appointment">
         <div className="cal-panel-head">
           <div>
-            <span className={`cal-panel-kind cal-dot-${event.kind}`}>{KIND_LABEL[event.kind]}</span>
+            <span className={`cal-panel-kind cal-bg-${event.kind}`}>{KIND_LABEL[event.kind]}</span>
             <h3>{event.title}</h3>
           </div>
           <button type="button" className="cal-panel-x" onClick={onClose} aria-label="Close">
@@ -369,58 +507,55 @@ function EventPanel({
           </button>
         </div>
 
-        <dl className="cal-panel-dl">
-          <div>
-            <dt>When</dt>
-            <dd>
-              {longDate(event.date)}
-              {event.time ? ` at ${event.time}` : ""}
-            </dd>
-          </div>
-          <div>
-            <dt>Stage</dt>
-            <dd>{STATUS_LABELS[event.status as Status] ?? event.status}</dd>
-          </div>
-          <div>
-            <dt>Phone</dt>
-            <dd>
-              <a href={`tel:${event.phone.replace(/[^0-9+]/g, "")}`}>{event.phone}</a>
-            </dd>
-          </div>
-          {event.service && (
-            <div>
-              <dt>Service</dt>
-              <dd>{event.service}</dd>
-            </div>
-          )}
-          {event.address && (
-            <div>
-              <dt>Address</dt>
-              <dd>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {event.address}
-                </a>
-              </dd>
-            </div>
-          )}
-        </dl>
+        <p className="cal-panel-when">
+          {longDate(event.date)}
+          {event.time ? ` at ${event.time}` : ""}
+        </p>
 
         {mode === "view" && (
-          <div className="cal-panel-actions">
-            <button type="button" className="crm-btn crm-btn-primary" onClick={onOpen}>
-              Open job
-            </button>
-            <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setMode("move")} disabled={busy}>
-              Reschedule
-            </button>
-            <button type="button" className="crm-btn cal-btn-danger" onClick={() => setMode("delete")} disabled={busy}>
-              Delete
-            </button>
-          </div>
+          <>
+            <div className="cal-panel-quick">
+              <a href={telHref(event.phone)} className="crm-btn crm-btn-ghost">
+                Call {event.phone}
+              </a>
+              {event.address && (
+                <a href={mapHref(event.address)} target="_blank" rel="noreferrer" className="crm-btn crm-btn-ghost">
+                  Directions
+                </a>
+              )}
+            </div>
+
+            <dl className="cal-panel-dl">
+              <div>
+                <dt>Stage</dt>
+                <dd>{STATUS_LABELS[event.status as Status] ?? event.status}</dd>
+              </div>
+              {event.service && (
+                <div>
+                  <dt>Service</dt>
+                  <dd>{event.service}</dd>
+                </div>
+              )}
+              {event.address && (
+                <div>
+                  <dt>Address</dt>
+                  <dd>{event.address}</dd>
+                </div>
+              )}
+            </dl>
+
+            <div className="cal-panel-actions">
+              <button type="button" className="crm-btn crm-btn-primary" onClick={onOpen}>
+                Open job
+              </button>
+              <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setMode("move")} disabled={busy}>
+                Reschedule
+              </button>
+              <button type="button" className="crm-btn cal-btn-danger" onClick={() => setMode("delete")} disabled={busy}>
+                Delete
+              </button>
+            </div>
+          </>
         )}
 
         {mode === "move" && (
@@ -499,9 +634,6 @@ function EventPanel({
                 Keep it
               </button>
             </div>
-            <p className="crm-muted crm-sm">
-              To delete the customer entirely, use Delete on their pipeline card. That can be undone from Archived.
-            </p>
           </form>
         )}
 
