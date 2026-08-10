@@ -298,7 +298,11 @@ export function confirmLink(token: string): string {
   return `${SITE_ORIGIN}/confirm/${token}`;
 }
 
-// The owner's first name used to sign customer-facing texts.
+// Used to introduce the business in the FIRST text a customer ever gets, and
+// nowhere else. A name on that one message is a person saying hello; a name on
+// every message afterwards ties the whole thread to one individual, which stops
+// being true the moment anyone else picks up the phone. Everything after the
+// introduction speaks as the business.
 const OWNER_NAME = (process.env.OWNER_NAME || "Noah").trim();
 const REVIEW_URL = (process.env.GOOGLE_REVIEW_URL || "").trim();
 const BUSINESS = "Raleigh Concrete Group";
@@ -532,7 +536,7 @@ export async function notifyVisitConfirmed(
     q.phone,
     text([
       `Hi ${firstName(q.name)},`,
-      `this is ${OWNER_NAME} with ${BUSINESS}.`,
+      `this is ${BUSINESS}.`,
       "",
       "For a job like this we want to make sure you get an accurate estimate, so rather than price it off the photos we'd like to come measure it in person. We have you down for:",
       "",
@@ -853,7 +857,7 @@ export function crewReminderMessage(q: QuoteInfo, daysOut: number, contractorNam
     ...block("When:", dayAndTime(q)),
     customerBrief(q),
     "",
-    `If you can't make it, or anything about the schedule changes, call ${OWNER_NAME} right away at ${CALL_NUMBER}.`,
+    `If you can't make it, or anything about the schedule changes, call us right away at ${CALL_NUMBER}.`,
     "",
     q.job_token ? jobLink(q.job_token) : null,
   ]);

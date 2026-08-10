@@ -210,7 +210,7 @@ these apart:
 test panel to text every owner number at once.
 
 Customer-facing text settings:
-- `OWNER_NAME` *(optional)* — first name used to sign customer texts (default `Noah`), e.g. "this is Noah with Raleigh Concrete Group".
+- `OWNER_NAME` *(optional)* — first name used to introduce the business in the **first** text a customer gets (default `Noah`), e.g. "this is Noah with Raleigh Concrete Group". Every later message speaks as the business, so a name here doesn't tie the whole thread to one person.
 - `GOOGLE_REVIEW_URL` *(optional)* — your Google review link; included in the post-job thank-you text. If unset, the thank-you still sends without a link.
 
 **2-day confirmation reminder (Vercel Cron)**
