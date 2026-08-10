@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
+import { requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
@@ -48,6 +49,11 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const events = await listEvents(session, id);
   const agreements = await listAgreementsForQuote(session, id);
   const photoUrls = (quote.file_urls ?? []).map((p) => `${base}/api/file?p=${encodeURIComponent(p)}`);
+  // The same column, read two ways: a booked visit on an in-person request, or
+  // the slot an online customer offered in case photos aren't enough. Only one
+  // of these is ever set, and they are never labelled the same.
+  const visitDate = visitDateOf(quote);
+  const offeredVisit = requestedVisitOf(quote);
 
   // The lead time governs what a CUSTOMER may request, not what the business
   // may agree to. You can book any day from today, including a rush job someone
@@ -100,16 +106,26 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 <dt>{t.job.type}</dt>
                 <dd>{quote.quote_type === "online" ? t.job.typeOnline : quote.quote_type === "inperson" ? t.job.typeInPerson : t.job.na}</dd>
               </div>
-              {quote.visit_date && (
+              {visitDate && (
                 <div>
                   <dt>{t.job.requestedVisit}</dt>
                   <dd>
-                    <strong className="crm-link-strong">{prettyDate(quote.visit_date)}</strong>
+                    <strong className="crm-link-strong">{prettyDate(visitDate)}</strong>
                     {quote.visit_time ? ` ${t.contractorJob.at} ${quote.visit_time}` : ""}
                   </dd>
                 </div>
               )}
-              {!quote.visit_date && quote.preferred_time && (
+              {offeredVisit && (
+                <div>
+                  <dt>{t.job.offeredVisit}</dt>
+                  <dd>
+                    {prettyDate(offeredVisit)}
+                    {quote.visit_time ? ` ${t.contractorJob.at} ${quote.visit_time}` : ""}
+                    <span className="crm-muted crm-sm"> — {t.job.offeredVisitHint}</span>
+                  </dd>
+                </div>
+              )}
+              {!visitDate && !offeredVisit && quote.preferred_time && (
                 <div>
                   <dt>{t.job.preferredTime}</dt>
                   <dd>{quote.preferred_time}</dd>

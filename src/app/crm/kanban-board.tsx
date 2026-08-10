@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { STATUSES, type Status } from "@/lib/crm/constants";
+import { STATUSES, visitDateOf, type Status } from "@/lib/crm/constants";
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { assignQuote, deleteQuote, moveQuote } from "./board-actions";
 
@@ -223,7 +223,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                     {(() => {
                       const kind = typeLabel(q, t);
                       const jobDate = shortDate(q.scheduled_date, locale);
-                      const visitDate = shortDate(q.visit_date, locale);
+                      const visitDate = shortDate(visitDateOf(q), locale);
                       return (
                         <div className="kb-card-meta">
                           <span className={`kb-pill kb-pill-${kind.cls}`}>{kind.text}</span>

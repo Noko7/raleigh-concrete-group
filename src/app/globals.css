@@ -1519,6 +1519,15 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .job-when-day { font-size: 1.6rem; font-weight: 900; line-height: 1.15; color: #fff; letter-spacing: -0.01em; }
 .job-when-time { font-size: 1.6rem; font-weight: 900; line-height: 1.15; color: #fbbf24; letter-spacing: -0.01em; }
 .job-when-none { font-size: 1.15rem; font-weight: 800; color: #d1d5db; }
+/* An offered slot on an online request, not a booking. Deliberately not the
+   amber of a confirmed time: the same styling would read as "be there". */
+.job-when-pending .job-when-day { color: #cbd5e1; font-size: 1.35rem; }
+.job-when-pending .job-when-time { color: #cbd5e1; font-size: 1.35rem; }
+.job-when-tag {
+  align-self: flex-start; margin-top: 0.3rem; background: #334155; color: #e2e8f0;
+  font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.07em;
+  border-radius: 999px; padding: 0.25rem 0.6rem; line-height: 1;
+}
 
 .job-meta { display: grid; gap: 0; margin-bottom: 1.4rem; }
 .job-meta > div { display: grid; grid-template-columns: 132px 1fr; gap: 0.5rem; font-size: 1rem; padding: 0.6rem 0; border-bottom: 1px solid #e5e7eb; }
@@ -1591,6 +1600,20 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .jq-field input:focus, .jq-field textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
 .jq-cancel { background: none; border: none; color: #6b7280; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0.6rem 0; min-height: 44px; }
 .jf-done { background: #f0fdf4; border-color: #86efac; }
+
+/* Confirming the visit an online customer offered. Blue rather than amber so it
+   reads as the other path to the amber "quote it now" card beside it, and the
+   offered slot is a full-width tap target holding the answer already. */
+.jv-card { border-color: #93c5fd; background: #f8fbff; }
+.jv-asked {
+  display: flex; flex-direction: column; gap: 0.1rem;
+  background: #fff; border: 2px solid #bfdbfe; border-radius: 0.7rem;
+  padding: 0.8rem 0.95rem; margin-bottom: 0.85rem;
+}
+.jv-asked-label { font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; }
+.jv-asked-day { font-size: 1.3rem; font-weight: 900; color: #0f172a; line-height: 1.2; }
+.jv-asked-time { font-size: 1.3rem; font-weight: 900; color: #1d4ed8; line-height: 1.2; }
+.jv-card .js-confirm { width: 100%; background: #1d4ed8; }
 
 /* Close-out checklist. Rows are full-width and 52px tall because these get
    tapped with work gloves on, and a 20px checkbox is the target. */

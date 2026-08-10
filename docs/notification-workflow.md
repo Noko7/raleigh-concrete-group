@@ -29,6 +29,8 @@ job (see ⑥). Customers are not reminded more than once.
 ├─────────────────────────────────────────────────────────────────────┤
 │ CUSTOMER  "Thanks for reaching out — we got your request and we're  │
 │            looking over the details. We'll follow up soon."         │
+│            + "if we need to see it in person you asked for <slot>,  │
+│              nothing is booked yet, we'll text to confirm"          │
 │            (in-person requests instead confirm the visit day/time)  │
 │ OWNER     Labelled block: name, job type, phone, address,           │
 │            details, job link (see "Owner: new lead format" below)   │
@@ -36,7 +38,20 @@ job (see ⑥). Customers are not reminded more than once.
 │            (only if auto-assigned to your primary contractor)       │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
-                    ── silence until you send a price ──
+                 ── silence until you send a price, unless ──
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ ①b ONLINE REQUEST NEEDS A LOOK                     status: unchanged│
+│    Crew taps "Confirm this visit" on their job page. Optional —     │
+│    most online jobs are priced from the photos and skip this.       │
+├─────────────────────────────────────────────────────────────────────┤
+│ CUSTOMER  "Your free in-person quote is confirmed: <day> at <time>" │
+│ OWNER     "QUOTE VISIT CONFIRMED" + who confirmed it + the brief    │
+│ CREW      "QUOTE VISIT CONFIRMED" + when + brief + call-us-if-stuck │
+│ The request becomes in-person, so it joins the calendar, gets a     │
+│ Google invite, and starts consuming that day's visit capacity.      │
+└─────────────────────────────────────────────────────────────────────┘
+                                 │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │ ② YOU SEND THE QUOTE                               status: Quoted   │
@@ -145,14 +160,40 @@ committed to a day they haven't agreed to.
 
 | Date | Earliest | Who it binds |
 |------|----------|--------------|
-| In-person quote **visit** | 4 days out (`VISIT_LEAD_DAYS`) | The customer, on the request form |
+| Quote **visit** (either type) | 4 days out (`VISIT_LEAD_DAYS`) | The customer, on the request form |
 | Preferred **install** days | 7 days out (`LEAD_TIME_DAYS`) | The customer, on the approval page |
 | Confirming the **work day** | today | Nobody — you and the crew can book any day |
+| Confirming a **quote visit** | today | Nobody — the crew can confirm any open day |
 
 Both customer-facing limits are enforced on the server as well as in the date
 picker, because `min` on an input is a convenience, not a rule. The crew's
 picker deliberately has no floor: the lead time exists to stop a customer
 booking something you can't staff, not to stop you agreeing to a rush job.
+
+### The date on an online request means something different
+
+Both quote types ask for a day and a time, and `quote_type` is the only thing
+that says which of two meanings `visit_date` carries:
+
+| `quote_type` | What `visit_date` is | Who is expected to be there |
+|--------------|----------------------|-----------------------------|
+| `inperson` | A booked visit, confirmed the moment it's submitted | The crew |
+| `online` | A slot the customer offered in case photos aren't enough | Nobody, yet |
+
+Reading the column without checking the type is what once texted the owner and
+the crew an appointment for a customer who had only been told "we'll be in
+touch". Nothing reads it raw now: `visitDateOf()` returns a booked appointment
+and `requestedVisitOf()` returns an unconfirmed offer, both in
+`src/lib/crm/constants.ts`, and the calendar, Google invites, crew reminders and
+the job-page headline are all built on the first of those.
+
+An online request that turns out to be too big to price from photos gets
+confirmed by the crew on their job page (**Need to see it in person?**). That
+runs `confirmVisit`, which flips `quote_type` to `inperson` — one column change
+that switches on every downstream surface at once — and texts the customer, the
+assigned contractor and the owner the same day, time and address. An online
+request's slot never consumes in-person visit capacity until it's confirmed
+(`countVisitsOn` excludes online rows).
 
 ---
 

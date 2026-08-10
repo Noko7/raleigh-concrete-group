@@ -1,4 +1,5 @@
 import { requireSession } from "@/lib/crm/auth";
+import { visitDateOf } from "@/lib/crm/constants";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { googleConfigured, googleStatus } from "@/lib/crm/gcal";
 import { crmBase } from "@/lib/crm/nav";
@@ -46,15 +47,13 @@ export default async function CalendarPage({
     if (q.scheduled_date) {
       events.push({ ...common, date: q.scheduled_date, kind: "job", time: q.scheduled_time });
     }
-    // The appointment the customer picked: an on-site visit (in-person) or a
-    // remote photo review (online). Color them separately so the day reads clearly.
-    if (q.visit_date) {
-      events.push({
-        ...common,
-        date: q.visit_date,
-        kind: q.quote_type === "online" ? "online" : "inperson",
-        time: q.visit_time,
-      });
+    // An in-person quote visit: a real slot with a drive attached. Online
+    // requests are deliberately absent even when the row still holds a date,
+    // because there is no appointment - a card on a day tells the crew to be
+    // somewhere, and for an online quote nobody is going anywhere.
+    const visitDate = visitDateOf(q);
+    if (visitDate) {
+      events.push({ ...common, date: visitDate, kind: "inperson", time: q.visit_time });
     }
   }
 

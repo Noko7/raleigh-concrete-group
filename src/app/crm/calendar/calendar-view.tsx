@@ -8,7 +8,10 @@ import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { START_TIMES } from "@/app/crm/quotes/[id]/schedule-card";
 import { deleteEvent, moveEvent, type CalActionState } from "./actions";
 
-export type CalKind = "job" | "inperson" | "online";
+// Only things somebody has to show up for. An online quote is desk work with no
+// place to be, so it never becomes a calendar event and there is no filter for
+// one - a chip that can never match anything is just another thing to read.
+export type CalKind = "job" | "inperson";
 
 export type CalEvent = {
   id: string;
@@ -22,8 +25,7 @@ export type CalEvent = {
   status: string;
 };
 
-const kindLabel = (t: Dict, k: CalKind) =>
-  k === "job" ? t.calendar.kindJob : k === "inperson" ? t.calendar.kindInPerson : t.calendar.kindOnline;
+const kindLabel = (t: Dict, k: CalKind) => (k === "job" ? t.calendar.kindJob : t.calendar.kindInPerson);
 
 // Month names and weekday initials come from the browser rather than a hand
 // written list, so Spanish gets "enero" and "L M X J V S D" without a second
@@ -126,7 +128,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
   // wide screen flips to Month on first load, then whatever you last chose.
   const [view, setView] = useState<"list" | "month">("list");
   const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() });
-  const [show, setShow] = useState<Record<CalKind, boolean>>({ job: true, inperson: true, online: true });
+  const [show, setShow] = useState<Record<CalKind, boolean>>({ job: true, inperson: true });
 
   const [selected, setSelected] = useState<CalEvent | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
@@ -307,7 +309,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
       </div>
 
       <div className="cal-filters">
-        {(["job", "inperson", "online"] as CalKind[]).map((k) => (
+        {(["job", "inperson"] as CalKind[]).map((k) => (
           <button
             key={k}
             type="button"

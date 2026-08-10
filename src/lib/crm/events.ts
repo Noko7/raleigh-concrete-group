@@ -43,6 +43,16 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return `Work day confirmed for ${String(m.to ?? "a date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
     case "date_changed":
       return `Work day moved${m.from ? ` from ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""}` : ""} to ${String(m.to ?? "a new date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
+    case "visit_confirmed": {
+      const when = `${String(m.to ?? "a date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
+      // Worth recording when the crew didn't take the slot the customer offered:
+      // it's the difference between "we agreed" and "we told them a new time".
+      const asked =
+        m.moved && m.requested
+          ? ` (customer had asked for ${String(m.requested)}${m.requested_time ? ` at ${String(m.requested_time)}` : ""})`
+          : "";
+      return `Quote visit confirmed for ${when}${asked}`;
+    }
     case "visit_moved":
       return `Quote visit moved${m.from ? ` from ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""}` : ""} to ${String(m.to ?? "a new date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
     case "visit_cancelled":

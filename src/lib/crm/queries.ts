@@ -206,10 +206,16 @@ export async function countJobsOn(date: string, excludeId?: string): Promise<num
   return ((await res.json()) as unknown[]).length;
 }
 
-// How many in-person quote visits are already scheduled on a date.
+// How many in-person quote visits are already scheduled on a date. Online
+// requests are excluded even when the row carries a date - they're a photo
+// review, not a slot in anyone's day, and counting them told real customers a
+// day was full when nobody was going anywhere. Rows saved before quote_type
+// existed are null and still count, since those were all visits.
 export async function countVisitsOn(date: string): Promise<number> {
   if (!ISO_DATE.test(date)) return 0;
-  const res = await pgAdmin(`quote_requests?visit_date=eq.${date}&select=id`);
+  const res = await pgAdmin(
+    `quote_requests?visit_date=eq.${date}&or=(quote_type.is.null,quote_type.neq.online)&select=id`,
+  );
   if (!res.ok) return 0;
   return ((await res.json()) as unknown[]).length;
 }

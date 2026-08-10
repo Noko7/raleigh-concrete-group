@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { STATUS_LABELS } from "@/lib/crm/constants";
+import { STATUS_LABELS, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { getQuoteByToken, signFiles } from "@/lib/crm/queries";
@@ -12,6 +12,7 @@ import { businessName } from "@/lib/site-data";
 import { JobFinish } from "./job-finish";
 import { JobQuote } from "./job-quote";
 import { JobSchedule } from "./job-schedule";
+import { JobVisit } from "./job-visit";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,11 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   const showQuote = !showSchedule && quote.status !== "lost" && quote.status !== "completed" && quote.status !== "paid";
   const showFinish = quote.status === "scheduled";
   const isDone = quote.status === "completed" || quote.status === "paid";
+  // Still an online request, so the crew hasn't decided yet whether the photos
+  // are enough. Sits alongside the quote card, not instead of it: pricing it
+  // remotely is still the faster path and stays one tap away.
+  const requestedVisit = requestedVisitOf(quote);
+  const showVisit = showQuote && quote.quote_type === "online";
 
   // The crew books against their own schedule, so their picker starts today.
   // The 7-day floor applies to what a customer may request, not to what the
@@ -53,19 +59,31 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
       month: "long",
       day: "numeric",
     });
-  const prettyVisit = quote.visit_date ? fmtDay(quote.visit_date) : null;
+  const visitDate = visitDateOf(quote);
+  const prettyVisit = visitDate ? fmtDay(visitDate) : null;
   const prettyJob = quote.scheduled_date ? fmtDay(quote.scheduled_date) : null;
 
   // The two things a contractor needs off this page in one glance, standing
   // outside holding a phone: what kind of appointment this is, and when it is.
   // A booked work day always wins over a quote visit - once the job is on, the
   // visit that produced it stops being the thing they're driving to.
+  //
+  // An online request's offered slot comes last and is flagged `pending`, which
+  // renders it in a different colour with "not confirmed" on it. A date shown
+  // the same way as a booking is a date somebody drives to.
   const isInPerson = quote.quote_type === "inperson";
   const when = prettyJob
-    ? { label: t.contractorJob.scheduledJob, day: prettyJob, time: quote.scheduled_time }
+    ? { label: t.contractorJob.scheduledJob, day: prettyJob, time: quote.scheduled_time, pending: false }
     : prettyVisit
-      ? { label: t.contractorJob.quoteVisit, day: prettyVisit, time: quote.visit_time }
-      : null;
+      ? { label: t.contractorJob.quoteVisit, day: prettyVisit, time: quote.visit_time, pending: false }
+      : requestedVisit
+        ? {
+            label: t.contractorJob.visitAsked,
+            day: fmtDay(requestedVisit),
+            time: quote.visit_time,
+            pending: true,
+          }
+        : null;
 
   const mapsLink = quote.address
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(quote.address)}`
@@ -92,13 +110,19 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             {isInPerson ? t.contractorJob.typeInPerson : t.contractorJob.typeOnline}
           </span>
           {when ? (
-            <div className="job-when">
+            <div className={`job-when${when.pending ? " job-when-pending" : ""}`}>
               <span className="job-when-label">{when.label}</span>
               <strong className="job-when-day">{when.day}</strong>
               {when.time && <strong className="job-when-time">{when.time}</strong>}
+              {when.pending && <span className="job-when-tag">{t.contractorJob.visitNotConfirmed}</span>}
             </div>
           ) : (
-            <span className="job-when-none">{t.contractorJob.notScheduled}</span>
+            // "No date set yet" on an online quote reads like something is
+            // missing. Nothing is: they didn't offer a time and none is needed
+            // unless the photos fall short.
+            <span className="job-when-none">
+              {quote.quote_type === "online" ? t.contractorJob.noVisitNeeded : t.contractorJob.notScheduled}
+            </span>
           )}
         </div>
 
@@ -111,6 +135,16 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             scheduledDate={quote.scheduled_date}
             scheduledTime={quote.scheduled_time}
             preferredDates={quote.preferred_dates ?? []}
+            minDate={minJobDate}
+            locale={locale}
+          />
+        )}
+
+        {showVisit && (
+          <JobVisit
+            id={quote.id}
+            requestedDate={requestedVisit}
+            requestedTime={quote.visit_time}
             minDate={minJobDate}
             locale={locale}
           />

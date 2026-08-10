@@ -73,15 +73,27 @@ export function TestSms({
       </dl>
 
       {/* Every one of these numbers gets texted on every money moment, so an
-          unrecognised one is worth chasing down. Naming the source is the
-          difference between "why is this number here" and knowing which knob
-          to turn: env vars live in Vercel, profiles are editable in the CRM. */}
-      {recipients.some((r) => r.source === "env") && (
+          unrecognised one is worth chasing down. Naming the source isn't enough
+          on its own: someone looking at a wrong number needs to be told which
+          of the two places to go and fix it, or they edit the env var in Vercel
+          and watch the texts keep arriving at the profile number that outranks
+          it. Each line below answers "so where do I change it". */}
+      {recipients.length > 0 && (
         <p className="crm-muted crm-sm sms-envnote">
-          A number listed as <code>OWNER_PHONE env var</code> comes from Vercel, not from this app. Owner profile
-          numbers win: <code>OWNER_PHONE</code> is only used while no owner has a number saved above, which is why it
-          can show as <em>not used</em>. To remove it entirely, change it in Vercel → Settings → Environment Variables
-          and redeploy.
+          {recipients.some((r) => r.source === "profile") && (
+            <>
+              A number shown with a person&apos;s name is saved on that owner&apos;s profile. Change it in the{" "}
+              <strong>Phone</strong> field at the top of this page (or on their staff record), then save — it takes
+              effect immediately, no redeploy.{" "}
+            </>
+          )}
+          {recipients.some((r) => r.source === "env") && (
+            <>
+              A number listed as <code>OWNER_PHONE env var</code> comes from Vercel, not from this app, and is only
+              used while no owner has a number saved — which is why it can show as <em>not used</em>. Change it in
+              Vercel → Settings → Environment Variables and redeploy.
+            </>
+          )}
         </p>
       )}
 

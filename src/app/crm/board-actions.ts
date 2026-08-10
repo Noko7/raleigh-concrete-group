@@ -75,6 +75,9 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
         service: current.service,
         address: current.address,
         scheduled_date: current.scheduled_date,
+        // quote_type has to ride along: it's what tells the message whether
+        // visit_date is a booked appointment or a slot a customer offered.
+        quote_type: current.quote_type,
         visit_date: current.visit_date,
         visit_time: current.visit_time,
         job_token: current.job_token,

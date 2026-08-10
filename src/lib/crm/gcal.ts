@@ -9,6 +9,7 @@
 // Google emails everyone a real calendar invite.
 //
 // Required env: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI.
+import { visitDateOf } from "./constants";
 import { pgAdmin } from "./rest";
 import type { Quote } from "./types";
 
@@ -213,14 +214,17 @@ function buildEvent(q: Quote, attendees: GAttendee[]): GEvent | null {
   }
 
   // Otherwise an in-person quote visit (timed if we can read the time slot).
-  if (q.visit_date) {
+  // Online quotes never produce an event even if the row carries a date: an
+  // invite on the crew's calendar means somebody is expected to be somewhere.
+  const visitDate = visitDateOf(q);
+  if (visitDate) {
     const clock = parseClock(q.visit_time);
     if (clock) {
       const hh = String(clock.h).padStart(2, "0");
       const mm = String(clock.m).padStart(2, "0");
-      const start = `${q.visit_date}T${hh}:${mm}:00`;
+      const start = `${visitDate}T${hh}:${mm}:00`;
       const endH = String((clock.h + 1) % 24).padStart(2, "0");
-      const end = `${q.visit_date}T${endH}:${mm}:00`;
+      const end = `${visitDate}T${endH}:${mm}:00`;
       return {
         ...base,
         summary: `In-person quote: ${q.name}`,
@@ -235,8 +239,8 @@ function buildEvent(q: Quote, attendees: GAttendee[]): GEvent | null {
       summary: `In-person quote: ${q.name}`,
       description: describe(q, true),
       location: q.address ?? undefined,
-      start: { date: q.visit_date },
-      end: { date: addDays(q.visit_date, 1) },
+      start: { date: visitDate },
+      end: { date: addDays(visitDate, 1) },
     };
   }
 

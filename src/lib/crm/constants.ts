@@ -39,6 +39,28 @@ export const VISIT_LEAD_DAYS = 4;
 // tampered form can't book "3:00 AM"; both sides check the same list.
 export const VISIT_TIME_SLOTS = ["8:00 AM", "10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM"];
 
+// visit_date carries two different meanings and quote_type is what tells them
+// apart. Everything that shows a date to a person goes through one of these two
+// readers rather than the column, because the difference between "we are coming"
+// and "we might come" is the whole thing.
+type Visitable = { quote_type?: string | null; visit_date?: string | null };
+
+// A booked appointment: somebody is expected at an address on this day. Only an
+// in-person row has one. This is what the calendar, Google invites, crew
+// reminders and the job page's headline date are all built on.
+export function visitDateOf(q: Visitable): string | null {
+  return q.quote_type === "online" ? null : (q.visit_date ?? null);
+}
+
+// The slot an online customer offered in case their job turns out to be too big
+// to price from photos. It is an option, not a commitment - nobody drives
+// anywhere on it, and the customer has been told we'll text to confirm first.
+// A contractor confirming it is what turns the request in-person, at which point
+// it stops being readable here and becomes a real visit above.
+export function requestedVisitOf(q: Visitable): string | null {
+  return q.quote_type === "online" ? (q.visit_date ?? null) : null;
+}
+
 // How many days before a booked job the crew gets a reminder text. 0 is the
 // morning of. The daily cron fires ~10am ET, so the morning-of text still lands
 // before a typical start time.

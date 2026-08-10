@@ -11,6 +11,7 @@
 // quote submission or a CRM save. Failures are logged (Vercel → Logs) with an
 // [sms] prefix so they can be diagnosed.
 import { phoneDisplay } from "@/lib/site-data";
+import { visitDateOf } from "./constants";
 import { SITE_ORIGIN } from "./env";
 import { getOwnerContacts, getOwnerPhones } from "./queries";
 
@@ -336,7 +337,7 @@ function customerBrief(q: QuoteInfo): string {
   if (q.address?.trim()) lines.push(`Address: ${q.address.trim()}`);
 
   const jobDay = dayOrNull(q.scheduled_date);
-  const visitDay = dayOrNull(q.visit_date);
+  const visitDay = dayOrNull(visitDateOf(q));
   if (jobDay) lines.push(`Scheduled: ${jobDay}${q.scheduled_time ? ` at ${q.scheduled_time}` : ""}`);
   else if (visitDay) lines.push(`Quote visit: ${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}`);
   else lines.push("Scheduled: not yet");
@@ -353,6 +354,8 @@ export function newQuoteMessage(q: QuoteInfo): string {
   // into a ten-part text.
   const raw = q.details?.trim();
   const details = raw ? (raw.length > 400 ? `${raw.slice(0, 400)}…` : raw) : null;
+  // Raw here, not visitDateOf: this message shows an online request's fallback
+  // slot too, and the label below is what says which of the two it is.
   const visitDay = dayOrNull(q.visit_date);
 
   return text([
@@ -360,7 +363,25 @@ export function newQuoteMessage(q: QuoteInfo): string {
     ...block("Job Type:", q.service?.trim() || "Not specified"),
     ...block("Customer Phone:", q.phone),
     ...block("Address:", q.address?.trim()),
-    ...block("Requested Visit:", visitDay ? `${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}` : null),
+    // Which kind of quote this is decides what the reader does next: an online
+    // request is desk work today, an in-person one is a drive on a set day.
+    // Left off entirely for older leads that predate the choice.
+    ...block(
+      "Quote Type:",
+      q.quote_type === "online" ? "Online - price it from the photos" : q.quote_type === "inperson" ? "In person" : null,
+    ),
+    // The same date means two different things, so it is never labelled the
+    // same way. On an online request it's the customer's fallback slot and the
+    // label has to say out loud that nobody has agreed to it, or the crew reads
+    // a booking into a maybe and drives out.
+    ...block(
+      q.quote_type === "online" ? "If a visit is needed, they asked for:" : "Visit Booked:",
+      visitDay
+        ? `${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}${
+            q.quote_type === "online" ? " (not confirmed - confirm it on the job page)" : ""
+          }`
+        : null,
+    ),
     ...block("Details:", details),
     q.job_token ? jobLink(q.job_token) : null,
   ]);
@@ -396,15 +417,81 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
       : // Deliberately promises a follow-up, not a price or a timeframe. Pricing
         // depends on the project, and committing to "your price shortly" up
         // front sets an expectation the job can't always meet.
+        //
+        // The slot they picked is repeated back so they know we have it, and
+        // named as a maybe in the same breath. They must not put us in their
+        // calendar off this text - nobody is coming until we confirm.
         text([
           `Hi ${firstName(q.name)},`,
           `this is ${OWNER_NAME} with ${BUSINESS}. Thanks for reaching out.`,
           "",
           "We got your request and we're looking over the details now. We'll follow up soon with next steps, and reach out if we need anything else about the project.",
+          ...(dayOrNull(q.visit_date)
+            ? [
+                "",
+                "If it turns out we need to see it in person, you asked for:",
+                `${dayOrNull(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`,
+                "",
+                "Nothing is booked yet - we'll text you to confirm before anyone comes out.",
+              ]
+            : []),
           "",
           OPT_OUT_LINE,
         ]);
   await sendSms(q.phone, msg).catch(() => {});
+}
+
+// ── 4. Contractor confirms the visit an online customer offered ─────────────
+// The moment a maybe becomes an appointment. Both sides get the same day and
+// time in the same shape, because this is the text each of them will scroll
+// back to on the morning.
+export async function notifyVisitConfirmed(
+  q: QuoteInfo,
+  crewPhone?: string | null,
+  crewName?: string | null,
+): Promise<void> {
+  const when = `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`;
+
+  await sendSms(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      `this is ${OWNER_NAME} with ${BUSINESS}. Your free in-person quote is confirmed:`,
+      "",
+      when,
+      "",
+      q.address?.trim() || null,
+      "",
+      "We'll measure on site and give you a written price. Reply or call if anything changes.",
+    ]),
+  ).catch(() => {});
+
+  if (crewPhone) {
+    await sendSms(
+      crewPhone,
+      text([
+        "QUOTE VISIT CONFIRMED",
+        "",
+        ...block("When:", when),
+        customerBrief(q),
+        "",
+        `Can't make it? Call ${CALL_NUMBER} as soon as you know.`,
+        "",
+        q.job_token ? jobLink(q.job_token) : null,
+      ]),
+    ).catch(() => {});
+  }
+
+  await alertOwner(
+    text([
+      "QUOTE VISIT CONFIRMED",
+      "",
+      ...block("When:", when),
+      ...block("Confirmed by:", crewName || "crew"),
+      customerBrief(q),
+    ]),
+    crewPhone,
+  ).catch(() => {});
 }
 
 // ── 5. Quote is ready: send the customer their link ─────────────────────────

@@ -38,7 +38,19 @@ const EMPTY: FormState = {
   visitTime: "",
 };
 
+// Both modes ask for a date, but they mean different things by it, and that
+// distinction is the whole point:
+//
+//   in-person  the customer is booking a visit. We confirm it on the spot.
+//   online     a fallback slot in case the job turns out to be too big to price
+//              from photos. Nobody is coming out unless a contractor confirms
+//              it first, and the customer is told exactly that.
+//
+// Treating the online date as a booking is what put appointments nobody had
+// agreed to on the crew's job page and in the owner's alerts.
 const STEPS = ["contact", "service", "schedule"] as const;
+
+type Step = (typeof STEPS)[number];
 
 const TIME_SLOTS = VISIT_TIME_SLOTS;
 
@@ -290,9 +302,10 @@ function Modal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const current = mode ? STEPS[stepIndex] : "choice";
+  const current: Step | "choice" = mode ? STEPS[stepIndex] : "choice";
   const totalSteps = STEPS.length;
   const stepNumber = stepIndex + 1;
+  const isLastStep = stepIndex === STEPS.length - 1;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -357,7 +370,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   function next() {
     if (!canProceed()) return;
     setErrorMsg("");
-    if (stepIndex < STEPS.length - 1) setStepIndex((i) => i + 1);
+    if (!isLastStep) setStepIndex((i) => i + 1);
     else submit();
   }
 
@@ -671,15 +684,23 @@ function Modal({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* Step 3: Schedule */}
+            {/* Step 3: Schedule. In-person books a visit; online picks a
+                fallback slot we only use if the job can't be priced remotely. */}
             {current === "schedule" && (
               <div className="qm-body">
                 <div className="qm-step-head">
                   <span className="qm-step-num">3</span>
-                  <h2 className="qm-title">Schedule</h2>
+                  <h2 className="qm-title">{mode === "online" ? "If we need to visit" : "Schedule"}</h2>
                 </div>
-                <p className="qm-sub">Select from the available dates and times.</p>
-                <label className="qm-label">Date</label>
+                {/* The online wording promises nothing. Most jobs never need a
+                    visit, and a customer who thinks they have an appointment
+                    when they don't is the worst outcome here. */}
+                <p className="qm-sub">
+                  {mode === "online"
+                    ? "We can price most jobs from your photos. If yours needs a look in person, when suits you? We'll only come out if we text you first to confirm."
+                    : "Select from the available dates and times."}
+                </p>
+                <label className="qm-label">{mode === "online" ? "Best day for you" : "Date"}</label>
                 <input
                   className="qm-input"
                   type="date"
@@ -687,7 +708,9 @@ function Modal({ onClose }: { onClose: () => void }) {
                   value={data.visitDate}
                   onChange={(e) => {
                     set({ visitDate: e.target.value });
-                    checkVisitDate(e.target.value);
+                    // Only in-person requests take a slot out of the day, so
+                    // only they need to check whether one is left.
+                    if (mode === "inperson") checkVisitDate(e.target.value);
                   }}
                 />
                 <span
@@ -695,7 +718,16 @@ function Modal({ onClose }: { onClose: () => void }) {
                     dateChecking ? "" : dateFull ? " qm-ac-full" : data.visitDate ? " qm-ac-ok" : ""
                   }`}
                 >
-                  {dateChecking ? (
+                  {mode === "online" ? (
+                    data.visitDate ? (
+                      <>
+                        <IconCheck className="qm-ac-check" /> We&apos;ll aim for {prettyDay(data.visitDate)} if a visit
+                        is needed
+                      </>
+                    ) : (
+                      "Just in case - we'll confirm by text before anyone comes out."
+                    )
+                  ) : dateChecking ? (
                     "Checking that day…"
                   ) : dateFull ? (
                     "That day is fully booked, please pick another."
@@ -731,7 +763,7 @@ function Modal({ onClose }: { onClose: () => void }) {
             )}
 
             {/* SMS consent disclosure (A2P 10DLC compliant), shown before submitting */}
-            {mode && current === "schedule" && (
+            {mode && isLastStep && (
               <p className="qm-consent">
                 By submitting this form, you agree to receive text messages from Raleigh Concrete
                 Group about your quote request, appointment reminders, and project updates. Message
@@ -755,9 +787,11 @@ function Modal({ onClose }: { onClose: () => void }) {
                   ? "Uploading…"
                   : status === "sending"
                     ? "Sending…"
-                    : current === "schedule"
-                      ? "Book My Free Quote"
-                      : "Continue"}
+                    : !isLastStep
+                      ? "Continue"
+                      : mode === "inperson"
+                        ? "Book My Free Quote"
+                        : "Get My Free Quote"}
               </button>
             </div>
             )}

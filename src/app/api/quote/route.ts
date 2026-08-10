@@ -87,19 +87,19 @@ export async function POST(request: Request) {
   // checks this too, but the form is the part an attacker controls.
   if (!isFullAddress(address)) errors.push("address");
   if (quoteType && !QUOTE_TYPES.has(quoteType)) errors.push("quote_type");
-  // In-person quotes must pick a real date + time so the crew can calendar it.
-  if (quoteType === "inperson") {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
-      errors.push("visit_date");
-    } else {
-      // No visits in the past, and none inside the lead time. One day of slack
-      // for time zones, matching how preferred install days are checked.
-      const earliest = Date.now() + (VISIT_LEAD_DAYS - 1) * 24 * 60 * 60 * 1000;
-      const picked = new Date(`${visitDate}T00:00:00Z`).getTime();
-      if (!Number.isFinite(picked) || picked < earliest) errors.push("visit_date");
-    }
-    if (!VISIT_TIME_SLOTS.includes(visitTime)) errors.push("visit_time");
+  // Both quote types pick a date and time, and both are checked the same way -
+  // an online request's slot is a fallback rather than a booking, but a fallback
+  // set for last Tuesday is no use to the contractor who has to confirm it.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
+    errors.push("visit_date");
+  } else {
+    // No visits in the past, and none inside the lead time. One day of slack
+    // for time zones, matching how preferred install days are checked.
+    const earliest = Date.now() + (VISIT_LEAD_DAYS - 1) * 24 * 60 * 60 * 1000;
+    const picked = new Date(`${visitDate}T00:00:00Z`).getTime();
+    if (!Number.isFinite(picked) || picked < earliest) errors.push("visit_date");
   }
+  if (!VISIT_TIME_SLOTS.includes(visitTime)) errors.push("visit_time");
 
   // file_urls: only accept paths we created in our own bucket.
   let fileUrls: string[] | null = null;
@@ -141,6 +141,11 @@ export async function POST(request: Request) {
     }
   }
 
+  // visit_date holds both meanings and quote_type is what separates them: on an
+  // in-person row it's a booked appointment, on an online row it's the slot the
+  // customer offered in case we can't price the job from photos. Nothing treats
+  // an online row as an appointment until a contractor confirms it, which is
+  // what flips the type to inperson.
   const row = {
     name,
     phone: phoneRaw,
