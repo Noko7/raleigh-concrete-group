@@ -318,6 +318,9 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
     },
     crew?.phone ?? session.staff.phone,
     crew?.full_name ?? session.staff.full_name,
+    // What they originally asked for, so the customer text can own up to it if
+    // the crew put them on a different day.
+    { date: current.visit_date, time: current.visit_time },
   ).catch(() => {});
   await syncQuoteToCalendar(id);
 

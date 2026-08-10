@@ -449,20 +449,40 @@ export async function notifyVisitConfirmed(
   q: QuoteInfo,
   crewPhone?: string | null,
   crewName?: string | null,
+  requested?: { date?: string | null; time?: string | null },
 ): Promise<void> {
   const when = `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`;
 
+  // The customer asked for a photo quote and is getting a visit instead, so the
+  // first thing this has to do is explain why - unexplained, a crew turning up
+  // reads as a sales call. Measuring is the honest reason and it's in the
+  // customer's interest, so it leads.
+  //
+  // The day is offered rather than announced. They picked this slot themselves
+  // when they filled the form, but that was a maybe and it may have been weeks
+  // ago, so it closes by inviting them to move it rather than assuming.
+  //
+  // If the crew put them on a different slot, say so and name only the part
+  // that moved. "That's a change from Friday" when it is still Friday reads as
+  // a mistake and costs a phone call.
+  const movedDay = Boolean(requested?.date) && requested?.date !== q.visit_date;
+  const movedTime = !movedDay && Boolean(requested?.time) && requested?.time !== q.visit_time;
+  const wasAsked = movedDay ? prettyDay(requested?.date) : movedTime ? requested?.time : null;
   await sendSms(
     q.phone,
     text([
       `Hi ${firstName(q.name)},`,
-      `this is ${OWNER_NAME} with ${BUSINESS}. Your free in-person quote is confirmed:`,
+      `this is ${OWNER_NAME} with ${BUSINESS}.`,
+      "",
+      "For a job like this we want to make sure you get an accurate estimate, so rather than price it off the photos we'd like to come measure it in person. We have you down for:",
       "",
       when,
       "",
       q.address?.trim() || null,
       "",
-      "We'll measure on site and give you a written price. Reply or call if anything changes.",
+      wasAsked ? `That's a change from the ${wasAsked} you asked about - it's the closest slot we have open.` : null,
+      "",
+      `It's still free and there's no obligation. Reply to this text or call us at ${phoneDisplay} if another day or time works better for you.`,
     ]),
   ).catch(() => {});
 

@@ -1497,7 +1497,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .job-logo { height: 40px; width: auto; margin-bottom: 0.75rem; }
 
 /* ── Contractor job page (/job/[token]) ── */
-.job-wrap { min-height: 100vh; background: #f4f5f7; padding: 1.5rem; color: #1f2328; }
+.job-wrap { min-height: 100vh; background: var(--ivory); padding: 1.5rem; color: #1f2328; }
 .job-card { max-width: 760px; margin: 0 auto; background: #fff; border-radius: 1rem; padding: 1.75rem; border: 1px solid #e2e5ea; }
 .job-brand { font-weight: 800; color: var(--amber); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; }
 .job-title { font-size: 1.7rem; font-weight: 800; margin-bottom: 1.1rem; }
@@ -1506,25 +1506,30 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
    them findable in a glance rather than something you have to read for. */
 .job-key {
   display: flex; flex-direction: column; align-items: flex-start; gap: 0.7rem;
-  background: #111827; border-radius: 0.9rem; padding: 1.05rem 1.15rem; margin-bottom: 1.4rem;
+  /* The same charcoal gradient as the public site's background, so the crew's
+     page reads as part of the business rather than a different product. */
+  background: linear-gradient(160deg, var(--charcoal-start), var(--charcoal-end));
+  border-radius: 0.9rem; padding: 1.05rem 1.15rem; margin-bottom: 1.4rem;
 }
 .job-type {
   font-size: 0.8rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em;
   border-radius: 999px; padding: 0.4rem 0.9rem; color: #fff; line-height: 1;
 }
 .job-type-inperson { background: var(--amber); }
-.job-type-online { background: #2563eb; }
+/* Ivory rather than a second hue. The two pills only have to be told apart, and
+   the page has exactly one accent colour - a blue here belonged to no theme. */
+.job-type-online { background: var(--ivory); color: var(--charcoal-start); }
 .job-when { display: flex; flex-direction: column; gap: 0.1rem; }
 .job-when-label { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: #9ca3af; }
 .job-when-day { font-size: 1.6rem; font-weight: 900; line-height: 1.15; color: #fff; letter-spacing: -0.01em; }
 .job-when-time { font-size: 1.6rem; font-weight: 900; line-height: 1.15; color: #fbbf24; letter-spacing: -0.01em; }
 .job-when-none { font-size: 1.15rem; font-weight: 800; color: #d1d5db; }
-/* An offered slot on an online request, not a booking. Deliberately not the
-   amber of a confirmed time: the same styling would read as "be there". */
-.job-when-pending .job-when-day { color: #cbd5e1; font-size: 1.35rem; }
-.job-when-pending .job-when-time { color: #cbd5e1; font-size: 1.35rem; }
+/* An offered slot on an online request, not a booking. Dimmed and stripped of
+   the amber a confirmed time gets: same styling would read as "be there". */
+.job-when-pending .job-when-day,
+.job-when-pending .job-when-time { color: #a8a49c; font-size: 1.35rem; }
 .job-when-tag {
-  align-self: flex-start; margin-top: 0.3rem; background: #334155; color: #e2e8f0;
+  align-self: flex-start; margin-top: 0.3rem; background: var(--charcoal-end); color: var(--ivory);
   font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.07em;
   border-radius: 999px; padding: 0.25rem 0.6rem; line-height: 1;
 }
@@ -1535,7 +1540,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .job-meta dt { color: #374151; font-weight: 800; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; align-self: center; }
 .job-meta dd { margin: 0; color: #0f172a; font-weight: 600; }
 .job-meta a { color: #b45309; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
-.job-details { background: #f8f9fa; border-radius: 0.7rem; padding: 1rem; margin-bottom: 1.25rem; }
+.job-details { background: #faf8f4; border-radius: 0.7rem; padding: 1rem; margin-bottom: 1.25rem; }
 .job-details h2 { font-weight: 800; font-size: 0.9rem; margin-bottom: 0.3rem; }
 .job-details p { white-space: pre-wrap; color: #374151; }
 .job-muted { color: #6b7280; }
@@ -1601,26 +1606,28 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .jq-cancel { background: none; border: none; color: #6b7280; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0.6rem 0; min-height: 44px; }
 .jf-done { background: #f0fdf4; border-color: #86efac; }
 
-/* Confirming the visit an online customer offered. Blue rather than amber so it
-   reads as the other path to the amber "quote it now" card beside it, and the
-   offered slot is a full-width tap target holding the answer already. */
-.jv-card { border-color: #93c5fd; background: #f8fbff; }
+/* Confirming the visit an online customer offered. Charcoal on ivory against
+   the amber-on-white "quote it now" card beside it: two cards, both in the
+   site's two colours, telling apart by weight instead of by hue. The offered
+   slot is a full-width tap target that already holds the answer. */
+.jv-card { border-color: var(--charcoal-end); background: var(--ivory); }
 .jv-asked {
   display: flex; flex-direction: column; gap: 0.1rem;
-  background: #fff; border: 2px solid #bfdbfe; border-radius: 0.7rem;
+  background: #fff; border: 2px solid #ddd8ce; border-radius: 0.7rem;
   padding: 0.8rem 0.95rem; margin-bottom: 0.85rem;
 }
-.jv-asked-label { font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; }
-.jv-asked-day { font-size: 1.3rem; font-weight: 900; color: #0f172a; line-height: 1.2; }
-.jv-asked-time { font-size: 1.3rem; font-weight: 900; color: #1d4ed8; line-height: 1.2; }
-.jv-card .js-confirm { width: 100%; background: #1d4ed8; }
+.jv-asked-label { font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; }
+.jv-asked-day { font-size: 1.3rem; font-weight: 900; color: var(--charcoal-start); line-height: 1.2; }
+.jv-asked-time { font-size: 1.3rem; font-weight: 900; color: var(--amber); line-height: 1.2; }
+.jv-card .js-confirm { width: 100%; background: var(--charcoal-end); }
+.jv-card .js-confirm:hover { background: var(--charcoal-start); }
 
 /* Close-out checklist. Rows are full-width and 52px tall because these get
    tapped with work gloves on, and a 20px checkbox is the target. */
 .jf-checks { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .jf-check {
   display: flex; align-items: center; gap: 0.7rem; cursor: pointer;
-  background: #f8f9fa; border: 1px solid #d1d5db; border-radius: 0.6rem;
+  background: #faf8f4; border: 1px solid #ddd8ce; border-radius: 0.6rem;
   padding: 0.7rem 0.8rem; min-height: 52px; font-size: 0.98rem; color: #1f2328;
 }
 .jf-check input { width: 22px; height: 22px; flex: none; accent-color: var(--amber); }
