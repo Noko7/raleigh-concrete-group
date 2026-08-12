@@ -58,8 +58,19 @@ job (see ⑥). Customers are not reminded more than once.
 │    "Send Quote" on the job page (needs a price + description)       │
 ├─────────────────────────────────────────────────────────────────────┤
 │ CUSTOMER  "Your quote is ready: <link>"                             │
-│ OWNER     nothing — you clicked it, the result is on screen         │
-│ CREW      nothing                                                   │
+│ OWNER     "QUOTE SENT" — who sent it, customer, amount, now         │
+│            waiting on them. Skipped if you sent it yourself.        │
+│ CREW      "Your quote for <customer> has been sent" + wait for      │
+│            them to answer. Only whoever pressed send.               │
+│                                                                     │
+│ If the customer's text FAILED, both messages say so instead —       │
+│ "QUOTE TEXT FAILED … give them a call". A confident "sent" over a   │
+│ text that bounced stops everyone chasing a customer who never       │
+│ heard from us.                                                      │
+│                                                                     │
+│ It only sends once. A second Send is refused while the quote is     │
+│ out and unanswered — unless they've replied, the last text failed,  │
+│ or an owner deliberately resends.                                   │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
                     ── waiting on the customer ──

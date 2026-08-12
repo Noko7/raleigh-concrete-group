@@ -605,6 +605,69 @@ export async function notifyQuoteReady(q: QuoteInfo): Promise<SendResult> {
   );
 }
 
+// ── 5b. Quote is out: tell the office, and tell whoever pressed send ────────
+// A quote leaving is a money moment nobody was being told about. The owner gets
+// it because it's the point the job starts waiting on someone outside the
+// business; the crew gets it because "did that actually go?" is the question
+// that makes people press Send twice.
+//
+// Both messages key off whether the customer's text was actually accepted. A
+// confident "quote sent" over a text that bounced is worse than saying nothing:
+// everyone stops chasing a customer who never heard from us.
+export async function notifyQuoteSent(
+  q: QuoteInfo,
+  sender: { name?: string | null; phone?: string | null; isOwner: boolean },
+  delivered: boolean,
+): Promise<void> {
+  const by = sender.name?.trim() || "A contractor";
+
+  await alertOwner(
+    delivered
+      ? text([
+          "QUOTE SENT",
+          "",
+          ...block("Sent by:", by),
+          ...block("Customer:", q.name),
+          ...block("Amount:", usd(q.quote_amount)),
+          "Waiting on them to approve or decline.",
+        ])
+      : text([
+          "QUOTE TEXT FAILED",
+          "",
+          ...block("Tried by:", by),
+          ...block("Customer:", q.name),
+          ...block("Their number:", q.phone),
+          "The quote link did NOT reach them. Give them a call.",
+        ]),
+    // Whoever pressed the button doesn't need to be told what they just did.
+    sender.phone,
+    { quoteId: q.id, kind: "quote_sent" },
+  ).catch(() => {});
+
+  // The owner is looking at the result on screen; a contractor is on a job site
+  // holding a phone, where a text is the only thing that persists.
+  if (sender.isOwner || !sender.phone) return;
+
+  await sendSms(
+    sender.phone,
+    delivered
+      ? text([
+          `Hi ${firstName(by)},`,
+          `your quote for ${q.name} has been sent.`,
+          "",
+          ...block("Amount:", usd(q.quote_amount)),
+          "Now wait for them to review it. You'll get a text as soon as they approve or decline - there's no need to send it again.",
+        ])
+      : text([
+          `Hi ${firstName(by)},`,
+          `your quote for ${q.name} did NOT go out - the text to them failed.`,
+          "",
+          `Please call ${CALL_NUMBER} so we can reach them another way.`,
+        ]),
+    { quoteId: q.id, kind: "quote_sent", role: "crew" },
+  ).catch(() => {});
+}
+
 // ── 6. Customer approved: thank them, but don't promise a day yet ───────────
 // They've proposed dates; the crew confirms one. Saying "we'll confirm" here is
 // what stops the customer assuming their first choice is locked in.

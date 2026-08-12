@@ -15,6 +15,7 @@ import {
   notifyCustomerScheduled,
   notifyPaymentRequest,
   notifyQuoteReady,
+  notifyQuoteSent,
   notifyVisitConfirmed,
   type SendResult,
 } from "@/lib/crm/notify";
@@ -105,9 +106,13 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
 
   // "Send Quote": make the customer link live and text it to them. Price and a
   // customer-facing description are both required.
+  // What the customer will actually see: this save's values where it changed
+  // them, the stored ones otherwise. Declared out here because the texts sent
+  // further down report the same figure the customer was quoted.
+  const effectiveAmount = patch.quote_amount !== undefined ? patch.quote_amount : current.quote_amount;
+  const effectiveSummary = patch.quote_summary !== undefined ? patch.quote_summary : current.quote_summary;
+
   if (sending) {
-    const effectiveAmount = patch.quote_amount !== undefined ? patch.quote_amount : current.quote_amount;
-    const effectiveSummary = patch.quote_summary !== undefined ? patch.quote_summary : current.quote_summary;
     if (effectiveAmount == null) return { ok: false, error: "Set a quote amount before sending." };
     if (!effectiveSummary || !effectiveSummary.trim()) {
       return { ok: false, error: "Add a customer-facing description before sending." };
@@ -214,6 +219,20 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
         to: smsTo,
         error: smsError ?? null,
       }).catch(() => {});
+
+      // Tell the office it's out and the sender that it landed. Deliberately
+      // after the delivery result, so neither message claims a send that failed.
+      await notifyQuoteSent(
+        {
+          id,
+          name: current.name,
+          phone: current.phone,
+          quote_amount: effectiveAmount,
+          job_token: current.job_token,
+        },
+        { name: session.staff.full_name, phone: session.staff.phone, isOwner },
+        r.ok,
+      ).catch(() => {});
     }
 
     revalidatePath(`/crm/quotes/${id}`);

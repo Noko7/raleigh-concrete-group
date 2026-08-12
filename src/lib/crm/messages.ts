@@ -11,6 +11,7 @@ export const MESSAGE_LABELS: Record<string, string> = {
   received: "Request received",
   visit_confirmed: "Quote visit confirmed",
   quote_ready: "Quote sent",
+  quote_sent: "Quote-sent alert",
   approved: "Approval thank-you",
   needs_scheduling: "Approved — needs a date",
   scheduled: "Work day confirmed",
