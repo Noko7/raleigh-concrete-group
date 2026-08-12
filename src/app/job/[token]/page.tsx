@@ -261,6 +261,10 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             amount={quote.quote_amount}
             summary={quote.quote_summary}
             alreadySent={Boolean(quote.quote_sent_at)}
+            // Sent and no answer yet: the crew's job is to wait, not to send it
+            // again, so the card says so instead of offering a button.
+            awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
+            sentAt={quote.quote_sent_at}
             customerFirstName={quote.name.trim().split(/\s+/)[0] || quote.name}
           />
         )}

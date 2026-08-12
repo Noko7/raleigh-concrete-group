@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/actions";
 import type { SaveState } from "@/app/crm/quotes/[id]/types";
 
@@ -19,6 +19,8 @@ export function JobQuote({
   amount,
   summary,
   alreadySent,
+  awaitingReply,
+  sentAt,
   customerFirstName,
 }: {
   id: string;
@@ -26,6 +28,8 @@ export function JobQuote({
   amount: number | null;
   summary: string | null;
   alreadySent: boolean;
+  awaitingReply: boolean;
+  sentAt: string | null;
   customerFirstName: string;
 }) {
   const t = dict(locale);
@@ -44,6 +48,30 @@ export function JobQuote({
   useEffect(() => {
     if (state.ok || state.sent) router.refresh();
   }, [state, router]);
+
+  // The ball is in the customer's court, so there is no button here at all.
+  // Leaving a "Resend" that always refuses would just move the frustration from
+  // the customer's phone to this page; showing when it went and what it said
+  // answers the question that makes people press Send again in the first place.
+  if (awaitingReply) {
+    const when = sentAt
+      ? new Date(sentAt).toLocaleString(locale === "es" ? "es-US" : "en-US", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : null;
+    return (
+      <section className="js-card jq-card jq-waiting">
+        <h2 className="js-title">{t.contractorJob.quoteWaitingTitle}</h2>
+        <p className="js-lead">
+          {fill(t.contractorJob.quoteWaitingLead, { name: customerFirstName })}
+          {amount != null ? ` — $${amount.toLocaleString("en-US")}` : ""}
+        </p>
+        {when && <p className="js-hint">{fill(t.contractorJob.quoteWaitingSent, { when })}</p>}
+        <p className="js-hint">{t.contractorJob.quoteWaitingHint}</p>
+      </section>
+    );
+  }
 
   if (!open) {
     return (
@@ -108,7 +136,9 @@ export function JobQuote({
         </button>
       </form>
 
-      {state.error && !pending && <p className="js-err">{state.error}</p>}
+      {/* A refused duplicate isn't an error - nothing broke and there's nothing
+          to fix, so it reads as a note rather than in red. */}
+      {state.error && !pending && <p className={state.alreadySent ? "js-hint" : "js-err"}>{state.error}</p>}
       {state.sent && !pending && !state.error && (
         <p className={state.smsDelivered ? "js-ok" : "js-err"}>
           {state.smsDelivered ? t.contractorJob.quoteOk : t.contractorJob.quoteFailed}

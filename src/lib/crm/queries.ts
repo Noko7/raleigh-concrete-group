@@ -263,6 +263,19 @@ export async function listMessages(session: Session, quoteId: string): Promise<Q
   return (await res.json()) as QuoteMessage[];
 }
 
+// The most recent attempt of one kind, for deciding whether it's worth sending
+// again. "We already texted them" and "we tried to text them and it bounced"
+// look the same on the quote row; only the log can tell them apart.
+export async function lastMessageOf(session: Session, quoteId: string, kind: string): Promise<QuoteMessage | null> {
+  const res = await pgUser(
+    `quote_messages?quote_id=eq.${encodeURIComponent(quoteId)}&kind=eq.${encodeURIComponent(kind)}` +
+      `&select=*&order=created_at.desc&limit=1`,
+    session.accessToken,
+  );
+  if (!res.ok) return null;
+  return ((await res.json()) as QuoteMessage[])[0] ?? null;
+}
+
 // ── Booking capacity ────────────────────────────────────────────────────────
 // One booked job per day; up to five in-person quote visits per day.
 export const MAX_JOBS_PER_DAY = 1;

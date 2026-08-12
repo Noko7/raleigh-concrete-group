@@ -1605,6 +1605,10 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 /* Quoting and finishing from the job page. Muted borders so the amber schedule
    card stays the loudest thing on screen when a date still needs confirming. */
 .jq-card, .jf-card, .jf-done, .jv-card { border-color: #d1d5db; }
+/* Waiting on the customer: a status, not an action. Muted so it doesn't read as
+   something the crew has failed to do. */
+.jq-waiting { background: #faf8f4; }
+.jq-waiting .js-title { color: #4b5563; }
 .jq-form { display: flex; flex-direction: column; gap: 0.85rem; }
 .jq-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; font-weight: 800; color: #374151; }
 .jq-field input, .jq-field textarea {

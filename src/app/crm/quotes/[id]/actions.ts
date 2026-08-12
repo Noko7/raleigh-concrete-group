@@ -27,6 +27,7 @@ import {
   findVisitConflict,
   getQuote,
   getStaffById,
+  lastMessageOf,
   updateQuote,
   updateQuoteResult,
 } from "@/lib/crm/queries";
@@ -44,7 +45,10 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   if (!current) return { ok: false, error: "You don't have access to this quote." };
 
   const isOwner = session.staff.role === "owner";
-  const sending = String(formData.get("intent") ?? "") === "send";
+  // "resend" is a deliberate second send and only an owner can ask for it; it
+  // otherwise behaves exactly like "send".
+  const intent = String(formData.get("intent") ?? "");
+  const sending = intent === "send" || intent === "resend";
   const patch: Partial<Quote> = {};
   const events: { type: string; meta?: Record<string, unknown> }[] = [];
 
@@ -107,6 +111,32 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     if (effectiveAmount == null) return { ok: false, error: "Set a quote amount before sending." };
     if (!effectiveSummary || !effectiveSummary.trim()) {
       return { ok: false, error: "Add a customer-facing description before sending." };
+    }
+
+    // One quote text, then wait for an answer.
+    //
+    // Nothing visible happens on this page when a text goes out, so the natural
+    // response to uncertainty is to press Send again. Ten identical texts is how
+    // that looks from the customer's phone, and not one of them carries any
+    // information the first didn't. The customer reads it as disorganised at the
+    // exact moment they're deciding whether to hand over thousands of dollars.
+    //
+    // Three things mean the block would be wrong, so each lifts it:
+    //   - they've replied, so this is a revised quote rather than a repeat
+    //   - the last text never left the building, so nothing was delivered
+    //   - an owner deliberately asked to send it again
+    if (current.quote_sent_at && !current.customer_response) {
+      const last = await lastMessageOf(session, id, "quote_ready");
+      // No log row (or the table isn't there yet) is treated as delivered: the
+      // safe default when we can't tell is not to text them twice.
+      const reached = last ? last.ok : true;
+      if (reached && !(intent === "resend" && isOwner)) {
+        return {
+          ok: false,
+          error: `${current.name.trim().split(/\s+/)[0] || "The customer"} was already texted this quote and hasn't replied yet, so it won't send twice. If they say it never arrived, the owner can send it again.`,
+          alreadySent: true,
+        };
+      }
     }
     if (current.status !== "quoted" && patch.status !== "quoted") {
       patch.status = "quoted";

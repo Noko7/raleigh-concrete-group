@@ -13,6 +13,11 @@ type Props = {
   id: string;
   isOwner: boolean;
   customerName: string;
+  // Already texted and no answer yet. The owner can still send it again - a
+  // customer saying "I never got it" is real and somebody has to be able to
+  // act on it - but it becomes a deliberate second send rather than a repeat
+  // of the same click.
+  awaitingReply: boolean;
   contractors: ContractorOption[];
   initial: {
     status: string;
@@ -23,7 +28,7 @@ type Props = {
   };
 };
 
-export function QuoteEditor({ id, isOwner, customerName, contractors, initial }: Props) {
+export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contractors, initial }: Props) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<SaveState, FormData>(saveQuote, { ok: false });
 
@@ -92,7 +97,11 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
           activity logged, and a green "Saved" as if it had worked. The confirm
           panel is only open when sending, so this can't disagree with the
           button the user actually pressed. */}
-      <input type="hidden" name="intent" value={confirming ? "send" : "save"} />
+      {/* Opening the confirm panel on a quote that's already out IS the
+          deliberate act the server asks for, so it sends "resend" rather than
+          bouncing off the duplicate guard and making the owner hunt for a
+          second button. The panel says plainly what that means. */}
+      <input type="hidden" name="intent" value={confirming ? (awaitingReply ? "resend" : "send") : "save"} />
 
       <div className="crm-editor-row">
         <label className="crm-field">
@@ -161,8 +170,14 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
 
       {confirming ? (
         <div className="crm-confirm">
-          <h3>Send this quote to {customerName.split(" ")[0]}?</h3>
-          <p className="crm-muted crm-sm">We&apos;ll text them their branded quote link and mark this Sent.</p>
+          <h3>
+            {awaitingReply ? "Send this quote again" : "Send this quote"} to {customerName.split(" ")[0]}?
+          </h3>
+          <p className="crm-muted crm-sm">
+            {awaitingReply
+              ? "They already have this quote and haven't replied. Sending again puts a second copy on their phone — do it if they say the first never arrived."
+              : "We'll text them their branded quote link and mark this Sent."}
+          </p>
           <div className="crm-confirm-row">
             <span>Price</span>
             <strong>{previewPrice}</strong>
@@ -172,8 +187,10 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
             <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setConfirming(false)} disabled={pending}>
               Cancel
             </button>
-            <button type="submit" name="intent" value="send" className="crm-btn crm-btn-send" disabled={pending}>
-              {pending ? "Sending…" : "Confirm & send"}
+            {/* No name/value: the hidden intent field above is the single source
+                of truth, and a second "intent" here could only disagree with it. */}
+            <button type="submit" className="crm-btn crm-btn-send" disabled={pending}>
+              {pending ? "Sending…" : awaitingReply ? "Send again" : "Confirm & send"}
             </button>
           </div>
           {state.error && !pending && <p className="crm-auth-error crm-confirm-error">{state.error}</p>}
@@ -185,7 +202,7 @@ export function QuoteEditor({ id, isOwner, customerName, contractors, initial }:
               {pending ? "Saving…" : "Save changes"}
             </button>
             <button type="button" className="crm-btn crm-btn-send" onClick={openConfirm} disabled={pending}>
-              Send Quote
+              {awaitingReply ? "Send Quote again" : "Send Quote"}
             </button>
             {state.ok && !state.sent && !pending && !state.error && <span className="crm-saved">Saved</span>}
             {(localErr || state.error) && <span className="crm-auth-error">{localErr || state.error}</span>}

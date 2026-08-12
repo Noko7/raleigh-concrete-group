@@ -343,6 +343,11 @@ const en = {
     visitOther: "Pick a different day or time",
     visitTime: "Time",
     visitNote: "Confirming texts the customer and the crew with the day, time and address.",
+    quoteWaitingTitle: "Quote sent — waiting on the customer",
+    quoteWaitingLead: "{name} has the quote and hasn't replied yet",
+    quoteWaitingSent: "Texted {when}",
+    quoteWaitingHint:
+      "It won't send twice — a second copy would just be the same text again. You'll get a message the moment they approve or decline. If they say it never arrived, ask the office to send it again.",
     quoteTitle: "Quote this job",
     quoteLead: "Set a price and what's included, then we'll text it straight to the customer.",
     quoteOpen: "Quote job",
@@ -728,6 +733,11 @@ const es: typeof en = {
     visitOther: "Elegir otro día u hora",
     visitTime: "Hora",
     visitNote: "Al confirmar le mandamos mensaje al cliente y al equipo con el día, la hora y la dirección.",
+    quoteWaitingTitle: "Cotización enviada — esperando al cliente",
+    quoteWaitingLead: "{name} ya tiene la cotización y todavía no responde",
+    quoteWaitingSent: "Enviada el {when}",
+    quoteWaitingHint:
+      "No se envía dos veces; una segunda copia sería el mismo mensaje otra vez. Te avisamos apenas acepte o rechace. Si dice que nunca le llegó, pídele a la oficina que la mande de nuevo.",
     quoteTitle: "Cotiza este trabajo",
     quoteLead: "Pon el precio y lo que incluye, y se lo enviamos al cliente por mensaje.",
     quoteOpen: "Cotizar trabajo",

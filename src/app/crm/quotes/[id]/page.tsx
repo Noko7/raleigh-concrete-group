@@ -247,6 +247,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             id={quote.id}
             isOwner={isOwner}
             customerName={quote.name}
+            awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
             contractors={contractors.map((c) => ({ id: c.id, label: c.full_name || c.email || "Contractor" }))}
             initial={{
               status: quote.status,
