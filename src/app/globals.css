@@ -1433,7 +1433,11 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cq-eyebrow { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--amber); }
 .cq-title { font-family: var(--font-headline), sans-serif; font-size: 2rem; margin-bottom: 0.5rem; }
 .cq-lead { color: rgba(43, 26, 18, 0.8); margin-bottom: 1.25rem; }
-.cq-price { display: flex; align-items: baseline; justify-content: space-between; background: #fff; border-radius: 0.9rem; padding: 1.1rem 1.25rem; margin-bottom: 1.25rem; border: 2px solid var(--amber); }
+/* flex-wrap so the width:100% price-sub note drops to its own line instead of
+   fighting the label and value for room on the same row - the mobile media
+   query below masks this by switching to a column layout, but the base (i.e.
+   desktop) row needs its own escape hatch. */
+.cq-price { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; background: #fff; border-radius: 0.9rem; padding: 1.1rem 1.25rem; margin-bottom: 1.25rem; border: 2px solid var(--amber); }
 .cq-price-label { font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.06em; color: rgba(43, 26, 18, 0.6); }
 .cq-price-value { font-family: var(--font-headline), sans-serif; font-size: 2.2rem; color: #2b1a12; }
 .cq-meta { display: grid; gap: 0.5rem; margin-bottom: 1.25rem; }
@@ -1453,7 +1457,14 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cq-btn-secondary:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
 .cq-fine { margin-top: 1rem; font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); text-align: center; }
 .cq-price-sub { display: block; width: 100%; font-size: 0.78rem; color: rgba(43, 26, 18, 0.6); }
-.cq-trust { list-style: none; margin: 0 0 1.25rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; }
+/* Column, not a wrapping row: at a row width wide enough to fit two items but
+   not three, one pair shares a flex line while the third sits alone. Flex's
+   default cross-axis stretch then pads the shorter item in that pair up to
+   match its taller sibling's height, and its checkmark drifts off-center as
+   a result - only ever visible at desktop widths, never on a narrow phone
+   where every item is already forced onto its own line. Stacking removes
+   the shared-line case entirely so desktop always matches mobile. */
+.cq-trust { list-style: none; margin: 0 0 1.25rem; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
 .cq-trust li { font-size: 0.82rem; font-weight: 700; color: rgba(43, 26, 18, 0.75); display: flex; align-items: center; gap: 0.35rem; }
 .cq-trust li::before { content: "✓"; color: var(--amber); font-weight: 800; }
 .cq-review { margin: 1.1rem 0 0; padding: 0.9rem 1rem; background: #fff; border-left: 3px solid var(--amber); border-radius: 0.6rem; }
