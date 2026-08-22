@@ -272,9 +272,9 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
           {quote.status === "scheduled" && (
             <div className="crm-card">
               <h2 className="crm-card-title">{t.finish.title}</h2>
-              <p className="crm-muted crm-sm">
+              <p className={quote.confirmed_at ? "crm-muted crm-sm" : "crm-text-danger crm-sm"}>
                 {quote.confirmed_at ? t.finish.confirmed : t.finish.awaitingConfirm}{" "}
-                {t.finish.hint}
+                <span className="crm-muted">{t.finish.hint}</span>
               </p>
               <form action={completeJob}>
                 <input type="hidden" name="id" value={quote.id} />

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { VISIT_TIME_SLOTS } from "@/lib/crm/constants";
+import { TIME_RE } from "@/lib/crm/constants";
 import { STATUSES, type Status } from "@/lib/crm/env";
 import { syncQuoteToCalendar } from "@/lib/crm/gcal";
 import {
@@ -326,9 +326,9 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   const time = String(formData.get("time") ?? "").slice(0, 20);
   if (!id) return { ok: false, error: "Missing job id." };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "Pick a date for the visit." };
-  // Same slot list the public form offers, so a confirmed visit can never land
-  // on a time the business doesn't actually work.
-  if (!VISIT_TIME_SLOTS.includes(time)) return { ok: false, error: "Pick a time for the visit." };
+  // Not held to the public form's fixed slot list - a contractor confirming a
+  // visit needs to fit it around a real day, so any well-formed time is fine.
+  if (!TIME_RE.test(time)) return { ok: false, error: "Pick a time for the visit." };
 
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };

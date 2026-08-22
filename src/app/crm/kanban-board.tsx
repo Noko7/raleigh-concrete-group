@@ -239,7 +239,12 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                               {q.visit_time ? ` ${q.visit_time}` : ""}
                             </span>
                           )}
-                          {q.confirmed_at && <span className="kb-pill kb-pill-confirmed">{t.pipeline.pillConfirmed}</span>}
+                          {q.status === "scheduled" &&
+                            (q.confirmed_at ? (
+                              <span className="kb-pill kb-pill-confirmed">{t.pipeline.pillConfirmed}</span>
+                            ) : (
+                              <span className="kb-pill kb-pill-unconfirmed">{t.pipeline.pillUnconfirmed}</span>
+                            ))}
                           {q.view_count > 0 && (
                             <span className="kb-pill kb-pill-view">
                               {t.pipeline.pillViewed} {q.view_count}x

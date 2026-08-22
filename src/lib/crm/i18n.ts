@@ -88,6 +88,7 @@ const en = {
     pillJob: "Job",
     pillVisit: "Visit",
     pillConfirmed: "Confirmed",
+    pillUnconfirmed: "Not confirmed",
     pillViewed: "Viewed",
     textBtn: "Text",
     deleteLead: "Delete",
@@ -329,6 +330,7 @@ const en = {
     typeInPerson: "In-person quote",
     typeOnline: "Online quote",
     notScheduled: "No date set yet",
+    jobNotConfirmed: "Customer hasn't confirmed yet",
     noVisitNeeded: "No visit needed - quote from the photos",
     visitTitle: "Need to see it in person?",
     visitLead:
@@ -478,6 +480,7 @@ const es: typeof en = {
     pillJob: "Trabajo",
     pillVisit: "Visita",
     pillConfirmed: "Confirmado",
+    pillUnconfirmed: "Sin confirmar",
     pillViewed: "Visto",
     textBtn: "Mensaje",
     deleteLead: "Eliminar",
@@ -719,6 +722,7 @@ const es: typeof en = {
     typeInPerson: "Cotización en persona",
     typeOnline: "Cotización en línea",
     notScheduled: "Todavía sin fecha",
+    jobNotConfirmed: "El cliente todavía no ha confirmado",
     noVisitNeeded: "No hace falta visita - cotiza con las fotos",
     visitTitle: "¿Necesitas verlo en persona?",
     visitLead:

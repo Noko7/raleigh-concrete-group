@@ -2,9 +2,9 @@
 
 import { useActionState, useState } from "react";
 
+import { to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
 import { setJobDate } from "@/app/crm/quotes/[id]/actions";
-import { START_TIMES } from "@/app/crm/quotes/[id]/schedule-card";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
 
 // Scheduling from the crew's own job page. Same server action the CRM uses, so
@@ -68,13 +68,11 @@ export function JobSchedule({
 
       <label className="js-time">
         <span>{t.contractorJob.schedStartTime}</span>
-        <select value={time} onChange={(e) => setTime(e.target.value)}>
-          {START_TIMES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <input
+          type="time"
+          value={to24Hour(time)}
+          onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
+        />
       </label>
 
       {choices.length > 0 && (

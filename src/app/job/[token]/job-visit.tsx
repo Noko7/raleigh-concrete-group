@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 
-import { VISIT_TIME_SLOTS } from "@/lib/crm/constants";
+import { TIME_RE, to12Hour, to24Hour, VISIT_TIME_SLOTS } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
 import { confirmVisit } from "@/app/crm/quotes/[id]/actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
@@ -45,9 +45,10 @@ export function JobVisit({
   const t = dict(locale);
   const [state, formAction, pending] = useActionState<ScheduleState, FormData>(confirmVisit, { ok: false });
 
-  // The customer's own time if it's still one we offer, otherwise the first
-  // slot - a time slot that no longer exists would be rejected on submit.
-  const fallbackTime = requestedTime && VISIT_TIME_SLOTS.includes(requestedTime) ? requestedTime : VISIT_TIME_SLOTS[0];
+  // The customer's own offered time if it's a real one, otherwise the first
+  // public slot as a sane starting point - the contractor isn't limited to
+  // this list themselves, this is only what the field opens on.
+  const fallbackTime = requestedTime && TIME_RE.test(requestedTime) ? requestedTime : VISIT_TIME_SLOTS[0];
   const [time, setTime] = useState(fallbackTime);
 
   // Only an online request arrives with something to accept.
@@ -58,13 +59,15 @@ export function JobVisit({
       <input type="hidden" name="id" value={id} />
       <label className="js-time">
         <span>{t.contractorJob.visitTime}</span>
-        <select value={time} onChange={(e) => setTime(e.target.value)} name="time">
-          {VISIT_TIME_SLOTS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <input
+          type="time"
+          value={to24Hour(time, "08:00")}
+          onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
+        />
+        {/* confirmVisit reads FormData directly rather than component state,
+            so the picked time still needs its own hidden field with the same
+            name the old <select> carried. */}
+        <input type="hidden" name="time" value={time} />
       </label>
       <input type="date" name="date" className="js-date" min={minDate} defaultValue={requestedDate ?? ""} required />
       <button type="submit" className="js-confirm" disabled={pending}>

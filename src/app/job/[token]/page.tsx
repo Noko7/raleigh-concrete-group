@@ -85,15 +85,26 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // the same way as a booking is a date somebody drives to.
   const isInPerson = quote.quote_type === "inperson";
   const when = prettyJob
-    ? { label: t.contractorJob.scheduledJob, day: prettyJob, time: quote.scheduled_time, pending: false }
+    ? {
+        label: t.contractorJob.scheduledJob,
+        day: prettyJob,
+        time: quote.scheduled_time,
+        pending: false,
+        // A booked work day the customer hasn't confirmed yet (the 2-day
+        // reminder link) is the one date on this page still at risk of
+        // falling through, so it gets called out in red right where the
+        // crew's eye already lands.
+        unconfirmed: !quote.confirmed_at,
+      }
     : prettyVisit
-      ? { label: t.contractorJob.quoteVisit, day: prettyVisit, time: quote.visit_time, pending: false }
+      ? { label: t.contractorJob.quoteVisit, day: prettyVisit, time: quote.visit_time, pending: false, unconfirmed: false }
       : requestedVisit
         ? {
             label: t.contractorJob.visitAsked,
             day: fmtDay(requestedVisit),
             time: quote.visit_time,
             pending: true,
+            unconfirmed: false,
           }
         : null;
 
@@ -127,6 +138,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               <strong className="job-when-day">{when.day}</strong>
               {when.time && <strong className="job-when-time">{when.time}</strong>}
               {when.pending && <span className="job-when-tag">{t.contractorJob.visitNotConfirmed}</span>}
+              {when.unconfirmed && <span className="job-when-tag job-when-tag-danger">{t.contractorJob.jobNotConfirmed}</span>}
             </div>
           ) : (
             // "No date set yet" on an online quote reads like something is

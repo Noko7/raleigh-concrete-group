@@ -1387,6 +1387,9 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .crm-editor-foot { display: flex; align-items: center; gap: 0.9rem; margin-top: 0.4rem; }
 .crm-saved { color: #4ade80; font-weight: 700; font-size: 0.85rem; }
 .crm-auth-error { color: #f87171; font-weight: 600; font-size: 0.85rem; }
+/* A job that's on the calendar but the customer hasn't confirmed - the same
+   red used everywhere else on the dark CRM theme (.crm-auth-error, .kb-toast). */
+.crm-text-danger { color: #f87171; font-weight: 700; }
 
 .crm-copy { margin-top: 0.8rem; }
 .crm-copy-label { display: block; font-size: 0.78rem; font-weight: 700; color: var(--crm-muted); margin-bottom: 0.3rem; }
@@ -1542,18 +1545,30 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .job-type-online { background: var(--charcoal-end); color: var(--ivory); }
 .job-when { display: flex; flex-direction: column; gap: 0.1rem; }
 .job-when-label { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: #6b7280; }
-.job-when-day { font-size: 1.6rem; font-weight: 900; line-height: 1.15; color: var(--charcoal-start); letter-spacing: -0.01em; }
-.job-when-time { font-size: 1.6rem; font-weight: 900; line-height: 1.15; color: var(--amber); letter-spacing: -0.01em; }
+/* Same display face the rest of the site uses for its big numbers (.crm-stat
+   strong, .cq-price-value): Bebas Neue reads as bold on its own weight, which
+   is what actually made these two facts hard to pick out before - plain body
+   text at a big size looks large, not bold. amber-dark over amber on the time
+   for a touch more contrast reading it outdoors. */
+.job-when-day, .job-when-time {
+  font-family: var(--font-headline), sans-serif; font-size: 1.9rem; font-weight: 700;
+  line-height: 1.05; letter-spacing: 0.01em;
+}
+.job-when-day { color: var(--charcoal-start); }
+.job-when-time { color: var(--amber-dark); }
 .job-when-none { font-size: 1.15rem; font-weight: 800; color: #6b7280; }
 /* An offered slot on an online request, not a booking. Dimmed and stripped of
    the amber a confirmed time gets: same styling would read as "be there". */
 .job-when-pending .job-when-day,
-.job-when-pending .job-when-time { color: #9ca3af; font-size: 1.35rem; }
+.job-when-pending .job-when-time { color: #9ca3af; font-size: 1.5rem; }
 .job-when-tag {
   align-self: flex-start; margin-top: 0.3rem; background: var(--charcoal-end); color: var(--ivory);
   font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.07em;
   border-radius: 999px; padding: 0.25rem 0.6rem; line-height: 1;
 }
+/* A booked work day the customer hasn't confirmed yet - red everywhere else on
+   the site means the same thing, so it does here too. */
+.job-when-tag-danger { background: #b91c1c; color: #fff; }
 
 .job-meta { display: grid; gap: 0; margin-bottom: 1.4rem; }
 .job-meta > div { display: grid; grid-template-columns: 132px 1fr; gap: 0.5rem; font-size: 1rem; padding: 0.6rem 0; border-bottom: 1px solid #e5e7eb; }
@@ -1592,13 +1607,17 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .js-booked { color: var(--amber-dark); }
 .js-hint { color: #6b7280; font-size: 0.85rem; }
 .js-time { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.8rem; font-size: 0.85rem; font-weight: 800; color: #374151; }
-.js-time select { padding: 0.65rem 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; font-weight: 600; background: #fff; min-height: 48px; }
+.js-time select, .js-time input[type="time"] { padding: 0.65rem 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; font-weight: 600; background: #fff; min-height: 48px; }
 .js-choices { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 0.9rem; }
 .js-choice { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; width: 100%; text-align: left; background: #fff; border: 2px solid var(--amber); border-radius: 0.7rem; padding: 0.85rem 1rem; cursor: pointer; font: inherit; min-height: 56px; }
 .js-choice:active { background: rgba(194, 104, 42, 0.08); }
 .js-choice:disabled { opacity: 0.55; }
 .js-choice-date { font-weight: 800; color: #1f2328; }
 .js-choice-cta { flex: none; background: var(--amber); color: #fff; font-weight: 800; font-size: 0.8rem; border-radius: 999px; padding: 0.45rem 0.85rem; white-space: nowrap; }
+/* Was sitting flush against whatever came before it (the confirm button on an
+   offered slot, or the day-choice buttons) - close enough to read as part of
+   that element instead of its own, separate option. */
+.js-other { margin-top: 1rem; }
 .js-other > summary { cursor: pointer; color: #6b7280; font-size: 0.88rem; font-weight: 700; }
 .js-other-form { display: flex; gap: 0.55rem; margin-top: 0.7rem; flex-wrap: wrap; }
 .js-date { flex: 1; min-width: 150px; padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; min-height: 48px; }
@@ -1704,6 +1723,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .kb-pill-assigned { background: rgba(194, 104, 42, 0.24); color: #f0b489; }
 .kb-pill-date { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
 .kb-pill-confirmed { background: rgba(34, 197, 94, 0.22); color: #4ade80; }
+.kb-pill-unconfirmed { background: rgba(248, 113, 113, 0.22); color: #f87171; }
 .kb-quick { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
 .kb-quick-btn { flex: 1; text-align: center; text-decoration: none; font-size: 0.78rem; font-weight: 800; padding: 0.42rem; border-radius: 0.45rem; background: rgba(255, 255, 255, 0.09); border: 1px solid var(--crm-border); color: var(--crm-text); }
 .kb-quick-btn:hover { background: var(--amber); border-color: var(--amber); color: #fff; }

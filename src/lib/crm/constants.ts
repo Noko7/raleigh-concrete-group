@@ -35,9 +35,37 @@ export const LEAD_TIME_DAYS = 7;
 // truck, so it can happen sooner.
 export const VISIT_LEAD_DAYS = 4;
 
-// The visit slots offered on the public quote form. Shared with the server so a
-// tampered form can't book "3:00 AM"; both sides check the same list.
+// The visit slots offered on the PUBLIC quote form only. Shared with the
+// server so a tampered form can't book "3:00 AM"; both sides check the same
+// list. A contractor confirming a visit from the job page isn't held to this
+// list - they need to fit a visit around a real day, not five fixed slots -
+// so confirmVisit validates against TIME_RE instead.
 export const VISIT_TIME_SLOTS = ["8:00 AM", "10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM"];
+
+// The shape every stored time string is in: "H:MM AM/PM", e.g. "9:00 AM" or
+// "2:15 PM". Not tied to any particular list of slots - this is what
+// scheduled_time/visit_time actually validate against once a contractor is
+// free to pick anything, and what SMS/CRM/calendar code already assumes.
+export const TIME_RE = /^\d{1,2}:\d{2}\s?(AM|PM)$/i;
+
+// Converts a native <input type="time"> value (24h "HH:MM") to the "H:MM
+// AM/PM" string above.
+export function to12Hour(hhmm: string): string {
+  const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return hhmm;
+  const h24 = Number(m[1]);
+  const ap = h24 >= 12 ? "PM" : "AM";
+  const h = h24 % 12 || 12;
+  return `${h}:${m[2]} ${ap}`;
+}
+// The reverse, for handing that same input its current value.
+export function to24Hour(t: string, fallback = "09:00"): string {
+  const m = t.trim().match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
+  if (!m) return fallback;
+  let h = Number(m[1]) % 12;
+  if (m[3].toUpperCase() === "PM") h += 12;
+  return `${String(h).padStart(2, "0")}:${m[2]}`;
+}
 
 // visit_date carries two different meanings and quote_type is what tells them
 // apart. Everything that shows a date to a person goes through one of these two
