@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { coreServices, isCityServicePair, locationKeys } from "./src/lib/site-data";
+
 const NOINDEX = { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" };
 
 // Baseline hardening applied to every response.
@@ -15,8 +17,38 @@ const SECURITY_HEADERS = [
 // leak them to third parties via the Referer header.
 const NO_REFERRER = { key: "Referrer-Policy", value: "no-referrer" };
 
+// ── Retired city+service URLs ────────────────────────────────────────────────
+// Every city+service pair with no hand-written copy in
+// src/lib/site-data.ts's `cityServiceLocalContent` gets a permanent (301)
+// redirect to its service page, so Google transfers the signal instead of
+// just losing the URL. These pairs used to be generated from a sentence
+// template with the city name swapped in, which is why Search Console
+// reported "Duplicate, Google chose different canonical" on
+// /chapel-hill/stamped-decorative-concrete and left most of the sitemap at
+// "Discovered - currently not indexed": there wasn't enough unique content
+// per page to justify the crawl.
+//
+// Raleigh's four bespoke pages (/raleigh/concrete-driveways, etc.) are NOT
+// redirected - they're real pages Search Console already prefers and
+// docs/seo.md targets directly.
+//
+// Derived from site-data so a pair can never be un-published without also
+// gaining a redirect, and never gain a redirect while it still has a page.
+const RETIRED_LOCATION_REDIRECTS = locationKeys.flatMap((location) =>
+  coreServices
+    .filter((s) => !isCityServicePair(location, s.slug))
+    .map((s) => ({
+      source: `/${location}/${s.slug}`,
+      destination: `/services/${s.slug}`,
+      permanent: true,
+    })),
+);
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  async redirects() {
+    return RETIRED_LOCATION_REDIRECTS;
+  },
   images: {
     // Serve modern formats (AVIF first, WebP fallback). Originals stay lossless
     // PNGs; Vercel re-encodes on the fly, so visitors download much smaller

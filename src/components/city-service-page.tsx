@@ -10,7 +10,8 @@ import { SiteHeader } from "@/components/site-header";
 import { breadcrumbSchema, faqSchema, serviceSchema } from "@/lib/seo";
 import {
   businessName,
-  cityServiceSlugs,
+  cityServicesFor,
+  coreServices,
   galleryImages,
   getCityServiceContent,
   getService,
@@ -30,10 +31,19 @@ export function CityServicePage({
   if (!content) return null;
   const { service, city, neighborhoods, paragraphs, projectExample, faqs } = content;
 
-  const otherCoreInCity = cityServiceSlugs
+  // Only the sibling services that actually have a hand-written page in THIS
+  // city. Linking at a pair with no content would point internal link equity
+  // straight at a 301, and used to be how the templated matrix got crawled in
+  // the first place.
+  const otherCoreInCity = cityServicesFor(locationKey)
     .filter((s) => s !== slug)
     .map((s) => getService(s))
     .filter((s): s is NonNullable<typeof s> => Boolean(s));
+
+  // Everything else we do, pointed at the city-neutral service pages.
+  const otherServicesElsewhere = coreServices.filter(
+    (s) => s.slug !== slug && !otherCoreInCity.some((o) => o.slug === s.slug),
+  );
 
   return (
     <>
@@ -201,26 +211,54 @@ export function CityServicePage({
 
         {/* Cross-links: other services in this city */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8">
-          <h2 className="mb-6 font-headline text-3xl text-ivory">
-            More Concrete Services in {city}
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {otherCoreInCity.map((other) => (
-              <Link
-                key={other.slug}
-                href={`/${locationKey}/${other.slug}`}
-                className="group rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:-translate-y-1 hover:border-amber-accent/50 hover:bg-white/10"
-              >
-                <h3 className="mb-2 font-headline text-2xl text-ivory">
-                  {other.name} in {city}
-                </h3>
-                <p className="text-sm leading-relaxed text-slate-300">{other.blurb}</p>
-                <span className="mt-3 inline-block text-sm font-bold uppercase tracking-[0.12em] text-amber-accent opacity-70 transition group-hover:opacity-100">
-                  View Details →
-                </span>
-              </Link>
-            ))}
-          </div>
+          {otherCoreInCity.length > 0 && (
+            <>
+              <h2 className="mb-6 font-headline text-3xl text-ivory">
+                More Concrete Services in {city}
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {otherCoreInCity.map((other) => (
+                  <Link
+                    key={other.slug}
+                    href={`/${locationKey}/${other.slug}`}
+                    className="group rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:-translate-y-1 hover:border-amber-accent/50 hover:bg-white/10"
+                  >
+                    <h3 className="mb-2 font-headline text-2xl text-ivory">
+                      {other.name} in {city}
+                    </h3>
+                    <p className="text-sm leading-relaxed text-slate-300">{other.blurb}</p>
+                    <span className="mt-3 inline-block text-sm font-bold uppercase tracking-[0.12em] text-amber-accent opacity-70 transition group-hover:opacity-100">
+                      View Details →
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
+
+          {otherServicesElsewhere.length > 0 && (
+            <>
+              <h2 className="mb-6 mt-10 font-headline text-3xl text-ivory">
+                Everything Else We Build
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {otherServicesElsewhere.map((other) => (
+                  <Link
+                    key={other.slug}
+                    href={`/services/${other.slug}`}
+                    className="group rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:-translate-y-1 hover:border-amber-accent/50 hover:bg-white/10"
+                  >
+                    <h3 className="mb-2 font-headline text-2xl text-ivory">{other.name}</h3>
+                    <p className="text-sm leading-relaxed text-slate-300">{other.blurb}</p>
+                    <span className="mt-3 inline-block text-sm font-bold uppercase tracking-[0.12em] text-amber-accent opacity-70 transition group-hover:opacity-100">
+                      View Details →
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
+
           <div className="mt-6 flex flex-wrap gap-4 text-sm font-bold uppercase tracking-[0.12em] text-amber-accent">
             <Link href={`/${locationKey}`} className="transition hover:text-ivory">
               All concrete services in {city} →
