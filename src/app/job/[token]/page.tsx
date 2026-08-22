@@ -93,8 +93,9 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         // A booked work day the customer hasn't confirmed yet (the 2-day
         // reminder link) is the one date on this page still at risk of
         // falling through, so it gets called out in red right where the
-        // crew's eye already lands.
-        unconfirmed: !quote.confirmed_at,
+        // crew's eye already lands. Only while it's still ahead of them:
+        // on a finished job nobody needs chasing for a confirmation.
+        unconfirmed: quote.status === "scheduled" && !quote.confirmed_at,
       }
     : prettyVisit
       ? { label: t.contractorJob.quoteVisit, day: prettyVisit, time: quote.visit_time, pending: false, unconfirmed: false }

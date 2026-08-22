@@ -323,12 +323,16 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
 
   const id = String(formData.get("id") ?? "");
   const date = String(formData.get("date") ?? "").slice(0, 10);
-  const time = String(formData.get("time") ?? "").slice(0, 20);
+  const rawTime = String(formData.get("time") ?? "").slice(0, 20);
   if (!id) return { ok: false, error: "Missing job id." };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "Pick a date for the visit." };
   // Not held to the public form's fixed slot list - a contractor confirming a
   // visit needs to fit it around a real day, so any well-formed time is fine.
-  if (!TIME_RE.test(time)) return { ok: false, error: "Pick a time for the visit." };
+  // Normalised the same way confirmSchedule does its start time: the fixed
+  // slot list used to guarantee one canonical spelling, and without it "9:00
+  // am" and "9:00 AM" would be two different strings in the same column.
+  if (!TIME_RE.test(rawTime)) return { ok: false, error: "Pick a time for the visit." };
+  const time = rawTime.trim().toUpperCase().replace(/\s+/, " ");
 
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
@@ -351,6 +355,10 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
     quote_type: "inperson",
     visit_date: date,
     visit_time: time,
+    // A confirmed (or moved) visit gets its own night-before reminders, the
+    // same way confirmSchedule re-arms the crew countdown for a work day.
+    visit_reminder_sent_at: null,
+    visit_crew_reminded_at: null,
   });
   if (!updated) return { ok: false, error: error ?? "Could not confirm that visit." };
 

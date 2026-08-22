@@ -524,15 +524,31 @@ export async function markCrewReminded(quote: Quote, stage: string): Promise<voi
   }).catch(() => {});
 }
 
+// How far back a reminder will chase something. Both nudges below are for
+// work that is still live, and neither should reach into the archive: a lead
+// that has sat untouched for two months is a pipeline problem to clean up, not
+// something to text the crew about, and a customer who never answered a quote
+// from months ago should not suddenly be told it is "waiting".
+//
+// It also stops the first run after deploy being a blast. Every qualifying row
+// in the table is unreminded on day one, so without a floor the first cron
+// would text every historical lead and every old unanswered quote at once.
+export const REMINDER_MAX_AGE_DAYS = 14;
+
+function ageWindow(column: string, hours: number): string {
+  const newest = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const oldest = new Date(Date.now() - REMINDER_MAX_AGE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  return `&${column}=lt.${encodeURIComponent(newest)}&${column}=gt.${encodeURIComponent(oldest)}`;
+}
+
 // ── Stale-lead nudge (cron) ──────────────────────────────────────────────────
-// New leads nobody has quoted or scheduled a visit for, more than `hours` old.
-// status stays "new" until a quote is sent, regardless of quote_type or
-// whether a visit was confirmed - so this is exactly the app's own definition
-// of "untouched".
+// New leads nobody has quoted, more than `hours` old (and inside the window
+// above). status stays "new" until a quote is sent, regardless of quote_type
+// or whether a visit was confirmed - so this is exactly the app's own
+// definition of "nothing has gone out yet".
 export async function listStaleLeads(hours: number): Promise<Quote[]> {
-  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
   const res = await pgAdmin(
-    `quote_requests?status=eq.new&created_at=lt.${encodeURIComponent(cutoff)}` +
+    `quote_requests?status=eq.new${ageWindow("created_at", hours)}` +
       `&stale_lead_reminded_at=is.null&archived_at=is.null&select=*`,
   );
   if (!res.ok) return [];
@@ -549,11 +565,15 @@ export async function markStaleLeadReminded(id: string): Promise<void> {
 
 // ── Quote-visit night-before reminders (cron) ───────────────────────────────
 // Confirmed in-person visits landing on `date` - quote_type must be inperson,
-// so an online row's unconfirmed fallback slot never counts here.
+// so an online row's unconfirmed fallback slot never counts here. Lost leads
+// are excluded for the same reason contractorCommitments excludes them: the
+// visit isn't happening, and "we'll be out tomorrow" to someone who already
+// said no is worse than saying nothing.
 export async function listVisitsOn(date: string): Promise<Quote[]> {
   if (!ISO_DATE.test(date)) return [];
   const res = await pgAdmin(
-    `quote_requests?quote_type=eq.inperson&visit_date=eq.${date}&archived_at=is.null&select=*`,
+    `quote_requests?quote_type=eq.inperson&visit_date=eq.${date}` +
+      `&status=neq.lost&archived_at=is.null&select=*`,
   );
   if (!res.ok) return [];
   return (await res.json()) as Quote[];
@@ -576,12 +596,11 @@ export async function markVisitCrewReminded(id: string): Promise<void> {
 }
 
 // ── 48h no-response follow-up (cron) ────────────────────────────────────────
-// A quote that's been sent, sat unanswered for `hours`, and hasn't had a
-// follow-up yet.
+// A quote that's been sent, sat unanswered for `hours` (and is still inside
+// the window above), and hasn't had a follow-up yet.
 export async function listUnansweredQuotes(hours: number): Promise<Quote[]> {
-  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
   const res = await pgAdmin(
-    `quote_requests?status=eq.quoted&quote_sent_at=lt.${encodeURIComponent(cutoff)}` +
+    `quote_requests?status=eq.quoted${ageWindow("quote_sent_at", hours)}` +
       `&customer_response=is.null&quote_followup_sent_at=is.null&archived_at=is.null&select=*`,
   );
   if (!res.ok) return [];
@@ -856,6 +875,11 @@ export async function rescheduleVisit(
   const { quote: updated, error } = await updateQuoteResult(session, id, {
     visit_date: date,
     visit_time: cleanTime || null,
+    // Re-arm the night-before reminders for the new day, the same way
+    // confirmSchedule re-arms the crew countdown. Without this a visit moved
+    // after its reminder had gone out would never be reminded again.
+    visit_reminder_sent_at: null,
+    visit_crew_reminded_at: null,
   });
   if (!updated) return { ok: false, error: error ?? "Could not move that visit." };
 
@@ -885,7 +909,7 @@ export async function clearAppointment(
           reminder_sent_at: null,
           status: current.status === "scheduled" ? "approved" : current.status,
         }
-      : { visit_date: null, visit_time: null };
+      : { visit_date: null, visit_time: null, visit_reminder_sent_at: null, visit_crew_reminded_at: null };
 
   const { quote: updated, error } = await updateQuoteResult(session, id, patch);
   if (!updated) return { ok: false, error: error ?? "Could not remove that appointment." };

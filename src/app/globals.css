@@ -1591,7 +1591,9 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .job-wrap { padding: 0.75rem; }
   .job-card { padding: 1.2rem 1rem; }
   .job-key { padding: 0.95rem 1rem; }
-  .job-when-day, .job-when-time { font-size: 1.45rem; }
+  /* Bebas is condensed, so it needs more size than the old body face did to
+     read at the same weight on a phone held at arm's length. */
+  .job-when-day, .job-when-time { font-size: 1.75rem; }
   .job-meta > div { grid-template-columns: 1fr; gap: 0.15rem; padding: 0.65rem 0; }
   .job-meta dt { font-size: 0.72rem; }
   .job-meta dd { font-size: 1.12rem; font-weight: 700; }
