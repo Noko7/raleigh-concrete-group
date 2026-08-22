@@ -62,6 +62,13 @@ export type Quote = {
   paid_at: string | null;
   payment_requested_at: string | null;
   archived_at: string | null;
+  // 12h nudge: a new lead nobody has quoted or scheduled a visit for.
+  stale_lead_reminded_at: string | null;
+  // Night-before reminders for an in-person quote VISIT (not the booked work day).
+  visit_reminder_sent_at: string | null;
+  visit_crew_reminded_at: string | null;
+  // 48h nudge: a sent quote nobody has accepted or declined.
+  quote_followup_sent_at: string | null;
 };
 
 export type QuoteEvent = {

@@ -107,6 +107,21 @@ export async function updateQuote(session: Session, id: string, patch: Partial<Q
   return (await updateQuoteResult(session, id, patch)).quote;
 }
 
+// A lead a staff member logs themselves - a customer who called in - rather
+// than one that arrived through the public quote form. Runs as the signed-in
+// user (RLS), not the service role; public_token/job_token come back from the
+// row's own column defaults, same as every other insert into this table.
+export async function insertQuote(session: Session, row: Partial<Quote>): Promise<Quote | null> {
+  const res = await pgUser("quote_requests", session.accessToken, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) return null;
+  const rows = (await res.json()) as Quote[];
+  return rows[0] ?? null;
+}
+
 // id → display name for showing assignees without a PostgREST join.
 export function staffNameMap(staff: Staff[]): Map<string, string> {
   return new Map(staff.map((s) => [s.id, s.full_name || s.email || "Staff"]));
@@ -507,6 +522,78 @@ export async function markCrewReminded(quote: Quote, stage: string): Promise<voi
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ crew_reminders: [...already, stage] }),
   }).catch(() => {});
+}
+
+// ── Stale-lead nudge (cron) ──────────────────────────────────────────────────
+// New leads nobody has quoted or scheduled a visit for, more than `hours` old.
+// status stays "new" until a quote is sent, regardless of quote_type or
+// whether a visit was confirmed - so this is exactly the app's own definition
+// of "untouched".
+export async function listStaleLeads(hours: number): Promise<Quote[]> {
+  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const res = await pgAdmin(
+    `quote_requests?status=eq.new&created_at=lt.${encodeURIComponent(cutoff)}` +
+      `&stale_lead_reminded_at=is.null&archived_at=is.null&select=*`,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as Quote[];
+}
+
+export async function markStaleLeadReminded(id: string): Promise<void> {
+  await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ stale_lead_reminded_at: new Date().toISOString() }),
+  });
+}
+
+// ── Quote-visit night-before reminders (cron) ───────────────────────────────
+// Confirmed in-person visits landing on `date` - quote_type must be inperson,
+// so an online row's unconfirmed fallback slot never counts here.
+export async function listVisitsOn(date: string): Promise<Quote[]> {
+  if (!ISO_DATE.test(date)) return [];
+  const res = await pgAdmin(
+    `quote_requests?quote_type=eq.inperson&visit_date=eq.${date}&archived_at=is.null&select=*`,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as Quote[];
+}
+
+export async function markVisitReminderSent(id: string): Promise<void> {
+  await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ visit_reminder_sent_at: new Date().toISOString() }),
+  });
+}
+
+export async function markVisitCrewReminded(id: string): Promise<void> {
+  await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ visit_crew_reminded_at: new Date().toISOString() }),
+  });
+}
+
+// ── 48h no-response follow-up (cron) ────────────────────────────────────────
+// A quote that's been sent, sat unanswered for `hours`, and hasn't had a
+// follow-up yet.
+export async function listUnansweredQuotes(hours: number): Promise<Quote[]> {
+  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const res = await pgAdmin(
+    `quote_requests?status=eq.quoted&quote_sent_at=lt.${encodeURIComponent(cutoff)}` +
+      `&customer_response=is.null&quote_followup_sent_at=is.null&archived_at=is.null&select=*`,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as Quote[];
+}
+
+export async function markQuoteFollowupSent(id: string): Promise<void> {
+  await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ quote_followup_sent_at: new Date().toISOString() }),
+  });
 }
 
 // Activity-log entry written by automatic/server-only processes (no session).

@@ -213,10 +213,17 @@ Customer-facing text settings:
 - `OWNER_NAME` *(optional)* — first name used to introduce the business in the **first** text a customer gets (default `Noah`), e.g. "this is Noah with Raleigh Concrete Group". Every later message speaks as the business, so a name here doesn't tie the whole thread to one person.
 - `GOOGLE_REVIEW_URL` *(optional)* — your Google review link; included in the post-job thank-you text. If unset, the thank-you still sends without a link.
 
-**2-day confirmation reminder (Vercel Cron)**
-A daily cron texts customers a confirm link about two days before their booked job. `vercel.json` already declares the schedule (`/api/cron/reminders`, 14:00 UTC). Add a `CRON_SECRET` env var in Vercel — Vercel sends it as a Bearer token and the endpoint rejects anything else. Confirming flips the job to **Confirmed**; "need to reschedule" texts the owner + contractor.
+**Daily reminders (Vercel Cron)**
+Two daily crons, both declared in `vercel.json` and both free on the Hobby plan (it allows up to two cron jobs, each once a day). Both share the same `CRON_SECRET` env var in Vercel — sent as a Bearer token, and the endpoints reject anything else.
+
+- `/api/cron/reminders` (14:00 UTC, ~10am ET) — four jobs: the 2-day customer confirmation text for a booked job; the crew countdown (3 days out, day before, morning of); a nudge to the assigned contractor (+ owner) about a lead nobody has quoted or scheduled a visit for, 12+ hours old; and a follow-up text to a customer who hasn't accepted or declined a sent quote within 48 hours. Confirming a job flips it to **Confirmed**; "need to reschedule" texts the owner + contractor.
+- `/api/cron/visit-reminders` (22:00 UTC, ~6pm ET) — kept separate because it needs an evening run time: texts both the customer and the assigned contractor (with the address) about tomorrow's in-person quote visit.
+
+Since both crons only run once a day, a 12h or 48h threshold can be noticed up to ~24h late — an acceptable tradeoff for staying on the free plan. Run `supabase/hourly-reminders.sql` before deploying this — it adds the tracking columns (`stale_lead_reminded_at`, `visit_reminder_sent_at`, `visit_crew_reminded_at`, `quote_followup_sent_at`) each new job uses to avoid sending the same reminder twice.
 
 > If you also send texts from a Make.com scenario, disable that scenario (or the SMS step) to avoid sending duplicate messages, since the app now texts directly through Quo.
+
+> GitHub's schedule trigger is best-effort (runs can lag a few minutes) and gets disabled automatically after 60 days of no repository activity — any push re-enables it. Fine for these reminders.
 
 **Google Calendar invites (optional)**
 When a job is booked (customer accepts) or you assign a contractor to a dated job/visit, the app

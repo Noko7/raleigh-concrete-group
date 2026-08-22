@@ -947,6 +947,100 @@ export async function notifyCrewReminder(
   }).catch(() => null);
 }
 
+// ── 12. Stale lead: nobody has quoted or scheduled a visit in 12h ──────────
+export function staleLeadMessage(q: QuoteInfo, contractorName?: string | null): string {
+  const greeting = contractorName?.trim() ? `Hi ${firstName(contractorName)},` : "Hi,";
+  return text([
+    "LEAD NEEDS ATTENTION",
+    "",
+    greeting,
+    "this lead hasn't been quoted or had a visit scheduled, and it's been over 12 hours:",
+    "",
+    customerBrief(q),
+    "",
+    "Send a quote or confirm a visit as soon as you can.",
+    "",
+    q.job_token ? jobLink(q.job_token) : null,
+  ]);
+}
+
+export async function notifyStaleLead(
+  contractorPhone: string | null | undefined,
+  q: QuoteInfo,
+  contractorName?: string | null,
+): Promise<void> {
+  const msg = staleLeadMessage(q, contractorName);
+  await alertOwner(msg, contractorPhone, { quoteId: q.id, kind: "stale_lead" });
+  if (contractorPhone) {
+    await sendSms(contractorPhone, msg, { quoteId: q.id, kind: "stale_lead", role: "crew" }).catch(() => {});
+  }
+}
+
+// ── 13. Quote visit, night before: customer + contractor ───────────────────
+// The 2-day reminder above (notifyReminder) is for a booked WORK day. This is
+// the equivalent for the free in-person quote VISIT - one reminder, the night
+// before, since a visit is an hour, not a crew and a truck.
+export async function notifyVisitReminder(q: QuoteInfo): Promise<SendResult> {
+  const when = `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`;
+  return sendSmsResult(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      `this is ${BUSINESS}. Just a reminder - we'll be out tomorrow for your free quote visit:`,
+      "",
+      when,
+      "",
+      q.address?.trim() || null,
+      "",
+      `See you then! Call or text ${phoneDisplay} if anything changes.`,
+    ]),
+    { quoteId: q.id, kind: "visit_reminder", role: "customer" },
+  );
+}
+
+export async function notifyVisitReminderCrew(
+  contractorPhone: string | null | undefined,
+  q: QuoteInfo,
+  contractorName?: string | null,
+): Promise<SendResult | null> {
+  if (!contractorPhone) return null;
+  const when = `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`;
+  const greeting = contractorName?.trim() ? `Hi ${firstName(contractorName)},` : "Hi,";
+  return sendSmsResult(
+    contractorPhone,
+    text([
+      "QUOTE VISIT TOMORROW",
+      "",
+      greeting,
+      "you have a quote visit tomorrow:",
+      "",
+      ...block("When:", when),
+      customerBrief(q),
+      "",
+      `Can't make it? Call ${CALL_NUMBER} as soon as you know.`,
+      "",
+      q.job_token ? jobLink(q.job_token) : null,
+    ]),
+    { quoteId: q.id, kind: "visit_reminder", role: "crew" },
+  ).catch(() => null);
+}
+
+// ── 14. 48h follow-up: a sent quote nobody has accepted or declined ────────
+export async function notifyQuoteFollowup(q: QuoteInfo): Promise<SendResult> {
+  return sendSmsResult(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      `your concrete project is waiting! Accept or decline your quote${money(q.quote_amount)} now:`,
+      "",
+      quoteLink(q.public_token ?? ""),
+      "",
+      `Questions? Call or text ${phoneDisplay} any time.`,
+    ]),
+    { quoteId: q.id, kind: "quote_followup", role: "customer" },
+  );
+}
+
 // ── 11. Job complete + paid: thank the customer and ask for a review ────────
 export async function notifyComplete(q: QuoteInfo): Promise<void> {
   await sendSms(

@@ -5,6 +5,7 @@ import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { listQuotes, listStaff } from "@/lib/crm/queries";
 import { KanbanBoard, type BoardQuote } from "./kanban-board";
+import { NewQuoteForm } from "./new-quote-form";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,7 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
             {isOwner ? "" : ` ${t.pipeline.assignedToYou}`} · {t.pipeline.dragHint}
           </p>
         </div>
+        {isOwner && <NewQuoteForm />}
       </div>
 
       <form className="crm-filters" method="get" action={`${base}/`}>

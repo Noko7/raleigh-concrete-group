@@ -85,6 +85,8 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return `Marked paid${m.amount != null ? ` ($${Number(m.amount).toLocaleString("en-US")})` : ""}`;
     case "links_rotated":
       return "Customer/job links regenerated (old links disabled)";
+    case "quote_created_manually":
+      return `Lead logged by staff${m.by ? ` (${String(m.by)})` : ""}`;
     default:
       return e.type.replace(/_/g, " ");
   }
