@@ -1794,6 +1794,29 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .kb-pill-date { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
 .kb-pill-confirmed { background: rgba(34, 197, 94, 0.22); color: #4ade80; }
 .kb-pill-unconfirmed { background: rgba(248, 113, 113, 0.22); color: #f87171; }
+/* How long a lead has gone unquoted. Amber at 12 hours (when the contractor
+   gets nudged), red at 48, so the card matches the texts going out about it. */
+.kb-age { font-size: 0.72rem; font-weight: 900; padding: 0.1rem 0.45rem; border-radius: 0.35rem; white-space: nowrap; }
+.kb-age-warn { background: rgba(250, 204, 21, 0.18); color: #fde047; }
+.kb-age-late { background: #b91c1c; color: #fff; }
+
+/* The one job to do next, above the board. */
+.kb-next {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; width: 100%;
+  text-align: left; cursor: pointer; font: inherit; margin-bottom: 0.9rem;
+  background: rgba(185, 28, 28, 0.12); border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 0.6rem; padding: 0.7rem 0.9rem;
+}
+.kb-next:hover { background: rgba(185, 28, 28, 0.2); }
+.kb-next-label { font-size: 0.66rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #f87171; }
+.kb-next-name { font-family: var(--font-headline), sans-serif; font-size: 1.3rem; color: var(--crm-text); line-height: 1.1; }
+.kb-next-meta { font-size: 0.78rem; color: var(--crm-muted); }
+
+/* Owner's view of who is sitting on unquoted work. */
+.kb-stale { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.9rem; font-size: 0.78rem; }
+.kb-stale-label { font-weight: 800; color: var(--crm-muted); }
+.kb-stale-item { background: rgba(255, 255, 255, 0.07); border: 1px solid var(--crm-border); border-radius: 999px; padding: 0.15rem 0.6rem; color: var(--crm-text); }
+.kb-stale-item strong { color: #f87171; }
 .kb-quick { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
 .kb-quick-btn { flex: 1; text-align: center; text-decoration: none; font-size: 0.78rem; font-weight: 800; padding: 0.42rem; border-radius: 0.45rem; background: rgba(255, 255, 255, 0.09); border: 1px solid var(--crm-border); color: var(--crm-text); }
 .kb-quick-btn:hover { background: var(--amber); border-color: var(--amber); color: #fff; }

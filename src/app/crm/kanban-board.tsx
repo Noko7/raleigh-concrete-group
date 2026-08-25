@@ -36,6 +36,28 @@ function shortDate(ymd: string | null, locale: Locale): string {
   });
 }
 
+// ── Ageing ──────────────────────────────────────────────────────────────────
+// A lead nobody has quoted yet. Status is the honest test: it stays "new"
+// until a price goes out, whatever else has happened to the row.
+const isUntouched = (q: BoardQuote) => q.status === "new";
+
+const hoursSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 3_600_000;
+
+// The two thresholds the rest of the system already uses: 12 hours is when the
+// contractor gets nudged, 48 is when a lead is properly late. Amber then red,
+// so a card's colour means the same thing as the texts going out about it.
+function ageBadge(q: BoardQuote): { text: string; tone: "warn" | "late" } | null {
+  if (!isUntouched(q)) return null;
+  const h = hoursSince(q.created_at);
+  if (h < 12) return null;
+  const text = h < 48 ? `${Math.floor(h)}h` : `${Math.floor(h / 24)}d`;
+  return { text, tone: h < 48 ? "warn" : "late" };
+}
+
+// Columns where the oldest thing genuinely is the most urgent. Finished work
+// is left newest-first: nobody is chasing a job that's already paid.
+const OLDEST_FIRST: ReadonlySet<Status> = new Set(["new", "quoted", "approved", "scheduled"]);
+
 // One clear label per lead type so a card reads at a glance.
 function typeLabel(q: BoardQuote, t: Dict): { text: string; cls: string } {
   if (q.quote_type === "online") return { text: t.pipeline.typeOnline, cls: "online" };
@@ -109,8 +131,43 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
     // can't leave this map missing a column.
     const map = Object.fromEntries(STATUSES.map((s) => [s, [] as BoardQuote[]])) as Record<Status, BoardQuote[]>;
     for (const q of quotes) map[q.status]?.push(q);
+    // Oldest first in the columns that still need work. The server hands
+    // these back newest-first, which puts the lead most at risk of going
+    // stale at the bottom of the pile - the opposite of the order to work in.
+    for (const s of STATUSES) {
+      map[s].sort((a, b) =>
+        OLDEST_FIRST.has(s)
+          ? a.created_at.localeCompare(b.created_at)
+          : b.created_at.localeCompare(a.created_at),
+      );
+    }
     return map;
   }, [quotes]);
+
+  // The single oldest lead nobody has quoted. Pinned above the board so there
+  // is one obvious answer to "what now" rather than seven columns of options.
+  const nextUp = useMemo(() => {
+    const stale = quotes.filter(isUntouched).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const oldest = stale[0];
+    if (!oldest || hoursSince(oldest.created_at) < 12) return null;
+    return { quote: oldest, waiting: stale.length };
+  }, [quotes]);
+
+  // Owners get the same picture per contractor: who is sitting on work. Only
+  // counts leads past the 12-hour nudge, so a morning's fresh leads don't
+  // read as a backlog.
+  const staleByContractor = useMemo(() => {
+    if (role !== "owner") return [];
+    const counts = new Map<string, number>();
+    for (const q of quotes) {
+      if (!isUntouched(q) || hoursSince(q.created_at) < 12) continue;
+      const key = q.assigned_to ?? "";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([id, n]) => ({ id, name: id ? (nameMap[id] ?? t.pipeline.crew) : t.pipeline.unassigned, n }))
+      .sort((a, b) => b.n - a.n);
+  }, [quotes, role, nameMap, t]);
 
   function flash(msg: string) {
     setToast(msg);
@@ -168,6 +225,34 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
   return (
     <div className="kb">
       {toast && <div className="kb-toast">{toast}</div>}
+
+      {/* One job, named, at the top. A board tells you everything at once,
+          which is a good way to see the shape of the week and a bad way to
+          decide what to touch first. */}
+      {nextUp && (
+        <button type="button" className="kb-next" onClick={() => router.push(cardHref(nextUp.quote))}>
+          <span className="kb-next-label">{t.pipeline.nextUp}</span>
+          <span className="kb-next-name">{nextUp.quote.name}</span>
+          <span className="kb-next-meta">
+            {nextUp.quote.service || t.pipeline.serviceTBD}
+            {" · "}
+            {fill(t.pipeline.waitingFor, { age: ageBadge(nextUp.quote)?.text ?? "" })}
+            {nextUp.waiting > 1 ? ` · ${fill(t.pipeline.alsoWaiting, { n: nextUp.waiting - 1 })}` : ""}
+          </span>
+        </button>
+      )}
+
+      {staleByContractor.length > 0 && (
+        <div className="kb-stale">
+          <span className="kb-stale-label">{t.pipeline.sittingOnWork}</span>
+          {staleByContractor.map((s) => (
+            <span key={s.id || "unassigned"} className="kb-stale-item">
+              {s.name} <strong>{s.n}</strong>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="kb-cols">
         {STATUSES.map((status) => {
           const cards = byStatus[status];
@@ -214,7 +299,16 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                   >
                     <div className="kb-card-top">
                       <h3 className="kb-card-name">{q.name}</h3>
-                      {q.quote_amount != null && <span className="kb-card-amount">{money(q.quote_amount)}</span>}
+                      {/* How long this has gone unquoted, where the price
+                          would otherwise sit - an unquoted lead has no price
+                          to show, so the two never collide. */}
+                      {(() => {
+                        const age = ageBadge(q);
+                        if (age) return <span className={`kb-age kb-age-${age.tone}`}>{age.text}</span>;
+                        return q.quote_amount != null ? (
+                          <span className="kb-card-amount">{money(q.quote_amount)}</span>
+                        ) : null;
+                      })()}
                     </div>
                     <p className="kb-card-sub">
                       {q.service || t.pipeline.serviceTBD}

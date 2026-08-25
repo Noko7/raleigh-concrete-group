@@ -97,6 +97,12 @@ const en = {
     deleted: "Lead deleted. Restore it anytime from Archived.",
     errMove: "Could not move that quote.",
     errDelete: "Could not delete that lead.",
+    nextUp: "Do this next",
+    // {age} is how long it has been waiting, e.g. "3d".
+    waitingFor: "waiting {age}",
+    // {n} is how many other leads are also unquoted.
+    alsoWaiting: "{n} more waiting",
+    sittingOnWork: "Unquoted leads:",
     errAssign: "Could not assign.",
   },
   job: {
@@ -510,6 +516,10 @@ const es: typeof en = {
     deleted: "Prospecto eliminado. Puedes restaurarlo cuando quieras desde Archivados.",
     errMove: "No se pudo mover esa cotización.",
     errDelete: "No se pudo eliminar ese prospecto.",
+    nextUp: "Haz esto ahora",
+    waitingFor: "esperando {age}",
+    alsoWaiting: "{n} más esperando",
+    sittingOnWork: "Prospectos sin cotizar:",
     errAssign: "No se pudo asignar.",
   },
   job: {

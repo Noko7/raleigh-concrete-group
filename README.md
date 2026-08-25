@@ -227,6 +227,22 @@ Run `supabase/hourly-reminders.sql` before deploying this — it adds the tracki
 
 > If you also send texts from a Make.com scenario, disable that scenario (or the SMS step) to avoid sending duplicate messages, since the app now texts directly through Quo.
 
+**What a customer text never contains**
+The price. A figure in a text has no scope beside it, gets forwarded and shopped around on its own, and the customer already has a quote page built to explain it — so every customer-facing message carries the link instead. `usd()` in `src/lib/crm/notify.ts` is for `role: "owner"` and `role: "crew"` messages only; check the role on the send before using it. Em dashes are stripped from every outbound text by `noEmDash()` (`src/lib/crm/constants.ts`), applied centrally in `sendSmsResult` so copy assembled from owner-typed content is covered too.
+
+**Quotes: five sections, seven days**
+Every quote answers Scope, Permits, Demolition and prep, Pour and finish, and Clean up. All five must say something before it can be sent, but "Not applicable" is a valid answer and each field has a one-tap button for it. Quotes written before this change fall back to their old free-text summary.
+
+A sent quote link is good for `QUOTE_TTL_DAYS` (7) days from the last send. Re-sending re-stamps the clock, which is how an expired quote is revived. Expiry only applies while the customer still has a decision to make — once they've accepted, the page is their record of the job and the payment text links back to it.
+
+**Routing leads to contractors**
+Each contractor has the job types they take (CRM → Crew → Edit details), keyed to the services in `quoteServiceOptions`. A new lead goes to the first active contractor who takes that service, falling back to the primary contractor in Settings when nothing claims it. Nothing ticked means no restriction, so routing is inert until an owner sets a rule.
+
+**Job photos**
+Customer uploads stay in `file_urls`. Staff photos are separate: `internal_urls` (site notes), `before_urls` and `after_urls`. A job cannot be marked complete without at least one before and one after photo — enforced in the `completeJob` server action, so it holds for the owner's CRM button as well as the crew's job page.
+
+Run `supabase/quote-detail.sql` for all of the above (quote sections, `quote_expires_at`, the three photo columns, and `staff.service_types`).
+
 **Google Calendar invites (optional)**
 When a job is booked (customer accepts) or you assign a contractor to a dated job/visit, the app
 creates an event on your Google Calendar and **invites the assigned contractor** (using the email
