@@ -11,7 +11,7 @@
 // quote submission or a CRM save. Failures are logged (Vercel → Logs) with an
 // [sms] prefix so they can be diagnosed.
 import { phoneDisplay } from "@/lib/site-data";
-import { visitDateOf } from "./constants";
+import { QUOTE_TTL_DAYS, noEmDash, visitDateOf } from "./constants";
 import { SITE_ORIGIN } from "./env";
 import { getOwnerContacts, getOwnerPhones, logMessage, type SmsLog } from "./queries";
 
@@ -123,7 +123,12 @@ async function record(log: SmsLog | undefined, r: SendResult, to: string, body: 
 // Detailed send - returns why it failed (used by the diagnostic endpoint).
 // Pass `log` and the attempt is recorded against the job; omit it for sends that
 // belong to no job, like the Settings test text.
-export async function sendSmsResult(toRaw: string, message: string, log?: SmsLog): Promise<SendResult> {
+export async function sendSmsResult(toRaw: string, messageRaw: string, log?: SmsLog): Promise<SendResult> {
+  // Every text goes through the dash guard, not just the ones written today.
+  // Doing it here rather than in each builder means a message assembled from
+  // owner-typed content (a quote summary, a service name) is covered too.
+  // Normalised before the log is written, so the log shows what was sent.
+  const message = noEmDash(messageRaw);
   const to = toE164(toRaw);
   if (!to) {
     const bad: SendResult = { ok: false, provider: SMS_PROVIDER, detail: `Invalid phone number: "${toRaw}"` };
@@ -361,8 +366,17 @@ type QuoteInfo = {
 };
 
 const firstName = (full: string) => full.trim().split(/\s+/)[0] || "there";
+// PRICE NEVER GOES IN A CUSTOMER TEXT.
+//
+// A figure in a text is a figure out of context: no scope beside it, no
+// what's-included, nothing to answer the question it immediately raises. It
+// also gets forwarded, screenshotted and shopped around on its own. The
+// customer sees their number on their quote page, next to the five sections
+// that explain it, and the texts carry the link instead.
+//
+// So `usd` is for OWNER and CREW messages only. Before using it, check the
+// `role` on the send: "owner" and "crew" may show money, "customer" may not.
 const usd = (n?: number | null) => (n != null ? `$${Number(n).toLocaleString("en-US")}` : null);
-const money = (n?: number | null) => (n != null ? ` for $${Number(n).toLocaleString("en-US")}` : "");
 
 // 1st, 2nd, 3rd, 4th... Spelled-out dates read as a date rather than as data,
 // which matters when the whole message is one line on a lock screen.
@@ -589,6 +603,10 @@ export async function notifyVisitConfirmed(
 }
 
 // ── 5. Quote is ready: send the customer their link ─────────────────────────
+// Carries the link and the deadline, never the number - see the note on `usd`.
+// The deadline is stated here because this is the message they scroll back to,
+// and a quote that quietly stops working is worse than one that said when it
+// would.
 export async function notifyQuoteReady(q: QuoteInfo): Promise<SendResult> {
   return sendSmsResult(
     q.phone,
@@ -598,6 +616,8 @@ export async function notifyQuoteReady(q: QuoteInfo): Promise<SendResult> {
       "",
       "View it here:",
       quoteLink(q.public_token ?? ""),
+      "",
+      `This quote is good for ${QUOTE_TTL_DAYS} days.`,
       "",
       BUSINESS,
     ]),
@@ -1034,14 +1054,26 @@ export async function notifyVisitReminderCrew(
 }
 
 // ── 14. 48h follow-up: a sent quote nobody has accepted or declined ────────
-export async function notifyQuoteFollowup(q: QuoteInfo): Promise<SendResult> {
+// Says the quote is waiting, never what it costs - see the note on `usd`.
+// The days-left line is the part that actually moves people: a decision with
+// no deadline gets postponed indefinitely, and this one has a real one.
+export async function notifyQuoteFollowup(q: QuoteInfo, daysLeft?: number | null): Promise<SendResult> {
+  const deadline =
+    daysLeft != null && daysLeft > 0
+      ? daysLeft === 1
+        ? "It expires tomorrow."
+        : `It expires in ${daysLeft} days.`
+      : null;
+
   return sendSmsResult(
     q.phone,
     text([
       `Hi ${firstName(q.name)},`,
-      `your concrete project is waiting! Accept or decline your quote${money(q.quote_amount)} now:`,
+      "your concrete project is waiting! Accept or decline your quote now:",
       "",
       quoteLink(q.public_token ?? ""),
+      "",
+      deadline,
       "",
       `Questions? Call or text ${phoneDisplay} any time.`,
     ]),
@@ -1077,8 +1109,12 @@ export async function notifyPaymentRequest(q: QuoteInfo): Promise<SendResult> {
     q.phone,
     text([
       `Hi ${firstName(q.name)},`,
-      `your project with ${BUSINESS} is complete${money(q.quote_amount)}.`,
+      `your project with ${BUSINESS} is complete.`,
       "",
+      // The amount they agreed to is on their quote page and not in this
+      // text - see the note on `usd`. An accepted quote's page never expires,
+      // so this link keeps working however long the job ran.
+      ...(q.public_token ? ["Your approved total is on your quote:", quoteLink(q.public_token), ""] : []),
       "How to pay:",
       how,
       "",

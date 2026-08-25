@@ -98,7 +98,11 @@ export async function GET(request: Request) {
   // ── 4. 48h no-response quote follow-up ─────────────────────────────────────
   let followupSent = 0;
   for (const q of await listUnansweredQuotes(48)) {
-    const res = await notifyQuoteFollowup(q).catch(() => null);
+    // Whole days left before the link stops working, so the text can say so.
+    const daysLeft = q.quote_expires_at
+      ? Math.ceil((new Date(q.quote_expires_at).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+      : null;
+    const res = await notifyQuoteFollowup(q, daysLeft).catch(() => null);
     await markQuoteFollowupSent(q.id);
     await addAdminEvent(q.id, "quote_followup_sent", { quote_amount: q.quote_amount });
     if (res?.ok) followupSent += 1;

@@ -459,6 +459,43 @@ export async function setPrimaryContractorId(id: string | null): Promise<boolean
   return res.ok;
 }
 
+// ── Routing a lead to the right contractor ──────────────────────────────────
+// An owner gives each contractor the job types they take (staff.service_types).
+// A lead goes to the first active contractor who takes its service; if nobody
+// claims it - no rules set anywhere, an unrecognised service, or a lead with
+// no service at all - it falls back to the primary contractor, which is
+// exactly what happened before routing existed.
+//
+// `service` is free text on the wire (the public form uses a select, but the
+// CRM's own lead form is a text box and the endpoint accepts anything), so
+// matching is case- and space-insensitive.
+const normalizeService = (s?: string | null) => (s ?? "").trim().toLowerCase();
+
+export async function listActiveContractors(): Promise<Staff[]> {
+  const res = await pgAdmin("staff?role=eq.contractor&active=eq.true&select=*&order=created_at.asc");
+  if (!res.ok) return [];
+  return (await res.json()) as Staff[];
+}
+
+// Who a lead for `service` should go to. Returns null only when there is no
+// primary contractor set either, in which case the lead stays unassigned and
+// the owner still gets the new-lead alert.
+export async function resolveAssignee(service?: string | null): Promise<string | null> {
+  const wanted = normalizeService(service);
+
+  if (wanted) {
+    // Ordered by created_at, so when two contractors both take a job type the
+    // longer-standing one wins and the choice is at least predictable.
+    const contractors = await listActiveContractors();
+    const match = contractors.find((c) =>
+      (c.service_types ?? []).some((t) => normalizeService(t) === wanted),
+    );
+    if (match) return match.id;
+  }
+
+  return getPrimaryContractorId();
+}
+
 // Service-role lookup of a contractor's contact info (no session) - used by the
 // public submission endpoint when auto-assigning the primary contractor.
 export async function getStaffContactById(
@@ -688,6 +725,21 @@ export async function getQuoteByToken(column: "public_token" | "job_token", toke
   return rows[0] ?? null;
 }
 
+// Has this quote's offer run out?
+//
+// Only ever true while the customer still has a decision to make. Once they
+// have accepted or declined, the page stops being an offer and becomes their
+// record of the job - the booked date, the amount they approved, the link the
+// payment text points at - so it never expires from under them.
+//
+// A null quote_expires_at is valid too: that's every quote sent before
+// expiry existed, and killing those retroactively would strand live links.
+export function isQuoteExpired(q: Pick<Quote, "quote_expires_at" | "customer_response">): boolean {
+  if (q.customer_response) return false;
+  if (!q.quote_expires_at) return false;
+  return new Date(q.quote_expires_at).getTime() < Date.now();
+}
+
 export async function recordCustomerView(token: string): Promise<void> {
   if (!/^[a-f0-9]{16,40}$/i.test(token)) return;
   const res = await pgAdmin(`quote_requests?public_token=eq.${token}&select=id,view_count,viewed_at,status&limit=1`);
@@ -719,12 +771,22 @@ export async function recordCustomerResponse(
 ): Promise<{ ok: boolean; error?: string }> {
   if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
   const res = await pgAdmin(
-    `quote_requests?public_token=eq.${token}&select=id,quote_amount,customer_response,discount_accepted&limit=1`,
+    `quote_requests?public_token=eq.${token}` +
+      `&select=id,quote_amount,customer_response,discount_accepted,quote_expires_at&limit=1`,
   );
   if (!res.ok) return { ok: false, error: "Could not load your quote." };
-  const rows = (await res.json()) as Pick<Quote, "id" | "quote_amount" | "customer_response" | "discount_accepted">[];
+  const rows = (await res.json()) as Pick<
+    Quote,
+    "id" | "quote_amount" | "customer_response" | "discount_accepted" | "quote_expires_at"
+  >[];
   const q = rows[0];
   if (!q) return { ok: false, error: "Quote not found." };
+
+  // Checked here as well as on the page: the page could have been open in a
+  // tab since before the quote ran out, and the button would still POST.
+  if (isQuoteExpired(q)) {
+    return { ok: false, error: "This quote has expired. Please call us and we'll send you an updated one." };
+  }
 
   const patch: Partial<Quote> = { customer_responded_at: new Date().toISOString() };
   let eventType: string;

@@ -2,8 +2,13 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 
-import { DECLINE_CREDIT } from "@/lib/crm/constants";
-import { getQuoteByToken } from "@/lib/crm/queries";
+import {
+  DECLINE_CREDIT,
+  QUOTE_SECTION_FIELDS,
+  QUOTE_SECTION_LABELS,
+  QUOTE_TTL_DAYS,
+} from "@/lib/crm/constants";
+import { getQuoteByToken, isQuoteExpired } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
 import { QuoteActions } from "./quote-actions";
 import { ViewBeacon } from "./view-beacon";
@@ -50,6 +55,36 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   const amount = hasPrice ? `$${Number(quote.quote_amount).toLocaleString("en-US")}` : null;
   const responded = quote.customer_response;
   const firstName = quote.name.split(" ")[0];
+
+  // Only the sections that were actually filled in. An owner can't send a
+  // quote with one blank, but a draft viewed early can have gaps and a
+  // half-empty list reads worse than the old single block.
+  const sections = QUOTE_SECTION_FIELDS.map((f) => [f, quote[f]] as const).filter(
+    (pair): pair is readonly [(typeof QUOTE_SECTION_FIELDS)[number], string] =>
+      Boolean(pair[1] && pair[1].trim()),
+  );
+
+  // ── The offer ran out ──
+  // Shown instead of the price, never alongside it: a number on screen next
+  // to "this has expired" is an invitation to argue about whether it still
+  // stands. Recovering is one phone call, and re-sending the quote from the
+  // CRM puts a fresh seven days on this same link.
+  if (isQuoteExpired(quote)) {
+    return (
+      <main className="cq-wrap">
+        <div className="cq-confirm">
+          <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="cq-logo" priority />
+          <p className="cq-confirm-eyebrow cq-confirm-eyebrow-muted">Quote expired</p>
+          <h1 className="cq-confirm-title">Hi {firstName}, this quote has expired.</h1>
+          <p className="cq-confirm-note">
+            Quotes are good for {QUOTE_TTL_DAYS} days so our pricing stays accurate. Give us a call or send a text and
+            we&apos;ll get an updated one out to you the same day.
+          </p>
+          <ContactButtons />
+        </div>
+      </main>
+    );
+  }
 
   // ── Full-screen confirmation once the customer has responded ──
   if (responded === "accepted") {
@@ -158,6 +193,12 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               <span className="cq-price-label">Your price, all in</span>
               <span className="cq-price-value">{amount}</span>
               <span className="cq-price-sub">Free quote · no obligation until you approve</span>
+              {/* Under the price, because that is what the deadline is
+                  actually about. Only shown once the quote has been sent -
+                  a draft has no clock running. */}
+              {quote.quote_expires_at && (
+                <span className="cq-expiry">Good through {prettyDate(quote.quote_expires_at.slice(0, 10))}</span>
+              )}
             </div>
             {/* Trust markers echo the site's own published copy (clear pricing,
                 on time, local) - no warranty or licensing claims per business
@@ -189,11 +230,29 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           )}
         </dl>
 
-        {quote.quote_summary && (
+        {/* The five sections, in a fixed order, so every quote we send
+            answers the same questions in the same places. Quotes written
+            before the sections existed fall back to their old free text
+            rather than showing the customer an empty panel. */}
+        {sections.length > 0 ? (
           <div className="cq-summary">
             <h2>What&apos;s included</h2>
-            <p>{quote.quote_summary}</p>
+            <dl className="cq-sections">
+              {sections.map(([field, value]) => (
+                <div key={field} className="cq-section">
+                  <dt>{QUOTE_SECTION_LABELS[field]}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
+        ) : (
+          quote.quote_summary && (
+            <div className="cq-summary">
+              <h2>What&apos;s included</h2>
+              <p>{quote.quote_summary}</p>
+            </div>
+          )
         )}
 
         {hasPrice ? <QuoteActions token={token} amount={Number(quote.quote_amount)} /> : null}

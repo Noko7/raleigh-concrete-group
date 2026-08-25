@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { TIME_RE } from "@/lib/crm/constants";
+import {
+  QUOTE_SECTION_FIELDS,
+  QUOTE_SECTION_LABELS,
+  QUOTE_TTL_DAYS,
+  TIME_RE,
+  noEmDash,
+} from "@/lib/crm/constants";
 import { STATUSES, type Status } from "@/lib/crm/env";
 import { syncQuoteToCalendar } from "@/lib/crm/gcal";
 import {
@@ -90,12 +96,38 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // Customer-facing summary
+  // Customer name. Free text from a phone call or a web form, so it arrives
+  // wrong often enough to need fixing - and it is the name every later text
+  // opens with, so a typo here follows the customer through the whole job.
+  if (formData.has("name")) {
+    const v = String(formData.get("name") ?? "").trim().slice(0, 120);
+    if (v.length < 2) return { ok: false, error: "Enter the customer's name." };
+    if (v !== current.name) {
+      patch.name = v;
+      events.push({ type: "name_changed", meta: { from: current.name, to: v } });
+    }
+  }
+
+  // Customer-facing summary. Superseded by the five sections below, still
+  // saved so an older quote can be edited without losing its body.
   if (formData.has("quote_summary")) {
-    const v = String(formData.get("quote_summary") ?? "").trim().slice(0, 4000);
+    const v = noEmDash(String(formData.get("quote_summary") ?? "").trim()).slice(0, 4000);
     patch.quote_summary = v || null;
     if (patch.quote_summary !== current.quote_summary) events.push({ type: "summary_changed" });
   }
+
+  // The five sections the customer reads. Any one may say "Not applicable",
+  // but none may be blank on a quote that goes out - that check is at send
+  // time below, so a half-written quote can still be saved as a draft.
+  let sectionsChanged = false;
+  for (const field of QUOTE_SECTION_FIELDS) {
+    if (!formData.has(field)) continue;
+    const v = noEmDash(String(formData.get(field) ?? "").trim()).slice(0, 2000);
+    const next = v || null;
+    if (next !== current[field]) sectionsChanged = true;
+    patch[field] = next;
+  }
+  if (sectionsChanged) events.push({ type: "summary_changed" });
 
   // Internal notes
   if (formData.has("internal_notes")) {
@@ -114,8 +146,23 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
 
   if (sending) {
     if (effectiveAmount == null) return { ok: false, error: "Set a quote amount before sending." };
-    if (!effectiveSummary || !effectiveSummary.trim()) {
-      return { ok: false, error: "Add a customer-facing description before sending." };
+
+    // Every section has to say something. "Not applicable" counts - a slab
+    // with no permit and nothing to demolish is a real answer, and saying so
+    // is what stops the customer wondering what was left out. A quote sent
+    // before the sections existed passes on its old summary instead, so an
+    // owner re-sending an old quote isn't forced to rewrite it.
+    const missing = QUOTE_SECTION_FIELDS.filter((f) => {
+      const v = patch[f] !== undefined ? patch[f] : current[f];
+      return !v || !v.trim();
+    });
+    const hasLegacySummary = Boolean(effectiveSummary && effectiveSummary.trim());
+    if (missing.length > 0 && !hasLegacySummary) {
+      const names = missing.map((f) => QUOTE_SECTION_LABELS[f]).join(", ");
+      return {
+        ok: false,
+        error: `Fill in every section before sending. Still blank: ${names}. Put "Not applicable" if a section doesn't apply to this job.`,
+      };
     }
 
     // One quote text, then wait for an answer.
@@ -148,6 +195,10 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       events.push({ type: "status_changed", meta: { from: current.status, to: "quoted" } });
     }
     if (!current.quote_sent_at) patch.quote_sent_at = new Date().toISOString();
+    // The link is good for seven days from THIS send. Re-stamped on every
+    // send, not just the first, so re-sending is what revives an expired
+    // quote - which is the whole recovery path for one that ran out.
+    patch.quote_expires_at = new Date(Date.now() + QUOTE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
     events.push({ type: "quote_sent" });
   }
 
@@ -474,6 +525,9 @@ export async function requestPayment(formData: FormData): Promise<void> {
     name: current.name,
     phone: current.phone,
     quote_amount: current.quote_amount,
+    // Carries the link to their approved total, since the text itself never
+    // states a figure.
+    public_token: current.public_token,
   }).catch(() => null);
 
   await updateQuote(session, id, { payment_requested_at: new Date().toISOString() });

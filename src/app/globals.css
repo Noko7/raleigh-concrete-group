@@ -1450,6 +1450,19 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cq-summary { background: #fff; border-radius: 0.9rem; padding: 1.1rem 1.25rem; margin-bottom: 1.25rem; }
 .cq-summary h2 { font-weight: 800; font-size: 0.95rem; margin-bottom: 0.4rem; }
 .cq-summary p { white-space: pre-wrap; color: rgba(43, 26, 18, 0.85); }
+/* The five sections. Each is a labelled block rather than a table row: the
+   answers run to a few lines each, and a label sitting in its own column
+   beside a paragraph leaves the label stranded at the top of a tall cell. */
+.cq-sections { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.75rem; }
+.cq-section { display: block; }
+.cq-section + .cq-section { border-top: 1px solid rgba(43, 26, 18, 0.1); padding-top: 0.9rem; }
+.cq-section dt {
+  font-size: 0.72rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--amber-dark); margin-bottom: 0.2rem;
+}
+.cq-section dd { margin: 0; white-space: pre-wrap; color: rgba(43, 26, 18, 0.85); line-height: 1.5; }
+/* How long the price is good for, under the number it applies to. */
+.cq-expiry { margin-top: 0.5rem; font-size: 0.82rem; font-weight: 700; color: rgba(43, 26, 18, 0.6); }
 .cq-cta { display: flex; gap: 0.7rem; flex-wrap: wrap; }
 .cq-cta-stack { flex-direction: column; margin-bottom: 1.25rem; }
 .cq-cta-stack .cq-btn { flex: none; width: 100%; }

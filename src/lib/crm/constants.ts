@@ -67,6 +67,58 @@ export function to24Hour(t: string, fallback = "09:00"): string {
   return `${String(h).padStart(2, "0")}:${m[2]}`;
 }
 
+// Every quote answers the same five questions, in this order. A concrete
+// quote that skips permits or says nothing about cleanup is where disputes
+// start, so the shape is fixed rather than left to whoever is typing.
+//
+// Order matters: it is the order the customer reads them on their quote page
+// and the order they appear in both editors.
+export const QUOTE_SECTION_FIELDS = [
+  "quote_scope",
+  "quote_permits",
+  "quote_prep",
+  "quote_pour",
+  "quote_cleanup",
+] as const;
+export type QuoteSectionField = (typeof QUOTE_SECTION_FIELDS)[number];
+
+export const QUOTE_SECTION_LABELS: Record<QuoteSectionField, string> = {
+  quote_scope: "Scope",
+  quote_permits: "Permits",
+  quote_prep: "Demolition and prep",
+  quote_pour: "Pour and finish",
+  quote_cleanup: "Clean up",
+};
+
+// What each section is for, shown as placeholder text so the answer lands in
+// the right box. Kept short: these are read on a phone on a job site.
+export const QUOTE_SECTION_HINTS: Record<QuoteSectionField, string> = {
+  quote_scope: "What we're building, the size, and the finish.",
+  quote_permits: "Who pulls them, what they cost, or Not applicable.",
+  quote_prep: "What comes out, what gets hauled away, how the base is built.",
+  quote_pour: "Depth, reinforcement, concrete mix, and the finish.",
+  quote_cleanup: "How the site is left, and when.",
+};
+
+// A sent quote link is good for a week. Long enough for a customer to think
+// it over and talk to a partner, short enough that our price isn't held open
+// while material costs move.
+export const QUOTE_TTL_DAYS = 7;
+
+// No em dashes in anything a customer reads.
+//
+// Applied to every outbound text and to the quote body on save, rather than
+// left to whoever is typing. An em dash is the tell that copy was not written
+// by the person sending it, it renders inconsistently across handsets, and
+// nobody types one on a phone anyway. A spaced hyphen says the same thing.
+//
+// Also folds the en dash, and the "--" people type meaning an em dash.
+export function noEmDash(s: string): string {
+  return s
+    .replace(/\s*[—–]\s*/g, " - ")
+    .replace(/\s--\s/g, " - ");
+}
+
 // visit_date carries two different meanings and quote_type is what tells them
 // apart. Everything that shows a date to a person goes through one of these two
 // readers rather than the column, because the difference between "we are coming"

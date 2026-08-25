@@ -7,8 +7,8 @@ import {
   MAX_VISITS_PER_DAY,
   countVisitsOn,
   findVisitConflict,
-  getPrimaryContractorId,
   getStaffContactById,
+  resolveAssignee,
 } from "@/lib/crm/queries";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
@@ -143,7 +143,10 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
-    const clash = await findVisitConflict(await getPrimaryContractorId(), visitDate, visitTime);
+    // Checked against whoever this job type actually routes to, not the
+    // primary contractor - otherwise a driveway lead is checked against the
+    // wrong person's calendar and booked on top of the right one's.
+    const clash = await findVisitConflict(await resolveAssignee(service), visitDate, visitTime);
     if (clash) {
       return NextResponse.json(
         {
@@ -213,12 +216,14 @@ export async function POST(request: Request) {
       console.error("[quote] SUPABASE_SERVICE_ROLE_KEY is not set - cannot auto-assign or look up owner numbers");
     }
 
-    // Auto-assign to the primary contractor (owner-selectable in Settings).
+    // Auto-assign by job type: each contractor takes the services an owner
+    // gave them (CRM → Crew), and anything unclaimed falls back to the
+    // primary contractor from Settings.
     let contractorPhone: string | null = null;
     let contractorName: string | null = null;
     if (newRow?.id && SERVICE_KEY) {
       try {
-        const primaryId = await getPrimaryContractorId();
+        const primaryId = await resolveAssignee(service);
         if (primaryId) {
           await fetch(`${SUPABASE_URL}/rest/v1/quote_requests?id=eq.${newRow.id}`, {
             method: "PATCH",

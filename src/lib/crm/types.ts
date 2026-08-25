@@ -10,6 +10,8 @@ export type Staff = {
   role: Role;
   active: boolean;
   must_reset_password: boolean;
+  // Job types this contractor is routed. Null or empty means no restriction.
+  service_types: string[] | null;
   // Which language the CRM renders in for this person.
   locale: string;
   created_at: string;
@@ -33,7 +35,25 @@ export type Quote = {
   status: Status;
   assigned_to: string | null;
   quote_amount: number | null;
+  // Legacy free-text quote body. Superseded by the five sections below, kept
+  // so quotes sent before that change still read correctly.
   quote_summary: string | null;
+  // The five sections every quote covers. "Not applicable" is a valid answer
+  // for any of them, but none may be blank on a quote that has been sent.
+  quote_scope: string | null;
+  quote_permits: string | null;
+  quote_prep: string | null;
+  quote_pour: string | null;
+  quote_cleanup: string | null;
+  // Seven days from the moment the quote was last sent. Null on quotes that
+  // predate expiry, which stay valid.
+  quote_expires_at: string | null;
+  // Photos staff add: internal reference shots, and the before/after pair a
+  // contractor must upload to mark the job complete. The customer's own
+  // uploads stay in file_urls.
+  internal_urls: string[] | null;
+  before_urls: string[] | null;
+  after_urls: string[] | null;
   internal_notes: string | null;
   public_token: string;
   job_token: string;
