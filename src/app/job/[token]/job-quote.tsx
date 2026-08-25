@@ -3,9 +3,14 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/actions";
 import type { SaveState } from "@/app/crm/quotes/[id]/types";
+
+type Sections = Record<QuoteSectionField, string>;
+const emptySections = (): Sections =>
+  Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, ""])) as Sections;
 
 // Quoting from the crew's own job page. Same server action as the CRM, so the
 // validation, the customer text and the activity log are identical - this is a
@@ -18,6 +23,7 @@ export function JobQuote({
   locale,
   amount,
   summary,
+  initialSections,
   alreadySent,
   awaitingReply,
   sentAt,
@@ -27,6 +33,7 @@ export function JobQuote({
   locale: Locale;
   amount: number | null;
   summary: string | null;
+  initialSections?: Partial<Record<QuoteSectionField, string | null>>;
   alreadySent: boolean;
   awaitingReply: boolean;
   sentAt: string | null;
@@ -39,9 +46,19 @@ export function JobQuote({
   const [open, setOpen] = useState(false);
   const [price, setPrice] = useState(amount != null ? String(amount) : "");
   const [what, setWhat] = useState(summary ?? "");
+  const [sections, setSections] = useState<Sections>(() => ({
+    ...emptySections(),
+    ...Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, initialSections?.[f] ?? ""])),
+  }));
+
+  const setSection = (field: QuoteSectionField, value: string) =>
+    setSections((s) => ({ ...s, [field]: value }));
 
   const priceNum = Number(price);
-  const ready = price.trim() !== "" && Number.isFinite(priceNum) && priceNum > 0 && what.trim().length > 0;
+  const hasLegacySummary = (summary ?? "").trim().length > 0;
+  // Every section filled, or an older quote that still has its free text.
+  const sectionsReady = QUOTE_SECTION_FIELDS.every((f) => sections[f].trim()) || hasLegacySummary;
+  const ready = price.trim() !== "" && Number.isFinite(priceNum) && priceNum > 0 && sectionsReady;
 
   // Pull fresh server data once the send lands, so the status and the activity
   // log on this page match what just happened.
@@ -115,16 +132,36 @@ export function JobQuote({
           />
         </label>
 
-        <label className="jq-field">
-          <span>{t.contractorJob.quoteSummary}</span>
-          <textarea
-            name="quote_summary"
-            rows={4}
-            value={what}
-            onChange={(e) => setWhat(e.target.value)}
-            placeholder={t.contractorJob.quotePlaceholder}
-          />
-        </label>
+        {/* The same five sections the CRM asks for, so a quote written from a
+            truck covers exactly what one written at a desk does. */}
+        <p className="js-hint jq-sections-hint">{t.contractorJob.quoteSectionsHint}</p>
+        {QUOTE_SECTION_FIELDS.map((field) => (
+          <label key={field} className="jq-field">
+            <span>
+              {t.contractorJob.sections[field]}
+              {!sections[field].trim() && (
+                <button type="button" className="crm-na-btn" onClick={() => setSection(field, t.contractorJob.notApplicable)}>
+                  {t.contractorJob.notApplicable}
+                </button>
+              )}
+            </span>
+            <textarea
+              name={field}
+              rows={2}
+              value={sections[field]}
+              onChange={(e) => setSection(field, e.target.value)}
+              placeholder={t.contractorJob.sectionHints[field]}
+            />
+          </label>
+        ))}
+
+        {/* Only for a quote written before the sections existed. */}
+        {hasLegacySummary && (
+          <label className="jq-field">
+            <span>{t.contractorJob.quoteSummary}</span>
+            <textarea name="quote_summary" rows={3} value={what} onChange={(e) => setWhat(e.target.value)} />
+          </label>
+        )}
 
         <p className="js-hint">{t.contractorJob.quoteWho.replace("{name}", customerFirstName)}</p>
 

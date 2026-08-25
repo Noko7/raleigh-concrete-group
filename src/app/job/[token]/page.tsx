@@ -273,6 +273,13 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             locale={locale}
             amount={quote.quote_amount}
             summary={quote.quote_summary}
+            initialSections={{
+              quote_scope: quote.quote_scope,
+              quote_permits: quote.quote_permits,
+              quote_prep: quote.quote_prep,
+              quote_pour: quote.quote_pour,
+              quote_cleanup: quote.quote_cleanup,
+            }}
             alreadySent={Boolean(quote.quote_sent_at)}
             // Sent and no answer yet: the crew's job is to wait, not to send it
             // again, so the card says so instead of offering a button.

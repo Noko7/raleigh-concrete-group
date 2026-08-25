@@ -251,10 +251,16 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             contractors={contractors.map((c) => ({ id: c.id, label: c.full_name || c.email || "Contractor" }))}
             initial={{
               status: quote.status,
+              name: quote.name,
               assigned_to: quote.assigned_to,
               quote_amount: quote.quote_amount,
               quote_summary: quote.quote_summary,
               internal_notes: quote.internal_notes,
+              quote_scope: quote.quote_scope,
+              quote_permits: quote.quote_permits,
+              quote_prep: quote.quote_prep,
+              quote_pour: quote.quote_pour,
+              quote_cleanup: quote.quote_cleanup,
             }}
           />
 

@@ -3,11 +3,23 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { STATUSES, STATUS_LABELS } from "@/lib/crm/constants";
+import {
+  QUOTE_SECTION_FIELDS,
+  QUOTE_SECTION_HINTS,
+  QUOTE_SECTION_LABELS,
+  STATUSES,
+  STATUS_LABELS,
+  type QuoteSectionField,
+} from "@/lib/crm/constants";
 import { saveQuote } from "./actions";
 import type { SaveState } from "./types";
 
 type ContractorOption = { id: string; label: string };
+
+type Sections = Record<QuoteSectionField, string>;
+
+const emptySections = (): Sections =>
+  Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, ""])) as Sections;
 
 type Props = {
   id: string;
@@ -21,11 +33,12 @@ type Props = {
   contractors: ContractorOption[];
   initial: {
     status: string;
+    name: string;
     assigned_to: string | null;
     quote_amount: number | null;
     quote_summary: string | null;
     internal_notes: string | null;
-  };
+  } & Partial<Record<QuoteSectionField, string | null>>;
 };
 
 export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contractors, initial }: Props) {
@@ -36,9 +49,14 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
   // server data changes (after a save, or a customer action elsewhere) we resync
   // the fields to it - that's the "stateful" behaviour the board needs.
   const [status, setStatus] = useState(initial.status);
+  const [name, setName] = useState(initial.name);
   const [assigned, setAssigned] = useState(initial.assigned_to ?? "");
   const [amount, setAmount] = useState(initial.quote_amount != null ? String(initial.quote_amount) : "");
   const [summary, setSummary] = useState(initial.quote_summary ?? "");
+  const [sections, setSections] = useState<Sections>(() => ({
+    ...emptySections(),
+    ...Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, initial[f] ?? ""])),
+  }));
   const [notes, setNotes] = useState(initial.internal_notes ?? "");
   const [confirming, setConfirming] = useState(false);
   const [localErr, setLocalErr] = useState("");
@@ -47,18 +65,25 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
     () =>
       [
         initial.status,
+        initial.name,
         initial.assigned_to ?? "",
         initial.quote_amount ?? "",
         initial.quote_summary ?? "",
         initial.internal_notes ?? "",
+        ...QUOTE_SECTION_FIELDS.map((f) => initial[f] ?? ""),
       ].join("|"),
     [initial],
   );
   useEffect(() => {
     setStatus(initial.status);
+    setName(initial.name);
     setAssigned(initial.assigned_to ?? "");
     setAmount(initial.quote_amount != null ? String(initial.quote_amount) : "");
     setSummary(initial.quote_summary ?? "");
+    setSections({
+      ...emptySections(),
+      ...Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, initial[f] ?? ""])),
+    });
     setNotes(initial.internal_notes ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSig]);
@@ -72,16 +97,23 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
 
   const amountNum = Number(amount);
   const amountValid = amount.trim() !== "" && Number.isFinite(amountNum) && amountNum > 0;
-  const summaryValid = summary.trim().length > 0;
   const previewPrice = amountValid ? `$${amountNum.toLocaleString("en-US")}` : "N/A";
 
+  // Which of the five are still blank. A quote written before the sections
+  // existed is allowed out on its old summary instead, matching the server.
+  const blankSections = QUOTE_SECTION_FIELDS.filter((f) => !sections[f].trim());
+  const hasLegacySummary = summary.trim().length > 0;
+  const sectionsValid = blankSections.length === 0 || hasLegacySummary;
+
+  const setSection = (field: QuoteSectionField, value: string) =>
+    setSections((s) => ({ ...s, [field]: value }));
+
   function openConfirm() {
-    if (!amountValid && !summaryValid) {
-      setLocalErr("Add a price and a customer-facing description before sending.");
-    } else if (!amountValid) {
+    if (!amountValid) {
       setLocalErr("Add a quote price before sending.");
-    } else if (!summaryValid) {
-      setLocalErr("Add a customer-facing description before sending.");
+    } else if (!sectionsValid) {
+      const names = blankSections.map((f) => QUOTE_SECTION_LABELS[f]).join(", ");
+      setLocalErr(`Fill in every section first. Still blank: ${names}. Use "Not applicable" where a section doesn't apply.`);
     } else {
       setLocalErr("");
       setConfirming(true);
@@ -102,6 +134,19 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
           bouncing off the duplicate guard and making the owner hunt for a
           second button. The panel says plainly what that means. */}
       <input type="hidden" name="intent" value={confirming ? (awaitingReply ? "resend" : "send") : "save"} />
+
+      {/* The name every later text opens with. Arrives from a web form or a
+          phone call, so it is wrong often enough to need fixing here. */}
+      <label className="crm-field">
+        <span>Customer name</span>
+        <input
+          name="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="crm-input"
+          maxLength={120}
+        />
+      </label>
 
       <div className="crm-editor-row">
         <label className="crm-field">
@@ -144,17 +189,54 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
         </label>
       </div>
 
-      <label className="crm-field">
-        <span>Customer-facing quote summary *</span>
-        <textarea
-          name="quote_summary"
-          rows={4}
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
-          className="crm-input"
-          placeholder="What's included, scope, timeline. This is shown to the customer on their quote link."
-        />
-      </label>
+      {/* The five sections the customer reads, in the order they read them.
+          Separate boxes rather than one, because a single box is how permits
+          and cleanup quietly go unmentioned. */}
+      <fieldset className="crm-sections">
+        <legend>What the customer sees</legend>
+        <p className="crm-muted crm-sm">
+          All five are required to send. Put &quot;Not applicable&quot; where a section doesn&apos;t apply to this job.
+        </p>
+        {QUOTE_SECTION_FIELDS.map((field) => (
+          <label key={field} className="crm-field">
+            <span>
+              {QUOTE_SECTION_LABELS[field]} *
+              {!sections[field].trim() && (
+                <button
+                  type="button"
+                  className="crm-na-btn"
+                  onClick={() => setSection(field, "Not applicable")}
+                >
+                  Not applicable
+                </button>
+              )}
+            </span>
+            <textarea
+              name={field}
+              rows={2}
+              value={sections[field]}
+              onChange={(e) => setSection(field, e.target.value)}
+              className="crm-input"
+              placeholder={QUOTE_SECTION_HINTS[field]}
+            />
+          </label>
+        ))}
+      </fieldset>
+
+      {/* Only for quotes written before the sections existed. Hidden entirely
+          on new ones so nobody fills in a sixth box that nothing displays. */}
+      {hasLegacySummary && (
+        <label className="crm-field">
+          <span>Older quote summary (shown only while the sections above are blank)</span>
+          <textarea
+            name="quote_summary"
+            rows={3}
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            className="crm-input"
+          />
+        </label>
+      )}
 
       <label className="crm-field">
         <span>Internal notes (never shown to the customer)</span>
@@ -175,14 +257,23 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
           </h3>
           <p className="crm-muted crm-sm">
             {awaitingReply
-              ? "They already have this quote and haven't replied. Sending again puts a second copy on their phone — do it if they say the first never arrived."
-              : "We'll text them their branded quote link and mark this Sent."}
+              ? "They already have this quote and haven't replied. Sending again puts a second copy on their phone, so do it if they say the first never arrived."
+              : "We'll text them their quote link, good for 7 days. The price is never in the text."}
           </p>
           <div className="crm-confirm-row">
             <span>Price</span>
             <strong>{previewPrice}</strong>
           </div>
-          <div className="crm-confirm-summary">{summary}</div>
+          {/* Exactly what they'll read, in the order they'll read it. */}
+          <div className="crm-confirm-summary">
+            {blankSections.length === 0
+              ? QUOTE_SECTION_FIELDS.map((f) => (
+                  <p key={f}>
+                    <strong>{QUOTE_SECTION_LABELS[f]}:</strong> {sections[f]}
+                  </p>
+                ))
+              : summary}
+          </div>
           <div className="crm-editor-foot">
             <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setConfirming(false)} disabled={pending}>
               Cancel
@@ -214,7 +305,7 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
             <div className={`send-result ${state.smsDelivered ? "send-result-ok" : "send-result-bad"}`}>
               <strong>
                 {state.smsDelivered
-                  ? `Quote sent — texted to ${state.smsTo ?? "the customer"}`
+                  ? `Quote sent, texted to ${state.smsTo ?? "the customer"}`
                   : "Quote saved, but the text did NOT go out"}
               </strong>
               {!state.smsDelivered && (
@@ -229,7 +320,8 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
             </div>
           )}
           <p className="crm-muted crm-sm crm-editor-hint">
-            Price and description are required to send. Send Quote texts the customer their link and marks this Sent.
+            Price and all five sections are required to send. Send Quote texts the customer their link, good for 7 days,
+            and marks this Sent. The price itself is never in the text.
           </p>
         </>
       )}

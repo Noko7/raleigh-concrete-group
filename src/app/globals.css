@@ -1383,6 +1383,23 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 
 .crm-field { display: block; margin-bottom: 0.85rem; }
 .crm-field > span { display: block; font-size: 0.8rem; font-weight: 700; color: var(--crm-muted); margin-bottom: 0.3rem; }
+/* The five quote sections, boxed together so they read as one thing the
+   customer receives rather than five unrelated fields. */
+.crm-sections { border: 1px solid var(--crm-border); border-radius: 0.6rem; padding: 0.9rem 1rem 0.4rem; margin-bottom: 1rem; }
+.crm-sections legend { font-size: 0.8rem; font-weight: 800; color: var(--crm-text); padding: 0 0.35rem; }
+.crm-sections > .crm-muted { margin-bottom: 0.8rem; }
+.crm-sections .crm-field > span { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+/* One tap to say a section doesn't apply, so "Not applicable" is easier than
+   leaving it blank. Disappears once the box has anything in it. */
+.crm-na-btn {
+  background: none; border: 1px solid var(--crm-border); color: var(--crm-muted);
+  border-radius: 999px; padding: 0.1rem 0.5rem; font-size: 0.68rem; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+}
+.crm-na-btn:hover { border-color: var(--amber); color: var(--amber); }
+.crm-confirm-summary p { margin: 0 0 0.5rem; }
+.crm-confirm-summary p:last-child { margin-bottom: 0; }
+.crm-confirm-summary strong { color: var(--amber); }
 .crm-editor-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.85rem; }
 .crm-editor-foot { display: flex; align-items: center; gap: 0.9rem; margin-top: 0.4rem; }
 .crm-saved { color: #4ade80; font-weight: 700; font-size: 0.85rem; }
@@ -1633,6 +1650,12 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
    offered slot, or the day-choice buttons) - close enough to read as part of
    that element instead of its own, separate option. */
 .js-other { margin-top: 1rem; }
+.jq-sections-hint { margin-bottom: 0.7rem; }
+/* On the job page the Not applicable chip sits on a light card, so it needs
+   its own colours rather than the dark CRM ones. */
+.jq-field > span { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.jq-field .crm-na-btn { border-color: #d1d5db; color: #6b7280; }
+.jq-field .crm-na-btn:hover { border-color: var(--amber); color: var(--amber); }
 .js-other > summary { cursor: pointer; color: #6b7280; font-size: 0.88rem; font-weight: 700; }
 .js-other-form { display: flex; gap: 0.55rem; margin-top: 0.7rem; flex-wrap: wrap; }
 .js-date { flex: 1; min-width: 150px; padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; min-height: 48px; }
