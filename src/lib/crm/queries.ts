@@ -1,7 +1,7 @@
 // Server-only data access for the CRM. Reads/writes that belong to a logged-in
 // user go through pgUser (RLS enforces owner/contractor scoping). Token-page
 // lookups, view tracking and signed URLs use pgAdmin (no user context).
-import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES } from "./constants";
+import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, visitDateOf } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
 import type {
@@ -578,18 +578,36 @@ function ageWindow(column: string, hours: number): string {
   return `&${column}=lt.${encodeURIComponent(newest)}&${column}=gt.${encodeURIComponent(oldest)}`;
 }
 
+// A lead with a confirmed visit still ahead of it is not being ignored -
+// somebody is driving out on that day, and the price is supposed to wait
+// until they have seen the job. Chasing it would be telling a contractor off
+// for following the process.
+//
+// A visit that has already passed is the opposite: they went, and no price
+// came back. That is exactly the lead worth chasing, so only FUTURE visits
+// buy an exemption. Today counts as future - the visit may not have happened
+// yet when the cron runs at 10am.
+export function hasUpcomingVisit(q: Quote, today = new Date().toISOString().slice(0, 10)): boolean {
+  const booked = visitDateOf(q);
+  return Boolean(booked && booked >= today);
+}
+
 // ── Stale-lead nudge (cron) ──────────────────────────────────────────────────
 // New leads nobody has quoted, more than `hours` old (and inside the window
-// above). status stays "new" until a quote is sent, regardless of quote_type
-// or whether a visit was confirmed - so this is exactly the app's own
-// definition of "nothing has gone out yet".
+// above), minus the ones with a visit still to come. Status stays "new" until
+// a price is sent, which is the right test for "nothing has gone out" but not
+// on its own for "nobody is on this".
 export async function listStaleLeads(hours: number): Promise<Quote[]> {
   const res = await pgAdmin(
     `quote_requests?status=eq.new${ageWindow("created_at", hours)}` +
       `&stale_lead_reminded_at=is.null&archived_at=is.null&select=*`,
   );
   if (!res.ok) return [];
-  return (await res.json()) as Quote[];
+  // Filtered here rather than in the query: "a booked visit" means
+  // quote_type and visit_date read together (visitDateOf), and expressing
+  // that as nested PostgREST or-filters would be a second, silently
+  // divergent definition of the rule.
+  return ((await res.json()) as Quote[]).filter((q) => !hasUpcomingVisit(q));
 }
 
 export async function markStaleLeadReminded(id: string): Promise<void> {

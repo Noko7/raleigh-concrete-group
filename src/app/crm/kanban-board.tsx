@@ -37,17 +37,31 @@ function shortDate(ymd: string | null, locale: Locale): string {
 }
 
 // ── Ageing ──────────────────────────────────────────────────────────────────
-// A lead nobody has quoted yet. Status is the honest test: it stays "new"
-// until a price goes out, whatever else has happened to the row.
-const isUntouched = (q: BoardQuote) => q.status === "new";
+// A lead nobody has quoted yet AND nobody is booked to go and see.
+//
+// Status alone is the wrong test. It stays "new" until a price goes out, but
+// an in-person lead sits in "new" perfectly legitimately while its visit is
+// still ahead of it: somebody is driving out on that day, and the price is
+// meant to wait until they have seen the job. Ageing that card red would be
+// marking a contractor late for following the process.
+//
+// Once the visit date has passed, it counts again - they went, and no price
+// came back, which is exactly the lead worth chasing. Today still counts as
+// upcoming, since the visit may not have happened yet.
+function isUntouched(q: BoardQuote, today: string): boolean {
+  if (q.status !== "new") return false;
+  const booked = visitDateOf(q);
+  if (booked && booked >= today) return false;
+  return true;
+}
 
 const hoursSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 3_600_000;
 
 // The two thresholds the rest of the system already uses: 12 hours is when the
 // contractor gets nudged, 48 is when a lead is properly late. Amber then red,
 // so a card's colour means the same thing as the texts going out about it.
-function ageBadge(q: BoardQuote): { text: string; tone: "warn" | "late" } | null {
-  if (!isUntouched(q)) return null;
+function ageBadge(q: BoardQuote, today: string): { text: string; tone: "warn" | "late" } | null {
+  if (!isUntouched(q, today)) return null;
   const h = hoursSince(q.created_at);
   if (h < 12) return null;
   const text = h < 48 ? `${Math.floor(h)}h` : `${Math.floor(h / 24)}d`;
@@ -144,14 +158,20 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
     return map;
   }, [quotes]);
 
+  // Recomputed per render rather than memoised: this is only ever compared
+  // against dates, so it costs nothing and can't go stale in a long-lived tab.
+  const today = new Date().toISOString().slice(0, 10);
+
   // The single oldest lead nobody has quoted. Pinned above the board so there
   // is one obvious answer to "what now" rather than seven columns of options.
   const nextUp = useMemo(() => {
-    const stale = quotes.filter(isUntouched).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const stale = quotes
+      .filter((q) => isUntouched(q, today))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
     const oldest = stale[0];
     if (!oldest || hoursSince(oldest.created_at) < 12) return null;
     return { quote: oldest, waiting: stale.length };
-  }, [quotes]);
+  }, [quotes, today]);
 
   // Owners get the same picture per contractor: who is sitting on work. Only
   // counts leads past the 12-hour nudge, so a morning's fresh leads don't
@@ -160,14 +180,14 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
     if (role !== "owner") return [];
     const counts = new Map<string, number>();
     for (const q of quotes) {
-      if (!isUntouched(q) || hoursSince(q.created_at) < 12) continue;
+      if (!isUntouched(q, today) || hoursSince(q.created_at) < 12) continue;
       const key = q.assigned_to ?? "";
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return [...counts.entries()]
       .map(([id, n]) => ({ id, name: id ? (nameMap[id] ?? t.pipeline.crew) : t.pipeline.unassigned, n }))
       .sort((a, b) => b.n - a.n);
-  }, [quotes, role, nameMap, t]);
+  }, [quotes, role, nameMap, t, today]);
 
   function flash(msg: string) {
     setToast(msg);
@@ -236,7 +256,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
           <span className="kb-next-meta">
             {nextUp.quote.service || t.pipeline.serviceTBD}
             {" · "}
-            {fill(t.pipeline.waitingFor, { age: ageBadge(nextUp.quote)?.text ?? "" })}
+            {fill(t.pipeline.waitingFor, { age: ageBadge(nextUp.quote, today)?.text ?? "" })}
             {nextUp.waiting > 1 ? ` · ${fill(t.pipeline.alsoWaiting, { n: nextUp.waiting - 1 })}` : ""}
           </span>
         </button>
@@ -303,7 +323,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                           would otherwise sit - an unquoted lead has no price
                           to show, so the two never collide. */}
                       {(() => {
-                        const age = ageBadge(q);
+                        const age = ageBadge(q, today);
                         if (age) return <span className={`kb-age kb-age-${age.tone}`}>{age.text}</span>;
                         return q.quote_amount != null ? (
                           <span className="kb-card-amount">{money(q.quote_amount)}</span>

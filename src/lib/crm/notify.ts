@@ -991,25 +991,26 @@ export async function notifyCrewReminder(
 }
 
 // ── 12. Stale lead: still nothing sent 12h after it came in ────────────────
-// An in-person request arrives with a visit already on the books (the customer
-// picks the slot on the form), so "no visit scheduled" would be plainly wrong
-// on half of these. What's actually true of every one of them is that nobody
-// has sent a price yet - so that's what it says, and the next step names
-// whichever one this lead is actually waiting on.
+// Never sent for a lead whose visit is still ahead of it - see
+// hasUpcomingVisit. So a visit date appearing here has already passed, which
+// is a different and more pointed message than "nobody has looked at this":
+// somebody went out, and no price came back.
 export function staleLeadMessage(q: QuoteInfo, contractorName?: string | null): string {
   const greeting = contractorName?.trim() ? `Hi ${firstName(contractorName)},` : "Hi,";
-  const hasVisit = Boolean(dayOrNull(visitDateOf(q)));
+  const visited = dayOrNull(visitDateOf(q));
   return text([
     "LEAD NEEDS ATTENTION",
     "",
     greeting,
-    "this lead came in over 12 hours ago and no quote has gone out yet:",
+    visited
+      ? `you visited this job on ${visited} and no quote has gone out yet:`
+      : "this lead came in over 12 hours ago and no quote has gone out yet:",
     "",
     customerBrief(q),
     "",
-    hasVisit
-      ? "The visit is booked - send their price once you've seen it, or call them if anything's changed."
-      : "Send them a quote, or confirm a visit if you need to see it first.",
+    visited
+      ? "Send them their price, or call them if something has changed."
+      : "Send them a quote, or book a visit if you need to see it first.",
     "",
     q.job_token ? jobLink(q.job_token) : null,
   ]);
