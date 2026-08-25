@@ -602,6 +602,29 @@ export async function notifyVisitConfirmed(
   ).catch(() => {});
 }
 
+// ── 4b. Estimate booked on a phone call ─────────────────────────────────────
+// The office books the visit while the customer is on the line, so this is
+// confirmation in writing rather than news. It stays short for that reason:
+// the day, the time, the address, and how to move it.
+export async function notifyVisitBooked(q: QuoteInfo): Promise<void> {
+  await sendSms(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      `this is ${OWNER_NAME} with ${BUSINESS}, confirming your free estimate:`,
+      "",
+      `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`,
+      "",
+      q.address?.trim() || null,
+      "",
+      `Call or text ${phoneDisplay} if you need to change it.`,
+      "",
+      OPT_OUT_LINE,
+    ]),
+    { quoteId: q.id, kind: "visit_booked", role: "customer" },
+  ).catch(() => {});
+}
+
 // ── 5. Quote is ready: send the customer their link ─────────────────────────
 // Carries the link and the deadline, never the number - see the note on `usd`.
 // The deadline is stated here because this is the message they scroll back to,

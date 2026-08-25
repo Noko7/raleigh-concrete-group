@@ -2,16 +2,25 @@
 
 import { useActionState, useEffect, useState } from "react";
 
+import { quoteServiceOptions } from "@/lib/site-data";
 import { createQuote, type NewQuoteState } from "./new-quote-actions";
 
 export function NewQuoteForm() {
   const [state, formAction, pending] = useActionState<NewQuoteState, FormData>(createQuote, { ok: false });
   const [open, setOpen] = useState(false);
+  const [quoteType, setQuoteType] = useState("");
+  // The crew can book an estimate for today - the lead-time floor is a rule
+  // for what a customer may request on the website, not for what the office
+  // may agree to on a call.
+  const today = new Date().toISOString().slice(0, 10);
 
   // Collapse once it saves - the new lead shows up on the board above via
   // revalidatePath, so a filled-in form left open just invites a duplicate.
   useEffect(() => {
-    if (state.ok) setOpen(false);
+    if (state.ok) {
+      setOpen(false);
+      setQuoteType("");
+    }
   }, [state.ok]);
 
   if (!open) {
@@ -37,18 +46,49 @@ export function NewQuoteForm() {
 
       <div className="crm-editor-row">
         <label className="crm-field">
-          <span>Service (optional)</span>
-          <input name="service" className="crm-input" placeholder="Driveway, patio, …" />
+          <span>Service</span>
+          {/* The same list the public form offers, because this is what
+              routes the lead to a contractor. A typed "driveway" would not
+              match the "Driveway" rule and would quietly fall through. */}
+          <select name="service" className="crm-input" defaultValue="">
+            <option value="">Not sure yet</option>
+            {quoteServiceOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="crm-field">
-          <span>Quote type (optional)</span>
-          <select name="quote_type" className="crm-input" defaultValue="">
+          <span>Quote type</span>
+          <select
+            name="quote_type"
+            className="crm-input"
+            value={quoteType}
+            onChange={(e) => setQuoteType(e.target.value)}
+          >
             <option value="">Not sure yet</option>
             <option value="online">Online - price from photos</option>
-            <option value="inperson">In person</option>
+            <option value="inperson">In person - book the estimate now</option>
           </select>
         </label>
       </div>
+
+      {/* Booking the estimate while they are still on the phone is the whole
+          point of taking the call. Only asked for an in-person quote, since
+          that is the only kind where somebody drives out. */}
+      {quoteType === "inperson" && (
+        <div className="crm-editor-row">
+          <label className="crm-field">
+            <span>Estimate date</span>
+            <input type="date" name="visit_date" className="crm-input" min={today} required />
+          </label>
+          <label className="crm-field">
+            <span>Estimate time</span>
+            <input type="time" name="visit_time" className="crm-input" defaultValue="08:00" required />
+          </label>
+        </div>
+      )}
 
       <div className="crm-editor-row">
         <label className="crm-field">

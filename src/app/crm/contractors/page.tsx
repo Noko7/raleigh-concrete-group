@@ -149,6 +149,7 @@ export default async function ContractorsPage() {
                   <th>Name</th>
                   <th>Email</th>
                   <th>Phone</th>
+                  <th>Job types</th>
                   <th>Status</th>
                   <th>Agreement</th>
                   <th></th>
@@ -160,6 +161,16 @@ export default async function ContractorsPage() {
                     <td>{c.full_name || "N/A"}</td>
                     <td>{c.email}</td>
                     <td>{prettyPhone(c.phone)}</td>
+                    <td>
+                      {/* "Anything" is the honest label for no rules set: the
+                          lead still reaches them via the primary-contractor
+                          fallback, so an empty list is not "nothing". */}
+                      {c.service_types?.length ? (
+                        <span className="crm-sm">{c.service_types.join(", ")}</span>
+                      ) : (
+                        <span className="crm-muted crm-sm">Anything</span>
+                      )}
+                    </td>
                     <td>
                       {c.active ? (
                         <span className="crm-badge crm-badge-won">Active</span>
@@ -187,7 +198,13 @@ export default async function ContractorsPage() {
                           {c.active ? "Deactivate" : "Reactivate"}
                         </button>
                       </form>
-                      <EditContact id={c.id} name={c.full_name ?? ""} email={c.email ?? ""} phone={c.phone} />
+                      <EditContact
+                        id={c.id}
+                        name={c.full_name ?? ""}
+                        email={c.email ?? ""}
+                        phone={c.phone}
+                        serviceTypes={c.service_types ?? []}
+                      />
                       <ResetPassword id={c.id} name={c.full_name || c.email || "this contractor"} />
                       <DeleteContractor id={c.id} name={c.full_name || c.email || "Contractor"} />
                     </td>

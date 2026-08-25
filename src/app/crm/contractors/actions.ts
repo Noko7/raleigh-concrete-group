@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
 import { SITE_ORIGIN } from "@/lib/crm/env";
+import { quoteServiceOptions } from "@/lib/site-data";
 import { sendSmsResult, toE164 } from "@/lib/crm/notify";
 import {
   createInvite,
@@ -182,7 +183,20 @@ export async function updateContractorContact(
     if (!res.ok) return { ok: false, error: res.error };
   }
 
-  const ok = await updateStaff(session, id, { full_name: fullName || null, phone, email });
+  // Only the services we actually offer, so a stale checkbox from an old page
+  // can't write a job type nothing will ever route. Empty means no
+  // restriction rather than "takes nothing" - see resolveAssignee.
+  const serviceTypes = formData
+    .getAll("service_types")
+    .map((s) => String(s))
+    .filter((s) => quoteServiceOptions.includes(s));
+
+  const ok = await updateStaff(session, id, {
+    full_name: fullName || null,
+    phone,
+    email,
+    service_types: serviceTypes.length ? serviceTypes : null,
+  });
   if (!ok) return { ok: false, error: "Could not save. Please try again." };
 
   revalidatePath("/crm/contractors");
