@@ -111,15 +111,61 @@ export async function updateQuote(session: Session, id: string, patch: Partial<Q
 // than one that arrived through the public quote form. Runs as the signed-in
 // user (RLS), not the service role; public_token/job_token come back from the
 // row's own column defaults, same as every other insert into this table.
-export async function insertQuote(session: Session, row: Partial<Quote>): Promise<Quote | null> {
+//
+// Says why it failed, for the same reason updateQuoteResult does: the three
+// ways this insert realistically breaks (RLS, a check constraint, a column that
+// doesn't exist yet) all need a different fix, and none of them are fixed by
+// the "try again" a bare null forces the form to say.
+export async function insertQuoteResult(
+  session: Session,
+  row: Partial<Quote>,
+): Promise<{ quote: Quote | null; error?: string; code?: string }> {
   const res = await pgUser("quote_requests", session.accessToken, {
     method: "POST",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify(row),
   });
-  if (!res.ok) return null;
-  const rows = (await res.json()) as Quote[];
-  return rows[0] ?? null;
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[insertQuote] failed", { status: res.status, body, columns: Object.keys(row) });
+    // PostgREST puts the SQLSTATE in the body, so the specific failure is
+    // knowable rather than guessable.
+    const code = body.match(/"code"\s*:\s*"([^"]+)"/)?.[1] ?? "";
+
+    // 42501 covers both halves of a permission problem: the table grant and the
+    // RLS policy. One file adds both, so one message covers both.
+    if (code === "42501" || /row-level security|permission denied/i.test(body)) {
+      return {
+        quote: null,
+        code,
+        error: "The database is not letting this account create leads. Run supabase/manual-quote.sql in Supabase, then try again.",
+      };
+    }
+    if (code === "PGRST204" || /column .* does not exist/i.test(body)) {
+      const missing = body.match(/'([a-z_]+)' column/i)?.[1] ?? body.match(/column "([a-z_]+)"/i)?.[1];
+      return {
+        quote: null,
+        code,
+        error: `The database is missing the "${missing ?? "required"}" column. Run the SQL in supabase/ (see README) and try again.`,
+      };
+    }
+    // 23514 = check violation. The caller knows which field it just sent that
+    // the constraint might not have heard of yet, so let it say so.
+    return {
+      quote: null,
+      code,
+      error: `Could not save the lead (error ${res.status}${code ? ` / ${code}` : ""}). Check the values and try again.`,
+    };
+  }
+
+  const rows = (await res.json().catch(() => [])) as Quote[];
+  if (!rows[0]) {
+    // Written, but not readable back. Saying "could not save" here would be a
+    // lie that gets the same customer entered twice.
+    return { quote: null, error: "The lead saved but could not be read back. Check the pipeline before adding it again." };
+  }
+  return { quote: rows[0] };
 }
 
 // id → display name for showing assignees without a PostgREST join.

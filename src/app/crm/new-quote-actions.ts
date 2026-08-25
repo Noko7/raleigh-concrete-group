@@ -10,7 +10,7 @@ import {
   conflictMessage,
   findVisitConflict,
   getStaffContactById,
-  insertQuote,
+  insertQuoteResult,
   resolveAssignee,
 } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
@@ -104,8 +104,21 @@ export async function createQuote(_prev: NewQuoteState, formData: FormData): Pro
 
   if (assigneeId) row.assigned_to = assigneeId;
 
-  const created = await insertQuote(session, row);
-  if (!created) return { ok: false, error: "Could not save. Check your access and try again." };
+  const result = await insertQuoteResult(session, row);
+  const created = result.quote;
+  if (!created) {
+    // A check violation on a "From plans" lead has exactly one cause worth
+    // naming: qr_chk still only knows the two types the public form can send,
+    // because supabase/quote-type-plans.sql hasn't been run. Every other field
+    // on this form was already validated above.
+    if (result.code === "23514" && quoteType === "plans") {
+      return {
+        ok: false,
+        error: 'The database does not know the "From plans" quote type yet. Run supabase/quote-type-plans.sql in Supabase, then try again.',
+      };
+    }
+    return { ok: false, error: result.error ?? "Could not save the lead. Please try again." };
+  }
 
   await addEvent(session, created.id, "quote_created_manually", { by: session.staff.full_name || session.staff.email });
 
