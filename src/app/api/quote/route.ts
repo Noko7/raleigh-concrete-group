@@ -41,6 +41,9 @@ const LIMITS = {
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Deliberately narrower than QUOTE_TYPES in constants.ts. "plans" is a
+// commercial route the office opens on a call after seeing what the job is;
+// it is not something the public form should let anyone self-select.
 const QUOTE_TYPES = new Set(["online", "inperson"]);
 
 function asString(v: unknown, max: number): string {

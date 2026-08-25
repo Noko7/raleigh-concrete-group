@@ -11,6 +11,7 @@ export const MESSAGE_LABELS: Record<string, string> = {
   received: "Request received",
   visit_confirmed: "Quote visit confirmed",
   visit_booked: "Estimate booked on a call",
+  custom: "Custom text from the office",
   visit_reminder: "Quote visit reminder",
   stale_lead: "Untouched lead nudge",
   quote_followup: "48h quote follow-up",

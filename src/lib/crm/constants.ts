@@ -119,6 +119,25 @@ export function noEmDash(s: string): string {
     .replace(/\s--\s/g, " - ");
 }
 
+// How we are pricing a job, which decides whether anybody goes to look at it.
+//
+//   inperson  we drive out and measure. The only kind with a real appointment.
+//   online    priced from the customer's photos. They offer a fallback slot in
+//             case the photos aren't enough; nobody is committed to it.
+//   plans     priced from drawings - the commercial case, an apartment block
+//             or a slab schedule. No visit and no photos.
+//
+// null is a row from before this column existed. Those were all site visits,
+// so null is treated as in-person throughout.
+export const QUOTE_TYPES = ["inperson", "online", "plans"] as const;
+export type QuoteType = (typeof QUOTE_TYPES)[number];
+
+export const QUOTE_TYPE_LABELS: Record<QuoteType, string> = {
+  inperson: "In person",
+  online: "Online (photos)",
+  plans: "From plans",
+};
+
 // visit_date carries two different meanings and quote_type is what tells them
 // apart. Everything that shows a date to a person goes through one of these two
 // readers rather than the column, because the difference between "we are coming"
@@ -128,8 +147,15 @@ type Visitable = { quote_type?: string | null; visit_date?: string | null };
 // A booked appointment: somebody is expected at an address on this day. Only an
 // in-person row has one. This is what the calendar, Google invites, crew
 // reminders and the job page's headline date are all built on.
+//
+// Written as an allow-list, not "anything except online". The old form was
+// correct while there were exactly two types, and quietly wrong the moment a
+// third arrived: a 'plans' row would have claimed a visit nobody booked, put
+// a commercial job on the calendar, and sent a crew a night-before reminder
+// to drive to an apartment site for an appointment that never existed.
 export function visitDateOf(q: Visitable): string | null {
-  return q.quote_type === "online" ? null : (q.visit_date ?? null);
+  const booked = q.quote_type === "inperson" || q.quote_type == null;
+  return booked ? (q.visit_date ?? null) : null;
 }
 
 // The slot an online customer offered in case their job turns out to be too big

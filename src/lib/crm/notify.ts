@@ -442,19 +442,28 @@ export function newQuoteMessage(q: QuoteInfo): string {
     // Left off entirely for older leads that predate the choice.
     ...block(
       "Quote Type:",
-      q.quote_type === "online" ? "Online - price it from the photos" : q.quote_type === "inperson" ? "In person" : null,
+      q.quote_type === "online"
+        ? "Online - price it from the photos"
+        : q.quote_type === "plans"
+          ? "From plans - no visit, price it off the drawings"
+          : q.quote_type === "inperson"
+            ? "In person"
+            : null,
     ),
     // The same date means two different things, so it is never labelled the
     // same way. On an online request it's the customer's fallback slot and the
     // label has to say out loud that nobody has agreed to it, or the crew reads
-    // a booking into a maybe and drives out.
+    // a booking into a maybe and drives out. A plans job has no date at all,
+    // so visitDateOf gives nothing and this whole block drops out.
     ...block(
       q.quote_type === "online" ? "If a visit is needed, they asked for:" : "Visit Booked:",
-      visitDay
-        ? `${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}${
-            q.quote_type === "online" ? " (not confirmed - confirm it on the job page)" : ""
-          }`
-        : null,
+      q.quote_type === "plans"
+        ? null
+        : visitDay
+          ? `${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}${
+              q.quote_type === "online" ? " (not confirmed - confirm it on the job page)" : ""
+            }`
+          : null,
     ),
     ...block("Details:", details),
     q.job_token ? jobLink(q.job_token) : null,
@@ -600,6 +609,24 @@ export async function notifyVisitConfirmed(
     crewPhone,
     { quoteId: q.id, kind: "visit_confirmed" },
   ).catch(() => {});
+}
+
+// ── 4a. A message the owner wrote themselves ────────────────────────────────
+// Sent when logging a call-in lead. The body is whatever they typed, because
+// the whole point is that a commercial enquiry about an apartment block needs
+// something none of the templates here can say.
+//
+// Two things are added rather than left to whoever is typing: the business
+// name, so it isn't an unsigned text from an unknown number, and the STOP
+// notice, because for a phoned-in lead this is the first message we have ever
+// sent them and that notice has to appear at least once.
+export async function notifyCustomMessage(q: QuoteInfo, body: string): Promise<SendResult> {
+  const written = body.trim();
+  return sendSmsResult(
+    q.phone,
+    text([written, "", BUSINESS, "", OPT_OUT_LINE]),
+    { quoteId: q.id, kind: "custom", role: "customer" },
+  );
 }
 
 // ── 4b. Estimate booked on a phone call ─────────────────────────────────────

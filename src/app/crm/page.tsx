@@ -56,7 +56,11 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
             {isOwner ? "" : ` ${t.pipeline.assignedToYou}`} · {t.pipeline.dragHint}
           </p>
         </div>
-        {isOwner && <NewQuoteForm />}
+        {isOwner && (
+          <NewQuoteForm
+            contractors={contractors.map((c) => ({ id: c.id, label: c.full_name || c.email || "Contractor" }))}
+          />
+        )}
       </div>
 
       <form className="crm-filters" method="get" action={`${base}/`}>

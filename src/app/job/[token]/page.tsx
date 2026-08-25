@@ -89,7 +89,8 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // An online request's offered slot comes last and is flagged `pending`, which
   // renders it in a different colour with "not confirmed" on it. A date shown
   // the same way as a booking is a date somebody drives to.
-  const isInPerson = quote.quote_type === "inperson";
+  const isPlans = quote.quote_type === "plans";
+  const isInPerson = !isPlans && quote.quote_type !== "online";
   const when = prettyJob
     ? {
         label: t.contractorJob.scheduledJob,
@@ -136,8 +137,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             are set large and heavy. They shout through size rather than through
             a colour of their own - this is one card in a stack, not a banner. */}
         <div className="job-key">
-          <span className={`job-type job-type-${isInPerson ? "inperson" : "online"}`}>
-            {isInPerson ? t.contractorJob.typeInPerson : t.contractorJob.typeOnline}
+          <span className={`job-type job-type-${isPlans ? "plans" : isInPerson ? "inperson" : "online"}`}>
+            {isPlans
+              ? t.contractorJob.typePlans
+              : isInPerson
+                ? t.contractorJob.typeInPerson
+                : t.contractorJob.typeOnline}
           </span>
           {when ? (
             <div className={`job-when${when.pending ? " job-when-pending" : ""}`}>
@@ -150,9 +155,14 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           ) : (
             // "No date set yet" on an online quote reads like something is
             // missing. Nothing is: they didn't offer a time and none is needed
-            // unless the photos fall short.
+            // unless the photos fall short. A plans job is the same, more so -
+            // nobody was ever going out on it.
             <span className="job-when-none">
-              {quote.quote_type === "online" ? t.contractorJob.noVisitNeeded : t.contractorJob.notScheduled}
+              {isPlans
+                ? t.contractorJob.priceFromPlans
+                : quote.quote_type === "online"
+                  ? t.contractorJob.noVisitNeeded
+                  : t.contractorJob.notScheduled}
             </span>
           )}
         </div>

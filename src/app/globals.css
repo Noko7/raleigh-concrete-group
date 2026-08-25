@@ -1605,6 +1605,9 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 /* Charcoal rather than a second accent: the two pills only have to be told
    apart, and the page has exactly one accent colour. */
 .job-type-online { background: var(--charcoal-end); color: var(--ivory); }
+/* Priced off drawings: no visit, no photos. Slate keeps it clearly apart
+   from the amber "somebody is driving out" pill. */
+.job-type-plans { background: #334155; color: var(--ivory); }
 .job-when { display: flex; flex-direction: column; gap: 0.1rem; }
 .job-when-label { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: #6b7280; }
 /* Same display face the rest of the site uses for its big numbers (.crm-stat
@@ -1788,6 +1791,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .kb-card-meta { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.55rem; }
 .kb-pill { font-size: 0.66rem; font-weight: 800; padding: 0.13rem 0.5rem; border-radius: 999px; background: rgba(255, 255, 255, 0.1); letter-spacing: 0.02em; }
 .kb-pill-online { background: rgba(34, 211, 238, 0.18); color: #67e8f9; }
+.kb-pill-plans { background: rgba(148, 163, 184, 0.22); color: #cbd5e1; }
 .kb-pill-inperson { background: rgba(250, 204, 21, 0.18); color: #fde047; }
 .kb-pill-view { background: rgba(74, 222, 128, 0.18); color: #86efac; }
 .kb-pill-assigned { background: rgba(194, 104, 42, 0.24); color: #f0b489; }

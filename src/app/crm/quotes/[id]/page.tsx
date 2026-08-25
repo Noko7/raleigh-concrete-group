@@ -122,7 +122,15 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               </div>
               <div>
                 <dt>{t.job.type}</dt>
-                <dd>{quote.quote_type === "online" ? t.job.typeOnline : quote.quote_type === "inperson" ? t.job.typeInPerson : t.job.na}</dd>
+                <dd>
+                  {quote.quote_type === "online"
+                    ? t.job.typeOnline
+                    : quote.quote_type === "plans"
+                      ? t.job.typePlans
+                      : quote.quote_type === "inperson"
+                        ? t.job.typeInPerson
+                        : t.job.na}
+                </dd>
               </div>
               {visitDate && (
                 <div>

@@ -75,6 +75,7 @@ const OLDEST_FIRST: ReadonlySet<Status> = new Set(["new", "quoted", "approved", 
 // One clear label per lead type so a card reads at a glance.
 function typeLabel(q: BoardQuote, t: Dict): { text: string; cls: string } {
   if (q.quote_type === "online") return { text: t.pipeline.typeOnline, cls: "online" };
+  if (q.quote_type === "plans") return { text: t.pipeline.typePlans, cls: "plans" };
   if (q.quote_type === "inperson") return { text: t.pipeline.typeInPerson, cls: "inperson" };
   return { text: t.pipeline.typeLead, cls: "inperson" };
 }

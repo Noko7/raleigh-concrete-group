@@ -86,6 +86,8 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     }
     case "name_changed":
       return `Customer name corrected to ${String(m.to ?? "")}`;
+    case "custom_message_sent":
+      return m.delivered ? "Custom text sent to the customer" : "Custom text FAILED to send";
     case "payment_requested":
       return "Payment instructions texted to the customer";
     case "job_paid":

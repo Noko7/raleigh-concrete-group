@@ -5,10 +5,13 @@ import { useActionState, useEffect, useState } from "react";
 import { quoteServiceOptions } from "@/lib/site-data";
 import { createQuote, type NewQuoteState } from "./new-quote-actions";
 
-export function NewQuoteForm() {
+type ContractorOption = { id: string; label: string };
+
+export function NewQuoteForm({ contractors }: { contractors: ContractorOption[] }) {
   const [state, formAction, pending] = useActionState<NewQuoteState, FormData>(createQuote, { ok: false });
   const [open, setOpen] = useState(false);
   const [quoteType, setQuoteType] = useState("");
+  const [sendText, setSendText] = useState(false);
   // The crew can book an estimate for today - the lead-time floor is a rule
   // for what a customer may request on the website, not for what the office
   // may agree to on a call.
@@ -20,6 +23,7 @@ export function NewQuoteForm() {
     if (state.ok) {
       setOpen(false);
       setQuoteType("");
+      setSendText(false);
     }
   }, [state.ok]);
 
@@ -70,9 +74,25 @@ export function NewQuoteForm() {
             <option value="">Not sure yet</option>
             <option value="online">Online - price from photos</option>
             <option value="inperson">In person - book the estimate now</option>
+            <option value="plans">From plans - no visit, price off the drawings</option>
           </select>
         </label>
       </div>
+
+      {/* Auto is the default and matches what a web lead does. The override
+          is here because a commercial job is often a specific person's work
+          regardless of what the job-type rules say. */}
+      <label className="crm-field">
+        <span>Assign to</span>
+        <select name="assigned_to" className="crm-input" defaultValue="">
+          <option value="">Auto - by job type</option>
+          {contractors.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {/* Booking the estimate while they are still on the phone is the whole
           point of taking the call. Only asked for an in-person quote, since
@@ -110,6 +130,33 @@ export function NewQuoteForm() {
         <span>Notes (optional)</span>
         <textarea name="details" className="crm-input" rows={2} placeholder="Whatever they told you on the phone" />
       </label>
+
+      {/* Off by default. A call-in lead normally needs no text at all - you
+          just spoke to them - so this is for the case where you promised
+          something on the call and want it in writing. */}
+      <fieldset className="crm-sections">
+        <legend>
+          <label className="svc-check">
+            <input type="checkbox" checked={sendText} onChange={(e) => setSendText(e.target.checked)} />
+            <span>Text the customer now</span>
+          </label>
+        </legend>
+        {sendText && (
+          <>
+            <textarea
+              name="custom_message"
+              className="crm-input"
+              rows={4}
+              maxLength={1000}
+              required
+              placeholder="Hi Dana, great speaking with you. Send over the plan set whenever you're ready and we'll get pricing back to you this week."
+            />
+            <p className="crm-muted crm-sm">
+              Sent exactly as written, signed off with the business name and the STOP notice. Never include a price.
+            </p>
+          </>
+        )}
+      </fieldset>
 
       <div className="crm-editor-foot">
         <button type="submit" className="crm-btn crm-btn-primary" disabled={pending}>

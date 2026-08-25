@@ -315,8 +315,11 @@ export async function countJobsOn(date: string, excludeId?: string): Promise<num
 // existed are null and still count, since those were all visits.
 export async function countVisitsOn(date: string): Promise<number> {
   if (!ISO_DATE.test(date)) return 0;
+  // Allow-list, mirroring visitDateOf: only in-person rows and legacy nulls
+  // occupy a slot. A 'plans' row is desk work with no place to be, so it must
+  // not make a day look full.
   const res = await pgAdmin(
-    `quote_requests?visit_date=eq.${date}&or=(quote_type.is.null,quote_type.neq.online)&select=id`,
+    `quote_requests?visit_date=eq.${date}&or=(quote_type.is.null,quote_type.eq.inperson)&select=id`,
   );
   if (!res.ok) return 0;
   return ((await res.json()) as unknown[]).length;
@@ -369,7 +372,9 @@ export async function contractorCommitments(
     if (r.scheduled_date === date && r.customer_response === "accepted") {
       out.push({ id: r.id, name: r.name, kind: "job", time: r.scheduled_time });
     }
-    if (r.visit_date === date && r.quote_type !== "online") {
+    // visitDateOf's rule, applied to the narrow row this query selects: only
+    // an in-person visit (or a legacy null) is somewhere a person has to be.
+    if (r.visit_date === date && visitDateOf(r)) {
       out.push({ id: r.id, name: r.name, kind: "visit", time: r.visit_time });
     }
   }

@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { to12Hour } from "@/lib/crm/constants";
-import { notifyAssignment, notifyVisitBooked } from "@/lib/crm/notify";
+import { QUOTE_TYPES, to12Hour } from "@/lib/crm/constants";
+import { notifyAssignment, notifyCustomMessage, notifyVisitBooked } from "@/lib/crm/notify";
 import {
   addEvent,
   conflictMessage,
@@ -16,8 +16,6 @@ import {
 import type { Quote } from "@/lib/crm/types";
 
 export type NewQuoteState = { ok: boolean; error?: string; id?: string };
-
-const QUOTE_TYPES = new Set(["online", "inperson"]);
 // Matches the public form's own check (src/app/api/quote/route.ts) - the DB's
 // qr_chk constraint validates this too, but failing here gives a real error
 // instead of a generic "could not save".
@@ -52,7 +50,9 @@ export async function createQuote(_prev: NewQuoteState, formData: FormData): Pro
   const city = String(formData.get("city") ?? "").trim().slice(0, 120);
   const details = String(formData.get("details") ?? "").trim().slice(0, 2000);
   const quoteTypeRaw = String(formData.get("quote_type") ?? "").trim();
-  const quoteType = QUOTE_TYPES.has(quoteTypeRaw) ? quoteTypeRaw : null;
+  const quoteType = (QUOTE_TYPES as readonly string[]).includes(quoteTypeRaw) ? quoteTypeRaw : null;
+
+  const customMessage = String(formData.get("custom_message") ?? "").trim().slice(0, 1000);
 
   // An in-person call-in books the estimate then and there, while the
   // customer is still on the phone to agree to it. Stored the same way a web
@@ -85,9 +85,14 @@ export async function createQuote(_prev: NewQuoteState, formData: FormData): Pro
     source_path: "crm:manual",
   };
 
-  // Routed by job type, exactly like a web lead, falling back to the primary
-  // contractor when nothing claims this service.
-  const assigneeId = await resolveAssignee(service).catch(() => null);
+  // An explicit pick wins over the job-type rules. Commercial work in
+  // particular is often a specific person's regardless of what the service
+  // says, and the office knows that on the call.
+  const pickedAssignee = String(formData.get("assigned_to") ?? "").trim();
+  if (pickedAssignee && !/^[0-9a-fA-F-]{36}$/.test(pickedAssignee)) {
+    return { ok: false, error: "Pick a valid contractor." };
+  }
+  const assigneeId = pickedAssignee || (await resolveAssignee(service).catch(() => null));
 
   // Don't put whoever gets this job in two places at once. Checked before the
   // row is written so the office can offer another time while still on the
@@ -121,6 +126,17 @@ export async function createQuote(_prev: NewQuoteState, formData: FormData): Pro
       },
       contractor?.full_name,
     ).catch(() => {});
+  }
+
+  // Whatever the office promised on the call, in writing. Sent before the
+  // appointment confirmation below so the two arrive in the order they were
+  // discussed.
+  if (customMessage) {
+    const res = await notifyCustomMessage(
+      { id: created.id, name: created.name, phone: created.phone },
+      customMessage,
+    ).catch(() => null);
+    await addEvent(session, created.id, "custom_message_sent", { delivered: Boolean(res?.ok) });
   }
 
   // A booked estimate goes to the customer in writing. Everything else about
