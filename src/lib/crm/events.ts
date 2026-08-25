@@ -76,9 +76,16 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "Customer could not confirm their job";
     case "job_completed": {
       const checks = Array.isArray(m.checks) ? (m.checks as string[]).length : 0;
-      const done = checks ? ` (${checks}/4 checked)` : "";
-      return `Work marked completed${done}${m.note ? ` — "${String(m.note)}"` : ""}`;
+      const done = checks ? ` (${checks}/3 checked)` : "";
+      return `Work marked completed${done}${m.note ? ` - "${String(m.note)}"` : ""}`;
     }
+    case "photos_added": {
+      const kind = String(m.kind ?? "");
+      const label = kind === "before" ? "before" : kind === "after" ? "after" : "site";
+      return `Added ${Number(m.count ?? 0)} ${label} photo(s)`;
+    }
+    case "name_changed":
+      return `Customer name corrected to ${String(m.to ?? "")}`;
     case "payment_requested":
       return "Payment instructions texted to the customer";
     case "job_paid":

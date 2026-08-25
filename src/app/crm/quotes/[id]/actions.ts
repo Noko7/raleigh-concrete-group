@@ -39,7 +39,7 @@ import {
   updateQuoteResult,
 } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
-import type { SaveState, ScheduleState } from "./types";
+import type { FinishState, SaveState, ScheduleState } from "./types";
 
 export async function saveQuote(_prev: SaveState, formData: FormData): Promise<SaveState> {
   const session = await getSession();
@@ -462,14 +462,38 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
 
 // Contractor/owner marks the on-site work done. Moves it to Completed and texts
 // the customer a thank-you with the review link. Payment is the next step.
-export async function completeJob(formData: FormData): Promise<void> {
+//
+// Returns state rather than void so the photo requirement below can say why it
+// refused. A silent no-op on a button that texts the customer is the worst of
+// both worlds: nothing happens and nobody knows why.
+export async function completeJob(_prev: FinishState, formData: FormData): Promise<FinishState> {
   const session = await getSession();
-  if (!session) return;
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
   const id = String(formData.get("id") ?? "");
-  if (!id) return;
+  if (!id) return { ok: false, error: "Missing job id." };
 
   const current = await getQuote(session, id);
-  if (!current || current.status === "completed" || current.status === "paid") return;
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+  if (current.status === "completed" || current.status === "paid") {
+    return { ok: true, message: "This job is already closed out." };
+  }
+
+  // Before and after are the record of what was handed over, so the job
+  // cannot close without them. Enforced here rather than only in the UI:
+  // this action is reachable from the CRM too, and a rule that only exists
+  // in one of two buttons is not a rule.
+  const missing: string[] = [];
+  if (!current.before_urls?.length) missing.push("before");
+  if (!current.after_urls?.length) missing.push("after");
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      error:
+        missing.length === 2
+          ? "Upload before and after photos before closing this job out."
+          : `Upload ${missing[0]} photos before closing this job out.`,
+    };
+  }
 
   // The crew's close-out checklist and any note they left. Optional: the owner's
   // own Mark completed button on the CRM page sends neither, and shouldn't have
@@ -479,7 +503,7 @@ export async function completeJob(formData: FormData): Promise<void> {
   const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
 
   const updated = await updateQuote(session, id, { status: "completed", completed_at: new Date().toISOString() });
-  if (!updated) return;
+  if (!updated) return { ok: false, error: "Could not close this job out. Please try again." };
 
   await addEvent(session, id, "status_changed", { from: current.status, to: "completed" });
   await addEvent(session, id, "job_completed", { checks, note: note || null });
@@ -506,6 +530,7 @@ export async function completeJob(formData: FormData): Promise<void> {
   revalidatePath("/crm");
   // The crew marks jobs done from their own job page.
   revalidatePath("/job/[token]", "page");
+  return { ok: true, message: "Job closed out and the customer has been thanked." };
 }
 
 // Text the customer how to pay (Zelle / bank deposit). The actual instructions

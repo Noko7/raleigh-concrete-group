@@ -15,3 +15,7 @@ export type SaveState = {
 };
 
 export type ScheduleState = { ok: boolean; error?: string; message?: string };
+
+// Closing a job out. Same shape as ScheduleState, named separately because the
+// one thing it reports that matters is the refusal: no before/after photos.
+export type FinishState = { ok: boolean; error?: string; message?: string };

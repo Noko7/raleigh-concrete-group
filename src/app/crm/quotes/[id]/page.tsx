@@ -19,10 +19,12 @@ import { AddAgreement } from "../../agreements/add-agreement";
 import { AgreementList } from "../../agreements/agreement-list";
 import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
+import { PhotoUpload } from "../../photo-upload";
+import { CompleteCard } from "./complete-card";
 import { MessageLog } from "./message-log";
 import { QuoteEditor } from "./quote-editor";
 import { ScheduleCard } from "./schedule-card";
-import { completeJob, markPaid, requestPayment, rotateTokens } from "./actions";
+import { markPaid, requestPayment, rotateTokens } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +59,14 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const events = await listEvents(session, id);
   const messages = await listMessages(session, id);
   const agreements = await listAgreementsForQuote(session, id);
-  const photoUrls = (quote.file_urls ?? []).map((p) => `${base}/api/file?p=${encodeURIComponent(p)}`);
+  // Every photo on this page is served through the same authenticated proxy,
+  // so a signed URL never leaves the CRM.
+  const viaProxy = (paths: string[] | null) =>
+    (paths ?? []).map((p) => `${base}/api/file?p=${encodeURIComponent(p)}`);
+  const photoUrls = viaProxy(quote.file_urls);
+  const internalUrls = viaProxy(quote.internal_urls);
+  const beforeUrls = viaProxy(quote.before_urls);
+  const afterUrls = viaProxy(quote.after_urls);
   // The same column, read two ways: a booked visit on an in-person request, or
   // the slot an online customer offered in case photos aren't enough. Only one
   // of these is ever set, and they are never labelled the same.
@@ -203,6 +212,27 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             )}
           </div>
 
+          {/* Ours, kept apart from the customer's own uploads above. Which
+              set a photo belongs to is the point: the before/after pair is
+              the record of the work, and a picture the customer sent in
+              before we started is not that. */}
+          <div className="crm-card">
+            <h2 className="crm-card-title">Our photos</h2>
+            <p className="crm-muted crm-sm">Only staff see these. The customer&apos;s quote page never shows photos.</p>
+
+            <h3 className="crm-photo-head">Site notes ({internalUrls.length})</h3>
+            {internalUrls.length > 0 && <PhotoGrid urls={internalUrls} />}
+            <PhotoUpload quoteId={quote.id} kind="internal" label="Add site photos" />
+
+            <h3 className="crm-photo-head">Before ({beforeUrls.length})</h3>
+            {beforeUrls.length > 0 && <PhotoGrid urls={beforeUrls} />}
+            <PhotoUpload quoteId={quote.id} kind="before" label="Add before photos" />
+
+            <h3 className="crm-photo-head">After ({afterUrls.length})</h3>
+            {afterUrls.length > 0 && <PhotoGrid urls={afterUrls} />}
+            <PhotoUpload quoteId={quote.id} kind="after" label="Add after photos" />
+          </div>
+
           <div className="crm-card">
             <h2 className="crm-card-title">Customer agreement ({agreements.length})</h2>
             <p className="crm-muted crm-sm">
@@ -276,19 +306,16 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
           )}
 
           {quote.status === "scheduled" && (
-            <div className="crm-card">
-              <h2 className="crm-card-title">{t.finish.title}</h2>
-              <p className={quote.confirmed_at ? "crm-muted crm-sm" : "crm-text-danger crm-sm"}>
-                {quote.confirmed_at ? t.finish.confirmed : t.finish.awaitingConfirm}{" "}
-                <span className="crm-muted">{t.finish.hint}</span>
-              </p>
-              <form action={completeJob}>
-                <input type="hidden" name="id" value={quote.id} />
-                <button type="submit" className="crm-btn crm-btn-primary">
-                  {t.finish.markCompleted}
-                </button>
-              </form>
-            </div>
+            <CompleteCard
+              id={quote.id}
+              title={t.finish.title}
+              hint={t.finish.hint}
+              statusNote={quote.confirmed_at ? t.finish.confirmed : t.finish.awaitingConfirm}
+              statusIsWarning={!quote.confirmed_at}
+              buttonLabel={t.finish.markCompleted}
+              beforeCount={quote.before_urls?.length ?? 0}
+              afterCount={quote.after_urls?.length ?? 0}
+            />
           )}
 
           {quote.status === "completed" && (

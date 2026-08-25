@@ -1397,6 +1397,33 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   cursor: pointer; font-family: inherit;
 }
 .crm-na-btn:hover { border-color: var(--amber); color: var(--amber); }
+/* ── Staff photo upload ── */
+.pu { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0.5rem 0 0.9rem; }
+.pu-btn {
+  display: inline-block; cursor: pointer; font-size: 0.78rem; font-weight: 800;
+  padding: 0.42rem 0.8rem; border-radius: 0.45rem;
+  background: rgba(255, 255, 255, 0.09); border: 1px solid var(--crm-border); color: var(--crm-text);
+}
+.pu-btn:hover { background: var(--amber); border-color: var(--amber); color: #fff; }
+.pu-err { color: #f87171; font-size: 0.8rem; font-weight: 600; }
+/* The job page is a light card, so the same control needs light colours. */
+.pu-light .pu-btn { background: #fff; border: 2px solid var(--amber); color: var(--amber-dark); min-height: 44px; display: inline-flex; align-items: center; }
+.pu-light .pu-btn:hover { background: var(--amber); color: #fff; }
+.pu-light .pu-err { color: #b91c1c; }
+
+.crm-photo-head { font-size: 0.8rem; font-weight: 800; color: var(--crm-muted); margin: 1rem 0 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.crm-photo-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.9rem; margin: 0.9rem 0; }
+.crm-slot-ok, .crm-slot-todo { display: block; font-size: 0.8rem; font-weight: 800; }
+.crm-slot-ok { color: #4ade80; }
+.crm-slot-todo { color: #f87171; }
+
+/* Before/after on the crew's finish card. */
+.jf-photos { border: 1px solid #e5e7eb; border-radius: 0.7rem; padding: 0.9rem; margin-bottom: 1rem; background: #faf8f4; }
+.jf-photo-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.9rem; }
+.jf-photo-slot { display: flex; flex-direction: column; gap: 0.2rem; }
+.jf-photo-ok { font-size: 0.82rem; font-weight: 800; color: #15803d; }
+.jf-photo-todo { font-size: 0.82rem; font-weight: 800; color: #b91c1c; }
+
 /* Job-type checkboxes: two columns so ten services don't make a long scroll
    inside an already-expanded row editor. */
 .svc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.35rem 0.9rem; margin-bottom: 0.7rem; }

@@ -64,6 +64,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // people doing the work are allowed to agree to.
   const minJobDate = new Date().toISOString().slice(0, 10);
   const photos = quote.file_urls?.length ? await signFiles(quote.file_urls, 7200) : [];
+  // What the crew has already put on this job, so the finish card can show
+  // counts rather than asking them to remember.
+  const ourPhotos = await signFiles(
+    [...(quote.internal_urls ?? []), ...(quote.before_urls ?? []), ...(quote.after_urls ?? [])],
+    7200,
+  );
 
   // Dates read in the contractor's own language, same as the rest of the page.
   const fmtDay = (ymd: string) =>
@@ -178,7 +184,14 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           />
         )}
 
-        {showFinish && <JobFinish id={quote.id} locale={locale} />}
+        {showFinish && (
+          <JobFinish
+            id={quote.id}
+            locale={locale}
+            beforeCount={quote.before_urls?.length ?? 0}
+            afterCount={quote.after_urls?.length ?? 0}
+          />
+        )}
 
         {isDone && (
           <section className="js-card jf-done">
@@ -262,6 +275,24 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               ) : null,
             )}
           </div>
+        )}
+
+        {/* Photos the crew has put on this job themselves, so they can see
+            what is already uploaded without opening the finish card. */}
+        {ourPhotos.length > 0 && (
+          <>
+            <h2 className="job-photos-title">{t.contractorJob.ourPhotos} ({ourPhotos.length})</h2>
+            <div className="job-photos">
+              {ourPhotos.map((p) =>
+                p.url ? (
+                  <a key={p.path} href={p.url} target="_blank" rel="noreferrer" className="job-photo">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.url} alt="Job photo" loading="lazy" />
+                  </a>
+                ) : null,
+              )}
+            </div>
+          </>
         )}
 
         {/* Pricing goes last on purpose. It needs the photos, the notes and the
