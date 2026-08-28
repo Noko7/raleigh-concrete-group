@@ -1,7 +1,7 @@
 // Server-only data access for the CRM. Reads/writes that belong to a logged-in
 // user go through pgUser (RLS enforces owner/contractor scoping). Token-page
 // lookups, view tracking and signed URLs use pgAdmin (no user context).
-import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, visitDateOf } from "./constants";
+import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, TIME_RE, visitDateOf } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
 import type {
@@ -928,7 +928,7 @@ export async function confirmSchedule(
   if (!ISO_DATE.test(date)) return { ok: false, error: "Pick a valid date." };
   // Display copy like "9:00 AM" - validated by shape so a tampered form can't
   // inject a paragraph into every text we send afterwards.
-  if (!/^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(time.trim())) return { ok: false, error: "Pick a start time." };
+  if (!TIME_RE.test(time.trim())) return { ok: false, error: "Pick a start time." };
   const cleanTime = time.trim().toUpperCase().replace(/\s+/, " ");
 
   const current = await getQuote(session, id);
@@ -983,7 +983,7 @@ export async function rescheduleVisit(
 ): Promise<{ ok: boolean; error?: string; previous?: string | null; previousTime?: string | null; unchanged?: boolean }> {
   if (!ISO_DATE.test(date)) return { ok: false, error: "Pick a valid date." };
   const cleanTime = time.trim().toUpperCase().replace(/\s+/, " ");
-  if (cleanTime && !/^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(cleanTime)) return { ok: false, error: "Pick a valid time." };
+  if (cleanTime && !TIME_RE.test(cleanTime)) return { ok: false, error: "Pick a valid time." };
 
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this quote." };

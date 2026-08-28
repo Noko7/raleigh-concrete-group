@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 
+import { to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
 import { setJobDate } from "./actions";
 import type { ScheduleState } from "./types";
@@ -14,20 +15,6 @@ function pretty(s: string): string {
     year: "numeric",
   });
 }
-
-// Crew-pickable start times. On the hour is how crews actually talk; half-hour
-// slots would double the list for little gain on a concrete job.
-export const START_TIMES = [
-  "7:00 AM",
-  "8:00 AM",
-  "9:00 AM",
-  "10:00 AM",
-  "11:00 AM",
-  "12:00 PM",
-  "1:00 PM",
-  "2:00 PM",
-  "3:00 PM",
-];
 
 // Confirming a date is what actually books the job and texts the customer, so
 // this is deliberately a separate card rather than another field in the editor -
@@ -71,15 +58,18 @@ export function ScheduleCard({
         <p className="crm-muted crm-sm">{t.schedule.waiting}</p>
       )}
 
+      {/* Any start time, not a list of round hours. A crew that has to be on
+          site at 6:45 for a pour shouldn't have to round it to 7:00 in the
+          text the customer gets. The value rides along in the hidden fields
+          below, so every way of booking a day carries the same time. */}
       <label className="crm-field sched-time">
         <span>{t.schedule.startTime}</span>
-        <select className="crm-input" value={time} onChange={(e) => setTime(e.target.value)}>
-          {START_TIMES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <input
+          type="time"
+          className="crm-input"
+          value={to24Hour(time, "09:00")}
+          onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
+        />
       </label>
 
       {preferredDates.length > 0 && (

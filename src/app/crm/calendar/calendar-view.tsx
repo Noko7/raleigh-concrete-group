@@ -3,9 +3,8 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { VISIT_TIME_SLOTS } from "@/lib/crm/constants";
+import { to12Hour, to24Hour, VISIT_TIME_SLOTS } from "@/lib/crm/constants";
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
-import { START_TIMES } from "@/app/crm/quotes/[id]/schedule-card";
 import { deleteEvent, moveEvent, type CalActionState } from "./actions";
 
 // Only things somebody has to show up for. An online quote is desk work with no
@@ -567,11 +566,12 @@ function EventPanel({
   delAction: (fd: FormData) => void;
 }) {
   const isJob = event.kind === "job";
-  const times = isJob ? START_TIMES : VISIT_TIME_SLOTS;
 
   const [mode, setMode] = useState<"view" | "move" | "delete">("view");
   const [date, setDate] = useState(event.date);
-  const [time, setTime] = useState(event.time ?? (isJob ? "9:00 AM" : times[0]));
+  // Only what the field opens on when the appointment has no time yet. The
+  // office isn't held to either list - see the picker below.
+  const [time, setTime] = useState(event.time ?? (isJob ? "9:00 AM" : VISIT_TIME_SLOTS[0]));
   const [notify, setNotify] = useState(true);
 
   return (
@@ -658,15 +658,22 @@ function EventPanel({
                 required
               />
             </label>
+            {/* Any time of day, not a fixed list. The five slots on the public
+                form are what a customer may request; rescheduling from here is
+                the office moving a real appointment around a real day, and
+                both moveEvent paths already validate the time by shape
+                (TIME_RE) rather than against any list. */}
             <label className="crm-field">
               <span>{t.calendar.time}</span>
-              <select name="time" className="crm-input" value={time} onChange={(e) => setTime(e.target.value)}>
-                {times.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="time"
+                className="crm-input"
+                value={to24Hour(time, isJob ? "09:00" : "08:00")}
+                onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
+              />
+              {/* moveEvent reads FormData, not component state, so the picked
+                  time still needs the field name the old select carried. */}
+              <input type="hidden" name="time" value={time} />
             </label>
             <p className="crm-muted crm-sm">{isJob ? t.calendar.moveNoteJob : t.calendar.moveNoteVisit}</p>
             <div className="cal-panel-actions">
