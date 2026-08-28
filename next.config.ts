@@ -64,6 +64,16 @@ const nextConfig: NextConfig = {
     // policy) stay indexable so Google can rank them.
     return [
       { source: "/:path*", headers: SECURITY_HEADERS },
+      // Photos in public/images are content, not code: a given filename always
+      // holds the same picture, and a changed picture arrives under a new name.
+      // Without this they're served must-revalidate, so every repeat visit
+      // spends a round-trip re-confirming a file that cannot have changed.
+      // Optimized variants (/_next/image) already have minimumCacheTTL above;
+      // this covers the originals and anything linked directly.
+      {
+        source: "/images/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
       // The CRM must never be framed (clickjacking) — belt-and-suspenders with
       // X-Frame-Options via the modern frame-ancestors directive.
       {

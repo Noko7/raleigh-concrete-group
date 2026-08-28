@@ -81,9 +81,12 @@ export default async function SecurityPage() {
   const base = await crmBase();
 
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const attempts = await listLoginAttempts(session, 2000, since);
-  const staff = await listStaff(session);
-  const activity = await listRecentActivity(session, 250);
+  const [attempts, staff, activity] = await Promise.all([
+    listLoginAttempts(session, 2000, since),
+    listStaff(session),
+    listRecentActivity(session, 250),
+  ]);
+  // The only one that has to wait: it looks up names for the rows above.
   const quoteNames = await getQuoteNames(
     session,
     activity.map((e) => e.quote_id),

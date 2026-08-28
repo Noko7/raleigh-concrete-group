@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isStaffAllowed } from "@/lib/crm/access";
-import { AT_COOKIE, RT_COOKIE } from "@/lib/crm/env";
+import { AT_COOKIE, RT_COOKIE, sessionCookieOpts } from "@/lib/crm/env";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -36,7 +36,6 @@ async function refresh(refreshToken: string) {
   }
 }
 
-const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: "lax" as const, path: "/" };
 const ACCESS_CACHE_TTL_MS = 3 * 60 * 1000;
 const accessCache = new Map<string, { active: boolean; role: string | null; email: string | null; ts: number }>();
 
@@ -186,11 +185,15 @@ export async function middleware(request: NextRequest) {
   // allowlist only applies to owners, so the role has to be known first, and
   // that means loading the staff row. It's cached, so this is one lookup per
   // user per few minutes rather than per request.
+  // Needed again at the bottom: a refreshed cookie has to be written with the
+  // same lifetime the role earned it at login.
+  let staffRole: string | null = null;
   if (hasSession && !isAuthApi && verified) {
     const tokenEmail = (verified.email ?? "").toLowerCase();
     const userId = verified.id;
     if (userId) {
       const staff = await getStaffAccess(userId);
+      staffRole = staff?.role ?? null;
       if (!staff || !staff.active || !isStaffAllowed(staff.role, staff.email ?? tokenEmail)) {
         const url = request.nextUrl.clone();
         url.pathname = isCrmHost ? "/login" : "/crm/login";
@@ -214,8 +217,16 @@ export async function middleware(request: NextRequest) {
   }
 
   if (refreshed) {
-    response.cookies.set(AT_COOKIE, refreshed.access_token, COOKIE_OPTS);
-    response.cookies.set(RT_COOKIE, refreshed.refresh_token, COOKIE_OPTS);
+    // The role is normally already in hand from the authorization check above.
+    // On the paths that skip it (the auth endpoints) look it up rather than
+    // defaulting: guessing "owner" here would expire a contractor's week-long
+    // session the moment their access token rolled over, which is the exact
+    // problem the longer lifetime exists to fix. getStaffAccess is cached, so
+    // this is almost always free.
+    const role = staffRole ?? (verified ? ((await getStaffAccess(verified.id))?.role ?? null) : null);
+    const opts = sessionCookieOpts(role);
+    response.cookies.set(AT_COOKIE, refreshed.access_token, opts);
+    response.cookies.set(RT_COOKIE, refreshed.refresh_token, opts);
   }
   return withNoIndex(response);
 }

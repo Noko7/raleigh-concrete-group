@@ -19,8 +19,11 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
   const t = dict(locale);
 
-  const quotes = await listQuotes(session, { search: sp.search, assignedTo: sp.assignedTo });
-  const staff = await listStaff(session);
+  // Independent queries, so don't make the second wait on the first.
+  const [quotes, staff] = await Promise.all([
+    listQuotes(session, { search: sp.search, assignedTo: sp.assignedTo }),
+    listStaff(session),
+  ]);
   const contractors = staff.filter((s) => s.role === "contractor");
   const nameMap: Record<string, string> = {};
   for (const s of staff) nameMap[s.id] = s.full_name || s.email || "Staff";

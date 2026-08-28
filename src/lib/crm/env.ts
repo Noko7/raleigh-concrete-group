@@ -21,6 +21,32 @@ export const ADMIN_READY = Boolean(SUPABASE_URL && SERVICE_KEY);
 export const AT_COOKIE = "rcg_at";
 export const RT_COOKIE = "rcg_rt";
 
+// How long a signed-in session survives the browser closing.
+//
+// Owners deliberately get NO maxAge - a browser-session cookie that dies with
+// the window. An owner can read every customer's details, create leads and add
+// or remove staff, so an office machine someone walks away from should not stay
+// signed in.
+//
+// Contractors get a week. They work off a phone between jobs, where the browser
+// being closed or swapped out is normal, and a login screen at 7am on a
+// driveway is friction that buys nothing: their session can only reach the jobs
+// assigned to them, and RLS enforces that on the database regardless of how
+// long the cookie lives.
+export const CONTRACTOR_SESSION_DAYS = 7;
+
+const BASE_COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: "lax" as const, path: "/" };
+
+// Both the login route and the middleware's token refresh write these cookies,
+// and they MUST agree: a refresh that forgot the maxAge would quietly demote a
+// contractor's week-long session back to a browser-session one an hour after
+// they signed in.
+export function sessionCookieOpts(role: string | null | undefined) {
+  return role === "contractor"
+    ? { ...BASE_COOKIE_OPTS, maxAge: CONTRACTOR_SESSION_DAYS * 24 * 60 * 60 }
+    : BASE_COOKIE_OPTS;
+}
+
 export const UPLOAD_BUCKET = "quote-uploads";
 
 // Private bucket holding signed contracts. Served only through

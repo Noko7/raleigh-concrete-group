@@ -21,13 +21,19 @@ function prettyPhone(raw: string | null): string {
 
 export default async function ContractorsPage() {
   const session = await requireOwner();
-  const staff = await listStaff(session);
+  // The crew list, the invites and the signed agreements are three unrelated
+  // tables; fetch them together rather than three round-trips deep.
+  const [staff, rawInvites, allAgreements] = await Promise.all([
+    listStaff(session),
+    listInvites(session),
+    listAllAgreements(session),
+  ]);
   const contractors = staff.filter((s) => s.role === "contractor");
 
   // Every invite with where it actually got to, so an unfinished signup is
   // visible instead of just silently missing from the crew list.
   const now = Date.now();
-  const invites = (await listInvites(session)).map((i) => {
+  const invites = rawInvites.map((i) => {
     const expired = new Date(i.expires_at).getTime() <= now;
     const state: "completed" | "cancelled" | "expired" | "started" | "sent" = i.used_at
       ? "completed"
@@ -52,8 +58,7 @@ export default async function ContractorsPage() {
     expired: { label: "Expired", cls: "ag-badge-void" },
   };
 
-  // One fetch for the whole page, then bucket by contractor.
-  const allAgreements = await listAllAgreements(session);
+  // One fetch for the whole page (batched above), then bucket by contractor.
   const byStaff = new Map<string, typeof allAgreements>();
   for (const a of allAgreements) {
     if (a.kind !== "contractor" || !a.staff_id) continue;

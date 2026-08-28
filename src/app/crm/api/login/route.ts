@@ -2,13 +2,11 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { isStaffAllowed } from "@/lib/crm/access";
-import { AT_COOKIE, RT_COOKIE, ADMIN_READY } from "@/lib/crm/env";
+import { AT_COOKIE, RT_COOKIE, ADMIN_READY, sessionCookieOpts } from "@/lib/crm/env";
 import { logLoginAttempt } from "@/lib/crm/queries";
 import { signInWithPassword, pgAdmin } from "@/lib/crm/rest";
 import type { Staff } from "@/lib/crm/types";
 import { clientIp } from "@/lib/rate-limit";
-
-const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: "lax" as const, path: "/" };
 
 // One generic message for every credential failure. We never echo back the
 // submitted values or any database/auth error text, so probing the form (e.g.
@@ -62,9 +60,12 @@ export async function POST(request: Request) {
 
     await logLoginAttempt({ email, success: true, reason: "ok", staffId: token.user.id, ip, userAgent }).catch(() => {});
 
+    // Lifetime follows the role: a week on a contractor's phone, until the
+    // browser closes for an owner. See sessionCookieOpts.
     const jar = await cookies();
-    jar.set(AT_COOKIE, token.access_token, COOKIE_OPTS);
-    jar.set(RT_COOKIE, token.refresh_token, COOKIE_OPTS);
+    const opts = sessionCookieOpts(staff.role);
+    jar.set(AT_COOKIE, token.access_token, opts);
+    jar.set(RT_COOKIE, token.refresh_token, opts);
     return NextResponse.json({ ok: true });
   } catch {
     await logLoginAttempt({ email, success: false, reason: "error", ip, userAgent }).catch(() => {});

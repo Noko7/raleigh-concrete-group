@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -10,7 +11,14 @@ import type { Session, Staff } from "./types";
 // refreshes the token before server components run, so by the time we read it
 // here it should be valid. We verify it against Supabase (signature + expiry)
 // and load the staff profile with the service-role key.
-export async function getSession(): Promise<Session | null> {
+//
+// Wrapped in React's cache() so those two round-trips happen ONCE per request
+// rather than once per caller. Every CRM page had been paying for them twice -
+// the layout renders the top bar from the session and then the page asks for it
+// again - and a page that also runs a server action paid a third time. The
+// memo lives for a single render pass, so this is deduplication, not a stored
+// session: a signed-out user is still signed out on their very next request.
+export const getSession = cache(async function getSession(): Promise<Session | null> {
   const at = (await cookies()).get(AT_COOKIE)?.value;
   if (!at) return null;
 
@@ -25,7 +33,7 @@ export async function getSession(): Promise<Session | null> {
   if (!isStaffAllowed(staff.role, staff.email ?? user.email)) return null;
 
   return { accessToken: at, user, staff };
-}
+});
 
 export async function requireSession(loginPath = "/crm/login"): Promise<Session> {
   const session = await getSession();

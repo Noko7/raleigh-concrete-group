@@ -53,12 +53,19 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   if (!isOwner && quote.job_token) redirect(`/job/${quote.job_token}`);
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
   const t = dict(locale);
-  const allStaff = await listStaff(session);
+  // Four independent queries that used to run one after another, so opening a
+  // job cost four sequential round-trips to Supabase before anything rendered.
+  // None of them depends on another's result.
+  const [allStaff, events, messages, agreements] = await Promise.all([
+    listStaff(session),
+    listEvents(session, id),
+    listMessages(session, id),
+    listAgreementsForQuote(session, id),
+  ]);
+  // Only reachable by a contractor on a job with no crew link (the redirect
+  // above catches every other case), so it stays out of the batch.
   const contractors = (isOwner ? allStaff : await listContractors(session)).filter((s) => s.role === "contractor");
   const nameMap = new Map(allStaff.map((s) => [s.id, s.full_name || s.email || "Staff"]));
-  const events = await listEvents(session, id);
-  const messages = await listMessages(session, id);
-  const agreements = await listAgreementsForQuote(session, id);
   // Every photo on this page is served through the same authenticated proxy,
   // so a signed URL never leaves the CRM.
   const viaProxy = (paths: string[] | null) =>
