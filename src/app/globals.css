@@ -1693,6 +1693,21 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .js-other > summary { cursor: pointer; color: #6b7280; font-size: 0.88rem; font-weight: 700; }
 .js-other-form { display: flex; gap: 0.55rem; margin-top: 0.7rem; flex-wrap: wrap; }
 .js-date { flex: 1; min-width: 150px; padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; min-height: 48px; }
+/* The picked day, spelled out under the picker that picked it. A native date
+   input orders its boxes by the phone's own language, so this line is where a
+   day and month the wrong way round becomes obvious - while they're still
+   looking at the field, rather than after the save bounces. Takes the flex
+   sizing the bare input used to carry, since it now sits in the row instead. */
+.jd { flex: 1 1 150px; display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+/* In the two rows that put a picker beside something else, the day takes a
+   line of its own: bottom-aligning a field that has a sentence hanging off it
+   leaves the input itself floating above everything next to it. */
+.jv-form .jd, .js-other-form .jd { flex-basis: 100%; }
+.jd-echo {
+  font-size: 0.85rem; font-weight: 700; color: #4b5563; line-height: 1.35;
+  text-transform: none; letter-spacing: normal;
+}
+.jd-echo-bad { color: #b91c1c; }
 .js-confirm { background: var(--amber); color: #fff; border: none; border-radius: 999px; padding: 0.7rem 1.2rem; font: inherit; font-weight: 800; cursor: pointer; min-height: 48px; }
 .js-confirm:disabled { opacity: 0.55; }
 .js-err { margin-top: 0.7rem; color: #b91c1c; font-weight: 700; font-size: 0.9rem; }

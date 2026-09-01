@@ -6,6 +6,7 @@ import { to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
 import { confirmVisit, setJobDate } from "@/app/crm/quotes/[id]/actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
+import { DateField } from "./date-field";
 
 // Moving an appointment that already exists, from the crew's own job page.
 //
@@ -49,15 +50,15 @@ export function JobReschedule({
   const [state, formAction, pending] = isJob ? jobMove : visitMove;
 
   const [open, setOpen] = useState(false);
-  const [day, setDay] = useState(date);
   const [start, setStart] = useState(time ?? (isJob ? "9:00 AM" : "8:00 AM"));
 
   // Opening always starts from the appointment as it stands now, which after a
   // save is the day that was just set rather than the one this component first
-  // mounted with. Done here rather than by remounting on the new date, because
-  // a remount would take the "customer texted" line down with it.
+  // mounted with. The date field reseeds itself - collapsing unmounts the whole
+  // form - but the start time outlives it up here, so it's reset by hand. Not
+  // done by remounting this component on the new date, because that would take
+  // the "customer texted" line down with it.
   function reopen() {
-    setDay(date);
     setStart(time ?? (isJob ? "9:00 AM" : "8:00 AM"));
     setOpen(true);
   }
@@ -87,14 +88,7 @@ export function JobReschedule({
         <div className="jr-fields">
           <label className="jr-field">
             <span>{t.contractorJob.reschedNewDay}</span>
-            <input
-              type="date"
-              name="date"
-              min={minDate}
-              value={day}
-              onChange={(e) => setDay(e.target.value)}
-              required
-            />
+            <DateField name="date" minDate={minDate} defaultValue={date} locale={locale} />
           </label>
           <label className="jr-field">
             <span>{isJob ? t.contractorJob.schedStartTime : t.contractorJob.visitTime}</span>

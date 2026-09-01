@@ -331,6 +331,10 @@ const en = {
     schedNothing: "Nothing to schedule yet — the customer hasn't approved their quote.",
     reschedule: "Reschedule",
     reschedNewDay: "New day",
+    // Spelled back out under every date picker on this page: the boxes
+    // themselves are ordered by the phone, not by us, so this is the only
+    // place the crew can see which day they actually picked.
+    dateTooEarly: "{picked} has already passed. Pick {min} or later.",
     reschedSave: "Save the new time",
     reschedNoteJob: "The customer and the crew get a text with the new day.",
     reschedNoteVisit: "The customer and the crew get a text with the new visit time.",
@@ -763,6 +767,7 @@ const es: typeof en = {
     schedNothing: "Todavía no hay nada que agendar — el cliente no ha aprobado su cotización.",
     reschedule: "Reagendar",
     reschedNewDay: "Nuevo día",
+    dateTooEarly: "{picked} ya pasó. Elige {min} o una fecha posterior.",
     reschedSave: "Guardar la nueva fecha",
     reschedNoteJob: "Le mandamos un mensaje al cliente y al equipo con el nuevo día.",
     reschedNoteVisit: "Le mandamos un mensaje al cliente y al equipo con la nueva hora de la visita.",
@@ -892,6 +897,26 @@ export type Dict = typeof en;
 
 export function dict(locale: Locale | string | null | undefined): Dict {
   return isLocale(locale) ? DICTS[locale] : en;
+}
+
+export const intlLocale = (l: Locale) => (l === "es" ? "es-US" : "en-US");
+
+/**
+ * A stored YYYY-MM-DD spelled out in the reader's language, e.g.
+ * "Friday, January 9, 2026" / "Viernes, 9 de enero de 2026".
+ *
+ * Parsed at local midnight rather than with `new Date(ymd)`, which reads a bare
+ * date as UTC and lands on the day before. Comes back as the language writes
+ * it, which in Spanish means a lowercase weekday - the caller lifts the first
+ * letter when the date starts a sentence.
+ */
+export function longDay(ymd: string, locale: Locale): string {
+  return new Date(`${ymd}T00:00:00`).toLocaleDateString(intlLocale(locale), {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 /**

@@ -6,6 +6,7 @@ import { TIME_RE, to12Hour, to24Hour, VISIT_TIME_SLOTS } from "@/lib/crm/constan
 import { dict, type Locale } from "@/lib/crm/i18n";
 import { confirmVisit } from "@/app/crm/quotes/[id]/actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
+import { DateField } from "./date-field";
 
 // Putting a real on-site appointment on the calendar. Two ways in:
 //
@@ -69,7 +70,13 @@ export function JobVisit({
             name the old <select> carried. */}
         <input type="hidden" name="time" value={time} />
       </label>
-      <input type="date" name="date" className="js-date" min={minDate} defaultValue={requestedDate ?? ""} required />
+      <DateField
+        name="date"
+        minDate={minDate}
+        defaultValue={requestedDate ?? ""}
+        locale={locale}
+        className="js-date"
+      />
       <button type="submit" className="js-confirm" disabled={pending}>
         {pending ? t.contractorJob.visitConfirming : t.contractorJob.visitConfirm}
       </button>

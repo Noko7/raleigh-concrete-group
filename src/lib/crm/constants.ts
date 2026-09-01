@@ -171,3 +171,16 @@ export function requestedVisitOf(q: Visitable): string | null {
 // morning of. The daily cron fires ~10am ET, so the morning-of text still lands
 // before a typical start time.
 export const CREW_REMINDER_DAYS = [3, 1, 0];
+
+// Today's date where the work is, as YYYY-MM-DD.
+//
+// Not `new Date().toISOString().slice(0, 10)`: the server runs in UTC, which is
+// already tomorrow from 8pm Eastern. A date picker floored on that refuses the
+// evening's own date - "el valor debe ser mayor o igual a <tomorrow>" on a day
+// the crew is standing in - and every appointment still on the books for today
+// reads as one that has already passed.
+export const BUSINESS_TZ = "America/New_York";
+export function todayYmd(): string {
+  // en-CA is the ISO-ordered locale: 2026-09-01, not 9/1/2026.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
+}

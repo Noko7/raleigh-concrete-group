@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
+import { requestedVisitOf, todayYmd, visitDateOf } from "@/lib/crm/constants";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
@@ -83,7 +83,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   // The lead time governs what a CUSTOMER may request, not what the business
   // may agree to. You can book any day from today, including a rush job someone
   // arranged over the phone.
-  const minJobDate = new Date().toISOString().slice(0, 10);
+  const minJobDate = todayYmd();
   // Scheduling only makes sense once the customer has actually said yes.
   const showSchedule = quote.customer_response === "accepted" && quote.status !== "lost";
 

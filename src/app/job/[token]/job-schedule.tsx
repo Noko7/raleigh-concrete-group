@@ -6,6 +6,7 @@ import { to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
 import { setJobDate } from "@/app/crm/quotes/[id]/actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
+import { DateField } from "./date-field";
 
 // Settling the work day from the crew's own job page. Same server action the CRM
 // uses, so the RLS scoping and the customer text are identical - this is only a
@@ -78,7 +79,7 @@ export function JobSchedule({
         <form action={formAction} className="js-other-form">
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="time" value={time} />
-          <input type="date" name="date" className="js-date" min={minDate} required />
+          <DateField name="date" minDate={minDate} locale={locale} className="js-date" />
           <button type="submit" className="js-confirm" disabled={pending}>
             {pending ? t.contractorJob.schedSaving : t.contractorJob.schedConfirm}
           </button>

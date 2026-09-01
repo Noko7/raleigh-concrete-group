@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { STATUS_LABELS, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
+import { STATUS_LABELS, requestedVisitOf, todayYmd, visitDateOf } from "@/lib/crm/constants";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { getQuoteByToken, signFiles } from "@/lib/crm/queries";
@@ -69,7 +69,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // The crew books against their own schedule, so their picker starts today.
   // The 7-day floor applies to what a customer may request, not to what the
   // people doing the work are allowed to agree to.
-  const minJobDate = new Date().toISOString().slice(0, 10);
+  const minJobDate = todayYmd();
   const photos = quote.file_urls?.length ? await signFiles(quote.file_urls, 7200) : [];
   // What the crew has already put on this job, so the finish card can show
   // counts rather than asking them to remember.
