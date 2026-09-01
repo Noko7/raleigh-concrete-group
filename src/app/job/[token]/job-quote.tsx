@@ -58,19 +58,59 @@ export function JobQuote({
   const hasLegacySummary = (summary ?? "").trim().length > 0;
   // Every section filled, or an older quote that still has its free text.
   const sectionsReady = QUOTE_SECTION_FIELDS.every((f) => sections[f].trim()) || hasLegacySummary;
-  const ready = price.trim() !== "" && Number.isFinite(priceNum) && priceNum > 0 && sectionsReady;
+
+  // Correcting a quote the customer is still holding. What makes it a
+  // correction rather than the same text again is that something they read has
+  // actually changed, so the button waits for that instead of letting them
+  // press Send and get the server's refusal back.
+  const changed =
+    price.trim() !== (amount != null ? String(amount) : "") ||
+    what.trim() !== (summary ?? "").trim() ||
+    QUOTE_SECTION_FIELDS.some((f) => sections[f].trim() !== (initialSections?.[f] ?? "").trim());
+
+  const ready =
+    price.trim() !== "" &&
+    Number.isFinite(priceNum) &&
+    priceNum > 0 &&
+    sectionsReady &&
+    (!awaitingReply || changed);
 
   // Pull fresh server data once the send lands, so the status and the activity
   // log on this page match what just happened.
   useEffect(() => {
     if (state.ok || state.sent) router.refresh();
+    // A send that went through folds the form away, so the page settles back to
+    // "waiting on the customer" with the result on it. A refusal leaves it open
+    // with everything they typed still in the fields.
+    if (state.sent && !state.error) setOpen(false);
   }, [state, router]);
 
-  // The ball is in the customer's court, so there is no button here at all.
-  // Leaving a "Resend" that always refuses would just move the frustration from
-  // the customer's phone to this page; showing when it went and what it said
-  // answers the question that makes people press Send again in the first place.
-  if (awaitingReply) {
+  // How the last send went. Declared once and rendered in all three states,
+  // because a send folds the form away and the answer has to follow it there
+  // rather than disappearing with the fields.
+  const result =
+    state.sent && !pending && !state.error ? (
+      <p className={state.smsDelivered ? "js-ok" : "js-err"}>
+        {state.smsDelivered
+          ? state.revised
+            ? t.contractorJob.quoteFixOk
+            : t.contractorJob.quoteOk
+          : t.contractorJob.quoteFailed}
+      </p>
+    ) : null;
+
+  // The ball is in the customer's court, so there is no Send button here.
+  // Repeating a quote they already have moves the frustration from their phone
+  // to this page and back; showing when it went and what it said answers the
+  // question that makes people press Send again in the first place.
+  //
+  // Correcting it is the exception, and the only one. A price that was typed
+  // wrong is sitting on a customer's phone waiting to be approved, and the crew
+  // who wrote it are the ones who can see that - so they get a way to fix it
+  // here rather than a phone call to the office while the wrong number stands.
+  // It's a quiet second action, not a second Send: the default answer to
+  // "nothing has happened yet" is still to wait.
+  if (awaitingReply && !open) {
     const when = sentAt
       ? new Date(sentAt).toLocaleString(locale === "es" ? "es-US" : "en-US", {
           dateStyle: "medium",
@@ -86,6 +126,10 @@ export function JobQuote({
         </p>
         {when && <p className="js-hint">{fill(t.contractorJob.quoteWaitingSent, { when })}</p>}
         <p className="js-hint">{t.contractorJob.quoteWaitingHint}</p>
+        <button type="button" className="jq-cancel jq-fix-open" onClick={() => setOpen(true)}>
+          {t.contractorJob.quoteFixOpen}
+        </button>
+        {result}
       </section>
     );
   }
@@ -102,14 +146,17 @@ export function JobQuote({
         <button type="button" className="js-confirm" onClick={() => setOpen(true)}>
           {alreadySent ? t.contractorJob.quoteResend : t.contractorJob.quoteOpen}
         </button>
+        {result}
       </section>
     );
   }
 
   return (
     <section className="js-card jq-card">
-      <h2 className="js-title">{t.contractorJob.quoteTitle}</h2>
-      <p className="js-lead">{t.contractorJob.quoteLead}</p>
+      <h2 className="js-title">{awaitingReply ? t.contractorJob.quoteFixTitle : t.contractorJob.quoteTitle}</h2>
+      <p className="js-lead">
+        {awaitingReply ? fill(t.contractorJob.quoteFixLead, { name: customerFirstName }) : t.contractorJob.quoteLead}
+      </p>
 
       <form action={formAction} className="jq-form">
         <input type="hidden" name="id" value={id} />
@@ -163,10 +210,23 @@ export function JobQuote({
           </label>
         )}
 
-        <p className="js-hint">{t.contractorJob.quoteWho.replace("{name}", customerFirstName)}</p>
+        <p className="js-hint">
+          {awaitingReply
+            ? fill(t.contractorJob.quoteFixWho, { name: customerFirstName })
+            : t.contractorJob.quoteWho.replace("{name}", customerFirstName)}
+        </p>
+
+        {/* Says why the button is greyed out before they go looking for the
+            reason: a correction that changes nothing is the duplicate text the
+            whole rule exists to stop. */}
+        {awaitingReply && !changed && <p className="js-hint">{t.contractorJob.quoteFixUnchanged}</p>}
 
         <button type="submit" className="js-confirm" disabled={!ready || pending}>
-          {pending ? t.contractorJob.quoteSending : t.contractorJob.quoteSend}
+          {pending
+            ? t.contractorJob.quoteSending
+            : awaitingReply
+              ? t.contractorJob.quoteFixSend
+              : t.contractorJob.quoteSend}
         </button>
         <button type="button" className="jq-cancel" onClick={() => setOpen(false)} disabled={pending}>
           {t.common.cancel}
@@ -176,11 +236,7 @@ export function JobQuote({
       {/* A refused duplicate isn't an error - nothing broke and there's nothing
           to fix, so it reads as a note rather than in red. */}
       {state.error && !pending && <p className={state.alreadySent ? "js-hint" : "js-err"}>{state.error}</p>}
-      {state.sent && !pending && !state.error && (
-        <p className={state.smsDelivered ? "js-ok" : "js-err"}>
-          {state.smsDelivered ? t.contractorJob.quoteOk : t.contractorJob.quoteFailed}
-        </p>
-      )}
+      {result}
     </section>
   );
 }

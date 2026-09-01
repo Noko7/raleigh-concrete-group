@@ -12,6 +12,9 @@ export type SaveState = {
   // they haven't answered. Not a failure - the UI renders it as a status rather
   // than an error, because nothing went wrong and nothing needs fixing.
   alreadySent?: boolean;
+  // The send replaced a quote the customer already had and hadn't answered, so
+  // the confirmation can say a correction went out rather than a first quote.
+  revised?: boolean;
 };
 
 export type ScheduleState = { ok: boolean; error?: string; message?: string };

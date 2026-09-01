@@ -22,6 +22,7 @@ import {
   notifyPaymentRequest,
   notifyQuoteReady,
   notifyQuoteSent,
+  notifyQuoteUpdated,
   notifyVisitConfirmed,
   type SendResult,
 } from "@/lib/crm/notify";
@@ -58,6 +59,13 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   const sending = intent === "send" || intent === "resend";
   const patch: Partial<Quote> = {};
   const events: { type: string; meta?: Record<string, unknown> }[] = [];
+  // Whether this save changes anything the customer would actually read: the
+  // price, one of the five sections, or an older quote's free text. It is what
+  // separates a correction from a second copy of the same quote further down.
+  let contentChanged = false;
+  // Set at send time: this send replaces a quote the customer already has and
+  // hasn't answered. Read again after the save to pick the customer's text.
+  let revising = false;
 
   // Status
   const status = String(formData.get("status") ?? "");
@@ -92,6 +100,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       patch.quote_amount = Math.round(amt * 100) / 100;
     }
     if (patch.quote_amount !== current.quote_amount) {
+      contentChanged = true;
       events.push({ type: "amount_changed", meta: { from: current.quote_amount, to: patch.quote_amount } });
     }
   }
@@ -113,7 +122,10 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   if (formData.has("quote_summary")) {
     const v = noEmDash(String(formData.get("quote_summary") ?? "").trim()).slice(0, 4000);
     patch.quote_summary = v || null;
-    if (patch.quote_summary !== current.quote_summary) events.push({ type: "summary_changed" });
+    if (patch.quote_summary !== current.quote_summary) {
+      contentChanged = true;
+      events.push({ type: "summary_changed" });
+    }
   }
 
   // The five sections the customer reads. Any one may say "Not applicable",
@@ -127,7 +139,10 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     if (next !== current[field]) sectionsChanged = true;
     patch[field] = next;
   }
-  if (sectionsChanged) events.push({ type: "summary_changed" });
+  if (sectionsChanged) {
+    contentChanged = true;
+    events.push({ type: "summary_changed" });
+  }
 
   // Internal notes
   if (formData.has("internal_notes")) {
@@ -165,6 +180,20 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       };
     }
 
+    // A second send to a customer who hasn't answered yet is one of two
+    // opposite things, and telling them apart is the whole rule:
+    //
+    //   a correction  the price was wrong, or the scope was, and the figure on
+    //                 their phone is one nobody wants them approving. It is new
+    //                 information, it goes out under its own message, and the
+    //                 crew who wrote the quote can send it themselves - waiting
+    //                 on the office while a wrong number sits in the customer's
+    //                 thread is how a bad quote gets accepted.
+    //
+    //   a duplicate   the same quote again, which carries nothing the first
+    //                 didn't. That's what the block below is for.
+    revising = Boolean(current.quote_sent_at) && !current.customer_response && contentChanged;
+
     // One quote text, then wait for an answer.
     //
     // Nothing visible happens on this page when a text goes out, so the natural
@@ -173,11 +202,12 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     // information the first didn't. The customer reads it as disorganised at the
     // exact moment they're deciding whether to hand over thousands of dollars.
     //
-    // Three things mean the block would be wrong, so each lifts it:
+    // Four things mean the block would be wrong, so each lifts it:
     //   - they've replied, so this is a revised quote rather than a repeat
+    //   - the quote itself changed, so this is the correction described above
     //   - the last text never left the building, so nothing was delivered
     //   - an owner deliberately asked to send it again
-    if (current.quote_sent_at && !current.customer_response) {
+    if (current.quote_sent_at && !current.customer_response && !revising) {
       const last = await lastMessageOf(session, id, "quote_ready");
       // No log row (or the table isn't there yet) is treated as delivered: the
       // safe default when we can't tell is not to text them twice.
@@ -185,7 +215,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       if (reached && !(intent === "resend" && isOwner)) {
         return {
           ok: false,
-          error: `${current.name.trim().split(/\s+/)[0] || "The customer"} was already texted this quote and hasn't replied yet, so it won't send twice. If they say it never arrived, the owner can send it again.`,
+          error: `${current.name.trim().split(/\s+/)[0] || "The customer"} was already texted this quote and hasn't replied yet, so it won't send twice. If the quote itself was wrong, change the price or the wording and it goes out as a correction. If they say it never arrived, the owner can send it again.`,
           alreadySent: true,
         };
       }
@@ -195,11 +225,23 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       events.push({ type: "status_changed", meta: { from: current.status, to: "quoted" } });
     }
     if (!current.quote_sent_at) patch.quote_sent_at = new Date().toISOString();
+    else if (revising) {
+      // A correction restarts the customer's clock. The quote they hold is this
+      // one, so the 48-hour nudge should count from this text rather than from
+      // the version it replaced - and a lead already nudged once gets a fresh
+      // window instead of never being followed up on the new price.
+      patch.quote_sent_at = new Date().toISOString();
+      patch.quote_followup_sent_at = null;
+    }
     // The link is good for seven days from THIS send. Re-stamped on every
     // send, not just the first, so re-sending is what revives an expired
     // quote - which is the whole recovery path for one that ran out.
     patch.quote_expires_at = new Date(Date.now() + QUOTE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    events.push({ type: "quote_sent" });
+    events.push(
+      revising
+        ? { type: "quote_revised", meta: { from: current.quote_amount, to: effectiveAmount } }
+        : { type: "quote_sent" },
+    );
   }
 
   if (!sending && Object.keys(patch).length === 0) return { ok: true };
@@ -250,7 +292,11 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       // Deliberately not swallowed: the whole point of this button is that the
       // customer receives something, so a failure has to reach the screen with
       // the provider's own reason rather than a silent false.
-      const r = await notifyQuoteReady({
+      // Same link either way - the quote page renders the current row, so the
+      // text they already have shows the corrected quote - but a correction
+      // says so rather than arriving as a second "your quote is ready".
+      const sendToCustomer = revising ? notifyQuoteUpdated : notifyQuoteReady;
+      const r = await sendToCustomer({
         id,
         name: current.name,
         phone: current.phone,
@@ -269,6 +315,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
         delivered: r.ok,
         to: smsTo,
         error: smsError ?? null,
+        revised: revising,
       }).catch(() => {});
 
       // Tell the office it's out and the sender that it landed. Deliberately
@@ -283,6 +330,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
         },
         { name: session.staff.full_name, phone: session.staff.phone, isOwner },
         r.ok,
+        revising,
       ).catch(() => {});
     }
 
@@ -294,6 +342,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     return {
       ok: true,
       sent: sending,
+      revised: sending ? revising : undefined,
       smsDelivered: sending ? smsDelivered : undefined,
       smsError: sending ? smsError : undefined,
       smsTo: sending ? smsTo : undefined,

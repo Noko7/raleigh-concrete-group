@@ -108,6 +108,17 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
   const setSection = (field: QuoteSectionField, value: string) =>
     setSections((s) => ({ ...s, [field]: value }));
 
+  // Sending to a customer who already has this quote is one of two different
+  // acts, and what separates them is whether the quote itself changed. Edited
+  // here, it goes out as a correction and the customer is told so; untouched,
+  // it's the same quote again and only worth sending if it never arrived. The
+  // server draws the same line - this is only what the panel says about it.
+  const quoteEdited =
+    amount.trim() !== (initial.quote_amount != null ? String(initial.quote_amount) : "") ||
+    summary.trim() !== (initial.quote_summary ?? "").trim() ||
+    QUOTE_SECTION_FIELDS.some((f) => sections[f].trim() !== (initial[f] ?? "").trim());
+  const correcting = awaitingReply && quoteEdited;
+
   function openConfirm() {
     if (!amountValid) {
       setLocalErr("Add a quote price before sending.");
@@ -253,12 +264,15 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
       {confirming ? (
         <div className="crm-confirm">
           <h3>
-            {awaitingReply ? "Send this quote again" : "Send this quote"} to {customerName.split(" ")[0]}?
+            {correcting ? "Send the corrected quote" : awaitingReply ? "Send this quote again" : "Send this quote"} to{" "}
+            {customerName.split(" ")[0]}?
           </h3>
           <p className="crm-muted crm-sm">
-            {awaitingReply
-              ? "They already have this quote and haven't replied. Sending again puts a second copy on their phone, so do it if they say the first never arrived."
-              : "We'll text them their quote link, good for 7 days. The price is never in the text."}
+            {correcting
+              ? "They're holding the earlier version and haven't replied. This replaces it: they get a text saying the quote was updated, and the link they already have shows the new one."
+              : awaitingReply
+                ? "They already have this quote and haven't replied. Sending again puts a second copy on their phone, so do it if they say the first never arrived."
+                : "We'll text them their quote link, good for 7 days. The price is never in the text."}
           </p>
           <div className="crm-confirm-row">
             <span>Price</span>
@@ -281,7 +295,7 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
             {/* No name/value: the hidden intent field above is the single source
                 of truth, and a second "intent" here could only disagree with it. */}
             <button type="submit" className="crm-btn crm-btn-send" disabled={pending}>
-              {pending ? "Sending…" : awaitingReply ? "Send again" : "Confirm & send"}
+              {pending ? "Sending…" : correcting ? "Send correction" : awaitingReply ? "Send again" : "Confirm & send"}
             </button>
           </div>
           {state.error && !pending && <p className="crm-auth-error crm-confirm-error">{state.error}</p>}
@@ -293,7 +307,7 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
               {pending ? "Saving…" : "Save changes"}
             </button>
             <button type="button" className="crm-btn crm-btn-send" onClick={openConfirm} disabled={pending}>
-              {awaitingReply ? "Send Quote again" : "Send Quote"}
+              {correcting ? "Send corrected Quote" : awaitingReply ? "Send Quote again" : "Send Quote"}
             </button>
             {state.ok && !state.sent && !pending && !state.error && <span className="crm-saved">Saved</span>}
             {(localErr || state.error) && <span className="crm-auth-error">{localErr || state.error}</span>}

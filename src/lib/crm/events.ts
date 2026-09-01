@@ -28,6 +28,15 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "Internal notes updated";
     case "quote_sent":
       return "Quote sent to the customer";
+    // A corrected quote sent to a customer who hadn't answered the first one.
+    // Both figures are on the line, because "did the price move, and by how
+    // much" is the only question anyone opens this row to answer.
+    case "quote_revised": {
+      const money = (v: unknown) => (v != null ? `$${Number(v).toLocaleString("en-US")}` : "no price");
+      return m.from !== m.to
+        ? `Corrected quote sent to the customer (was ${money(m.from)}, now ${money(m.to)})`
+        : "Corrected quote sent to the customer (wording changed)";
+    }
     case "quote_delivery":
       return m.delivered
         ? `Quote link texted to ${String(m.to ?? "the customer")}`

@@ -16,6 +16,7 @@ export const MESSAGE_LABELS: Record<string, string> = {
   stale_lead: "Untouched lead nudge",
   quote_followup: "48h quote follow-up",
   quote_ready: "Quote sent",
+  quote_updated: "Updated quote sent",
   quote_sent: "Quote-sent alert",
   approved: "Approval thank-you",
   needs_scheduling: "Approved — needs a date",

@@ -675,6 +675,33 @@ export async function notifyQuoteReady(q: QuoteInfo): Promise<SendResult> {
   );
 }
 
+// ── 5a. The quote changed after it went out ─────────────────────────────────
+// Not the same text again. A price that was wrong when it left is the one thing
+// worth interrupting a customer for a second time, and the message has to say
+// so plainly: the number they were already shown is no longer the number.
+//
+// Same link as before - the quote page always renders the current row - so the
+// text they have in their thread still works and now shows the corrected quote.
+// It says that outright, because the natural worry on reading "updated" is that
+// the old link is the old price.
+export async function notifyQuoteUpdated(q: QuoteInfo): Promise<SendResult> {
+  return sendSmsResult(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      "we've updated the quote we sent you, so please use this one rather than the earlier version.",
+      "",
+      "View the updated quote here:",
+      quoteLink(q.public_token ?? ""),
+      "",
+      `The link is the same one we sent before. This updated quote is good for ${QUOTE_TTL_DAYS} days.`,
+      "",
+      BUSINESS,
+    ]),
+    { quoteId: q.id, kind: "quote_updated", role: "customer" },
+  );
+}
+
 // ── 5b. Quote is out: tell the office, and tell whoever pressed send ────────
 // A quote leaving is a money moment nobody was being told about. The owner gets
 // it because it's the point the job starts waiting on someone outside the
@@ -688,18 +715,24 @@ export async function notifyQuoteSent(
   q: QuoteInfo,
   sender: { name?: string | null; phone?: string | null; isOwner: boolean },
   delivered: boolean,
+  // A correction to a quote the customer had already been sent, rather than a
+  // first send. Same money moment, different story: the office needs to know a
+  // number they may have already discussed has moved.
+  revised = false,
 ): Promise<void> {
   const by = sender.name?.trim() || "A contractor";
 
   await alertOwner(
     delivered
       ? text([
-          "QUOTE SENT",
+          revised ? "QUOTE UPDATED" : "QUOTE SENT",
           "",
           ...block("Sent by:", by),
           ...block("Customer:", q.name),
-          ...block("Amount:", usd(q.quote_amount)),
-          "Waiting on them to approve or decline.",
+          ...block(revised ? "New amount:" : "Amount:", usd(q.quote_amount)),
+          revised
+            ? "This replaces the quote they were already sent. Waiting on them to approve or decline."
+            : "Waiting on them to approve or decline.",
         ])
       : text([
           "QUOTE TEXT FAILED",
@@ -723,9 +756,11 @@ export async function notifyQuoteSent(
     delivered
       ? text([
           `Hi ${firstName(by)},`,
-          `your quote for ${q.name} has been sent.`,
+          revised
+            ? `your updated quote for ${q.name} has been sent, and it replaces the one they had.`
+            : `your quote for ${q.name} has been sent.`,
           "",
-          ...block("Amount:", usd(q.quote_amount)),
+          ...block(revised ? "New amount:" : "Amount:", usd(q.quote_amount)),
           "Now wait for them to review it. You'll get a text as soon as they approve or decline - there's no need to send it again.",
         ])
       : text([

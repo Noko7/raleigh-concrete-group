@@ -361,6 +361,15 @@ const en = {
     quoteWaitingSent: "Texted {when}",
     quoteWaitingHint:
       "It won't send twice — a second copy would just be the same text again. You'll get a message the moment they approve or decline. If they say it never arrived, ask the office to send it again.",
+    quoteFixOpen: "Priced it wrong? Send a corrected quote",
+    quoteFixTitle: "Correct this quote",
+    quoteFixLead:
+      "Change the price or the wording and we'll text {name} that the quote was updated. The link they already have will show the corrected one.",
+    quoteFixWho: "{name} gets a text saying the quote was updated, and it replaces the one they're holding.",
+    quoteFixUnchanged:
+      "Nothing has changed yet — edit the price or a section, otherwise this is the same quote they already have.",
+    quoteFixSend: "Send the corrected quote",
+    quoteFixOk: "Corrected quote texted to the customer.",
     quoteTitle: "Quote this job",
     quoteLead: "Set a price and what's included, then we'll text it straight to the customer.",
     quoteOpen: "Quote job",
@@ -784,6 +793,15 @@ const es: typeof en = {
     quoteWaitingSent: "Enviada el {when}",
     quoteWaitingHint:
       "No se envía dos veces; una segunda copia sería el mismo mensaje otra vez. Te avisamos apenas acepte o rechace. Si dice que nunca le llegó, pídele a la oficina que la mande de nuevo.",
+    quoteFixOpen: "¿La cotizaste mal? Envía una corregida",
+    quoteFixTitle: "Corrige esta cotización",
+    quoteFixLead:
+      "Cambia el precio o el texto y le avisamos a {name} por mensaje que la cotización se actualizó. El enlace que ya tiene mostrará la corregida.",
+    quoteFixWho: "{name} recibe un mensaje diciendo que la cotización se actualizó, y reemplaza la que tiene.",
+    quoteFixUnchanged:
+      "Todavía no has cambiado nada — edita el precio o una sección, si no es la misma cotización que ya tiene.",
+    quoteFixSend: "Enviar la cotización corregida",
+    quoteFixOk: "Cotización corregida enviada al cliente por mensaje.",
     quoteTitle: "Cotiza este trabajo",
     quoteLead: "Pon el precio y lo que incluye, y se lo enviamos al cliente por mensaje.",
     quoteOpen: "Cotizar trabajo",
