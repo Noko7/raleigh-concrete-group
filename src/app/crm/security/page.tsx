@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { requireOwner } from "@/lib/crm/auth";
+import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { eventActor, eventText } from "@/lib/crm/events";
 import { crmBase } from "@/lib/crm/nav";
 import { getQuoteNames, listLoginAttempts, listRecentActivity, listStaff } from "@/lib/crm/queries";
@@ -37,7 +38,7 @@ function device(ua: string | null): string {
 }
 
 function fmt(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+  return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: BUSINESS_TZ });
 }
 
 function ago(iso: string): string {

@@ -149,7 +149,12 @@ export async function createQuote(_prev: NewQuoteState, formData: FormData): Pro
       { id: created.id, name: created.name, phone: created.phone },
       customMessage,
     ).catch(() => null);
-    await addEvent(session, created.id, "custom_message_sent", { delivered: Boolean(res?.ok) });
+    // A text raised in the evening is held until 8am rather than sent, so the
+    // activity log records which of the two happened.
+    await addEvent(session, created.id, "custom_message_sent", {
+      delivered: Boolean(res?.ok),
+      held_until: res?.sendAfter ?? null,
+    });
   }
 
   // A booked estimate goes to the customer in writing. Everything else about

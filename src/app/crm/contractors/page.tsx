@@ -1,4 +1,5 @@
 import { requireOwner } from "@/lib/crm/auth";
+import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { listAllAgreements, listInvites, listStaff } from "@/lib/crm/queries";
 import { AddAgreement } from "../agreements/add-agreement";
 import { AgreementList, AgreementStatusBadge } from "../agreements/agreement-list";
@@ -108,7 +109,7 @@ export default async function ContractorsPage() {
                       <td className="crm-sm">
                         {i.opened_at ? (
                           <>
-                            {new Date(i.opened_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            {new Date(i.opened_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: BUSINESS_TZ })}
                             {i.open_count > 1 && <span className="crm-muted"> ·{i.open_count}×</span>}
                           </>
                         ) : (
@@ -116,7 +117,7 @@ export default async function ContractorsPage() {
                         )}
                       </td>
                       <td className="crm-sm">
-                        {new Date(i.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {new Date(i.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: BUSINESS_TZ })}
                       </td>
                       <td className="crm-row-actions">
                         {(i.state === "sent" || i.state === "started") && (

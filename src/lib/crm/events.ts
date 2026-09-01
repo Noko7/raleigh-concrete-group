@@ -1,9 +1,17 @@
 // Plain-English rendering of the activity log. Shared by the job detail page
 // and the Security dashboard so both describe an event the same way.
+import { clockLabel } from "./clock";
 import { STATUS_LABELS } from "./constants";
 import type { QuoteEvent } from "./types";
 
 const statusLabel = (v: unknown) => STATUS_LABELS[String(v) as keyof typeof STATUS_LABELS] ?? String(v ?? "N/A");
+
+// When a text held by quiet hours is due, in Raleigh time - "tomorrow at
+// 8:00 AM" rather than the ISO stamp the event actually stores.
+const heldWhen = (v: unknown) => {
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? "in the morning" : clockLabel(d);
+};
 
 // Who triggered the event: a named teammate, the customer, or an automatic change.
 export function eventActor(e: QuoteEvent, names: Map<string, string>): string {
@@ -38,9 +46,12 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
         : "Corrected quote sent to the customer (wording changed)";
     }
     case "quote_delivery":
-      return m.delivered
-        ? `Quote link texted to ${String(m.to ?? "the customer")}`
-        : `Quote text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` — ${String(m.error)}` : ""}`;
+      // Three outcomes, not two: sent, held for quiet hours, or actually
+      // failed. Reading a hold as a failure sends somebody chasing a problem
+      // that will resolve itself at 8am.
+      if (m.delivered) return `Quote link texted to ${String(m.to ?? "the customer")}`;
+      if (m.held_until) return `Quote link queued for ${String(m.to ?? "the customer")} (quiet hours, goes out ${heldWhen(m.held_until)})`;
+      return `Quote text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` — ${String(m.error)}` : ""}`;
     case "customer_viewed":
       return "Customer opened their quote";
     case "customer_accepted": {
@@ -96,7 +107,9 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     case "name_changed":
       return `Customer name corrected to ${String(m.to ?? "")}`;
     case "custom_message_sent":
-      return m.delivered ? "Custom text sent to the customer" : "Custom text FAILED to send";
+      if (m.delivered) return "Custom text sent to the customer";
+      if (m.held_until) return `Custom text queued (quiet hours, goes out ${heldWhen(m.held_until)})`;
+      return "Custom text FAILED to send";
     case "payment_requested":
       return "Payment instructions texted to the customer";
     case "job_paid":

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { requestedVisitOf, todayYmd, visitDateOf } from "@/lib/crm/constants";
+import { requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
+import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
@@ -29,7 +30,7 @@ import { markPaid, requestPayment, rotateTokens } from "./actions";
 export const dynamic = "force-dynamic";
 
 function fmt(iso: string) {
-  return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+  return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: BUSINESS_TZ });
 }
 
 function prettyDate(s: string) {

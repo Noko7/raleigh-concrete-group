@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { todayYmd } from "@/lib/crm/clock";
 import { STATUSES, visitDateOf, type Status } from "@/lib/crm/constants";
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { assignQuote, deleteQuote, moveQuote } from "./board-actions";
@@ -161,7 +162,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
 
   // Recomputed per render rather than memoised: this is only ever compared
   // against dates, so it costs nothing and can't go stale in a long-lived tab.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayYmd();
 
   // The single oldest lead nobody has quoted. Pinned above the board so there
   // is one obvious answer to "what now" rather than seven columns of options.

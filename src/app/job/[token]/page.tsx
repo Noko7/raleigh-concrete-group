@@ -4,7 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { STATUS_LABELS, requestedVisitOf, todayYmd, visitDateOf } from "@/lib/crm/constants";
+import { STATUS_LABELS, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
+import { todayYmd } from "@/lib/crm/clock";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { getQuoteByToken, signFiles } from "@/lib/crm/queries";

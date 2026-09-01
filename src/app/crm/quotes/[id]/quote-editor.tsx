@@ -316,13 +316,27 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
           {/* Sending is the one action with a real-world outcome, so it gets an
               unambiguous banner rather than a line of grey text. */}
           {state.sent && !pending && !state.error && (
-            <div className={`send-result ${state.smsDelivered ? "send-result-ok" : "send-result-bad"}`}>
+            <div
+              className={`send-result ${
+                state.smsDelivered ? "send-result-ok" : state.smsHeldUntil ? "send-result-held" : "send-result-bad"
+              }`}
+            >
               <strong>
                 {state.smsDelivered
                   ? `Quote sent, texted to ${state.smsTo ?? "the customer"}`
-                  : "Quote saved, but the text did NOT go out"}
+                  : state.smsHeldUntil
+                    ? `Quote saved. The text goes out ${state.smsHeldUntil}`
+                    : "Quote saved, but the text did NOT go out"}
               </strong>
-              {!state.smsDelivered && (
+              {/* A hold is not a problem to fix, so it gets the fact and nothing
+                  else - no provider dump, no "check your settings". */}
+              {state.smsHeldUntil && (
+                <p className="crm-sm">
+                  Nothing goes out between 7pm and 8am. It&apos;s queued and will send itself; the customer link below
+                  works now if it can&apos;t wait.
+                </p>
+              )}
+              {!state.smsDelivered && !state.smsHeldUntil && (
                 <>
                   <p className="crm-sm">
                     The quote link is live, so copy the customer link below and send it yourself. Then check Settings →

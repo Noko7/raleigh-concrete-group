@@ -3,15 +3,11 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ymdInDays } from "@/lib/crm/clock";
 import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES } from "@/lib/crm/constants";
 
 type Mode = "choose" | "save" | "schedule" | "submitting" | "accepted" | "declined";
 
-function ymd(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-}
 function pretty(s: string): string {
   const d = new Date(`${s}T00:00:00`);
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
@@ -30,11 +26,9 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
   const [checking, setChecking] = useState(false);
   const [taken, setTaken] = useState<string[]>([]);
 
-  const minDate = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + LEAD_TIME_DAYS);
-    return ymd(d);
-  }, []);
+  // Counted in Raleigh days. The customer's phone may be in another zone, and
+  // the server checks the same floor the same way.
+  const minDate = useMemo(() => ymdInDays(LEAD_TIME_DAYS), []);
 
   // Warn early if a day is already spoken for, so the customer doesn't offer
   // three days we can't use.

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
+import { ymdInDays } from "@/lib/crm/clock";
 import { VISIT_LEAD_DAYS, VISIT_TIME_SLOTS } from "@/lib/crm/constants";
 import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
 
@@ -58,11 +59,7 @@ const TIME_SLOTS = VISIT_TIME_SLOTS;
 // this too: `min` on a date input is a convenience, not a rule, and picking a
 // day in the past used to sail straight through.
 function minVisitDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + VISIT_LEAD_DAYS);
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
+  return ymdInDays(VISIT_LEAD_DAYS);
 }
 function prettyDay(s: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "";

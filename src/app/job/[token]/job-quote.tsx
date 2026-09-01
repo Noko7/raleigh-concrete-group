@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/actions";
@@ -115,6 +116,7 @@ export function JobQuote({
       ? new Date(sentAt).toLocaleString(locale === "es" ? "es-US" : "en-US", {
           dateStyle: "medium",
           timeStyle: "short",
+          timeZone: BUSINESS_TZ,
         })
       : null;
     return (

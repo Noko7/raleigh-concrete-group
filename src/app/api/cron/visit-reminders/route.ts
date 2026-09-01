@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { notifyVisitReminder, notifyVisitReminderCrew } from "@/lib/crm/notify";
+import { ymdInDays } from "@/lib/crm/clock";
+import { flushHeldMessages, notifyVisitReminder, notifyVisitReminderCrew } from "@/lib/crm/notify";
 import {
   addAdminEvent,
   getStaffContactById,
@@ -27,17 +28,17 @@ function authorized(request: Request): boolean {
   return request.headers.get("authorization") === `Bearer ${secret}`;
 }
 
-function dateInDays(days: number): string {
-  const d = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-  return d.toISOString().slice(0, 10);
-}
-
 export async function GET(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const tomorrow = dateInDays(1);
+  // 6pm ET is inside business hours, so this run can also clear anything still
+  // queued from the morning - a held text shouldn't sit all day because nobody
+  // happened to use the app.
+  const flushed = await flushHeldMessages();
+
+  const tomorrow = ymdInDays(1);
   let customerSent = 0;
   let crewSent = 0;
 
@@ -66,5 +67,5 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, date: tomorrow, customerSent, crewSent });
+  return NextResponse.json({ ok: true, date: tomorrow, flushed, customerSent, crewSent });
 }

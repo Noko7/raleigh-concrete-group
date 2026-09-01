@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 
+import { ymdInDays } from "@/lib/crm/clock";
 import { CREW_REMINDER_DAYS } from "@/lib/crm/constants";
-import { notifyCrewReminder, notifyQuoteFollowup, notifyReminder, notifyStaleLead } from "@/lib/crm/notify";
+import {
+  flushHeldMessages,
+  notifyCrewReminder,
+  notifyQuoteFollowup,
+  notifyReminder,
+  notifyStaleLead,
+} from "@/lib/crm/notify";
 import {
   addAdminEvent,
   getStaffContactById,
@@ -17,14 +24,15 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Daily Vercel Cron (14:00 UTC, so ~10am ET). Four jobs:
+// Daily Vercel Cron (14:00 UTC, so 10am ET / 9am EST). Five jobs:
+//   0. Send anything quiet hours held overnight (see flushHeldMessages).
 //   1. Ask the customer to confirm a job that's ~2 days out.
 //   2. Remind the assigned crew 3 days out, the day before, and the morning of.
 //   3. Nudge the assigned contractor (+owner) about a lead nobody has quoted
 //      or scheduled a visit for, 12+ hours old.
 //   4. Follow up with a customer who hasn't accepted or declined a sent
 //      quote within 48 hours.
-// Jobs 3 and 4 only get checked once a day here rather than more often, since
+// Jobs 1-4 only get checked once a day here rather than more often, since
 // Vercel's Hobby plan caps cron at once-a-day - a lead can go up to ~24h past
 // its threshold before this notices, which is an acceptable tradeoff for
 // staying on the free plan. See /api/cron/visit-reminders for the other daily
@@ -36,18 +44,20 @@ function authorized(request: Request): boolean {
   return request.headers.get("authorization") === `Bearer ${secret}`;
 }
 
-function dateInDays(days: number): string {
-  const d = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-  return d.toISOString().slice(0, 10);
-}
-
 export async function GET(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  // ── 0. Anything quiet hours held overnight ────────────────────────────────
+  // This run is the floor under the queue: whatever the night collected goes
+  // out here at the latest, whether or not anybody has touched the app since
+  // 8am. Deliberately first - a text raised at 9pm last night is older news
+  // than anything below, and it has been waiting longer.
+  const flushed = await flushHeldMessages();
+
   // ── 1. Customer confirmation, two days out ────────────────────────────────
-  const target = dateInDays(2);
+  const target = ymdInDays(2);
   const jobs = await listBookedForReminder(target);
 
   let sent = 0;
@@ -64,7 +74,7 @@ export async function GET(request: Request) {
   let crewSent = 0;
   for (const daysOut of CREW_REMINDER_DAYS) {
     const stage = String(daysOut);
-    const day = dateInDays(daysOut);
+    const day = ymdInDays(daysOut);
     for (const q of await listJobsOn(day)) {
       if (!q.assigned_to) continue;
       if ((q.crew_reminders ?? []).includes(stage)) continue;
@@ -111,6 +121,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ok: true,
     date: target,
+    flushed,
     found: jobs.length,
     sent,
     crewSent,

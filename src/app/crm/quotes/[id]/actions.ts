@@ -287,6 +287,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
 
     let smsDelivered = false;
     let smsError: string | undefined;
+    let smsHeldUntil: string | undefined;
     let smsTo: string | undefined;
     if (sending) {
       // Deliberately not swallowed: the whole point of this button is that the
@@ -305,7 +306,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
 
       smsDelivered = r.ok;
       smsTo = r.to ?? current.phone;
-      if (!r.ok) {
+      if (r.held) smsHeldUntil = r.sendAfterLabel;
+      else if (!r.ok) {
         smsError = [r.detail, r.status ? `(HTTP ${r.status})` : ""].filter(Boolean).join(" ").slice(0, 500);
       }
       // The quote is recorded as sent either way - it genuinely was marked sent
@@ -313,6 +315,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       // them, so a silent texting outage is visible afterwards.
       await addEvent(session, id, "quote_delivery", {
         delivered: r.ok,
+        held_until: r.sendAfter ?? null,
         to: smsTo,
         error: smsError ?? null,
         revised: revising,
@@ -345,6 +348,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       revised: sending ? revising : undefined,
       smsDelivered: sending ? smsDelivered : undefined,
       smsError: sending ? smsError : undefined,
+      smsHeldUntil: sending ? smsHeldUntil : undefined,
       smsTo: sending ? smsTo : undefined,
     };
   } catch (err) {

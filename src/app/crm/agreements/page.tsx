@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { requireSession } from "@/lib/crm/auth";
+import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { listAllAgreements, listQuotes, listStaff } from "@/lib/crm/queries";
@@ -13,6 +14,7 @@ function fmt(iso: string, locale: string) {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: BUSINESS_TZ,
   });
 }
 

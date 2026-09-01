@@ -1,6 +1,7 @@
 // Server-only data access for the CRM. Reads/writes that belong to a logged-in
 // user go through pgUser (RLS enforces owner/contractor scoping). Token-page
 // lookups, view tracking and signed URLs use pgAdmin (no user context).
+import { todayYmd, ymdInDays } from "./clock";
 import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, TIME_RE, visitDateOf } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
@@ -272,7 +273,18 @@ export type QuoteMessage = {
   provider: string | null;
   status: number | null;
   detail: string | null;
+  // Set on a text raised during quiet hours: when it may go out, and when the
+  // queue actually sent it. Both null on anything sent there and then, which is
+  // every row written before quiet-hours.sql was run.
+  send_after?: string | null;
+  sent_at?: string | null;
 };
+
+// Still waiting for the morning: due in the future, or due already and not yet
+// picked up by a flush.
+export function isHeld(m: QuoteMessage): boolean {
+  return Boolean(m.send_after) && !m.sent_at;
+}
 
 // Service-role: sends happen from the public quote endpoint and from cron, where
 // there is no session. Never throws - a logging failure must not take a send
@@ -287,6 +299,9 @@ export async function logMessage(row: {
   provider?: string | null;
   status?: number | null;
   detail?: string | null;
+  // Set only by a quiet-hours hold: the row is the queue entry as well as the
+  // log line, and this is when it comes due.
+  send_after?: string | null;
 }): Promise<void> {
   try {
     const res = await pgAdmin("quote_messages", {
@@ -303,6 +318,7 @@ export async function logMessage(row: {
         provider: row.provider ?? null,
         status: row.status ?? null,
         detail: row.detail ? row.detail.slice(0, 2000) : null,
+        ...(row.send_after ? { send_after: row.send_after } : {}),
       }),
     });
     if (!res.ok) {
@@ -312,6 +328,64 @@ export async function logMessage(row: {
     }
   } catch (e) {
     console.error("[sms-log] threw", e);
+  }
+}
+
+// ── The quiet-hours queue ───────────────────────────────────────────────────
+// Texts raised between 7pm and 8am wait in the message log with a send_after on
+// them. These three are what the flush in notify.ts drives: find what's due,
+// take one so nothing else can, then write down how it went.
+
+export async function listDueMessages(nowIso: string, limit = 25): Promise<QuoteMessage[]> {
+  const res = await pgAdmin(
+    `quote_messages?sent_at=is.null&send_after=lte.${encodeURIComponent(nowIso)}` +
+      `&select=*&order=send_after.asc&limit=${limit}`,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as QuoteMessage[];
+}
+
+/**
+ * Take a queued message, returning false if somebody already has it.
+ *
+ * The two crons, and every request that flushes on its way past, can all reach
+ * the same row at the same moment. The `sent_at=is.null` in the filter is what
+ * stops that being a duplicate text: whoever's UPDATE lands first gets the row
+ * back, everyone else gets an empty list and moves on. Stamped before the send
+ * rather than after, so a crash mid-send leaves a text unsent rather than sent
+ * twice - the safer half of a choice that has to be made one way or the other.
+ */
+export async function claimMessage(id: string, nowIso: string): Promise<boolean> {
+  try {
+    const res = await pgAdmin(`quote_messages?id=eq.${encodeURIComponent(id)}&sent_at=is.null`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ sent_at: nowIso }),
+    });
+    if (!res.ok) return false;
+    return ((await res.json()) as unknown[]).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function finishMessage(
+  id: string,
+  result: { ok: boolean; provider?: string | null; status?: number | null; detail?: string | null },
+): Promise<void> {
+  try {
+    await pgAdmin(`quote_messages?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        ok: result.ok,
+        provider: result.provider ?? null,
+        status: result.status ?? null,
+        detail: result.detail ? result.detail.slice(0, 2000) : null,
+      }),
+    });
+  } catch (e) {
+    console.error("[sms-queue] could not record the result of a held message", e);
   }
 }
 
@@ -638,7 +712,7 @@ function ageWindow(column: string, hours: number): string {
 // came back. That is exactly the lead worth chasing, so only FUTURE visits
 // buy an exemption. Today counts as future - the visit may not have happened
 // yet when the cron runs at 10am.
-export function hasUpcomingVisit(q: Quote, today = new Date().toISOString().slice(0, 10)): boolean {
+export function hasUpcomingVisit(q: Quote, today = todayYmd()): boolean {
   const booked = visitDateOf(q);
   return Boolean(booked && booked >= today);
 }
@@ -868,14 +942,15 @@ export async function recordCustomerResponse(
     // Approving no longer books a day. The customer proposes dates that suit
     // them and the job parks in "approved" until the crew confirms one against
     // their own schedule - that confirmation is what puts it on the calendar.
-    const min = Date.now() + (LEAD_TIME_DAYS - 1) * 24 * 60 * 60 * 1000; // lenient by a day for time zones
+    // Raleigh calendar dates on both sides, so this is a day count rather than
+    // a millisecond comparison that had to be lenient to survive time zones.
+    const min = ymdInDays(LEAD_TIME_DAYS);
     const seen = new Set<string>();
     const dates: string[] = [];
     for (const raw of input.preferredDates ?? []) {
       const date = String(raw).slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || seen.has(date)) continue;
-      const picked = new Date(`${date}T00:00:00Z`).getTime();
-      if (!Number.isFinite(picked) || picked < min) continue;
+      if (date < min) continue;
       seen.add(date);
       dates.push(date);
       if (dates.length >= MAX_PREFERRED_DATES) break;

@@ -1,3 +1,4 @@
+import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { dict, type Dict, type Locale } from "@/lib/crm/i18n";
 import type { Agreement, AgreementStatus } from "@/lib/crm/types";
 import { removeAgreement, setAgreementStatus } from "./actions";
@@ -18,6 +19,7 @@ function fmt(iso: string, locale: Locale) {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: BUSINESS_TZ,
   });
 }
 

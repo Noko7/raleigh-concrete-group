@@ -8,6 +8,10 @@ export type SaveState = {
   smsError?: string;
   // Where it was sent, so a wrong number is obvious at a glance.
   smsTo?: string;
+  // Quiet hours held the text rather than sending it. Not a failure and not a
+  // delivery - the banner is its own third thing, because "did NOT go out" is
+  // wrong and "sent" is a lie.
+  smsHeldUntil?: string;
   // The send was refused because this quote is already with the customer and
   // they haven't answered. Not a failure - the UI renders it as a status rather
   // than an error, because nothing went wrong and nothing needs fixing.

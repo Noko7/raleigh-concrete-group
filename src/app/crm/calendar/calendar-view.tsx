@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { todayYmd } from "@/lib/crm/clock";
 import { to12Hour, to24Hour, VISIT_TIME_SLOTS } from "@/lib/crm/constants";
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { deleteEvent, moveEvent, type CalActionState } from "./actions";
@@ -119,14 +120,17 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
   const t = dict(locale);
   const MONTHS = useMemo(() => monthNames(locale), [locale]);
   const DOW = useMemo(() => weekdayNames(locale), [locale]);
-  const today = new Date();
-  const todayStr = ymd(today);
+  // Raleigh's today, not the viewer's. A phone that has wandered into another
+  // zone - or is simply set wrong - would otherwise ring the wrong cell and
+  // file jobs under the wrong day.
+  const todayStr = todayYmd();
+  const [todayY, todayM] = todayStr.split("-").map(Number);
 
   // List is the default: this is used in the field far more than at a desk, and
   // a 7-column grid on a phone gives you 45px cells nobody can read or tap. A
   // wide screen flips to Month on first load, then whatever you last chose.
   const [view, setView] = useState<"list" | "month">("list");
-  const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [cursor, setCursor] = useState({ y: todayY, m: todayM - 1 });
   const [show, setShow] = useState<Record<CalKind, boolean>>({ job: true, inperson: true });
 
   const [selected, setSelected] = useState<CalEvent | null>(null);
@@ -299,7 +303,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
             <button
               type="button"
               className="cal-nav cal-nav-today"
-              onClick={() => setCursor({ y: today.getFullYear(), m: today.getMonth() })}
+              onClick={() => setCursor({ y: todayY, m: todayM - 1 })}
             >
               {t.calendar.today}
             </button>

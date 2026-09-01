@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
 import { isLocale } from "@/lib/crm/i18n";
+import { BUSINESS_TZ, now } from "@/lib/crm/clock";
 import { ownerRecipients, sendSmsResult, toE164 } from "@/lib/crm/notify";
 import { setPrimaryContractorId, updateOwnProfile } from "@/lib/crm/queries";
 import { rateLimit } from "@/lib/rate-limit";
@@ -78,10 +79,23 @@ export async function sendTestSms(_prev: TestSmsState, formData: FormData): Prom
     }
   }
 
-  const stamp = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const stamp = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TZ,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(now());
   const results = await Promise.all(
     targets.map(async (to) => {
-      const r = await sendSmsResult(to, `Raleigh Concrete Group CRM test message (${stamp}). Notifications are working.`);
+      // The one text that ignores quiet hours. An owner tapping "send a test"
+      // at 9pm is asking a question they need the answer to now, they are
+      // holding the phone it lands on, and a test that arrives at 8am tomorrow
+      // tells them nothing about whether texting works tonight.
+      const r = await sendSmsResult(
+        to,
+        `Raleigh Concrete Group CRM test message (${stamp}). Notifications are working.`,
+        undefined,
+        { force: true },
+      );
       return {
         to,
         from: r.from ?? null,

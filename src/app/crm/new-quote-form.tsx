@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 
+import { todayYmd } from "@/lib/crm/clock";
 import { quoteServiceOptions } from "@/lib/site-data";
 import { createQuote, type NewQuoteState } from "./new-quote-actions";
 
@@ -15,7 +16,7 @@ export function NewQuoteForm({ contractors }: { contractors: ContractorOption[] 
   // The crew can book an estimate for today - the lead-time floor is a rule
   // for what a customer may request on the website, not for what the office
   // may agree to on a call.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayYmd();
 
   // Collapse once it saves - the new lead shows up on the board above via
   // revalidatePath, so a filled-in form left open just invites a duplicate.

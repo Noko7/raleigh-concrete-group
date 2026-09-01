@@ -11,9 +11,18 @@
 // quote submission or a CRM save. Failures are logged (Vercel → Logs) with an
 // [sms] prefix so they can be diagnosed.
 import { phoneDisplay } from "@/lib/site-data";
+import { clockLabel, hourLabel, inQuietHours, nextSendableAt, now, QUIET_FROM_HOUR, QUIET_UNTIL_HOUR } from "./clock";
 import { QUOTE_TTL_DAYS, noEmDash, visitDateOf } from "./constants";
 import { SITE_ORIGIN } from "./env";
-import { getOwnerContacts, getOwnerPhones, logMessage, type SmsLog } from "./queries";
+import {
+  claimMessage,
+  finishMessage,
+  getOwnerContacts,
+  getOwnerPhones,
+  listDueMessages,
+  logMessage,
+  type SmsLog,
+} from "./queries";
 
 export const SMS_PROVIDER = (process.env.SMS_PROVIDER || (process.env.QUO_API_KEY ? "quo" : "twilio")).toLowerCase();
 const OWNER_PHONE = process.env.OWNER_PHONE || "";
@@ -26,6 +35,13 @@ export type SendResult = {
   from?: string;
   status?: number;
   detail?: string;
+  // Quiet hours: not sent, not lost. `ok` stays false because nothing reached
+  // the provider, so anything counting successful sends still counts honestly -
+  // but a screen showing this to a person needs to say "waiting", not "failed".
+  held?: boolean;
+  // When it will go out, ISO, and the same in words: "tomorrow at 8:00 AM".
+  sendAfter?: string;
+  sendAfterLabel?: string;
 };
 
 export function toE164(raw: string): string | null {
@@ -120,10 +136,34 @@ async function record(log: SmsLog | undefined, r: SendResult, to: string, body: 
   });
 }
 
-// Detailed send - returns why it failed (used by the diagnostic endpoint).
-// Pass `log` and the attempt is recorded against the job; omit it for sends that
-// belong to no job, like the Settings test text.
-export async function sendSmsResult(toRaw: string, messageRaw: string, log?: SmsLog): Promise<SendResult> {
+// The provider call on its own, with no quiet-hours gate in front of it. Used
+// by sendSmsResult during the day and by the queue flush in the morning; those
+// are the only two ways a text is allowed to leave.
+async function deliver(to: string, message: string): Promise<SendResult> {
+  if (SMS_PROVIDER === "quo" || SMS_PROVIDER === "openphone") return sendQuo(to, message);
+  if (SMS_PROVIDER === "custom") return sendCustom(to, message);
+  return sendTwilio(to, message);
+}
+
+/**
+ * Send now, or hold it until the morning.
+ *
+ * Between 7pm and 8am Eastern nothing goes out. The text isn't dropped: it's
+ * written to the message log with a `send_after` on it and delivered by the
+ * flush below, which every send and both crons run on their way past. So an
+ * 11pm booking still texts the customer - at 8am, when a phone buzzing is a
+ * phone buzzing rather than somebody being woken up.
+ *
+ * `force` is for texts a person is standing in front of waiting for: the
+ * Settings test message, which is useless if it arrives twelve hours later,
+ * and which can't wake anybody because they asked for it.
+ */
+export async function sendSmsResult(
+  toRaw: string,
+  messageRaw: string,
+  log?: SmsLog,
+  opts?: { force?: boolean },
+): Promise<SendResult> {
   // Every text goes through the dash guard, not just the ones written today.
   // Doing it here rather than in each builder means a message assembled from
   // owner-typed content (a quote summary, a service name) is covered too.
@@ -140,11 +180,43 @@ export async function sendSmsResult(toRaw: string, messageRaw: string, log?: Sms
     await record(log, empty, to, message);
     return empty;
   }
+
+  // Quiet hours: park it and say when it leaves. Recorded through the same log
+  // as everything else, because the queue entry and the log line are one row.
+  if (!opts?.force && inQuietHours()) {
+    const due = nextSendableAt();
+    const label = clockLabel(due);
+    const detail = `Quiet hours (${hourLabel(QUIET_FROM_HOUR)}–${hourLabel(QUIET_UNTIL_HOUR)}). Held, and goes out ${label}.`;
+    await logMessage({
+      quote_id: log?.quoteId ?? null,
+      kind: log?.kind ?? "held",
+      role: log?.role ?? "customer",
+      to_phone: to,
+      body: message,
+      ok: false,
+      provider: SMS_PROVIDER,
+      detail,
+      send_after: due.toISOString(),
+    });
+    return {
+      ok: false,
+      held: true,
+      provider: SMS_PROVIDER,
+      to,
+      detail,
+      sendAfter: due.toISOString(),
+      sendAfterLabel: label,
+    };
+  }
+
+  // Anything the night left behind goes out alongside this one, so the first
+  // text of the morning drags the queue out with it rather than leaving it for
+  // the cron. Deliberately not part of this send's own result: a stuck queue
+  // must not hold up the text somebody is waiting on right now.
+  await flushInBackground();
+
   try {
-    let r: SendResult;
-    if (SMS_PROVIDER === "quo" || SMS_PROVIDER === "openphone") r = await sendQuo(to, message);
-    else if (SMS_PROVIDER === "custom") r = await sendCustom(to, message);
-    else r = await sendTwilio(to, message);
+    const r = await deliver(to, message);
     if (!r.ok) {
       console.error("[sms] send failed", {
         provider: r.provider,
@@ -166,6 +238,71 @@ export async function sendSmsResult(toRaw: string, messageRaw: string, log?: Sms
 
 export async function sendSms(toRaw: string, message: string, log?: SmsLog): Promise<boolean> {
   return (await sendSmsResult(toRaw, message, log)).ok;
+}
+
+// ── The morning flush ───────────────────────────────────────────────────────
+
+export type FlushResult = { due: number; sent: number; failed: number; skipped?: string };
+
+/**
+ * Deliver everything the night held back.
+ *
+ * Runs from three places, all of them "on the way past" rather than a timer of
+ * their own: both daily crons, and every send made during business hours. That
+ * spread is deliberate - a serverless app has no process sitting around to wake
+ * up at 8am, so instead the queue drains on the first thing that happens after
+ * it, and the 10am cron is the floor if nothing else happens at all.
+ *
+ * Each row is claimed before it's sent (see claimMessage), so all three racing
+ * at once still texts each person once.
+ */
+export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<FlushResult> {
+  // Never during quiet hours. Held messages come due at 8am, so this can only
+  // fire early if the clock is wrong - and the whole point is that it doesn't.
+  if (inQuietHours()) return { due: 0, sent: 0, failed: 0, skipped: "quiet hours" };
+
+  const startedAt = now().getTime();
+  const due = await listDueMessages(now().toISOString(), limit);
+  let sent = 0;
+  let failed = 0;
+
+  for (const m of due) {
+    if (now().getTime() - startedAt > budgetMs) break;
+    if (!m.to_phone || !m.body) {
+      await finishMessage(m.id, { ok: false, provider: SMS_PROVIDER, detail: "Held with no number or body to send." });
+      continue;
+    }
+    if (!(await claimMessage(m.id, now().toISOString()))) continue;
+
+    const r = await deliver(m.to_phone, m.body).catch(
+      (e) => ({ ok: false, provider: SMS_PROVIDER, detail: String(e) }) as SendResult,
+    );
+    await finishMessage(m.id, {
+      ok: r.ok,
+      provider: r.provider,
+      status: r.status ?? null,
+      detail: r.ok ? null : (r.detail ?? "Send failed."),
+    });
+    if (r.ok) sent += 1;
+    else failed += 1;
+  }
+
+  if (failed > 0) console.error("[sms-queue] held messages that failed to send", { due: due.length, sent, failed });
+  return { due: due.length, sent, failed };
+}
+
+// Drain the queue without making the caller wait for it. `after` runs the work
+// once the response is out but before the function is torn down, which is the
+// only way a serverless request can leave something running. Outside a request
+// (a script, a test) it throws, and then a short awaited flush is the fallback -
+// bounded, because it's on somebody's critical path at that point.
+async function flushInBackground(): Promise<void> {
+  try {
+    const { after } = await import("next/server");
+    after(() => flushHeldMessages().catch(() => {}));
+  } catch {
+    await flushHeldMessages(5, 2500).catch(() => {});
+  }
 }
 
 // Everyone who receives an owner alert: the OWNER_PHONE env plus every active

@@ -216,14 +216,28 @@ Customer-facing text settings:
 **Daily reminders (Vercel Cron)**
 Two daily crons, both declared in `vercel.json` and both free on the Hobby plan (it allows up to two cron jobs, each once a day). Both share the same `CRON_SECRET` env var in Vercel — sent as a Bearer token, and the endpoints reject anything else.
 
-- `/api/cron/reminders` (14:00 UTC, ~10am ET) — four jobs: the 2-day customer confirmation text for a booked job; the crew countdown (3 days out, day before, morning of); a nudge to the assigned contractor (+ owner) about a lead nobody has quoted 12+ hours after it came in; and a follow-up text to a customer who hasn't accepted or declined a sent quote within 48 hours. Confirming a job flips it to **Confirmed**; "need to reschedule" texts the owner + contractor.
-- `/api/cron/visit-reminders` (22:00 UTC, ~6pm ET) — kept separate because it needs an evening run time: texts both the customer and the assigned contractor (with the address) about tomorrow's in-person quote visit.
+- `/api/cron/reminders` (14:00 UTC, ~10am ET) — flushes anything quiet hours held overnight, then four jobs: the 2-day customer confirmation text for a booked job; the crew countdown (3 days out, day before, morning of); a nudge to the assigned contractor (+ owner) about a lead nobody has quoted 12+ hours after it came in; and a follow-up text to a customer who hasn't accepted or declined a sent quote within 48 hours. Confirming a job flips it to **Confirmed**; "need to reschedule" texts the owner + contractor.
+- `/api/cron/visit-reminders` (22:00 UTC, ~6pm ET) — kept separate because it needs an evening run time; also flushes the held queue on its way past: texts both the customer and the assigned contractor (with the address) about tomorrow's in-person quote visit.
 
 Since both crons only run once a day, a 12h or 48h threshold can be noticed up to ~24h late — an acceptable tradeoff for staying on the free plan.
 
 The two nudges only chase work from the last **14 days** (`REMINDER_MAX_AGE_DAYS` in `src/lib/crm/queries.ts`). That keeps them off stale pipeline nobody intends to work, and — because every existing row counts as un-reminded the first time this runs — stops the first cron after deploy texting every historical lead and old unanswered quote at once.
 
 Run `supabase/hourly-reminders.sql` before deploying this — it adds the tracking columns (`stale_lead_reminded_at`, `visit_reminder_sent_at`, `visit_crew_reminded_at`, `quote_followup_sent_at`) each new job uses to avoid sending the same reminder twice. Moving or cancelling a visit clears its two markers, so the new day gets its own reminders.
+
+**Quiet hours: nothing goes out 7pm-8am**
+Every text this app sends is gated on the Raleigh clock. A message raised between 7pm and 8am Eastern is not sent and not dropped — it is written to the message log with a `send_after` on it and delivered the next morning, so an 11pm booking still texts the customer, at 8am. Run `supabase/quiet-hours.sql` to add the two columns this needs (`send_after`, `sent_at`).
+
+The queue drains from three places, because a serverless app has nothing sitting around to wake up at 8am: both daily crons flush it first thing, and so does any text sent during business hours. In practice a held message goes out on the first activity after 8am, and the 10am cron is the floor if the morning is quiet. If you want it delivered at 8:00 exactly, that is a third cron (`/api/cron/reminders` at `0 12 * * *`) — Vercel's Hobby plan allows two, so it needs a plan that allows three.
+
+One text ignores quiet hours: the Settings → Text notifications test message. You asked for it, you are holding the phone, and a test that arrives twelve hours later answers nothing.
+
+A held message shows in the job's **Texts sent** log as "Waiting for 8:00 AM" rather than as a failure, and the CRM says so where it reports a send — the quote banner, the contractor invite and password notes.
+
+**Time is Eastern, everywhere**
+`src/lib/crm/clock.ts` owns every reading of the clock: `now()`, today's date, day arithmetic, quiet hours. Vercel runs in UTC and phones are set to whatever their owners set them to, so anything asking "what day is it" or printing a timestamp goes through there and comes back in `America/New_York` — Eastern, which is EST in winter and EDT in summer, not a pinned -05:00 that would be an hour out all summer.
+
+Time itself is the host clock, not an NTP query: serverless functions get outbound TCP only (NTP is UDP/123), and Vercel's AWS instances are already disciplined by Amazon's own time service, which is steadier than a public pool server reached over the internet. Settings → **Time & quiet hours** shows the current Raleigh time, whether texts are sending right now, and a drift check against a public HTTPS host's `Date` header as a second opinion.
 
 > If you also send texts from a Make.com scenario, disable that scenario (or the SMS step) to avoid sending duplicate messages, since the app now texts directly through Quo.
 

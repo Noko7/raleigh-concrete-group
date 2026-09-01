@@ -1,4 +1,5 @@
 import { requireOwner } from "@/lib/crm/auth";
+import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { STATUS_LABELS } from "@/lib/crm/constants";
 import { crmBase } from "@/lib/crm/nav";
 import { listQuotes } from "@/lib/crm/queries";
@@ -52,7 +53,7 @@ export default async function ArchivedPage() {
                     <span className={`crm-badge crm-badge-${q.status}`}>{STATUS_LABELS[q.status]}</span>
                   </td>
                   <td className="crm-sm crm-muted">
-                    {q.archived_at ? new Date(q.archived_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                    {q.archived_at ? new Date(q.archived_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: BUSINESS_TZ }) : ""}
                   </td>
                   <td className="crm-row-actions">
                     <form action={restoreQuoteForm}>

@@ -93,7 +93,11 @@ export async function createContractor(_prev: AddState, formData: FormData): Pro
       const msg = loginMessage("Your Raleigh Concrete Group CRM login is ready.", email, password);
       const res = await sendSmsResult(phone, msg);
       smsSent = res.ok;
-      if (!res.ok) smsNote = `Couldn't text them (${res.detail || res.status || "unknown error"}). Share the password manually.`;
+      // Quiet hours hold it until the morning rather than dropping it, and the
+      // password is on screen either way - so this says which of the two
+      // happened instead of reporting a hold as a failure.
+      if (res.held) smsNote = `Quiet hours: their login text goes out ${res.sendAfterLabel}. The password above works now if you'd rather pass it on yourself.`;
+      else if (!res.ok) smsNote = `Couldn't text them (${res.detail || res.status || "unknown error"}). Share the password manually.`;
     }
   }
 
@@ -137,7 +141,8 @@ export async function resetContractorPassword(_prev: ResetState, formData: FormD
       const msg = loginMessage("Your Raleigh Concrete Group CRM password was reset.", contractor.email, password);
       const sms = await sendSmsResult(contractor.phone, msg);
       smsSent = sms.ok;
-      if (!sms.ok) smsNote = `Couldn't text them (${sms.detail || sms.status || "unknown error"}). Share the password manually.`;
+      if (sms.held) smsNote = `Quiet hours: their password text goes out ${sms.sendAfterLabel}. The password above works now if you'd rather pass it on yourself.`;
+      else if (!sms.ok) smsNote = `Couldn't text them (${sms.detail || sms.status || "unknown error"}). Share the password manually.`;
     }
   }
 
@@ -253,7 +258,9 @@ export async function sendContractorInvite(
     smsSent: sms.ok,
     smsNote: sms.ok
       ? undefined
-      : `Couldn't text it (${sms.detail || sms.status || "unknown error"}). Send them the link yourself.`,
+      : sms.held
+        ? `Quiet hours: the invite text goes out ${sms.sendAfterLabel}. The link above works now if you'd rather send it yourself.`
+        : `Couldn't text it (${sms.detail || sms.status || "unknown error"}). Send them the link yourself.`,
   };
 }
 

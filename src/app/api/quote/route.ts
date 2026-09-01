@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
+import { ymdInDays } from "@/lib/crm/clock";
 import { VISIT_LEAD_DAYS, VISIT_TIME_SLOTS } from "@/lib/crm/constants";
 import { notifyCustomerReceived, notifyNewQuote } from "@/lib/crm/notify";
 import {
@@ -97,11 +98,10 @@ export async function POST(request: Request) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
     errors.push("visit_date");
   } else {
-    // No visits in the past, and none inside the lead time. One day of slack
-    // for time zones, matching how preferred install days are checked.
-    const earliest = Date.now() + (VISIT_LEAD_DAYS - 1) * 24 * 60 * 60 * 1000;
-    const picked = new Date(`${visitDate}T00:00:00Z`).getTime();
-    if (!Number.isFinite(picked) || picked < earliest) errors.push("visit_date");
+    // No visits in the past, and none inside the lead time. Both sides are
+    // Raleigh calendar dates now, so this is an exact day count rather than a
+    // millisecond comparison that needed a day of slack to survive time zones.
+    if (visitDate < ymdInDays(VISIT_LEAD_DAYS)) errors.push("visit_date");
   }
   if (!VISIT_TIME_SLOTS.includes(visitTime)) errors.push("visit_time");
 
