@@ -83,6 +83,15 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "Customer declined the quote";
     case "reminder_sent":
       return "Confirmation reminder texted to the customer";
+    case "stale_lead_reminded": {
+      // Chased in one text covering every stale lead, so this says which batch
+      // it was part of - the text itself is logged without a job id, since it
+      // belongs to several.
+      const of = Number(m.of);
+      return of > 1
+        ? `Chased as untouched, in a list of ${of} sent to the crew`
+        : "Chased as untouched: nudge texted to the crew";
+    }
     case "crew_reminded": {
       const d = Number(m.days_out);
       const when = d === 0 ? "morning of" : d === 1 ? "day before" : `${d} days out`;

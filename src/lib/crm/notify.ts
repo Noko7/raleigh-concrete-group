@@ -148,24 +148,23 @@ async function deliver(to: string, message: string): Promise<SendResult> {
 /**
  * Send now, or hold it until the morning.
  *
- * Between 7pm and 8am Eastern nothing goes out. The text isn't dropped: it's
- * written to the message log with a `send_after` on it and delivered by the
- * flush below, which every send and both crons run on their way past. So an
- * 11pm booking still texts the customer - at 8am, when a phone buzzing is a
- * phone buzzing rather than somebody being woken up.
+ * Quiet hours are a courtesy to CUSTOMERS, not a shift pattern. Between 7pm and
+ * 8am Eastern a customer text isn't sent: it's written to the message log with
+ * a `send_after` on it and delivered by the flush below, which every send and
+ * both crons run on their way past. So an 11pm booking still texts the
+ * customer - at 8am, when a phone buzzing is a phone buzzing rather than
+ * somebody being woken up by a business they bought concrete from.
  *
- * `force` is for the two texts somebody is already waiting on when it's sent,
- * and only those:
+ * The owner and the crew are on the job and get everything the moment it
+ * happens, whatever the hour. That's what `role` decides here: "customer" waits,
+ * "owner" and "crew" don't, and a send with no log at all (a contractor's login
+ * text, the Settings test) is staff-facing by definition and goes straight out.
  *
- *   - the receipt for a quote request, sent seconds after the customer pressed
- *     the button (notifyCustomerReceived)
- *   - the Settings test message, which is useless if it arrives twelve hours
- *     later (sendTestSms)
- *
- * Neither can wake anybody: both are answers to something the person on the
- * other end just did. Nothing that arrives out of the blue belongs here - an
- * owner alert about a new lead is exactly the 2am buzz quiet hours exist to
- * stop, and it waits like everything else.
+ * `force` is the one exception on the customer side: a text that is itself the
+ * answer to something the customer just did. Today that is only the receipt for
+ * a quote request, sent seconds after they pressed the button - see
+ * notifyCustomerReceived. Anything that arrives out of the blue does not belong
+ * here; that is the whole thing quiet hours are for.
  */
 export async function sendSmsResult(
   toRaw: string,
@@ -192,14 +191,15 @@ export async function sendSmsResult(
 
   // Quiet hours: park it and say when it leaves. Recorded through the same log
   // as everything else, because the queue entry and the log line are one row.
-  if (!opts?.force && inQuietHours()) {
+  // Customers only - see the note above.
+  if (!opts?.force && log?.role === "customer" && inQuietHours()) {
     const due = nextSendableAt();
     const label = clockLabel(due);
     const detail = `Quiet hours (${hourLabel(QUIET_FROM_HOUR)}–${hourLabel(QUIET_UNTIL_HOUR)}). Held, and goes out ${label}.`;
     await logMessage({
-      quote_id: log?.quoteId ?? null,
-      kind: log?.kind ?? "held",
-      role: log?.role ?? "customer",
+      quote_id: log.quoteId ?? null,
+      kind: log.kind,
+      role: "customer",
       to_phone: to,
       body: message,
       ok: false,
@@ -1235,16 +1235,118 @@ export function staleLeadMessage(q: QuoteInfo, contractorName?: string | null): 
   ]);
 }
 
-export async function notifyStaleLead(
-  contractorPhone: string | null | undefined,
-  q: QuoteInfo,
+// How many leads a digest spells out before it stops and points at the CRM.
+// Past this the text is a wall nobody reads to the end, and the pipeline board
+// is the better tool anyway.
+const DIGEST_MAX_ITEMS = 6;
+
+// One lead as a few lines inside a digest, rather than the four-line brief a
+// single-lead text can afford. `who` is set only on the owner's copy - the
+// contractor knows whose leads these are, the owner needs telling.
+function staleLeadItem(q: QuoteInfo, n: number, who?: string | null): string {
+  const visited = dayOrNull(visitDateOf(q));
+  return text([
+    `${n}. ${q.name}${q.service?.trim() ? ` - ${q.service.trim()}` : ""}`,
+    q.phone,
+    q.address?.trim() || null,
+    visited ? `Visited ${visited}, no price sent` : null,
+    who ? `Assigned: ${who}` : null,
+    q.job_token ? jobLink(q.job_token) : null,
+  ]);
+}
+
+/**
+ * Every stale lead in one text.
+ *
+ * This used to be one text per lead, which meant a contractor who took a day
+ * off came back to six identical-looking alerts and read none of them. A list
+ * is both less noise and more use: it says how far behind the pipeline is,
+ * which a stack of separate texts actively hides.
+ *
+ * `who` on each entry labels it for the owner's copy, which spans everybody.
+ */
+export function staleLeadDigest(
+  leads: { quote: QuoteInfo; who?: string | null }[],
   contractorName?: string | null,
-): Promise<void> {
-  const msg = staleLeadMessage(q, contractorName);
-  await alertOwner(msg, contractorPhone, { quoteId: q.id, kind: "stale_lead" });
-  if (contractorPhone) {
-    await sendSms(contractorPhone, msg, { quoteId: q.id, kind: "stale_lead", role: "crew" }).catch(() => {});
+): string {
+  const greeting = contractorName?.trim() ? `Hi ${firstName(contractorName)},` : "Hi,";
+  const shown = leads.slice(0, DIGEST_MAX_ITEMS);
+  const rest = leads.length - shown.length;
+
+  return text([
+    `${leads.length} LEADS NEED ATTENTION`,
+    "",
+    greeting,
+    "these came in over 12 hours ago and no quote has gone out yet:",
+    "",
+    ...shown.flatMap((l, i) => [staleLeadItem(l.quote, i + 1, l.who), ""]),
+    rest > 0 ? `...and ${rest} more. Open the CRM to see all ${leads.length}.` : null,
+    rest > 0 ? "" : null,
+    "Send each a quote, or book a visit if you need to see it first.",
+  ]);
+}
+
+// A contractor and the leads of theirs that have gone quiet. `phone` is null
+// for a contractor with no number on file, and for the unassigned pile - both
+// still belong in the owner's copy.
+export type StaleLeadGroup = {
+  phone?: string | null;
+  name?: string | null;
+  leads: QuoteInfo[];
+};
+
+/**
+ * Text each contractor their own stale leads, and the owner everybody's.
+ *
+ * One text per person per run, not one per lead. The owner's copy spans every
+ * group including the unassigned pile, so it doubles as the "nobody has picked
+ * this up" alert that used to have no owner of its own.
+ *
+ * A contractor who is also an owner is skipped: their leads are already in the
+ * owner digest they're about to get, and two texts listing the same jobs is the
+ * spam this replaced.
+ */
+export async function notifyStaleLeads(
+  groups: StaleLeadGroup[],
+): Promise<{ owner: boolean; contractors: number; leads: number }> {
+  const withLeads = groups.filter((g) => g.leads.length > 0);
+  const leadCount = withLeads.reduce((n, g) => n + g.leads.length, 0);
+  if (leadCount === 0) return { owner: false, contractors: 0, leads: 0 };
+
+  // One lead is still one lead: it gets the message it always got, which says
+  // more about that job than a list entry can. The digest is for the pile-up.
+  const only = leadCount === 1 ? withLeads[0] : null;
+
+  await alertOwner(
+    only
+      ? staleLeadMessage(only.leads[0], only.name)
+      : staleLeadDigest(withLeads.flatMap((g) => g.leads.map((quote) => ({ quote, who: g.name || "Unassigned" })))),
+    null,
+    // A digest belongs to no single job, so it is logged without one; the
+    // per-lead trace is the stale_lead_reminded event the cron writes on each.
+    only ? { quoteId: only.leads[0].id, kind: "stale_lead" } : { kind: "stale_lead_digest" },
+  );
+
+  const owners = new Set(await ownerRecipients());
+  let contractors = 0;
+  for (const g of withLeads) {
+    const phone = g.phone ? toE164(g.phone) : null;
+    if (!phone || owners.has(phone)) continue;
+    const msg =
+      g.leads.length === 1
+        ? staleLeadMessage(g.leads[0], g.name)
+        : staleLeadDigest(
+            g.leads.map((quote) => ({ quote })),
+            g.name,
+          );
+    const log =
+      g.leads.length === 1
+        ? { quoteId: g.leads[0].id, kind: "stale_lead", role: "crew" as const }
+        : { kind: "stale_lead_digest", role: "crew" as const };
+    if (await sendSms(phone, msg, log).catch(() => false)) contractors += 1;
   }
+
+  return { owner: true, contractors, leads: leadCount };
 }
 
 // ── 13. Quote visit, night before: customer + contractor ───────────────────

@@ -7,7 +7,8 @@ import {
   notifyCrewReminder,
   notifyQuoteFollowup,
   notifyReminder,
-  notifyStaleLead,
+  notifyStaleLeads,
+  type StaleLeadGroup,
 } from "@/lib/crm/notify";
 import {
   addAdminEvent,
@@ -28,8 +29,9 @@ export const dynamic = "force-dynamic";
 //   0. Send anything quiet hours held overnight (see flushHeldMessages).
 //   1. Ask the customer to confirm a job that's ~2 days out.
 //   2. Remind the assigned crew 3 days out, the day before, and the morning of.
-//   3. Nudge the assigned contractor (+owner) about a lead nobody has quoted
-//      or scheduled a visit for, 12+ hours old.
+//   3. Nudge the assigned contractor (+owner) about leads nobody has quoted
+//      or scheduled a visit for, 12+ hours old - one text listing all of
+//      theirs, not one per lead.
 //   4. Follow up with a customer who hasn't accepted or declined a sent
 //      quote within 48 hours.
 // Jobs 1-4 only get checked once a day here rather than more often, since
@@ -96,13 +98,30 @@ export async function GET(request: Request) {
   }
 
   // ── 3. Stale leads: nobody has quoted or scheduled a visit in 12h ─────────
-  let staleSent = 0;
-  for (const q of await listStaleLeads(12)) {
-    const contractor = q.assigned_to ? await getStaffContactById(q.assigned_to) : null;
-    await notifyStaleLead(contractor?.phone, q, contractor?.full_name).catch(() => {});
+  // One text per person, listing all of their stale leads - not one text per
+  // lead. A contractor who was off yesterday came back to six near-identical
+  // alerts and read none of them; a list is less noise and says more, because
+  // "you are six behind" is the actual news. The owner's copy spans everybody,
+  // so the unassigned pile has somewhere to be reported too.
+  const stale = await listStaleLeads(12);
+  const byContractor = new Map<string, StaleLeadGroup>();
+  for (const q of stale) {
+    const key = q.assigned_to ?? "";
+    let group = byContractor.get(key);
+    if (!group) {
+      // One lookup per contractor rather than one per lead.
+      const contractor = q.assigned_to ? await getStaffContactById(q.assigned_to) : null;
+      group = { phone: contractor?.phone, name: contractor?.full_name, leads: [] };
+      byContractor.set(key, group);
+    }
+    group.leads.push(q);
+  }
+  const staleSent = await notifyStaleLeads([...byContractor.values()]).catch(() => null);
+  // Marked and recorded per lead either way: the digest is how it was sent, but
+  // "this job was chased" still belongs on this job's own activity log.
+  for (const q of stale) {
     await markStaleLeadReminded(q.id);
-    await addAdminEvent(q.id, "stale_lead_reminded", { assigned_to: q.assigned_to });
-    staleSent += 1;
+    await addAdminEvent(q.id, "stale_lead_reminded", { assigned_to: q.assigned_to, of: stale.length });
   }
 
   // ── 4. 48h no-response quote follow-up ─────────────────────────────────────

@@ -45,21 +45,28 @@ export function ClockCard({ check }: { check: ClockCheck }) {
           </dd>
         </div>
         <div>
-          <dt>Texts</dt>
+          <dt>Customer texts</dt>
           <dd>
             {quiet ? (
               <>
-                <span className="crm-badge crm-badge-warning">Quiet hours</span> Anything raised now is queued and sends{" "}
-                {clockLabel(nextSendableAt(at), at)}. Two go out anyway, because somebody is waiting on them as they
-                send: the receipt a customer gets for submitting a quote request, and the test message below.
+                <span className="crm-badge crm-badge-warning">Quiet hours</span> A text to a customer is queued now and
+                sends {clockLabel(nextSendableAt(at), at)}. The exception is the receipt for a quote request, which goes
+                out at once because they just pressed the button and are waiting on it.
               </>
             ) : (
               <>
-                <span className="crm-badge crm-badge-success">Sending</span> Texts go out as they happen, until{" "}
-                {hourLabel(QUIET_FROM_HOUR)}. Between {hourLabel(QUIET_FROM_HOUR)} and {hourLabel(QUIET_UNTIL_HOUR)} they are
-                held and delivered the next morning.
+                <span className="crm-badge crm-badge-success">Sending</span> Customer texts go out as they happen, until{" "}
+                {hourLabel(QUIET_FROM_HOUR)}. Between {hourLabel(QUIET_FROM_HOUR)} and {hourLabel(QUIET_UNTIL_HOUR)} they
+                are held and delivered the next morning.
               </>
             )}
+          </dd>
+        </div>
+        <div>
+          <dt>Your texts</dt>
+          <dd>
+            <span className="crm-badge crm-badge-success">Any time</span> Quiet hours never apply to you or the crew.
+            Lead alerts, crew reminders and logins send the moment they happen, at any hour.
           </dd>
         </div>
         <div>
