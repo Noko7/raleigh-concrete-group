@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — CRM language preference
+-- Raleigh Concrete Group - CRM language preference
 -- Run this AFTER crm.sql, once, in Supabase → SQL Editor. Safe to re-run.
 --
 -- Each staff member picks the language the CRM renders in. Stored on the staff

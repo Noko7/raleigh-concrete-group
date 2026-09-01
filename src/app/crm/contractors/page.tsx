@@ -82,7 +82,7 @@ export default async function ContractorsPage() {
           <h2 className="crm-card-title">Signups ({liveInvites.length} in progress)</h2>
           <p className="crm-muted crm-sm">
             Where each invite got to. <strong>Opened, not finished</strong> means they tapped the link but never
-            created the account — worth a call. Cancelling stops a link working immediately.
+            created the account - worth a call. Cancelling stops a link working immediately.
           </p>
           <div className="crm-table-wrap">
             <table className="crm-table">
@@ -102,7 +102,7 @@ export default async function ContractorsPage() {
                   return (
                     <tr key={i.id}>
                       <td>{prettyPhone(i.phone)}</td>
-                      <td>{i.full_name || <span className="crm-muted">—</span>}</td>
+                      <td>{i.full_name || <span className="crm-muted">No name</span>}</td>
                       <td>
                         <span className={`crm-badge ${s.cls}`}>{s.label}</span>
                       </td>
@@ -113,7 +113,7 @@ export default async function ContractorsPage() {
                             {i.open_count > 1 && <span className="crm-muted"> ·{i.open_count}×</span>}
                           </>
                         ) : (
-                          <span className="crm-muted">—</span>
+                          <span className="crm-muted">Not yet</span>
                         )}
                       </td>
                       <td className="crm-sm">
@@ -240,7 +240,7 @@ export default async function ContractorsPage() {
                   <AddAgreement
                     kind="contractor"
                     targetId={c.id}
-                    defaultTitle={`Contractor agreement — ${c.full_name || c.email || "Contractor"}`}
+                    defaultTitle={`Contractor agreement for ${c.full_name || c.email || "Contractor"}`}
                   />
                 </div>
               </div>

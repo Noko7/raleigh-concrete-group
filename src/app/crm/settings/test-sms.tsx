@@ -56,7 +56,7 @@ export function TestSms({
           <dt>Owner alerts go to</dt>
           <dd>
             {recipients.length === 0 ? (
-              <span className="crm-muted">Nobody — save your phone above or set OWNER_PHONE</span>
+              <span className="crm-muted">Nobody - save your phone above or set OWNER_PHONE</span>
             ) : (
               <ul className="sms-targets">
                 {recipients.map((r) => (
@@ -83,14 +83,14 @@ export function TestSms({
           {recipients.some((r) => r.source === "profile") && (
             <>
               A number shown with a person&apos;s name is saved on that owner&apos;s profile. Change it in the{" "}
-              <strong>Phone</strong> field at the top of this page (or on their staff record), then save — it takes
+              <strong>Phone</strong> field at the top of this page (or on their staff record), then save - it takes
               effect immediately, no redeploy.{" "}
             </>
           )}
           {recipients.some((r) => r.source === "env") && (
             <>
               A number listed as <code>OWNER_PHONE env var</code> comes from Vercel, not from this app, and is only
-              used while no owner has a number saved — which is why it can show as <em>not used</em>. Change it in
+              used while no owner has a number saved - which is why it can show as <em>not used</em>. Change it in
               Vercel → Settings → Environment Variables and redeploy.
             </>
           )}

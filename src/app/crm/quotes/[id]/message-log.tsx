@@ -33,7 +33,7 @@ export function MessageLog({ messages }: { messages: QuoteMessage[] }) {
       {messages.length === 0 ? (
         <p className="crm-muted crm-sm">
           No texts recorded for this job yet. If you were expecting some, check that{" "}
-          <code>supabase/message-log.sql</code> has been run — until it has, sends still go out but nothing is
+          <code>supabase/message-log.sql</code> has been run - until it has, sends still go out but nothing is
           recorded here.
         </p>
       ) : (

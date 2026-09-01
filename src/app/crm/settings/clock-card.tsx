@@ -40,7 +40,7 @@ export function ClockCard({ check }: { check: ClockCheck }) {
         <div>
           <dt>Zone</dt>
           <dd>
-            {BUSINESS_TZ} — Eastern, so EST in winter and EDT in summer. Every date in the CRM, on the job pages and in
+            {BUSINESS_TZ} - Eastern, so EST in winter and EDT in summer. Every date in the CRM, on the job pages and in
             the texts is written in this zone, whatever the server or the phone reading it is set to.
           </dd>
         </div>
@@ -85,7 +85,7 @@ export function ClockCard({ check }: { check: ClockCheck }) {
               <>
                 <span className="crm-badge crm-badge-danger">Off by {drift}s</span> This server disagrees with{" "}
                 {check.source} by more than {DRIFT_TOLERANCE_SECONDS} seconds. Dates and quiet hours are running against
-                a clock that is wrong — redeploy, and if it persists it is worth raising with Vercel.
+                a clock that is wrong - redeploy, and if it persists it is worth raising with Vercel.
               </>
             )}
           </dd>
@@ -94,7 +94,7 @@ export function ClockCard({ check }: { check: ClockCheck }) {
 
       <p className="crm-muted crm-sm">
         Time comes from the machine this runs on, not from an NTP pool: serverless functions get outbound TCP only, and
-        port 123 isn&apos;t open to them. It isn&apos;t a downgrade — Vercel runs on AWS instances disciplined by
+        port 123 isn&apos;t open to them. It isn&apos;t a downgrade - Vercel runs on AWS instances disciplined by
         Amazon&apos;s own time service, which is steadier than a public pool server reached across the internet. The
         line above is the second opinion.
       </p>

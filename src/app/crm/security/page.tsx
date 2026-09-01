@@ -210,7 +210,7 @@ export default async function SecurityPage() {
       <div className="crm-card">
         <h2 className="crm-card-title">Team activity ({staffActivity.length})</h2>
         <p className="crm-muted crm-sm">
-          Everything your crew changed in the CRM, newest first. Customer-driven and automatic events are left out —
+          Everything your crew changed in the CRM, newest first. Customer-driven and automatic events are left out;
           those show on each job&apos;s own timeline.
         </p>
         {staffActivity.length === 0 ? (

@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — quoting from building plans
+-- Raleigh Concrete Group - quoting from building plans
 -- Run this in Supabase → SQL Editor. Safe to re-run.
 --
 -- Adds a third quote_type. The two existing ones describe how we look at a

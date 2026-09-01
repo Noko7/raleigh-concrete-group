@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — appointment time + crew reminder tracking
+-- Raleigh Concrete Group - appointment time + crew reminder tracking
 -- Run this in Supabase → SQL Editor. Safe to re-run, and safe to run even if
 -- you already ran scheduled-time.sql (both statements are "if not exists").
 --

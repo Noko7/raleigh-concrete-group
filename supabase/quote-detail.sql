@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — structured quotes, link expiry, service routing,
+-- Raleigh Concrete Group - structured quotes, link expiry, service routing,
 -- and job photos.
 -- Run this in Supabase → SQL Editor. Safe to re-run (every statement is
 -- idempotent).

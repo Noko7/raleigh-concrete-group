@@ -14,7 +14,7 @@ export function ResetPassword({ id, name }: { id: string; name: string }) {
       <div className="crm-tempcreds">
         <p>
           New temporary password for <strong>{name}</strong>
-          {state.smsSent ? " — we texted it to them." : " (shown once):"}
+          {state.smsSent ? " - we texted it to them." : " (shown once):"}
         </p>
         <code className="crm-code">{state.password}</code>
         <p className="crm-muted crm-sm">

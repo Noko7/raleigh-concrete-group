@@ -9,7 +9,7 @@ import {
   notifyVisitCancelled,
   notifyVisitMoved,
 } from "@/lib/crm/notify";
-import { addEvent, clearAppointment, getQuote, rescheduleVisit } from "@/lib/crm/queries";
+import { addEvent, clearAppointment, getQuote, getStaffById, rescheduleVisit } from "@/lib/crm/queries";
 import { setJobDate } from "@/app/crm/quotes/[id]/actions";
 
 export type CalActionState = { ok: boolean; error?: string; message?: string };
@@ -67,21 +67,28 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
     to_time: time || null,
   });
 
+  // The office moving a visit from the month grid is precisely when whoever has
+  // to drive to it needs telling - they aren't looking at this screen.
+  const crew = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
   await notifyVisitMoved(
     {
       id,
       name: current.name,
       phone: current.phone,
+      service: current.service,
+      address: current.address,
       visit_date: date,
       visit_time: time || null,
+      job_token: current.job_token,
     },
     result.previous,
     result.previousTime,
+    { crewPhone: crew?.phone ?? null, crewName: crew?.full_name ?? null, movedBy: session.staff.full_name },
   ).catch(() => {});
   await syncQuoteToCalendar(id);
 
   refresh(id);
-  return { ok: true, message: "Visit moved and the customer was texted." };
+  return { ok: true, message: "Visit moved. The customer and the crew were texted." };
 }
 
 // Take the appointment off the calendar. The lead itself is untouched: this is

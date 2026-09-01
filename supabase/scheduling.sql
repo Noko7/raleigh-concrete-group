@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — approval / scheduling split
+-- Raleigh Concrete Group - approval / scheduling split
 -- Run this AFTER crm.sql, once, in Supabase → SQL Editor. Safe to re-run.
 --
 -- Before: a customer accepting their quote also picked the install date, which

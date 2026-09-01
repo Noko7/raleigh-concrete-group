@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — appointment time on booked jobs
+-- Raleigh Concrete Group - appointment time on booked jobs
 -- Run this AFTER scheduling.sql, once, in Supabase → SQL Editor. Safe to re-run.
 --
 -- Jobs were booked to a DAY only, so "your project is confirmed" couldn't tell

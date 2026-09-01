@@ -9,7 +9,7 @@ const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 // Decode only the expiry from a JWT (no signature check) to decide whether to
-// refresh. Identity/authorization is NEVER trusted from this — see verifyUser,
+// refresh. Identity/authorization is NEVER trusted from this - see verifyUser,
 // which validates the token's signature with Supabase before we act on it.
 function jwtExpMs(token: string): number {
   try {

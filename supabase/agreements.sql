@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — signed agreements
+-- Raleigh Concrete Group - signed agreements
 -- Run this AFTER crm.sql, once, in Supabase → SQL Editor. Safe to re-run.
 --
 -- Stores the contracts you send out through DocuSeal. DocuSeal itself is managed
@@ -8,8 +8,8 @@
 -- submission, and the signed PDF once you download it.
 --
 -- Two kinds:
---   contractor — one onboarding agreement per crew member (staff_id)
---   customer   — one agreement per job (quote_id)
+--   contractor - one onboarding agreement per crew member (staff_id)
+--   customer - one agreement per job (quote_id)
 
 -- ── 1. Private bucket for contract files ────────────────────────────────────
 -- Private, exactly like quote-uploads: no anon read/write policy exists, so the
@@ -46,7 +46,7 @@ create table if not exists public.agreements (
 );
 
 -- A contractor agreement hangs off a staff row; a customer agreement off a job.
--- Never both, never neither — otherwise the RLS policies below can't scope it.
+-- Never both, never neither - otherwise the RLS policies below can't scope it.
 alter table public.agreements drop constraint if exists agreements_target_chk;
 alter table public.agreements add constraint agreements_target_chk
   check (
@@ -65,7 +65,7 @@ grant select, insert, update, delete on public.agreements to authenticated;
 grant all on public.agreements to service_role;
 
 -- Owners see and manage everything. A contractor sees only their own onboarding
--- agreement and the customer agreements for jobs assigned to them — the same
+-- agreement and the customer agreements for jobs assigned to them - the same
 -- scoping rule the rest of the CRM uses.
 drop policy if exists "staff read agreements" on public.agreements;
 create policy "staff read agreements" on public.agreements

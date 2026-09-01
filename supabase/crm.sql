@@ -1,11 +1,11 @@
--- Raleigh Concrete Group — CRM extension
+-- Raleigh Concrete Group - CRM extension
 -- Run this AFTER schema.sql, once, in Supabase → SQL Editor. Safe to re-run.
 --
 -- Adds: staff (owner + contractors), CRM columns on quote_requests (status,
 -- assignment, customer/job tokens, view tracking, quote amount), an activity
 -- log, and Row-Level Security so a contractor can only ever see jobs assigned to
 -- them. The public marketing site and the customer/job token pages never touch
--- these tables directly — those go through server code with the service-role key.
+-- these tables directly - those go through server code with the service-role key.
 
 -- ── 1. Staff (one row per Supabase Auth user) ───────────────────────────────
 create table if not exists public.staff (
@@ -234,7 +234,7 @@ create policy "staff insert events" on public.quote_events
 
 -- ── 3b. Integrations (Google Calendar OAuth tokens, etc.) ───────────────────
 -- Singleton-ish key/value store for third-party tokens. Only ever touched by
--- server code with the service-role key — no authenticated grants, RLS on with
+-- server code with the service-role key - no authenticated grants, RLS on with
 -- no policies so a logged-in user can never read the refresh token.
 create table if not exists public.app_integrations (
   provider   text primary key,
@@ -272,7 +272,7 @@ create policy "owner reads login attempts" on public.login_attempts
   using (public.is_owner());
 
 -- ── 4. One-time: make yourself the owner ────────────────────────────────────
--- Passwords live in Supabase Auth (auth.users), NOT in this table — never add a
+-- Passwords live in Supabase Auth (auth.users), NOT in this table - never add a
 -- password column here.
 -- 1) Supabase → Authentication → Users → "Add user" → set your email + password
 --    and CHECK "Auto Confirm User" (an unconfirmed email can't sign in).

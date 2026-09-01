@@ -195,7 +195,7 @@ export async function sendSmsResult(
   if (!opts?.force && log?.role === "customer" && inQuietHours()) {
     const due = nextSendableAt();
     const label = clockLabel(due);
-    const detail = `Quiet hours (${hourLabel(QUIET_FROM_HOUR)}–${hourLabel(QUIET_UNTIL_HOUR)}). Held, and goes out ${label}.`;
+    const detail = `Quiet hours (${hourLabel(QUIET_FROM_HOUR)} to ${hourLabel(QUIET_UNTIL_HOUR)}). Held, and goes out ${label}.`;
     await logMessage({
       quote_id: log.quoteId ?? null,
       kind: log.kind,
@@ -1043,10 +1043,24 @@ export async function notifyCustomerRescheduled(
 // ── Quote visits: moved or cancelled from the calendar ─────────────────────
 // The visit is an appointment the customer set aside time for, so moving or
 // dropping it gets the same courtesy as a booked job.
+/**
+ * A quote visit the customer already had, on a different day.
+ *
+ * Deliberately not the confirmation text again. That one introduces the visit -
+ * why we want to come, that it's free, that there's no obligation - and none of
+ * that is news to somebody who already has the appointment. Sending it a second
+ * time reads as a second appointment on top of the first, which is a phone call
+ * to sort out. This says the one thing that changed and gets out of the way.
+ *
+ * `crew` is passed when the move came from a screen that isn't the crew's own
+ * job page: the office can move a visit out from under the person who has to
+ * drive to it, and that person needs telling.
+ */
 export async function notifyVisitMoved(
   q: QuoteInfo,
   previous?: string | null,
   previousTime?: string | null,
+  crew?: { crewPhone?: string | null; crewName?: string | null; movedBy?: string | null },
 ): Promise<void> {
   const wasDay = dayOrNull(previous);
   const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
@@ -1061,6 +1075,24 @@ export async function notifyVisitMoved(
     text([`Hi ${firstName(q.name)},`, ...body, "", "Sorry for the change, call or text us if that time doesn't work."]),
     { quoteId: q.id, kind: "visit_moved", role: "customer" },
   ).catch(() => {});
+
+  if (!crew) return;
+
+  const internal = text([
+    "QUOTE VISIT MOVED",
+    "",
+    ...block("Was:", was),
+    ...block("Now:", now),
+    ...block("Moved by:", crew.movedBy),
+    customerBrief(q),
+    "",
+    q.job_token ? jobLink(q.job_token) : null,
+  ]);
+
+  if (crew.crewPhone) {
+    await sendSms(crew.crewPhone, internal, { quoteId: q.id, kind: "visit_moved", role: "crew" }).catch(() => {});
+  }
+  await alertOwner(internal, crew.crewPhone, { quoteId: q.id, kind: "visit_moved" }).catch(() => {});
 }
 
 export async function notifyVisitCancelled(q: QuoteInfo): Promise<void> {

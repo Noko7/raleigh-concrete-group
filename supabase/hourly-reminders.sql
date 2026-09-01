@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — reminder tracking (stale leads, quote visits, follow-ups)
+-- Raleigh Concrete Group - reminder tracking (stale leads, quote visits, follow-ups)
 -- Run this in Supabase → SQL Editor. Safe to re-run (every statement is
 -- "if not exists").
 --

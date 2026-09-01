@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — contractor invites
+-- Raleigh Concrete Group - contractor invites
 -- Run this AFTER crm.sql, once, in Supabase → SQL Editor. Safe to re-run.
 --
 -- Instead of the owner typing a contractor's details in by hand, they text an

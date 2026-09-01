@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — quote request storage
+-- Raleigh Concrete Group - quote request storage
 -- Run this once in your Supabase project: Dashboard → SQL Editor → New query → paste → Run.
 -- Safe to re-run: every statement is idempotent.
 
@@ -30,7 +30,7 @@ alter table public.quote_requests add column if not exists file_urls jsonb;
 -- them. You read leads in the Supabase dashboard (or with the service-role key).
 alter table public.quote_requests enable row level security;
 
--- The PUBLIC (anon) role gets NO direct access to this table — it cannot read,
+-- The PUBLIC (anon) role gets NO direct access to this table - it cannot read,
 -- insert, update or delete. All writes go through the server route /api/quote,
 -- which uses the secret service-role key (and re-validates every field). This
 -- keeps customer leads safe from scraping and spam straight from the browser.

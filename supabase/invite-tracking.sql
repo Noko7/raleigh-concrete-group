@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — contractor invite tracking
+-- Raleigh Concrete Group - contractor invite tracking
 -- Run this AFTER invites.sql, once, in Supabase → SQL Editor. Safe to re-run.
 --
 -- Adds the missing middle step. Before this an invite was only "pending" or

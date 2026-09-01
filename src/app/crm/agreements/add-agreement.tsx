@@ -42,7 +42,7 @@ export function AddAgreement({
   const [fileName, setFileName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Collapse the form once the save lands — the saved row shows up in the list
+  // Collapse the form once the save lands - the saved row shows up in the list
   // above via revalidatePath, so leaving a filled-in form open is just confusing.
   useEffect(() => {
     if (state.ok) {

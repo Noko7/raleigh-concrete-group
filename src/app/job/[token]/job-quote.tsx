@@ -124,7 +124,7 @@ export function JobQuote({
         <h2 className="js-title">{t.contractorJob.quoteWaitingTitle}</h2>
         <p className="js-lead">
           {fill(t.contractorJob.quoteWaitingLead, { name: customerFirstName })}
-          {amount != null ? ` — $${amount.toLocaleString("en-US")}` : ""}
+          {amount != null ? ` - $${amount.toLocaleString("en-US")}` : ""}
         </p>
         {when && <p className="js-hint">{fill(t.contractorJob.quoteWaitingSent, { when })}</p>}
         <p className="js-hint">{t.contractorJob.quoteWaitingHint}</p>

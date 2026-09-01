@@ -51,7 +51,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       // that will resolve itself at 8am.
       if (m.delivered) return `Quote link texted to ${String(m.to ?? "the customer")}`;
       if (m.held_until) return `Quote link queued for ${String(m.to ?? "the customer")} (quiet hours, goes out ${heldWhen(m.held_until)})`;
-      return `Quote text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` — ${String(m.error)}` : ""}`;
+      return `Quote text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` - ${String(m.error)}` : ""}`;
     case "customer_viewed":
       return "Customer opened their quote";
     case "customer_accepted": {

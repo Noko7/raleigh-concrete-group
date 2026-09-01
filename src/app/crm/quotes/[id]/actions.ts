@@ -9,6 +9,7 @@ import {
   QUOTE_TTL_DAYS,
   TIME_RE,
   noEmDash,
+  visitDateOf,
 } from "@/lib/crm/constants";
 import { STATUSES, type Status } from "@/lib/crm/env";
 import { syncQuoteToCalendar } from "@/lib/crm/gcal";
@@ -24,6 +25,7 @@ import {
   notifyQuoteSent,
   notifyQuoteUpdated,
   notifyVisitConfirmed,
+  notifyVisitMoved,
   type SendResult,
 } from "@/lib/crm/notify";
 import {
@@ -455,6 +457,26 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   if (clash) return { ok: false, error: conflictMessage(clash) };
 
   const wasOnline = current.quote_type === "online";
+  // Did this customer already have an appointment? An online request's date is
+  // a slot they offered, not one we took, so only an in-person row counts.
+  //
+  // This is the difference between confirming and moving, and the customer
+  // hears about it very differently. Confirming introduces the visit: why
+  // we're coming, when, that it's free. Moving assumes all of that and says
+  // the one thing that changed. Sending the confirmation twice - which is what
+  // this action used to do when the crew hit Reschedule - reads as a second
+  // appointment being announced on top of the first.
+  const hadAppointment = Boolean(visitDateOf(current));
+  const movedOff = current.visit_date !== date || (current.visit_time ?? "") !== time;
+
+  // Re-confirming the day it is already on is not news. Nothing has changed for
+  // the customer, so nothing is sent to them: a text saying the appointment
+  // they already have is still the appointment they have is the same text
+  // twice, however it's worded.
+  if (hadAppointment && !movedOff) {
+    return { ok: true, message: "That was already the visit day and time. Nobody was texted." };
+  }
+
   const { quote: updated, error } = await updateQuoteResult(session, id, {
     quote_type: "inperson",
     visit_date: date,
@@ -466,39 +488,51 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   });
   if (!updated) return { ok: false, error: error ?? "Could not confirm that visit." };
 
-  const movedOff = current.visit_date !== date || (current.visit_time ?? "") !== time;
-  await addEvent(session, id, "visit_confirmed", {
+  await addEvent(session, id, hadAppointment ? "visit_moved" : "visit_confirmed", {
     to: date,
     to_time: time,
-    requested: current.visit_date ?? null,
-    requested_time: current.visit_time ?? null,
-    moved: movedOff,
+    ...(hadAppointment
+      ? { from: current.visit_date ?? null, from_time: current.visit_time ?? null }
+      : { requested: current.visit_date ?? null, requested_time: current.visit_time ?? null, moved: movedOff }),
   });
 
   // Whoever the job belongs to gets the text, not whoever happened to click. On
   // the crew's own job page these are the same person; from the CRM they aren't.
   const crew = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
-  await notifyVisitConfirmed(
-    {
-      id,
-      name: current.name,
-      phone: current.phone,
-      service: current.service,
-      address: current.address,
-      quote_type: "inperson",
-      visit_date: date,
-      visit_time: time,
-      job_token: current.job_token,
-    },
-    crew?.phone ?? session.staff.phone,
-    crew?.full_name ?? session.staff.full_name,
-    // What they originally asked for, so the customer text can own up to it if
-    // the crew put them on a different day.
-    { date: current.visit_date, time: current.visit_time },
-    // Read before the update above flipped it. An in-person request being given
-    // a date is not the same story as an online one being converted.
-    wasOnline,
-  ).catch(() => {});
+  const info = {
+    id,
+    name: current.name,
+    phone: current.phone,
+    service: current.service,
+    address: current.address,
+    quote_type: "inperson",
+    visit_date: date,
+    visit_time: time,
+    job_token: current.job_token,
+  };
+
+  if (hadAppointment) {
+    // Moving one they already have: what changed, and nothing else. The crew
+    // and the office are told separately, because the calendar can move a
+    // visit out from under whoever has to drive to it.
+    await notifyVisitMoved(info, current.visit_date, current.visit_time, {
+      crewPhone: crew?.phone ?? null,
+      crewName: crew?.full_name ?? null,
+      movedBy: session.staff.full_name,
+    }).catch(() => {});
+  } else {
+    await notifyVisitConfirmed(
+      info,
+      crew?.phone ?? session.staff.phone,
+      crew?.full_name ?? session.staff.full_name,
+      // What they originally asked for, so the customer text can own up to it if
+      // the crew put them on a different day.
+      { date: current.visit_date, time: current.visit_time },
+      // Read before the update above flipped it. An in-person request being given
+      // a date is not the same story as an online one being converted.
+      wasOnline,
+    ).catch(() => {});
+  }
   await syncQuoteToCalendar(id);
 
   revalidatePath(`/crm/quotes/${id}`);
@@ -507,9 +541,11 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   revalidatePath("/job/[token]", "page");
   return {
     ok: true,
-    message: movedOff
-      ? "Visit confirmed for the new day. The customer and the crew have been texted."
-      : "Visit confirmed. The customer and the crew have been texted.",
+    message: hadAppointment
+      ? "Visit moved. The customer has been texted the new day, and so has the crew."
+      : movedOff
+        ? "Visit confirmed for the new day. The customer and the crew have been texted."
+        : "Visit confirmed. The customer and the crew have been texted.",
   };
 }
 

@@ -155,7 +155,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   <dd>
                     {prettyDate(offeredVisit)}
                     {quote.visit_time ? ` ${t.contractorJob.at} ${quote.visit_time}` : ""}
-                    <span className="crm-muted crm-sm"> — {t.job.offeredVisitHint}</span>
+                    <span className="crm-muted crm-sm"> ({t.job.offeredVisitHint})</span>
                   </dd>
                 </div>
               )}
@@ -254,12 +254,12 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             <p className="crm-muted crm-sm">
               Send the agreement from DocuSeal, then track it here. {quote.email
                 ? `DocuSeal will email ${quote.email}.`
-                : "This customer has no email on file, so DocuSeal can't email them — share the signing link another way."}
+                : "This customer has no email on file, so DocuSeal can't email them - share the signing link another way."}
             </p>
             <AgreementList agreements={agreements} isOwner={isOwner} locale={locale} />
             {isOwner && (
               <div className="ag-add">
-                <AddAgreement kind="customer" targetId={quote.id} defaultTitle={`Customer agreement — ${quote.name}`} />
+                <AddAgreement kind="customer" targetId={quote.id} defaultTitle={`Customer agreement for ${quote.name}`} />
               </div>
             )}
           </div>

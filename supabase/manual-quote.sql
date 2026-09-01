@@ -1,4 +1,4 @@
--- Raleigh Concrete Group — let an owner create a lead themselves
+-- Raleigh Concrete Group - let an owner create a lead themselves
 -- Run this in Supabase → SQL Editor. Safe to re-run.
 --
 -- Every quote_requests row so far has come from the public /api/quote
