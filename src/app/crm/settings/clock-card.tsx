@@ -49,8 +49,9 @@ export function ClockCard({ check }: { check: ClockCheck }) {
           <dd>
             {quiet ? (
               <>
-                <span className="crm-badge crm-badge-warning">Quiet hours</span> Nothing is going out. Anything raised
-                now is queued and sends {clockLabel(nextSendableAt(at), at)}.
+                <span className="crm-badge crm-badge-warning">Quiet hours</span> Anything raised now is queued and sends{" "}
+                {clockLabel(nextSendableAt(at), at)}. Two go out anyway, because somebody is waiting on them as they
+                send: the receipt a customer gets for submitting a quote request, and the test message below.
               </>
             ) : (
               <>

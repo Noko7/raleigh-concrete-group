@@ -154,9 +154,18 @@ async function deliver(to: string, message: string): Promise<SendResult> {
  * 11pm booking still texts the customer - at 8am, when a phone buzzing is a
  * phone buzzing rather than somebody being woken up.
  *
- * `force` is for texts a person is standing in front of waiting for: the
- * Settings test message, which is useless if it arrives twelve hours later,
- * and which can't wake anybody because they asked for it.
+ * `force` is for the two texts somebody is already waiting on when it's sent,
+ * and only those:
+ *
+ *   - the receipt for a quote request, sent seconds after the customer pressed
+ *     the button (notifyCustomerReceived)
+ *   - the Settings test message, which is useless if it arrives twelve hours
+ *     later (sendTestSms)
+ *
+ * Neither can wake anybody: both are answers to something the person on the
+ * other end just did. Nothing that arrives out of the blue belongs here - an
+ * owner alert about a new lead is exactly the 2am buzz quiet hours exist to
+ * stop, and it waits like everything else.
  */
 export async function sendSmsResult(
   toRaw: string,
@@ -236,8 +245,13 @@ export async function sendSmsResult(
   }
 }
 
-export async function sendSms(toRaw: string, message: string, log?: SmsLog): Promise<boolean> {
-  return (await sendSmsResult(toRaw, message, log)).ok;
+export async function sendSms(
+  toRaw: string,
+  message: string,
+  log?: SmsLog,
+  opts?: { force?: boolean },
+): Promise<boolean> {
+  return (await sendSmsResult(toRaw, message, log, opts)).ok;
 }
 
 // ── The morning flush ───────────────────────────────────────────────────────
@@ -662,7 +676,13 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
           "",
           OPT_OUT_LINE,
         ]);
-  await sendSms(q.phone, msg, { quoteId: q.id, kind: "received", role: "customer" }).catch(() => {});
+  // Sent through quiet hours. This is a receipt, not a notification: the
+  // customer filled in the form seconds ago and is still looking at the page
+  // that said we'd text them. Holding it until 8am reads as the form having
+  // failed, which is how somebody at 10pm ends up filling it in twice or
+  // calling a competitor. The alert to the office about the same lead is not
+  // urgent in that way, and does wait.
+  await sendSms(q.phone, msg, { quoteId: q.id, kind: "received", role: "customer" }, { force: true }).catch(() => {});
 }
 
 // ── 4. Contractor confirms the visit an online customer offered ─────────────

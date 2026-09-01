@@ -230,7 +230,12 @@ Every text this app sends is gated on the Raleigh clock. A message raised betwee
 
 The queue drains from three places, because a serverless app has nothing sitting around to wake up at 8am: both daily crons flush it first thing, and so does any text sent during business hours. In practice a held message goes out on the first activity after 8am, and the 10am cron is the floor if the morning is quiet. If you want it delivered at 8:00 exactly, that is a third cron (`/api/cron/reminders` at `0 12 * * *`) — Vercel's Hobby plan allows two, so it needs a plan that allows three.
 
-One text ignores quiet hours: the Settings → Text notifications test message. You asked for it, you are holding the phone, and a test that arrives twelve hours later answers nothing.
+Two texts ignore quiet hours, both of them answers to something the person on the other end just did:
+
+- **The customer's quote-request receipt.** They pressed the button seconds ago and are looking at a page that says we'll text them. Holding that until 8am reads as the form having failed, which is how somebody at 10pm fills it in twice or calls a competitor. The *owner alert* about the same lead is not urgent in that way and does wait.
+- **The Settings → Text notifications test message.** You asked for it, you are holding the phone, and a test that arrives twelve hours later answers nothing.
+
+Nothing that arrives out of the blue belongs in that list — an owner alert about a new lead is exactly the 2am buzz quiet hours exist to stop. The exception is `{ force: true }` on `sendSms`/`sendSmsResult`, so grepping for it shows the whole list.
 
 A held message shows in the job's **Texts sent** log as "Waiting for 8:00 AM" rather than as a failure, and the CRM says so where it reports a send — the quote banner, the contractor invite and password notes.
 
