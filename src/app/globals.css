@@ -1671,7 +1671,6 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .js-card { background: #fff; border: 2px solid var(--amber); border-radius: 0.9rem; padding: 1.1rem 1.15rem; margin-bottom: 1.4rem; }
 .js-title { font-size: 1.15rem; font-weight: 800; margin-bottom: 0.4rem; }
 .js-lead { color: #374151; font-size: 0.95rem; margin-bottom: 0.9rem; line-height: 1.45; }
-.js-booked { color: var(--amber-dark); }
 .js-hint { color: #6b7280; font-size: 0.85rem; }
 .js-time { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.8rem; font-size: 0.85rem; font-weight: 800; color: #374151; }
 .js-time select, .js-time input[type="time"] { padding: 0.65rem 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; font-weight: 600; background: #fff; min-height: 48px; }
@@ -1698,6 +1697,43 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .js-confirm:disabled { opacity: 0.55; }
 .js-err { margin-top: 0.7rem; color: #b91c1c; font-weight: 700; font-size: 0.9rem; }
 .js-ok { margin-top: 0.7rem; color: #15803d; font-weight: 700; font-size: 0.9rem; }
+
+/* ── Reschedule, sitting inside the key block under the date it changes ──
+   Outlined rather than filled: a filled amber pill on this page means "this is
+   what to do next", and on a job that already has a date nothing needs doing.
+   Still full width and 48px, because it gets tapped with a glove on. */
+.jr { width: 100%; }
+.jr-open {
+  width: 100%; min-height: 48px; background: #fff; color: var(--amber-dark);
+  border: 2px solid var(--amber); border-radius: 999px; padding: 0.6rem 1.1rem;
+  font: inherit; font-weight: 800; cursor: pointer;
+}
+.jr-open:active { background: rgba(194, 104, 42, 0.08); }
+/* Open, it's an inset panel rather than another bordered card: it belongs to
+   the date above it, and a second box inside the key block would read as a
+   second appointment. */
+.jr-form {
+  display: flex; flex-direction: column; gap: 0.7rem;
+  background: #faf8f4; border: 1px solid #ddd8ce; border-radius: 0.7rem;
+  padding: 0.85rem 0.95rem;
+}
+.jr-fields { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.jr-field {
+  flex: 1 1 150px; display: flex; flex-direction: column; gap: 0.3rem;
+  font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280;
+}
+.jr-field input {
+  padding: 0.65rem 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem;
+  font: inherit; font-weight: 600; color: #1f2328; background: #fff; min-height: 48px;
+}
+.jr-field input:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+.jr-note { color: #6b7280; font-size: 0.85rem; line-height: 1.4; }
+.jr-acts { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.jr-save { flex: 1; }
+.jr-msg { margin-top: 0.55rem; }
+@media (max-width: 640px) {
+  .jr-fields { flex-direction: column; gap: 0.55rem; }
+}
 
 /* Job page header: title and pipeline stage side by side, then a way back. */
 .job-head { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }

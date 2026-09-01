@@ -11,6 +11,7 @@ import { getQuoteByToken, signFiles } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { JobFinish } from "./job-finish";
 import { JobQuote } from "./job-quote";
+import { JobReschedule } from "./job-reschedule";
 import { JobSchedule } from "./job-schedule";
 import { JobVisit } from "./job-visit";
 
@@ -36,8 +37,14 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // This page is the crew's whole job: quote it, schedule it, finish it. Which
   // cards appear is driven by where the job actually is, so there's only ever
   // one obvious next action on screen.
-  const showSchedule = quote.customer_response === "accepted" && quote.status !== "lost";
-  const showQuote = !showSchedule && quote.status !== "lost" && quote.status !== "completed" && quote.status !== "paid";
+  //
+  // Booking and re-booking are split: the schedule card settles a date that
+  // doesn't exist yet, and once one does, changing it is the Reschedule button
+  // under the date at the top of the page. Two ways to move the same date on
+  // one screen is how a crew ends up not trusting either.
+  const accepted = quote.customer_response === "accepted" && quote.status !== "lost";
+  const showSchedule = accepted && !quote.scheduled_date;
+  const showQuote = !accepted && quote.status !== "lost" && quote.status !== "completed" && quote.status !== "paid";
   const showFinish = quote.status === "scheduled";
   const isDone = quote.status === "completed" || quote.status === "paid";
 
@@ -116,6 +123,20 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           }
         : null;
 
+  // Which appointment the Reschedule button moves: always the one the block
+  // above is showing, so the crew is changing the date they're looking at. A
+  // slot an online customer merely offered isn't an appointment yet - taking
+  // that one up, on a different day or not, is the visit card's job. A job
+  // that's finished or lost has nothing left to move.
+  const reschedule =
+    isDone || quote.status === "lost"
+      ? null
+      : quote.scheduled_date
+        ? ({ kind: "job", date: quote.scheduled_date, time: quote.scheduled_time } as const)
+        : visitDate
+          ? ({ kind: "visit", date: visitDate, time: quote.visit_time } as const)
+          : null;
+
   const mapsLink = quote.address
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(quote.address)}`
     : null;
@@ -165,6 +186,20 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
                   : t.contractorJob.notScheduled}
             </span>
           )}
+
+          {/* Under the date, inside the same block, because the date is what
+              it changes. Collapsed to one button so a settled job still reads
+              as settled. */}
+          {reschedule && (
+            <JobReschedule
+              id={quote.id}
+              kind={reschedule.kind}
+              date={reschedule.date}
+              time={reschedule.time}
+              minDate={minJobDate}
+              locale={locale}
+            />
+          )}
         </div>
 
         {/* Appointments go at the top: they're the time-critical decisions and
@@ -175,8 +210,6 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         {showSchedule && (
           <JobSchedule
             id={quote.id}
-            scheduledDate={quote.scheduled_date}
-            scheduledTime={quote.scheduled_time}
             preferredDates={quote.preferred_dates ?? []}
             minDate={minJobDate}
             locale={locale}
