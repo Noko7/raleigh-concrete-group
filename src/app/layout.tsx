@@ -1,9 +1,9 @@
-import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Bebas_Neue, Sora } from "next/font/google";
 
 import { JsonLd } from "@/components/json-ld";
 import { QuoteModalRoot } from "@/components/quote-modal";
+import { VercelInsights } from "@/components/vercel-insights";
 import { localBusinessSchema, websiteSchema } from "@/lib/seo";
 import "./globals.css";
 
@@ -68,7 +68,7 @@ export default function RootLayout({
         <JsonLd data={[localBusinessSchema(), websiteSchema()]} />
         {children}
         <QuoteModalRoot />
-        <Analytics />
+        <VercelInsights />
       </body>
     </html>
   );
