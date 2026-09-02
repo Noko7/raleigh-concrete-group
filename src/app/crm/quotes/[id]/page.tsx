@@ -24,6 +24,7 @@ import { PhotoUpload } from "../../photo-upload";
 import { CompleteCard } from "./complete-card";
 import { MessageLog } from "./message-log";
 import { QuoteEditor } from "./quote-editor";
+import { CancelAppointment } from "./cancel-appointment";
 import { ScheduleCard } from "./schedule-card";
 import { markPaid, requestPayment, rotateTokens } from "./actions";
 
@@ -319,6 +320,22 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               minDate={minJobDate}
               locale={locale}
             />
+          )}
+
+          {/* Calling one off, for the customer who rings the office rather than
+              the crew. One control per appointment this job actually has: a
+              booked work day and a quote visit are different days and different
+              texts, and a job can be carrying both. */}
+          {(quote.scheduled_date || visitDate) && quote.status !== "completed" && quote.status !== "paid" && (
+            <div className="crm-card">
+              <h2 className="crm-card-title">{t.calendar.cancelAppt}</h2>
+              {quote.scheduled_date && (
+                <CancelAppointment id={quote.id} kind="job" customerName={quote.name} locale={locale} />
+              )}
+              {visitDate && (
+                <CancelAppointment id={quote.id} kind="visit" customerName={quote.name} locale={locale} />
+              )}
+            </div>
           )}
 
           {quote.status === "scheduled" && (

@@ -12,11 +12,12 @@ import {
   visitDateOf,
 } from "@/lib/crm/constants";
 import { STATUSES, type Status } from "@/lib/crm/env";
-import { syncQuoteToCalendar } from "@/lib/crm/gcal";
+import { removeQuoteFromCalendar, syncQuoteToCalendar } from "@/lib/crm/gcal";
 import {
   alertOwner,
   notifyAssignment,
   notifyBooked,
+  notifyBookingCancelled,
   notifyComplete,
   notifyCustomerRescheduled,
   notifyCustomerScheduled,
@@ -24,6 +25,7 @@ import {
   notifyQuoteReady,
   notifyQuoteSent,
   notifyQuoteUpdated,
+  notifyVisitCancelled,
   notifyVisitConfirmed,
   notifyVisitMoved,
   type SendResult,
@@ -31,6 +33,7 @@ import {
 import {
   MAX_VISITS_PER_DAY,
   addEvent,
+  clearAppointment,
   confirmSchedule,
   conflictMessage,
   countVisitsOn,
@@ -546,6 +549,92 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
       : movedOff
         ? "Visit confirmed for the new day. The customer and the crew have been texted."
         : "Visit confirmed. The customer and the crew have been texted.",
+  };
+}
+
+/**
+ * Call off an appointment: a booked work day, or a quote visit.
+ *
+ * Cancels the APPOINTMENT, not the lead. The customer stays in the pipeline
+ * with everything on them intact - a work day drops back to Needs scheduling
+ * so it can be rebooked, a visit's date is simply cleared. Getting rid of the
+ * lead itself is still the pipeline's Delete, which archives it and can be
+ * undone.
+ *
+ * `notify` defaults to on, because the usual reason to cancel is that we can't
+ * make it and they're expecting us. It comes off when the customer is the one
+ * who asked and you're already on the phone with them - a text telling somebody
+ * what they just said is noise.
+ *
+ * Lives here with setJobDate and confirmVisit rather than with the calendar
+ * that first grew it: it is now reached from three screens, and two ways to
+ * cancel the same appointment is how one of them ends up not texting anybody.
+ */
+export async function cancelAppointment(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+
+  const id = String(formData.get("id") ?? "");
+  const kind = String(formData.get("kind") ?? "") === "job" ? "job" : "visit";
+  const notify = String(formData.get("notify") ?? "yes") !== "no";
+  // Whether the CUSTOMER asked for this. It decides whether their text is a
+  // receipt or an apology, and it is what the crew's copy names as the reason.
+  const asked = String(formData.get("asked") ?? "") === "yes";
+  if (!id) return { ok: false, error: "Missing appointment." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+
+  // Nothing booked is not a failure worth an error box - it usually means two
+  // people cancelled the same appointment, or the page has been open a while.
+  const had = kind === "job" ? current.scheduled_date : visitDateOf(current);
+  if (!had) return { ok: true, message: "That appointment was already cancelled. Nobody was texted." };
+
+  const result = await clearAppointment(session, id, kind);
+  if (!result.ok) return { ok: false, error: result.error ?? "Could not cancel that appointment." };
+
+  await addEvent(session, id, kind === "job" ? "booking_cancelled" : "visit_cancelled", {
+    from: result.previous ?? null,
+    from_time: result.previousTime ?? null,
+    notified: notify,
+  });
+
+  // The crew hears either way. `notify` is about the customer - whether to text
+  // somebody you may have just put the phone down on - and has never had
+  // anything to do with whether the person driving there finds out.
+  const crew = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
+  const info = {
+    id,
+    name: current.name,
+    phone: current.phone,
+    service: current.service,
+    address: current.address,
+    visit_date: result.previous,
+    visit_time: result.previousTime,
+    job_token: current.job_token,
+  };
+  const team = {
+    asked,
+    tellCustomer: notify,
+    crewPhone: crew?.phone ?? null,
+    cancelledBy: session.staff.full_name,
+  };
+
+  if (kind === "job") await notifyBookingCancelled(info, result.previous, result.previousTime, team).catch(() => {});
+  else await notifyVisitCancelled(info, team).catch(() => {});
+
+  await removeQuoteFromCalendar(id);
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+  revalidatePath("/crm/calendar");
+  revalidatePath("/job/[token]", "page");
+  return {
+    ok: true,
+    message:
+      kind === "job"
+        ? `Date released. ${current.name} is back in Needs scheduling${notify ? " and was texted." : "."}`
+        : `Visit cancelled${notify ? " and the customer was texted." : "."}`,
   };
 }
 

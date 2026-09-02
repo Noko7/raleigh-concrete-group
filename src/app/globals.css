@@ -1756,6 +1756,36 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .jr-acts { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .jr-save { flex: 1; }
 .jr-msg { margin-top: 0.55rem; }
+
+/* ── Cancelling an appointment ─────────────────────────────────────────────
+   Shared by the crew's job page (light card) and the CRM quote page (dark),
+   so every colour here either adapts or is a mid-tone that reads on both.
+   Nothing may inherit a --crm-* text colour: on the job page there isn't one. */
+.ca { width: 100%; }
+/* A quiet text link, not a second pill. Reschedule is the answer nearly every
+   time both are on screen, and two equal buttons make you read to choose. */
+.ca-open {
+  background: none; border: none; color: #6b7280; font: inherit; font-weight: 700;
+  text-decoration: underline; cursor: pointer; padding: 0.55rem 0; min-height: 44px;
+}
+.ca-open:hover { color: #b91c1c; }
+.ca-form {
+  display: flex; flex-direction: column; gap: 0.75rem;
+  border: 1px solid rgba(185, 28, 28, 0.45); border-radius: 0.7rem;
+  padding: 0.85rem 0.95rem; margin-top: 0.4rem;
+}
+.ca-warn {
+  background: rgba(185, 28, 28, 0.12); border-radius: 0.5rem;
+  padding: 0.7rem 0.8rem; font-size: 0.88rem; line-height: 1.45; color: inherit;
+}
+.ca-check { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.88rem; color: inherit; cursor: pointer; }
+.ca-check input { margin-top: 0.2rem; width: 18px; height: 18px; flex: none; }
+.ca-check em { display: block; font-style: normal; opacity: 0.72; font-size: 0.8rem; margin-top: 0.15rem; }
+.ca-acts { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.ca-acts .cal-btn-danger { flex: 1; min-height: 44px; }
+.ca-msg { margin-top: 0.55rem; font-weight: 700; font-size: 0.9rem; }
+.ca-ok { color: #16a34a; }
+.ca-err { color: #ef4444; }
 @media (max-width: 640px) {
   .jr-fields { flex-direction: column; gap: 0.55rem; }
 }

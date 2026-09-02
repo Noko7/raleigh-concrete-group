@@ -3,14 +3,10 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { clearGoogleToken, removeQuoteFromCalendar, syncQuoteToCalendar } from "@/lib/crm/gcal";
-import {
-  notifyBookingCancelled,
-  notifyVisitCancelled,
-  notifyVisitMoved,
-} from "@/lib/crm/notify";
-import { addEvent, clearAppointment, getQuote, getStaffById, rescheduleVisit } from "@/lib/crm/queries";
-import { setJobDate } from "@/app/crm/quotes/[id]/actions";
+import { clearGoogleToken, syncQuoteToCalendar } from "@/lib/crm/gcal";
+import { notifyVisitMoved } from "@/lib/crm/notify";
+import { addEvent, getQuote, getStaffById, rescheduleVisit } from "@/lib/crm/queries";
+import { cancelAppointment, setJobDate } from "@/app/crm/quotes/[id]/actions";
 
 export type CalActionState = { ok: boolean; error?: string; message?: string };
 
@@ -95,41 +91,9 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
 // "cancel the appointment", not "delete the customer". Deleting a lead outright
 // is still the pipeline's Delete, which archives it and can be undone.
 export async function deleteEvent(_prev: CalActionState, formData: FormData): Promise<CalActionState> {
-  const session = await getSession();
-  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
-
-  const id = String(formData.get("id") ?? "");
-  const kind = String(formData.get("kind") ?? "") === "job" ? "job" : "visit";
-  // Whether to tell the customer. Defaults to yes - they're expecting us.
-  const notify = String(formData.get("notify") ?? "yes") !== "no";
-  if (!id) return { ok: false, error: "Missing appointment." };
-
-  const current = await getQuote(session, id);
-  if (!current) return { ok: false, error: "You don't have access to this quote." };
-
-  const result = await clearAppointment(session, id, kind);
-  if (!result.ok) return { ok: false, error: result.error ?? "Could not remove that appointment." };
-
-  await addEvent(session, id, kind === "job" ? "booking_cancelled" : "visit_cancelled", {
-    from: result.previous ?? null,
-    from_time: result.previousTime ?? null,
-    notified: notify,
-  });
-
-  if (notify) {
-    const info = { id, name: current.name, phone: current.phone, visit_date: result.previous, visit_time: result.previousTime };
-    if (kind === "job") await notifyBookingCancelled(info, result.previous, result.previousTime).catch(() => {});
-    else await notifyVisitCancelled(info).catch(() => {});
-  }
-
-  await removeQuoteFromCalendar(id);
-
-  refresh(id);
-  return {
-    ok: true,
-    message:
-      kind === "job"
-        ? `Date released. ${current.name} is back in Needs scheduling${notify ? " and was texted." : "."}`
-        : `Visit removed${notify ? " and the customer was texted." : "."}`,
-  };
+  // Delegated for the same reason moveEvent delegates to setJobDate: cancelling
+  // clears the date, logs it, texts the customer and takes the Google Calendar
+  // event down, and a second copy of that here is how the month grid quietly
+  // stops doing one of the four.
+  return cancelAppointment({ ok: false }, formData);
 }

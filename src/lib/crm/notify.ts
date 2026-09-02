@@ -1095,41 +1095,113 @@ export async function notifyVisitMoved(
   await alertOwner(internal, crew.crewPhone, { quoteId: q.id, kind: "visit_moved" }).catch(() => {});
 }
 
-export async function notifyVisitCancelled(q: QuoteInfo): Promise<void> {
-  await sendSms(
-    q.phone,
-    text([
-      `Hi ${firstName(q.name)},`,
-      `we've had to cancel your quote visit with ${BUSINESS}${
-        dayOrNull(q.visit_date) ? ` on ${dayOrNull(q.visit_date)}` : ""
-      }.`,
-      "",
-      "We're sorry for the trouble. Call or text us and we'll get you booked back in.",
-    ]),
-    { quoteId: q.id, kind: "visit_cancelled", role: "customer" },
-  ).catch(() => {});
+/**
+ * A quote visit called off.
+ *
+ * `asked` is whether the CUSTOMER asked for this, and it changes the whole
+ * message. "We've had to cancel your visit, sorry for the trouble" sent to
+ * somebody who rang up five minutes ago to cancel it themselves reads as a
+ * second, separate cancellation - and an apology for something they wanted.
+ * Theirs is a receipt; ours is an apology.
+ *
+ * `crew` is passed when whoever has to drive there isn't the person cancelling.
+ * A cancellation nobody passes on is a van outside an empty house.
+ */
+export async function notifyVisitCancelled(
+  q: QuoteInfo,
+  opts?: { asked?: boolean; tellCustomer?: boolean; crewPhone?: string | null; cancelledBy?: string | null },
+): Promise<void> {
+  const day = dayOrNull(q.visit_date);
+
+  // Skipped when the office has already said it out loud on the phone.
+  if (opts?.tellCustomer !== false) {
+    await sendSms(
+      q.phone,
+      text(
+        opts?.asked
+          ? [
+              `Hi ${firstName(q.name)},`,
+              `that's done - your quote visit with ${BUSINESS}${day ? ` on ${day}` : ""} is cancelled.`,
+              "",
+              "No problem at all. Call or text us whenever you'd like to book it back in.",
+            ]
+          : [
+              `Hi ${firstName(q.name)},`,
+              `we've had to cancel your quote visit with ${BUSINESS}${day ? ` on ${day}` : ""}.`,
+              "",
+              "We're sorry for the trouble. Call or text us and we'll get you booked back in.",
+            ],
+      ),
+      { quoteId: q.id, kind: "visit_cancelled", role: "customer" },
+    ).catch(() => {});
+  }
+
+  await tellTeamCancelled(q, "QUOTE VISIT CANCELLED", day, opts);
+}
+
+// The crew and the office, told the same thing: this is off, here is who is
+// no longer expecting you, and who called it. Sent from every cancel path,
+// because the one that matters is the one nobody remembered to wire up.
+async function tellTeamCancelled(
+  q: QuoteInfo,
+  headline: string,
+  was: string | null,
+  opts?: { asked?: boolean; tellCustomer?: boolean; crewPhone?: string | null; cancelledBy?: string | null },
+): Promise<void> {
+  if (!opts) return;
+  const internal = text([
+    headline,
+    "",
+    ...block("Was:", was),
+    ...block("Cancelled by:", opts.asked ? `${q.name} (the customer)` : opts.cancelledBy || "the office"),
+    customerBrief(q),
+    "",
+    q.job_token ? jobLink(q.job_token) : null,
+  ]);
+  if (opts.crewPhone) {
+    await sendSms(opts.crewPhone, internal, { quoteId: q.id, kind: "cancelled_crew", role: "crew" }).catch(() => {});
+  }
+  await alertOwner(internal, opts.crewPhone, { quoteId: q.id, kind: "cancelled_crew" }).catch(() => {});
 }
 
 // A booked work day was removed. The customer is expecting a crew, so this is
 // the one cancellation that must never be silent.
-export async function notifyBookingCancelled(q: QuoteInfo, previous?: string | null, previousTime?: string | null): Promise<void> {
+export async function notifyBookingCancelled(
+  q: QuoteInfo,
+  previous?: string | null,
+  previousTime?: string | null,
+  opts?: { asked?: boolean; tellCustomer?: boolean; crewPhone?: string | null; cancelledBy?: string | null },
+): Promise<void> {
   const wasDay = dayOrNull(previous);
   const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
-  await sendSms(
-    q.phone,
-    text([
-      `Hi ${firstName(q.name)},`,
-      was
-        ? `we've had to release your project date with ${BUSINESS}:`
-        : `we've had to release your project date with ${BUSINESS}.`,
-      ...(was ? ["", was] : []),
-      "",
-      "Your project is still on. We're working out a new date and will text you as soon as we have one.",
-      "",
-      "Sorry for the change, call or text us any time.",
-    ]),
-    { quoteId: q.id, kind: "booking_cancelled", role: "customer" },
-  ).catch(() => {});
+
+  if (opts?.tellCustomer !== false) {
+    await sendSms(
+      q.phone,
+      text(
+        opts?.asked
+          ? [
+              `Hi ${firstName(q.name)},`,
+              `that's done - your project date with ${BUSINESS} is released${was ? ":" : "."}`,
+              ...(was ? ["", was] : []),
+              "",
+              "Your project is still on our books. Call or text us whenever you're ready to pick a new day.",
+            ]
+          : [
+              `Hi ${firstName(q.name)},`,
+              `we've had to release your project date with ${BUSINESS}${was ? ":" : "."}`,
+              ...(was ? ["", was] : []),
+              "",
+              "Your project is still on. We're working out a new date and will text you as soon as we have one.",
+              "",
+              "Sorry for the change, call or text us any time.",
+            ],
+      ),
+      { quoteId: q.id, kind: "booking_cancelled", role: "customer" },
+    ).catch(() => {});
+  }
+
+  await tellTeamCancelled(q, "WORK DAY RELEASED", was, opts);
 }
 
 export async function notifyBooked(

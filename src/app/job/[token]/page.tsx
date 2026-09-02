@@ -10,6 +10,7 @@ import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { getQuoteByToken, signFiles } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
+import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
 import { JobFinish } from "./job-finish";
 import { JobQuote } from "./job-quote";
 import { JobReschedule } from "./job-reschedule";
@@ -192,14 +193,25 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               it changes. Collapsed to one button so a settled job still reads
               as settled. */}
           {reschedule && (
-            <JobReschedule
-              id={quote.id}
-              kind={reschedule.kind}
-              date={reschedule.date}
-              time={reschedule.time}
-              minDate={minJobDate}
-              locale={locale}
-            />
+            <>
+              <JobReschedule
+                id={quote.id}
+                kind={reschedule.kind}
+                date={reschedule.date}
+                time={reschedule.time}
+                minDate={minJobDate}
+                locale={locale}
+              />
+              {/* The other answer to "I can't make it". Same date, same block,
+                  and the customer who rang about it is usually still on the
+                  phone - which is why the text is optional. */}
+              <CancelAppointment
+                id={quote.id}
+                kind={reschedule.kind}
+                customerName={quote.name}
+                locale={locale}
+              />
+            </>
           )}
         </div>
 
