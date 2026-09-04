@@ -44,6 +44,17 @@ export type SendResult = {
   sendAfterLabel?: string;
 };
 
+// Is this the same person? Numbers reach here in whatever shape somebody typed
+// them into their profile, so they are compared normalised rather than as
+// strings. Used to answer one question throughout: did the person about to be
+// texted just do this thing themselves?
+export function samePhone(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  const x = toE164(a);
+  const y = toE164(b);
+  return Boolean(x && y && x === y);
+}
+
 export function toE164(raw: string): string | null {
   const trimmed = (raw || "").trim();
   if (trimmed.startsWith("+")) {
@@ -323,7 +334,13 @@ async function flushInBackground(): Promise<void> {
 // owner's saved number, de-duplicated in E.164. Exported so the Settings
 // diagnostics can show exactly who a real alert would reach, rather than
 // re-deriving the list and drifting from what alertOwner actually does.
-export async function ownerRecipients(excludeRaw?: string | null): Promise<string[]> {
+// One or more numbers to leave out. Every caller here is answering the same
+// question - who already knows, because they are the one who did it - and on
+// several events that is two different people (the crew member who pressed the
+// button, and the office copy of a text they have already had).
+export type PhoneExclusion = string | null | undefined | (string | null | undefined)[];
+
+export async function ownerRecipients(excludeRaw?: PhoneExclusion): Promise<string[]> {
   const recipients = new Map<string, string>();
   const add = (raw?: string | null) => {
     const e = raw ? toE164(raw) : null;
@@ -341,8 +358,10 @@ export async function ownerRecipients(excludeRaw?: string | null): Promise<strin
   }
   if (recipients.size === 0) add(OWNER_PHONE);
 
-  const exclude = excludeRaw ? toE164(excludeRaw) : null;
-  if (exclude) recipients.delete(exclude);
+  for (const raw of Array.isArray(excludeRaw) ? excludeRaw : [excludeRaw]) {
+    const e = raw ? toE164(raw) : null;
+    if (e) recipients.delete(e);
+  }
   return [...recipients.values()];
 }
 
@@ -386,7 +405,7 @@ export async function ownerRecipientDetails(): Promise<OwnerRecipient[]> {
 // texted about their own clicks.
 export async function alertOwner(
   message: string,
-  excludeRaw?: string | null,
+  excludeRaw?: PhoneExclusion,
   log?: Omit<SmsLog, "role">,
 ): Promise<void> {
   const recipients = await ownerRecipients(excludeRaw);
@@ -716,6 +735,9 @@ export async function notifyVisitConfirmed(
   crewName?: string | null,
   requested?: { date?: string | null; time?: string | null },
   fromOnline = true,
+  // Who confirmed it. On the crew's own job page this is the same person as
+  // crewPhone, and telling somebody what they just did is noise.
+  actorPhone?: string | null,
 ): Promise<void> {
   const when = `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`;
 
@@ -759,7 +781,7 @@ export async function notifyVisitConfirmed(
     { quoteId: q.id, kind: "visit_confirmed", role: "customer" },
   ).catch(() => {});
 
-  if (crewPhone) {
+  if (crewPhone && !samePhone(crewPhone, actorPhone)) {
     await sendSms(
       crewPhone,
       text([
@@ -784,7 +806,7 @@ export async function notifyVisitConfirmed(
       ...block("Confirmed by:", crewName || "crew"),
       customerBrief(q),
     ]),
-    crewPhone,
+    [actorPhone, crewPhone],
     { quoteId: q.id, kind: "visit_confirmed" },
   ).catch(() => {});
 }
@@ -880,18 +902,24 @@ export async function notifyQuoteUpdated(q: QuoteInfo): Promise<SendResult> {
   );
 }
 
-// ── 5b. Quote is out: tell the office, and tell whoever pressed send ────────
+// ── 5b. Quote is out: tell the office ──────────────────────────────────────
 // A quote leaving is a money moment nobody was being told about. The owner gets
 // it because it's the point the job starts waiting on someone outside the
-// business; the crew gets it because "did that actually go?" is the question
-// that makes people press Send twice.
+// business.
 //
-// Both messages key off whether the customer's text was actually accepted. A
+// Whoever pressed Send does not. They are holding the phone they pressed it on,
+// and the page answers them there: the CRM banner and the crew's job card both
+// report the send, name the number, and say when a held text goes out. A text
+// that arrives seconds later saying what they just did is the definition of
+// noise - and the rule this app already runs on is that nobody is told about
+// their own click.
+//
+// The message keys off whether the customer's text was actually accepted. A
 // confident "quote sent" over a text that bounced is worse than saying nothing:
 // everyone stops chasing a customer who never heard from us.
 export async function notifyQuoteSent(
   q: QuoteInfo,
-  sender: { name?: string | null; phone?: string | null; isOwner: boolean },
+  sender: { name?: string | null; phone?: string | null },
   // How the customer's own text went, as the send itself reported it. Three
   // outcomes, not two: it reached the provider, quiet hours are holding it
   // until morning, or it actually failed.
@@ -948,42 +976,6 @@ export async function notifyQuoteSent(
     // Whoever pressed the button doesn't need to be told what they just did.
     sender.phone,
     { quoteId: q.id, kind: "quote_sent" },
-  ).catch(() => {});
-
-  // The owner is looking at the result on screen; a contractor is on a job site
-  // holding a phone, where a text is the only thing that persists.
-  if (sender.isOwner || !sender.phone) return;
-
-  await sendSms(
-    sender.phone,
-    delivered
-      ? text([
-          `Hi ${firstName(by)},`,
-          revised
-            ? `your updated quote for ${q.name} has been sent, and it replaces the one they had.`
-            : `your quote for ${q.name} has been sent.`,
-          "",
-          ...block(revised ? "New amount:" : "Amount:", usd(q.quote_amount)),
-          "Now wait for them to review it. You'll get a text as soon as they approve or decline - there's no need to send it again.",
-        ])
-      : held
-        ? text([
-            `Hi ${firstName(by)},`,
-            `your quote for ${q.name} is saved and their text is scheduled.`,
-            "",
-            ...block(revised ? "New amount:" : "Amount:", usd(q.quote_amount)),
-            `We don't text customers between 7pm and 8am, so theirs goes out ${when}.`,
-            // Not "tonight": a quote written at 3am is held too, and its text
-            // goes out at 8 the same morning.
-            "Nothing else to do. You'll get a text as soon as they approve or decline.",
-          ])
-        : text([
-            `Hi ${firstName(by)},`,
-            `your quote for ${q.name} did NOT go out - the text to them failed.`,
-            "",
-            `Please call ${CALL_NUMBER} so we can reach them another way.`,
-          ]),
-    { quoteId: q.id, kind: "quote_sent", role: "crew" },
   ).catch(() => {});
 }
 
@@ -1126,7 +1118,13 @@ export async function notifyVisitMoved(
   q: QuoteInfo,
   previous?: string | null,
   previousTime?: string | null,
-  crew?: { crewPhone?: string | null; crewName?: string | null; movedBy?: string | null },
+  crew?: {
+    crewPhone?: string | null;
+    crewName?: string | null;
+    movedBy?: string | null;
+    // Who moved it, so they aren't texted about their own change.
+    actorPhone?: string | null;
+  },
 ): Promise<void> {
   const wasDay = dayOrNull(previous);
   const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
@@ -1155,10 +1153,10 @@ export async function notifyVisitMoved(
     q.job_token ? jobLink(q.job_token) : null,
   ]);
 
-  if (crew.crewPhone) {
+  if (crew.crewPhone && !samePhone(crew.crewPhone, crew.actorPhone)) {
     await sendSms(crew.crewPhone, internal, { quoteId: q.id, kind: "visit_moved", role: "crew" }).catch(() => {});
   }
-  await alertOwner(internal, crew.crewPhone, { quoteId: q.id, kind: "visit_moved" }).catch(() => {});
+  await alertOwner(internal, [crew.actorPhone, crew.crewPhone], { quoteId: q.id, kind: "visit_moved" }).catch(() => {});
 }
 
 /**
@@ -1175,7 +1173,7 @@ export async function notifyVisitMoved(
  */
 export async function notifyVisitCancelled(
   q: QuoteInfo,
-  opts?: { asked?: boolean; tellCustomer?: boolean; crewPhone?: string | null; cancelledBy?: string | null },
+  opts?: CancelAudience,
 ): Promise<void> {
   const day = dayOrNull(q.visit_date);
 
@@ -1208,11 +1206,20 @@ export async function notifyVisitCancelled(
 // The crew and the office, told the same thing: this is off, here is who is
 // no longer expecting you, and who called it. Sent from every cancel path,
 // because the one that matters is the one nobody remembered to wire up.
+// Who hears about a cancellation, and who already knows because they called it.
+export type CancelAudience = {
+  asked?: boolean;
+  tellCustomer?: boolean;
+  crewPhone?: string | null;
+  cancelledBy?: string | null;
+  actorPhone?: string | null;
+};
+
 async function tellTeamCancelled(
   q: QuoteInfo,
   headline: string,
   was: string | null,
-  opts?: { asked?: boolean; tellCustomer?: boolean; crewPhone?: string | null; cancelledBy?: string | null },
+  opts?: CancelAudience,
 ): Promise<void> {
   if (!opts) return;
   const internal = text([
@@ -1224,10 +1231,10 @@ async function tellTeamCancelled(
     "",
     q.job_token ? jobLink(q.job_token) : null,
   ]);
-  if (opts.crewPhone) {
+  if (opts.crewPhone && !samePhone(opts.crewPhone, opts.actorPhone)) {
     await sendSms(opts.crewPhone, internal, { quoteId: q.id, kind: "cancelled_crew", role: "crew" }).catch(() => {});
   }
-  await alertOwner(internal, opts.crewPhone, { quoteId: q.id, kind: "cancelled_crew" }).catch(() => {});
+  await alertOwner(internal, [opts.actorPhone, opts.crewPhone], { quoteId: q.id, kind: "cancelled_crew" }).catch(() => {});
 }
 
 // A booked work day was removed. The customer is expecting a crew, so this is
@@ -1236,7 +1243,7 @@ export async function notifyBookingCancelled(
   q: QuoteInfo,
   previous?: string | null,
   previousTime?: string | null,
-  opts?: { asked?: boolean; tellCustomer?: boolean; crewPhone?: string | null; cancelledBy?: string | null },
+  opts?: CancelAudience,
 ): Promise<void> {
   const wasDay = dayOrNull(previous);
   const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
@@ -1275,6 +1282,11 @@ export async function notifyBooked(
   contractorPhone?: string | null,
   previous?: string | null,
   previousTime?: string | null,
+  // Who confirmed the day. Usually the assigned contractor, from their own job
+  // page - that is the whole point of the approve/confirm split - so without
+  // this the crew's main action always texts the crew the date they just
+  // picked, and an owner doing it from the CRM gets their own alert back.
+  actorPhone?: string | null,
 ): Promise<void> {
   const wasDay = dayOrNull(previous);
   const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
@@ -1289,8 +1301,11 @@ export async function notifyBooked(
     jobLink(q.job_token ?? ""),
   ]);
 
-  await alertOwner(msg, null, { quoteId: q.id, kind: "booked" });
-  if (contractorPhone) {
+  await alertOwner(msg, actorPhone, { quoteId: q.id, kind: "booked" });
+  // The crew copy is for a contractor who wasn't the one clicking - the office
+  // booked it, or another owner did. When they confirmed it themselves the job
+  // page in their hand already shows the date.
+  if (contractorPhone && !samePhone(contractorPhone, actorPhone)) {
     await sendSms(contractorPhone, msg, { quoteId: q.id, kind: "booked", role: "crew" }).catch(() => {});
   }
 }

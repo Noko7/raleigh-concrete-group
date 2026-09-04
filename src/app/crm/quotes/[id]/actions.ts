@@ -410,7 +410,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
           quote_amount: effectiveAmount,
           job_token: current.job_token,
         },
-        { name: session.staff.full_name, phone: session.staff.phone, isOwner },
+        { name: session.staff.full_name, phone: session.staff.phone },
         r,
         revising,
       ).catch(() => {});
@@ -480,7 +480,9 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
   const contractor = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
   if (moved) await notifyCustomerRescheduled(info, result.previous, result.previousTime).catch(() => {});
   else await notifyCustomerScheduled(info).catch(() => {});
-  await notifyBooked(info, contractor?.phone, result.previous, result.previousTime).catch(() => {});
+  await notifyBooked(info, contractor?.phone, result.previous, result.previousTime, session.staff.phone).catch(
+    () => {},
+  );
   await syncQuoteToCalendar(id);
 
   revalidatePath(`/crm/quotes/${id}`);
@@ -596,11 +598,15 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
       crewPhone: crew?.phone ?? null,
       crewName: crew?.full_name ?? null,
       movedBy: session.staff.full_name,
+      actorPhone: session.staff.phone,
     }).catch(() => {});
   } else {
     await notifyVisitConfirmed(
       info,
-      crew?.phone ?? session.staff.phone,
+      // Nobody assigned means nobody to tell. It used to fall back to the
+      // person clicking, which texted them the visit they were in the middle
+      // of booking; the owner alert already covers an unassigned job.
+      crew?.phone ?? null,
       crew?.full_name ?? session.staff.full_name,
       // What they originally asked for, so the customer text can own up to it if
       // the crew put them on a different day.
@@ -608,6 +614,7 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
       // Read before the update above flipped it. An in-person request being given
       // a date is not the same story as an online one being converted.
       wasOnline,
+      session.staff.phone,
     ).catch(() => {});
   }
   await syncQuoteToCalendar(id);
@@ -692,6 +699,7 @@ export async function cancelAppointment(_prev: ScheduleState, formData: FormData
     tellCustomer: notify,
     crewPhone: crew?.phone ?? null,
     cancelledBy: session.staff.full_name,
+    actorPhone: session.staff.phone,
   };
 
   if (kind === "job") await notifyBookingCancelled(info, result.previous, result.previousTime, team).catch(() => {});

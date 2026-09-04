@@ -107,7 +107,32 @@ scheduling is settled in one text each way instead of a phone-tag loop.
 
 **Owner alerts** are limited to the moments worth interrupting you: new lead,
 approved, declined, date confirmed or moved, can't-confirm, completed, and paid.
-You're never texted about an action you performed yourself.
+
+**Nobody is texted about something they just did.** This is the one rule the
+staff-facing texts run on, and it is enforced at the send, not per message: the
+acting person's number is passed to every internal notification and dropped from
+its recipients. It matters most for the crew, because the actions that generate
+the most internal texts - sending a quote, confirming a work day, confirming or
+moving a visit, cancelling one - are exactly the ones a contractor performs
+themselves on their own job page. Before this, each of those texted them back a
+summary of the button they had just pressed, on top of the screen already
+telling them, and an owner doing the same thing from the CRM got their own alert
+returned to them.
+
+The screen is the receipt for your own action; a text is for people who weren't
+there. So:
+- **Sending a quote** texts the office and nobody else. Whoever pressed Send
+  sees the result where they pressed it - the CRM banner and the crew's job card
+  both name the number it went to, and say when a text held by quiet hours goes
+  out.
+- **Confirming or moving a work day or a visit** texts the customer, the office,
+  and the assigned contractor *if they weren't the one who did it*. When the
+  office books it, the crew still hear. When the crew book it themselves, they
+  don't get told what they just booked.
+- **Cancelling** is the same, and the crew still hear on every path regardless of
+  whether the customer is texted - that checkbox was only ever about the customer.
+- An unassigned job tells no contractor rather than falling back to whoever is
+  clicking, which used to mean the office texting itself.
 
 **One-time setup**
 1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql` and `supabase/locale.sql` in the SQL Editor.
@@ -236,7 +261,7 @@ The queue drains from three places, because a serverless app has nothing sitting
 
 One customer text ignores quiet hours: **the quote-request receipt**. They pressed the button seconds ago and are looking at a page that says we'll text them; holding that until 8am reads as the form having failed, which is how somebody at 10pm fills it in twice or calls the next contractor. Nothing that arrives out of the blue belongs in that category. The exception is `{ force: true }` on `sendSms`/`sendSmsResult`, so grepping for it shows the whole list - one call site.
 
-A held message shows in the job's **Texts sent** log as "Waiting until 8:00 AM" rather than as a failure, and every place that reports a send says so in its own words: the CRM quote banner, the contractor invite and password notes, the crew's own job page after they send a quote, and the confirmation text that crew member gets ("their text is scheduled", not "it failed"). A contractor quoting a job at 9pm is told the quote is saved and when it goes out - being told it failed is how somebody sends it twice, or spends the evening believing the job is stalled.
+A held message shows in the job's **Texts sent** log as "Waiting until 8:00 AM" rather than as a failure, and every screen that reports a send says so in its own words: the CRM quote banner, the contractor invite and password notes, and the crew's own job card after they send a quote ("Saved. Their text is scheduled for 8:00 AM"). A contractor quoting a job at 9pm is told the quote is saved and when it goes out - being told it failed is how somebody sends it twice, or spends the evening believing the job is stalled. The owner's copy says the same: `QUOTE SENT, QUEUED`, not `QUOTE TEXT FAILED`.
 
 **Time is Eastern, everywhere**
 `src/lib/crm/clock.ts` owns every reading of the clock: `now()`, today's date, day arithmetic, quiet hours. Vercel runs in UTC and phones are set to whatever their owners set them to, so anything asking "what day is it" or printing a timestamp goes through there and comes back in `America/New_York` - Eastern, which is EST in winter and EDT in summer, not a pinned -05:00 that would be an hour out all summer.

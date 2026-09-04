@@ -79,7 +79,12 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
     },
     result.previous,
     result.previousTime,
-    { crewPhone: crew?.phone ?? null, crewName: crew?.full_name ?? null, movedBy: session.staff.full_name },
+    {
+      crewPhone: crew?.phone ?? null,
+      crewName: crew?.full_name ?? null,
+      movedBy: session.staff.full_name,
+      actorPhone: session.staff.phone,
+    },
   ).catch(() => {});
   await syncQuoteToCalendar(id);
 
