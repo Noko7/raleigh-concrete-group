@@ -2272,3 +2272,93 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-bg-job { background: #16a34a; }
 .cal-bg-inperson { background: var(--crm-accent); }
 .cal-bg-online { background: #3b82f6; }
+
+/* ── Quote line items ──────────────────────────────────────────────────────
+   Three surfaces, one idea: a quote can be a list of things the customer
+   answers one at a time.
+     .qo-*      the builder, in the CRM editor and on the crew's job page
+     .cq-opt-*  what the customer taps
+     .jo-*      what the crew reads back once the customer has answered
+   The builder is deliberately plain - it sits inside two differently-styled
+   forms, and borrowing either one's chrome would make it look bolted on. */
+
+/* Builder, shared by the CRM editor and the crew job form */
+.qo-box { border: 1px solid #e2e5ea; border-radius: 0.6rem; padding: 0.9rem 1rem 1rem; margin-bottom: 1rem; }
+.qo-box legend { font-size: 0.8rem; font-weight: 800; padding: 0 0.35rem; }
+.qo-row { border: 1px solid #e2e5ea; border-radius: 0.55rem; padding: 0.75rem; margin: 0.75rem 0; background: #fbfbfc; }
+/* A base-job item is not a choice, so it does not look like one. */
+.qo-row-required { background: #fff; border-left: 3px solid var(--amber); }
+.qo-row-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; }
+.qo-kind { font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; border-radius: 999px; padding: 0.15rem 0.5rem; }
+.qo-kind-required { background: rgba(194, 104, 42, 0.14); color: var(--amber-dark); }
+.qo-kind-optional { background: #eef2f7; color: #4b5563; }
+.qo-row-tools { display: flex; align-items: center; gap: 0.3rem; }
+.qo-row-tools button { background: #fff; border: 1px solid #d1d5db; border-radius: 0.35rem; padding: 0.1rem 0.4rem; font: inherit; font-size: 0.8rem; cursor: pointer; color: #4b5563; }
+.qo-row-tools button:disabled { opacity: 0.4; cursor: not-allowed; }
+.qo-remove { color: #b91c1c !important; }
+.qo-row-main { display: flex; gap: 0.6rem; }
+.qo-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.78rem; font-weight: 800; color: #374151; margin-bottom: 0.5rem; }
+.qo-field-title { flex: 1 1 auto; }
+.qo-field-price { flex: 0 0 8rem; }
+.qo-field input, .qo-field textarea { width: 100%; padding: 0.5rem 0.6rem; border: 1px solid #d1d5db; border-radius: 0.45rem; font: inherit; font-weight: 400; background: #fff; color: #1f2328; }
+.qo-field textarea { resize: vertical; }
+.qo-field input:focus, .qo-field textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+.qo-field input[readonly] { background: #f3f4f6; color: #6b7280; }
+.qo-toggle { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; font-weight: 700; color: #374151; cursor: pointer; }
+.qo-kind-hint { margin: 0.15rem 0 0; }
+.qo-add { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+.qo-add-btn { background: #fff; border: 1px dashed #9ca3af; border-radius: 0.45rem; padding: 0.45rem 0.7rem; font: inherit; font-size: 0.82rem; font-weight: 800; color: #374151; cursor: pointer; }
+.qo-add-btn:hover { border-color: var(--amber); color: var(--amber-dark); }
+.qo-total { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin-top: 0.85rem; padding-top: 0.7rem; border-top: 1px solid #e2e5ea; font-size: 0.85rem; font-weight: 800; }
+.qo-total strong { font-size: 1.15rem; }
+/* Answered: the record of what was bought, not a form any more. */
+.qo-locked { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.qo-locked li { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; border: 1px solid #e2e5ea; border-radius: 0.45rem; font-size: 0.86rem; }
+.qo-locked-title { flex: 1 1 auto; font-weight: 700; }
+.qo-locked-no { opacity: 0.55; text-decoration: line-through; }
+.qo-tag { font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: #4b5563; }
+.qo-locked-yes .qo-tag { color: var(--amber-dark); }
+.crm-confirm-options { list-style: none; margin: 0.5rem 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
+.crm-confirm-options li { display: flex; align-items: baseline; gap: 0.5rem; }
+.crm-confirm-options li span { flex: 1 1 auto; }
+.crm-confirm-options li em { font-style: normal; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
+
+/* What the customer taps. Each item is a card carrying its own decision,
+   because a row of checkboxes reads as a form and this is a set of questions. */
+.cq-opts { background: #fff; border-radius: 0.9rem; padding: 1.1rem 1.25rem; margin-bottom: 1.25rem; }
+.cq-opts-title { font-weight: 800; font-size: 0.95rem; margin-bottom: 0.6rem; }
+.cq-opt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.cq-opt { border: 2px solid rgba(43, 26, 18, 0.12); border-radius: 0.75rem; padding: 0.85rem 0.95rem; transition: border-color 0.15s, background 0.15s; }
+.cq-opt-on { border-color: var(--amber); background: rgba(194, 104, 42, 0.06); }
+.cq-opt-off { opacity: 0.6; }
+.cq-opt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; }
+.cq-opt-title { font-weight: 800; }
+.cq-opt-price { font-family: var(--font-headline), sans-serif; font-size: 1.3rem; white-space: nowrap; }
+.cq-opt-desc { font-size: 0.88rem; color: rgba(43, 26, 18, 0.75); margin: 0.3rem 0 0; white-space: pre-wrap; }
+.cq-opt-included { display: inline-block; margin-top: 0.5rem; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: var(--amber-dark); }
+.cq-opt-choice { display: flex; gap: 0.5rem; margin-top: 0.65rem; }
+/* Big enough to hit with a thumb, because that is the only way this is used. */
+.cq-opt-btn { flex: 1 1 0; padding: 0.6rem 0.5rem; border: 2px solid rgba(43, 26, 18, 0.2); border-radius: 0.55rem; background: #fff; font: inherit; font-weight: 800; font-size: 0.9rem; color: #2b1a12; cursor: pointer; }
+.cq-opt-btn:hover { border-color: #2b1a12; }
+.cq-opt-btn-yes { background: var(--amber); border-color: var(--amber); color: #fff; }
+.cq-opt-btn-no { background: #2b1a12; border-color: #2b1a12; color: #fff; }
+.cq-opt-total { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-top: 1rem; padding-top: 0.8rem; border-top: 2px solid rgba(43, 26, 18, 0.12); font-weight: 800; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.06em; color: rgba(43, 26, 18, 0.6); }
+.cq-opt-total strong { font-family: var(--font-headline), sans-serif; font-size: 2rem; color: #2b1a12; letter-spacing: 0; }
+.cq-opt-todo { margin-top: 0.5rem; color: var(--amber-dark); font-weight: 700; }
+.cq-expiry-line { text-align: center; margin-bottom: 1.25rem; }
+.cq-sched-scope { margin-bottom: 0.9rem; }
+.cq-confirm-items { list-style: none; margin: 0 auto 1rem; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; text-align: left; max-width: 320px; }
+.cq-confirm-items li { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.9rem; }
+.cq-confirm-item-no { opacity: 0.5; text-decoration: line-through; }
+
+/* Crew: what the customer bought, read off the job page before loading up. */
+.jo-scope-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.jo-scope-list li { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 0.75rem; padding: 0.6rem 0.7rem; border: 1px solid #e2e5ea; border-left: 3px solid var(--amber); border-radius: 0.45rem; }
+.jo-scope-list li em { grid-column: 1 / -1; font-style: normal; font-size: 0.85rem; color: #4b5563; white-space: pre-wrap; }
+.jo-scope-no { margin-top: 0.6rem; }
+
+@media (max-width: 560px) {
+  .qo-row-main { flex-direction: column; }
+  .qo-field-price { flex: 1 1 auto; }
+  .cq-opt-choice { flex-direction: column; }
+}

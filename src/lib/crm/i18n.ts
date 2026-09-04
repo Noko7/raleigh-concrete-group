@@ -309,6 +309,36 @@ const en = {
     remove: "Delete",
     ownerHint: "Add a contractor agreement on the Contractors page, or a customer agreement from that job's page.",
   },
+  // The line-item builder. A quote is either one price or a list of things the
+  // customer answers one at a time - "yes to the patio, no to the sidewalk" -
+  // and these are the words on the crew's own screen while they write it.
+  quoteOptions: {
+    title: "Line items (optional)",
+    emptyHint:
+      "Leave this empty for a normal one-price quote. Add line items when the customer should be able to say yes to part of it - a patio now, the sidewalk maybe.",
+    hint: "The customer answers each optional item yes or no, and the total follows their answers.",
+    kindRequired: "Part of the job",
+    kindOptional: "Their choice",
+    itemTitle: "Item",
+    itemTitlePlaceholder: "e.g. Back patio, 12x16",
+    itemPrice: "Price ($)",
+    itemDesc: "What this covers",
+    itemDescPlaceholder: "What is included in this item specifically.",
+    letThemChoose: "Let the customer say no to this one",
+    requiredHint: "Always included. The customer sees the price but cannot drop it.",
+    optionalHint: "The customer chooses. Say no and it comes off their total.",
+    addOptional: "+ Add an optional extra",
+    addRequired: "+ Add to the base job",
+    remove: "Remove",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    allInTotal: "All in, if they take everything",
+    acceptedTotal: "What they approved",
+    lockedNote: "The customer has answered, so this is the record of what they bought. It cannot be changed.",
+    answerYes: "Approved",
+    answerNo: "Turned down",
+    answerNone: "No answer",
+  },
   contractorJob: {
     title: "Job Details",
     customer: "Customer",
@@ -377,6 +407,12 @@ const en = {
       "Nothing has changed yet - edit the price or a section, otherwise this is the same quote they already have.",
     quoteFixSend: "Send the corrected quote",
     quoteFixOk: "Corrected quote texted to the customer.",
+    // What the customer actually bought on a quote with line items. The crew
+    // needs this before they load the truck: "approved" does not say whether
+    // there is a sidewalk to pour.
+    approvedScope: "What they approved",
+    approvedScopeHint: "Build these. Anything below them was turned down.",
+    turnedDown: "Turned down",
     quoteTitle: "Quote this job",
     quoteLead: "Set a price and what's included, then we'll text it straight to the customer.",
     quoteOpen: "Quote job",
@@ -405,6 +441,11 @@ const en = {
     quoteSend: "Send quote to customer",
     quoteSending: "Sending…",
     quoteOk: "Quote texted to the customer.",
+    // Quiet hours held the customer's text. Not a failure and not a delivery,
+    // so it gets its own line rather than borrowing either one's words - a
+    // contractor told their quote failed at 9pm either sends it again or spends
+    // the evening thinking the job is stuck.
+    quoteQueued: "Saved. Their text is scheduled for {when} - we don't text customers between 7pm and 8am.",
     quoteFailed: "Saved, but the text didn't send. Call the office.",
     finishTitle: "Mark the job done",
     finishLead: "Once the work is finished on site, mark it done and we'll thank the customer.",
@@ -748,6 +789,34 @@ const es: typeof en = {
     ownerHint:
       "Agrega un acuerdo de contratista en la página de Contratistas, o un acuerdo de cliente desde la página de ese trabajo.",
   },
+  quoteOptions: {
+    title: "Partidas (opcional)",
+    emptyHint:
+      "Déjalo vacío para una cotización normal de un solo precio. Agrega partidas cuando el cliente deba poder aceptar solo una parte: el patio ahora, la banqueta tal vez.",
+    hint: "El cliente responde sí o no a cada partida opcional, y el total sigue sus respuestas.",
+    kindRequired: "Parte del trabajo",
+    kindOptional: "Su elección",
+    itemTitle: "Partida",
+    itemTitlePlaceholder: "ej. Patio trasero, 12x16",
+    itemPrice: "Precio ($)",
+    itemDesc: "Qué incluye",
+    itemDescPlaceholder: "Lo que incluye específicamente esta partida.",
+    letThemChoose: "Permitir que el cliente diga que no a esta",
+    requiredHint: "Siempre incluida. El cliente ve el precio pero no puede quitarla.",
+    optionalHint: "El cliente decide. Si dice que no, se descuenta de su total.",
+    addOptional: "+ Agregar un extra opcional",
+    addRequired: "+ Agregar al trabajo base",
+    remove: "Quitar",
+    moveUp: "Subir",
+    moveDown: "Bajar",
+    allInTotal: "Total si acepta todo",
+    acceptedTotal: "Lo que aprobó",
+    lockedNote:
+      "El cliente ya respondió, así que esto es el registro de lo que compró. No se puede cambiar.",
+    answerYes: "Aprobada",
+    answerNo: "Rechazada",
+    answerNone: "Sin respuesta",
+  },
   contractorJob: {
     title: "Detalles del trabajo",
     customer: "Cliente",
@@ -813,6 +882,9 @@ const es: typeof en = {
       "Todavía no has cambiado nada - edita el precio o una sección, si no es la misma cotización que ya tiene.",
     quoteFixSend: "Enviar la cotización corregida",
     quoteFixOk: "Cotización corregida enviada al cliente por mensaje.",
+    approvedScope: "Lo que aprobó",
+    approvedScopeHint: "Construye esto. Lo que aparece abajo fue rechazado.",
+    turnedDown: "Rechazado",
     quoteTitle: "Cotiza este trabajo",
     quoteLead: "Pon el precio y lo que incluye, y se lo enviamos al cliente por mensaje.",
     quoteOpen: "Cotizar trabajo",
@@ -841,6 +913,10 @@ const es: typeof en = {
     quoteSend: "Enviar cotización al cliente",
     quoteSending: "Enviando…",
     quoteOk: "Cotización enviada al cliente por mensaje.",
+    // {when} llega en inglés desde el reloj del servidor ("tomorrow at 8:00 AM"),
+    // así que va entre paréntesis: se lee como un dato y no rompe la frase.
+    quoteQueued:
+      "Se guardó. Su mensaje ya está programado ({when}). No enviamos mensajes a clientes entre las 7pm y las 8am.",
     quoteFailed: "Se guardó, pero el mensaje no se envió. Llama a la oficina.",
     finishTitle: "Marcar el trabajo como terminado",
     finishLead: "Cuando el trabajo esté terminado en el sitio, márcalo y le agradecemos al cliente.",

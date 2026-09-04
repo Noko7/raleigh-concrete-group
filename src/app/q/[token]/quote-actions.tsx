@@ -4,9 +4,20 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ymdInDays } from "@/lib/crm/clock";
-import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES } from "@/lib/crm/constants";
+import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, selectedTotal } from "@/lib/crm/constants";
 
 type Mode = "choose" | "save" | "schedule" | "submitting" | "accepted" | "declined";
+
+// One line item as the customer sees it. `required` items are part of the job
+// and shown so they can see what they are paying for; the rest are theirs to
+// take or leave.
+export type PublicOption = {
+  id: string;
+  title: string;
+  description: string | null;
+  amount: number;
+  required: boolean;
+};
 
 function pretty(s: string): string {
   const d = new Date(`${s}T00:00:00`);
@@ -14,7 +25,15 @@ function pretty(s: string): string {
 }
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
-export function QuoteActions({ token, amount }: { token: string; amount: number | null }) {
+export function QuoteActions({
+  token,
+  amount,
+  options = [],
+}: {
+  token: string;
+  amount: number | null;
+  options?: PublicOption[];
+}) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("choose");
   const [discount, setDiscount] = useState(false);
@@ -25,6 +44,22 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
   const [taken, setTaken] = useState<string[]>([]);
+  // Their yes/no per optional line item. Nothing is pre-answered: an untouched
+  // box is a customer who scrolled past it, not a decision, and either reading
+  // of it would be us deciding for them.
+  const [answers, setAnswers] = useState<Record<string, "accepted" | "declined">>({});
+
+  const itemised = options.length > 0;
+  const optional = options.filter((o) => !o.required);
+  const answered = optional.filter((o) => answers[o.id]).length;
+  const allAnswered = answered === optional.length;
+  // What they are buying right now. Required items always count; optional ones
+  // only once they have said yes.
+  const running = useMemo(() => selectedTotal(options, answers), [options, answers]);
+  // The figure every price below is worked from: their selection on an itemised
+  // quote, the single price on an ordinary one.
+  const total = itemised ? running : (amount ?? 0);
+  const canApprove = itemised ? allAnswered && total > 0 : amount != null;
 
   // Counted in Raleigh days. The customer's phone may be in another zone, and
   // the server checks the same floor the same way.
@@ -63,7 +98,11 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
     setTaken((t) => t.filter((x) => x !== d));
   }
 
-  const discounted = amount != null ? Math.max(0, Math.round((amount - DECLINE_CREDIT) * 100) / 100) : null;
+  // What the save offer is quoted against. On an itemised quote somebody can
+  // reach it having answered nothing, and striking through $0 is not an offer -
+  // so it falls back to the all-in figure until they have picked something.
+  const offerBase = itemised && running === 0 ? (amount ?? 0) : total;
+  const discounted = Math.max(0, Math.round((offerBase - DECLINE_CREDIT) * 100) / 100);
 
   async function submit(action: "accept" | "decline") {
     setError("");
@@ -78,6 +117,9 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
           action,
           discount,
           preferred_dates: action === "accept" ? picks : undefined,
+          // Every item, including the required ones, so the server records a
+          // decision against each rather than inferring one.
+          options: action === "accept" && itemised ? answersWithRequired(options, answers) : undefined,
         }),
       });
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
@@ -96,17 +138,19 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
   }
 
   if (mode === "accepted") {
-    const finalPrice = discount && discounted != null ? discounted : amount;
+    const finalPrice = discount ? discounted : total;
+    const bought = options.filter((o) => o.required || answers[o.id] === "accepted");
     return (
       <div className="cq-result cq-result-ok">
         <p className="cq-result-eyebrow">Quote approved</p>
         <h3>Thanks! We&apos;ll confirm your date shortly</h3>
-        {finalPrice != null && (
-          <p className="cq-result-price">
-            {discount && <span className="cq-result-save">${DECLINE_CREDIT} credit applied</span>}
-            <strong>{usd(finalPrice)}</strong>
-          </p>
+        {bought.length > 0 && (
+          <p className="cq-result-note">You approved: {bought.map((o) => o.title).join(", ")}.</p>
         )}
+        <p className="cq-result-price">
+          {discount && <span className="cq-result-save">${DECLINE_CREDIT} credit applied</span>}
+          <strong>{usd(finalPrice)}</strong>
+        </p>
         {picks.length > 0 && (
           <p className="cq-result-note">
             You told us these work: {picks.map((d) => pretty(d)).join(", ")}.
@@ -134,17 +178,19 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
       <div className="cq-offer">
         <p className="cq-offer-eyebrow">Wait, before you go</p>
         <h3>Here&apos;s a ${DECLINE_CREDIT} credit to earn your business.</h3>
-        {discounted != null && (
-          <p className="cq-offer-price">
-            <s>{usd(amount as number)}</s> <strong>{usd(discounted)}</strong>
-          </p>
-        )}
+        <p className="cq-offer-price">
+          <s>{usd(offerBase)}</s> <strong>{usd(discounted)}</strong>
+        </p>
         <button
           type="button"
           className="cq-btn cq-btn-accept"
           onClick={() => {
             setDiscount(true);
-            setMode("schedule");
+            // Taking the credit is not the same as having chosen. On an
+            // itemised quote with questions still open, this goes back to them
+            // rather than to the calendar - otherwise they land on the date
+            // picker and the server refuses the approval they thought they gave.
+            setMode(itemised && !allAnswered ? "choose" : "schedule");
           }}
         >
           Take ${DECLINE_CREDIT} off &amp; approve
@@ -165,7 +211,16 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
           Pick up to {MAX_PREFERRED_DATES} days that suit you, starting {LEAD_TIME_DAYS} days from now. Our crew will
           confirm one of them and text you back. Nothing is booked until then.
         </p>
-        {discount && discounted != null && (
+        {/* What they are approving, carried into this step: the decision they
+            just made is two taps behind them and worth restating before they
+            commit to it. */}
+        {itemised && (
+          <p className="cq-fine cq-sched-scope">
+            Approving: {options.filter((o) => o.required || answers[o.id] === "accepted").map((o) => o.title).join(", ")}{" "}
+            &middot; <strong>{usd(discount ? discounted : total)}</strong>
+          </p>
+        )}
+        {discount && !itemised && (
           <p className="cq-offer-price">
             With ${DECLINE_CREDIT} credit: <strong>{usd(discounted)}</strong>
           </p>
@@ -180,7 +235,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
                   {taken.includes(d) && <em> (likely full, we&apos;ll suggest another)</em>}
                 </span>
                 <button type="button" onClick={() => removeDate(d)} disabled={busy} aria-label={`Remove ${pretty(d)}`}>
-                  ×
+                  &times;
                 </button>
               </li>
             ))}
@@ -200,7 +255,7 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
             disabled={busy}
           />
         )}
-        {checking && <p className="cq-fine">Checking that day…</p>}
+        {checking && <p className="cq-fine">Checking that day&hellip;</p>}
         {error && <p className="cq-err">{error}</p>}
 
         <button
@@ -220,20 +275,103 @@ export function QuoteActions({ token, amount }: { token: string; amount: number 
 
   // choose
   return (
-    <div className="cq-actions">
-      <button
-        type="button"
-        className="cq-btn cq-btn-accept"
-        onClick={() => {
-          setDiscount(false);
-          setMode("schedule");
-        }}
-      >
-        Approve quote
-      </button>
-      <button type="button" className="cq-btn cq-btn-decline" onClick={() => setMode("save")}>
-        Decline
-      </button>
-    </div>
+    <>
+      {/* The whole point of an itemised quote: each extra is its own yes or no,
+          and the total underneath moves as they answer. Nothing is ticked for
+          them, so the number they end up approving is one they built. */}
+      {itemised && (
+        <div className="cq-opts">
+          <h2 className="cq-opts-title">Choose what you&apos;d like</h2>
+          {discount && (
+            <p className="cq-fine cq-opt-todo">
+              Your ${DECLINE_CREDIT} credit is held. Answer each option and it comes off the total below.
+            </p>
+          )}
+          <ul className="cq-opt-list">
+            {options.map((o) => {
+              const answer = answers[o.id];
+              const on = o.required || answer === "accepted";
+              return (
+                <li key={o.id} className={`cq-opt${on ? " cq-opt-on" : ""}${answer === "declined" ? " cq-opt-off" : ""}`}>
+                  <div className="cq-opt-head">
+                    <span className="cq-opt-title">{o.title}</span>
+                    <span className="cq-opt-price">{usd(o.amount)}</span>
+                  </div>
+                  {o.description && <p className="cq-opt-desc">{o.description}</p>}
+                  {o.required ? (
+                    <span className="cq-opt-included">Included in your project</span>
+                  ) : (
+                    <div className="cq-opt-choice" role="group" aria-label={`${o.title}: add it or not`}>
+                      <button
+                        type="button"
+                        className={`cq-opt-btn${answer === "accepted" ? " cq-opt-btn-yes" : ""}`}
+                        aria-pressed={answer === "accepted"}
+                        onClick={() => setAnswers((a) => ({ ...a, [o.id]: "accepted" }))}
+                      >
+                        Yes, add it
+                      </button>
+                      <button
+                        type="button"
+                        className={`cq-opt-btn${answer === "declined" ? " cq-opt-btn-no" : ""}`}
+                        aria-pressed={answer === "declined"}
+                        onClick={() => setAnswers((a) => ({ ...a, [o.id]: "declined" }))}
+                      >
+                        No thanks
+                      </button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="cq-opt-total">
+            <span>Your total</span>
+            <strong>{usd(discount && running > 0 ? Math.max(0, running - DECLINE_CREDIT) : running)}</strong>
+          </div>
+          {!allAnswered && (
+            <p className="cq-fine cq-opt-todo">
+              {optional.length - answered === 1
+                ? "One option still needs a yes or no."
+                : `${optional.length - answered} options still need a yes or no.`}
+            </p>
+          )}
+          {allAnswered && total === 0 && (
+            <p className="cq-fine cq-opt-todo">
+              You&apos;ve said no to everything. Use Decline below if none of it is for you.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="cq-actions">
+        <button
+          type="button"
+          className="cq-btn cq-btn-accept"
+          disabled={!canApprove}
+          onClick={() => {
+            setDiscount(false);
+            setMode("schedule");
+          }}
+        >
+          Approve quote
+        </button>
+        <button type="button" className="cq-btn cq-btn-decline" onClick={() => setMode("save")}>
+          Decline
+        </button>
+      </div>
+    </>
   );
+}
+
+// Required items are sent as accepted rather than left out. The server would
+// treat them that way regardless, but a record that says every item was
+// answered is the one worth having when somebody asks what they agreed to.
+function answersWithRequired(
+  options: PublicOption[],
+  answers: Record<string, "accepted" | "declined">,
+): Record<string, "accepted" | "declined"> {
+  const out: Record<string, "accepted" | "declined"> = { ...answers };
+  for (const o of options) if (o.required) out[o.id] = "accepted";
+  return out;
 }

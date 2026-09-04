@@ -91,6 +91,26 @@ export type Quote = {
   quote_followup_sent_at: string | null;
 };
 
+// One line item on a quote. A quote either has none of these (the original
+// single-price quote) or a list of them, each of which the customer answers on
+// its own - which is what lets somebody take the patio and leave the sidewalk.
+export type QuoteOption = {
+  id: string;
+  quote_id: string;
+  title: string;
+  description: string | null;
+  // numeric(10,2) comes back from PostgREST as a string, so read it through
+  // optionAmount() rather than assuming a number.
+  amount: number | string;
+  // Part of the base job, rather than an extra the customer chooses.
+  required: boolean;
+  sort_order: number;
+  customer_response: "accepted" | "declined" | null;
+  responded_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type QuoteEvent = {
   id: string;
   quote_id: string;

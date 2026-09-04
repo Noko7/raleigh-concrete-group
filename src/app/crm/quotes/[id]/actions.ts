@@ -9,6 +9,7 @@ import {
   QUOTE_TTL_DAYS,
   TIME_RE,
   noEmDash,
+  optionsTotal,
   visitDateOf,
 } from "@/lib/crm/constants";
 import { STATUSES, type Status } from "@/lib/crm/env";
@@ -41,10 +42,16 @@ import {
   getQuote,
   getStaffById,
   lastMessageOf,
+  listQuoteOptions,
+  optionsAsDrafts,
+  parseQuoteOptions,
+  sameOptions,
+  saveQuoteOptions,
   updateQuote,
   updateQuoteResult,
 } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
+import type { QuoteOptionDraft } from "@/lib/crm/constants";
 import type { FinishState, SaveState, ScheduleState } from "./types";
 
 export async function saveQuote(_prev: SaveState, formData: FormData): Promise<SaveState> {
@@ -92,8 +99,57 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // Quote amount
-  if (formData.has("quote_amount")) {
+  // Line items. A quote is either one price or a list of things the customer
+  // answers one at a time, and this is where the second shape arrives: both
+  // editors post the whole list as JSON, and it replaces whatever is stored.
+  //
+  // Locked once they've answered. The rows carry their own accepted/declined
+  // stamps by then - the record of what was actually bought - and rewriting
+  // them would quietly change what a finished job says it included.
+  const existingOptions = await listQuoteOptions(session, id);
+  let optionRows: QuoteOptionDraft[] | null = null;
+  if (formData.has("options_json") && !current.customer_response) {
+    let raw: unknown = [];
+    try {
+      raw = JSON.parse(String(formData.get("options_json") ?? "[]"));
+    } catch {
+      return { ok: false, error: "Could not read the line items. Please try again." };
+    }
+    const parsed = parseQuoteOptions(raw);
+    if (parsed.error) return { ok: false, error: parsed.error };
+
+    if (sameOptions(optionsAsDrafts(existingOptions), parsed.rows)) {
+      // Identical to what's stored: nothing to write, and not a correction.
+      optionRows = null;
+    } else {
+      optionRows = parsed.rows;
+      contentChanged = true;
+      events.push({ type: "options_changed", meta: { count: optionRows.length, total: optionsTotal(optionRows) } });
+    }
+  }
+
+  // What this quote is worth, and where that number comes from.
+  //
+  // With line items the price is the sum of them, full stop. The editors show
+  // that total in the amount field so the two can't disagree on screen, but the
+  // figure the browser posted is never what gets saved - a stale form would
+  // otherwise undo a line item somebody had just added.
+  //
+  // Only while the offer is still open. Once the customer has answered, the
+  // price is what THEY picked - required items plus the extras they said yes
+  // to - and re-deriving it from every row on the quote would quietly bill
+  // them for the sidewalk they turned down.
+  const effectiveOptions = optionRows ?? optionsAsDrafts(existingOptions);
+  const itemised = effectiveOptions.length > 0 && !current.customer_response;
+
+  if (itemised) {
+    const total = optionsTotal(effectiveOptions);
+    if (total !== Number(current.quote_amount)) {
+      patch.quote_amount = total;
+      contentChanged = true;
+      events.push({ type: "amount_changed", meta: { from: current.quote_amount, to: total } });
+    }
+  } else if (formData.has("quote_amount")) {
     const raw = String(formData.get("quote_amount") ?? "").trim();
     if (raw === "") {
       patch.quote_amount = null;
@@ -161,10 +217,18 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   // What the customer will actually see: this save's values where it changed
   // them, the stored ones otherwise. Declared out here because the texts sent
   // further down report the same figure the customer was quoted.
-  const effectiveAmount = patch.quote_amount !== undefined ? patch.quote_amount : current.quote_amount;
+  const effectiveAmount =
+    itemised
+      ? optionsTotal(effectiveOptions)
+      : patch.quote_amount !== undefined
+        ? patch.quote_amount
+        : current.quote_amount;
   const effectiveSummary = patch.quote_summary !== undefined ? patch.quote_summary : current.quote_summary;
 
   if (sending) {
+    if (itemised && optionsTotal(effectiveOptions) <= 0) {
+      return { ok: false, error: "Put a price on at least one line item before sending." };
+    }
     if (effectiveAmount == null) return { ok: false, error: "Set a quote amount before sending." };
 
     // Every section has to say something. "Not applicable" counts - a slab
@@ -249,9 +313,17 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     );
   }
 
-  if (!sending && Object.keys(patch).length === 0) return { ok: true };
+  if (!sending && Object.keys(patch).length === 0 && !optionRows) return { ok: true };
 
   try {
+    // Line items first: the price on the row below is derived from them, so a
+    // failure here has to stop the save rather than leave a total with nothing
+    // behind it.
+    if (optionRows) {
+      const saved = await saveQuoteOptions(session, id, optionRows);
+      if (!saved.ok) return { ok: false, error: saved.error ?? "Could not save the line items." };
+    }
+
     if (Object.keys(patch).length > 0) {
       const updated = await updateQuote(session, id, patch);
       if (!updated) return { ok: false, error: "Could not save. Check your access and try again." };
@@ -327,7 +399,9 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       }).catch(() => {});
 
       // Tell the office it's out and the sender that it landed. Deliberately
-      // after the delivery result, so neither message claims a send that failed.
+      // after the delivery result, so neither message claims a send that failed
+      // - and the whole result goes over, not just `ok`, so a text quiet hours
+      // are holding reads as queued rather than as a failure to chase.
       await notifyQuoteSent(
         {
           id,
@@ -337,7 +411,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
           job_token: current.job_token,
         },
         { name: session.staff.full_name, phone: session.staff.phone, isOwner },
-        r.ok,
+        r,
         revising,
       ).catch(() => {});
     }

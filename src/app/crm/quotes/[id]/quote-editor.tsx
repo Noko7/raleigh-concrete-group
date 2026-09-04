@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { dict } from "@/lib/crm/i18n";
 import {
   QUOTE_SECTION_FIELDS,
   QUOTE_SECTION_HINTS,
@@ -12,6 +13,15 @@ import {
   type QuoteSectionField,
 } from "@/lib/crm/constants";
 import { saveQuote } from "./actions";
+import {
+  OptionBuilder,
+  rowsFromOptions,
+  rowsMatch,
+  rowsToJson,
+  rowsTotal,
+  type OptionRow,
+  type StoredOption,
+} from "./option-builder";
 import type { SaveState } from "./types";
 
 type ContractorOption = { id: string; label: string };
@@ -24,6 +34,9 @@ const emptySections = (): Sections =>
 type Props = {
   id: string;
   isOwner: boolean;
+  // Line items, if this quote was written as a list of choices rather than one
+  // price. Empty is the normal case and changes nothing.
+  options: StoredOption[];
   customerName: string;
   // Already texted and no answer yet. The owner can still send it again - a
   // customer saying "I never got it" is real and somebody has to be able to
@@ -38,11 +51,15 @@ type Props = {
     quote_amount: number | null;
     quote_summary: string | null;
     internal_notes: string | null;
+    customer_response: "accepted" | "declined" | null;
   } & Partial<Record<QuoteSectionField, string | null>>;
 };
 
-export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contractors, initial }: Props) {
+export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply, contractors, initial }: Props) {
   const router = useRouter();
+  // Owner-facing screen, so English. The builder takes its words as a prop
+  // because the crew's copy of it renders in whichever language they chose.
+  const optionLabels = dict("en").quoteOptions;
   const [state, formAction, pending] = useActionState<SaveState, FormData>(saveQuote, { ok: false });
 
   // Everything is controlled so the form always shows the saved truth. When the
@@ -58,8 +75,28 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
     ...Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, initial[f] ?? ""])),
   }));
   const [notes, setNotes] = useState(initial.internal_notes ?? "");
+  const [rows, setRows] = useState<OptionRow[]>(() => rowsFromOptions(options));
   const [confirming, setConfirming] = useState(false);
   const [localErr, setLocalErr] = useState("");
+
+  // The stored line items, in the shape the builder edits. Rebuilt only when the
+  // server data actually changes, so typing in the builder isn't clobbered.
+  const optionsSig = useMemo(
+    () => options.map((o) => `${o.id}|${o.title}|${o.description ?? ""}|${o.amount}|${o.required}`).join("~"),
+    [options],
+  );
+  const storedRows = useMemo(() => rowsFromOptions(options), [optionsSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Built by hand rather than with Object.fromEntries, which widens the value
+  // back to a bare string and loses the union the builder is typed on.
+  const answers = useMemo(() => {
+    const out: Record<string, "accepted" | "declined" | null> = {};
+    for (const o of options) out[o.id] = o.customer_response;
+    return out;
+  }, [options]);
+  useEffect(() => {
+    setRows(rowsFromOptions(options));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionsSig]);
 
   const initialSig = useMemo(
     () =>
@@ -95,8 +132,17 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
     if (state.ok || state.sent) router.refresh();
   }, [state, router]);
 
-  const amountNum = Number(amount);
-  const amountValid = amount.trim() !== "" && Number.isFinite(amountNum) && amountNum > 0;
+  // With line items the price is their sum and the box below just reports it.
+  // Two editable numbers that are meant to agree is how a quote goes out with a
+  // total that matches nothing on it.
+  // Once they have answered, the price on the row is what they actually bought,
+  // not the sum of everything they were offered - so the box goes back to
+  // showing (and editing) that figure.
+  const locked = Boolean(initial.customer_response);
+  const itemised = rows.length > 0 && !locked;
+  const itemTotal = rowsTotal(rows);
+  const amountNum = itemised ? itemTotal : Number(amount);
+  const amountValid = itemised ? itemTotal > 0 : amount.trim() !== "" && Number.isFinite(amountNum) && amountNum > 0;
   const previewPrice = amountValid ? `$${amountNum.toLocaleString("en-US")}` : "N/A";
 
   // Which of the five are still blank. A quote written before the sections
@@ -114,14 +160,15 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
   // it's the same quote again and only worth sending if it never arrived. The
   // server draws the same line - this is only what the panel says about it.
   const quoteEdited =
-    amount.trim() !== (initial.quote_amount != null ? String(initial.quote_amount) : "") ||
+    (itemised ? itemTotal !== Number(initial.quote_amount ?? 0) : amount.trim() !== (initial.quote_amount != null ? String(initial.quote_amount) : "")) ||
+    !rowsMatch(storedRows, rows) ||
     summary.trim() !== (initial.quote_summary ?? "").trim() ||
     QUOTE_SECTION_FIELDS.some((f) => sections[f].trim() !== (initial[f] ?? "").trim());
   const correcting = awaitingReply && quoteEdited;
 
   function openConfirm() {
     if (!amountValid) {
-      setLocalErr("Add a quote price before sending.");
+      setLocalErr(itemised ? "Put a price on at least one line item before sending." : "Add a quote price before sending.");
     } else if (!sectionsValid) {
       const names = blankSections.map((f) => QUOTE_SECTION_LABELS[f]).join(", ");
       setLocalErr(`Fill in every section first. Still blank: ${names}. Use "Not applicable" where a section doesn't apply.`);
@@ -145,6 +192,11 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
           bouncing off the duplicate guard and making the owner hunt for a
           second button. The panel says plainly what that means. */}
       <input type="hidden" name="intent" value={confirming ? (awaitingReply ? "resend" : "send") : "save"} />
+      {/* The whole list, as JSON. A variable number of rows can't ride on named
+          form fields without inventing an indexing scheme the server then has
+          to un-invent. Not sent once the customer has answered: the rows are
+          their receipt by then, and the action refuses to rewrite them anyway. */}
+      {!locked && <input type="hidden" name="options_json" value={rowsToJson(rows)} />}
 
       {/* The name every later text opens with. Arrives from a web form or a
           phone call, so it is wrong often enough to need fixing here. */}
@@ -186,19 +238,31 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
         )}
 
         <label className="crm-field">
-          <span>Quote amount ($) *</span>
+          <span>{itemised ? "Quote amount ($) - from the line items" : "Quote amount ($) *"}</span>
           <input
             type="number"
             name="quote_amount"
             min={0}
             step="0.01"
-            value={amount}
+            value={itemised ? String(itemTotal) : amount}
             onChange={(e) => setAmount(e.target.value)}
             className="crm-input"
             placeholder="e.g. 6500"
+            readOnly={itemised}
+            title={itemised ? "Edit the line items below to change this." : undefined}
           />
         </label>
       </div>
+
+      {/* Between the price and the five sections, which is the order it gets
+          written in: what the job is made of, then how all of it is done. */}
+      <OptionBuilder
+        rows={rows}
+        onChange={setRows}
+        labels={optionLabels}
+        locked={locked}
+        answers={answers}
+      />
 
       {/* The five sections the customer reads, in the order they read them.
           Separate boxes rather than one, because a single box is how permits
@@ -275,9 +339,24 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
                 : "We'll text them their quote link, good for 7 days. The price is never in the text."}
           </p>
           <div className="crm-confirm-row">
-            <span>Price</span>
+            <span>{itemised ? "Price, if they take everything" : "Price"}</span>
             <strong>{previewPrice}</strong>
           </div>
+          {/* Exactly the choice the customer is about to be given, so nobody
+              sends a quote whose optional extra was meant to be part of the job. */}
+          {itemised && (
+            <ul className="crm-confirm-options">
+              {rows
+                .filter((r) => r.title.trim())
+                .map((r) => (
+                  <li key={r.key}>
+                    <span>{r.title}</span>
+                    <strong>${Number(r.amount || 0).toLocaleString("en-US")}</strong>
+                    <em>{r.required ? "included" : "they choose"}</em>
+                  </li>
+                ))}
+            </ul>
+          )}
           {/* Exactly what they'll read, in the order they'll read it. */}
           <div className="crm-confirm-summary">
             {blankSections.length === 0
@@ -350,6 +429,9 @@ export function QuoteEditor({ id, isOwner, customerName, awaitingReply, contract
           <p className="crm-muted crm-sm crm-editor-hint">
             Price and all five sections are required to send. Send Quote texts the customer their link, good for 7 days,
             and marks this Sent. The price itself is never in the text.
+            {itemised
+              ? " This quote has line items, so the customer answers each one and their total follows what they picked."
+              : ""}
           </p>
         </>
       )}

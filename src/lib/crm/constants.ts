@@ -175,3 +175,53 @@ export const CREW_REMINDER_DAYS = [3, 1, 0];
 // Anything to do with what time it is lives in ./clock - the business's zone,
 // today's date, quiet hours. It's imported from client components too, same as
 // this file.
+
+// ── Quote line items ────────────────────────────────────────────────────────
+// A quote can be one price, or it can be a list of things the customer answers
+// one at a time: "yes to the patio, no to the sidewalk". Both shapes exist at
+// once - a quote with no line items is the original single-price quote and
+// behaves exactly as it always did.
+//
+// Two kinds, and the difference is who decides:
+//   required  part of the job. Shown so the customer can see what they're
+//             paying for, but not theirs to drop.
+//   optional  an extra. They say yes or no, and the total follows.
+//
+// Anything shared by both editors and the customer page lives here, since this
+// module is the one that is safe to import from a client component.
+export const MAX_QUOTE_OPTIONS = 12;
+export const OPTION_TITLE_MAX = 120;
+export const OPTION_DESC_MAX = 2000;
+
+// The shape both editors post and the server validates. Ids are absent on a
+// row that has not been saved yet.
+export type QuoteOptionDraft = {
+  id?: string;
+  title: string;
+  description: string;
+  amount: number;
+  required: boolean;
+};
+
+type Priced = { amount: number | string | null };
+export const optionAmount = (o: Priced): number => {
+  const n = Number(o.amount);
+  return Number.isFinite(n) ? n : 0;
+};
+
+// What the job costs if the customer takes everything on offer. This is the
+// figure a quote carries while it's out, before anyone has answered.
+export function optionsTotal(rows: Priced[]): number {
+  return Math.round(rows.reduce((sum, o) => sum + optionAmount(o), 0) * 100) / 100;
+}
+
+// What the job costs given a set of answers: every required item, plus the
+// optional ones with a yes against them. `answers` is keyed by option id;
+// anything missing counts as not chosen, so a half-answered quote reads low
+// rather than optimistically high.
+export function selectedTotal(
+  rows: (Priced & { id: string; required: boolean })[],
+  answers: Record<string, "accepted" | "declined" | undefined>,
+): number {
+  return optionsTotal(rows.filter((o) => o.required || answers[o.id] === "accepted"));
+}

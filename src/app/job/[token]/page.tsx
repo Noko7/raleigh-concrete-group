@@ -8,7 +8,7 @@ import { STATUS_LABELS, requestedVisitOf, visitDateOf } from "@/lib/crm/constant
 import { todayYmd } from "@/lib/crm/clock";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
-import { getQuoteByToken, signFiles } from "@/lib/crm/queries";
+import { getQuoteByToken, listQuoteOptionsAdmin, signFiles } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
 import { JobFinish } from "./job-finish";
@@ -72,6 +72,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // The 7-day floor applies to what a customer may request, not to what the
   // people doing the work are allowed to agree to.
   const minJobDate = todayYmd();
+  // Service role rather than the session: this page is already gated above by
+  // the job token plus "assigned to you", and reading the line items through
+  // RLS would be a second, weaker copy of that same check.
+  const options = await listQuoteOptionsAdmin(quote.id);
+  const chosen = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response !== "declined") : [];
+  const rejected = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response === "declined") : [];
   const photos = quote.file_urls?.length ? await signFiles(quote.file_urls, 7200) : [];
   // What the crew has already put on this job, so the finish card can show
   // counts rather than asking them to remember.
@@ -256,6 +262,30 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           </section>
         )}
 
+        {/* What they actually bought, above the customer details, because on a
+            quote with options it is the thing that decides what goes on the
+            truck. Only ever shown once they have answered. */}
+        {chosen.length > 0 && (
+          <section className="js-card jo-scope">
+            <h2 className="js-title">{t.contractorJob.approvedScope}</h2>
+            <p className="js-hint">{t.contractorJob.approvedScopeHint}</p>
+            <ul className="jo-scope-list">
+              {chosen.map((o) => (
+                <li key={o.id}>
+                  <strong>{o.title}</strong>
+                  <span>${Number(o.amount).toLocaleString("en-US")}</span>
+                  {o.description && <em>{o.description}</em>}
+                </li>
+              ))}
+            </ul>
+            {rejected.length > 0 && (
+              <p className="js-hint jo-scope-no">
+                {t.contractorJob.turnedDown}: {rejected.map((o) => o.title).join(", ")}
+              </p>
+            )}
+          </section>
+        )}
+
         <dl className="job-meta">
           <div>
             <dt>{t.contractorJob.customer}</dt>
@@ -360,6 +390,14 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             locale={locale}
             amount={quote.quote_amount}
             summary={quote.quote_summary}
+            options={options.map((o) => ({
+              id: o.id,
+              title: o.title,
+              description: o.description,
+              amount: Number(o.amount),
+              required: o.required,
+              customer_response: o.customer_response,
+            }))}
             initialSections={{
               quote_scope: quote.quote_scope,
               quote_permits: quote.quote_permits,

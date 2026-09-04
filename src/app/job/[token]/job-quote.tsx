@@ -1,12 +1,21 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/actions";
+import {
+  OptionBuilder,
+  rowsFromOptions,
+  rowsMatch,
+  rowsToJson,
+  rowsTotal,
+  type OptionRow,
+  type StoredOption,
+} from "@/app/crm/quotes/[id]/option-builder";
 import type { SaveState } from "@/app/crm/quotes/[id]/types";
 
 type Sections = Record<QuoteSectionField, string>;
@@ -24,6 +33,7 @@ export function JobQuote({
   locale,
   amount,
   summary,
+  options,
   initialSections,
   alreadySent,
   awaitingReply,
@@ -34,6 +44,9 @@ export function JobQuote({
   locale: Locale;
   amount: number | null;
   summary: string | null;
+  // The line items on this quote, if it was written as a list of choices. An
+  // empty list is the ordinary one-price quote and nothing here changes.
+  options: StoredOption[];
   initialSections?: Partial<Record<QuoteSectionField, string | null>>;
   alreadySent: boolean;
   awaitingReply: boolean;
@@ -51,11 +64,27 @@ export function JobQuote({
     ...emptySections(),
     ...Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, initialSections?.[f] ?? ""])),
   }));
+  const [rows, setRows] = useState<OptionRow[]>(() => rowsFromOptions(options));
+  // Resync to the server once a save lands. Without this the rows in state
+  // still have no ids after the first save, and the next one would insert a
+  // second copy of every line item instead of updating the ones just written.
+  const optionsSig = options
+    .map((o) => `${o.id}|${o.title}|${o.description ?? ""}|${o.amount}|${o.required}`)
+    .join("~");
+  const storedRows = useMemo(() => rowsFromOptions(options), [optionsSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setRows(rowsFromOptions(options));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionsSig]);
 
   const setSection = (field: QuoteSectionField, value: string) =>
     setSections((s) => ({ ...s, [field]: value }));
 
-  const priceNum = Number(price);
+  // Line items own the price when there are any: the box above just reports
+  // their sum, so the crew can't send a total that matches nothing on the quote.
+  const itemised = rows.length > 0;
+  const itemTotal = rowsTotal(rows);
+  const priceNum = itemised ? itemTotal : Number(price);
   const hasLegacySummary = (summary ?? "").trim().length > 0;
   // Every section filled, or an older quote that still has its free text.
   const sectionsReady = QUOTE_SECTION_FIELDS.every((f) => sections[f].trim()) || hasLegacySummary;
@@ -65,12 +94,13 @@ export function JobQuote({
   // actually changed, so the button waits for that instead of letting them
   // press Send and get the server's refusal back.
   const changed =
-    price.trim() !== (amount != null ? String(amount) : "") ||
+    (itemised ? itemTotal !== Number(amount ?? 0) : price.trim() !== (amount != null ? String(amount) : "")) ||
+    !rowsMatch(storedRows, rows) ||
     what.trim() !== (summary ?? "").trim() ||
     QUOTE_SECTION_FIELDS.some((f) => sections[f].trim() !== (initialSections?.[f] ?? "").trim());
 
   const ready =
-    price.trim() !== "" &&
+    (itemised || price.trim() !== "") &&
     Number.isFinite(priceNum) &&
     priceNum > 0 &&
     sectionsReady &&
@@ -89,14 +119,21 @@ export function JobQuote({
   // How the last send went. Declared once and rendered in all three states,
   // because a send folds the form away and the answer has to follow it there
   // rather than disappearing with the fields.
+  //
+  // Three states, not two. A quote written at 9pm has its customer text held
+  // until 8am, which is neither sent nor failed: reading it as a failure sends
+  // the crew chasing the office over something that is already handled, and
+  // reading it as sent would be a lie about a text nobody has yet received.
   const result =
     state.sent && !pending && !state.error ? (
-      <p className={state.smsDelivered ? "js-ok" : "js-err"}>
+      <p className={state.smsDelivered ? "js-ok" : state.smsHeldUntil ? "js-hint" : "js-err"}>
         {state.smsDelivered
           ? state.revised
             ? t.contractorJob.quoteFixOk
             : t.contractorJob.quoteOk
-          : t.contractorJob.quoteFailed}
+          : state.smsHeldUntil
+            ? fill(t.contractorJob.quoteQueued, { when: state.smsHeldUntil })
+            : t.contractorJob.quoteFailed}
       </p>
     ) : null;
 
@@ -166,6 +203,10 @@ export function JobQuote({
             on the submit button, so it can't silently fall through to "save"
             and report success without texting anyone. */}
         <input type="hidden" name="intent" value="send" />
+        {/* The whole list as JSON - a variable number of rows can't ride on
+            named form fields without an indexing scheme the server would then
+            have to undo. */}
+        <input type="hidden" name="options_json" value={rowsToJson(rows)} />
 
         <label className="jq-field">
           <span>{t.contractorJob.quoteAmount}</span>
@@ -175,11 +216,17 @@ export function JobQuote({
             inputMode="decimal"
             min={0}
             step="0.01"
-            value={price}
+            value={itemised ? String(itemTotal) : price}
             onChange={(e) => setPrice(e.target.value)}
             placeholder="6500"
+            readOnly={itemised}
           />
         </label>
+
+        {/* Priced first, then described. A crew standing in somebody's back
+            yard being asked "and what about the sidewalk?" can answer it here
+            instead of over the phone a day later. */}
+        <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} />
 
         {/* The same five sections the CRM asks for, so a quote written from a
             truck covers exactly what one written at a desk does. */}

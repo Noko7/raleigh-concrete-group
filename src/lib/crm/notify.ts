@@ -514,9 +514,30 @@ type QuoteInfo = {
   visit_time?: string | null;
   public_token?: string;
   job_token?: string;
+  // What the customer said yes and no to, on a quote that was written as line
+  // items. Only set on the messages sent the moment they answer.
+  chosen?: { accepted: ChosenOption[]; declined: ChosenOption[] } | null;
 };
 
+export type ChosenOption = { title: string; amount: number };
+
 const firstName = (full: string) => full.trim().split(/\s+/)[0] || "there";
+
+// The line items on a crew or owner text, with their prices. "Approved" on a
+// quote with options does not say what to build, and a crew reading only the
+// total has no way to tell whether the sidewalk is in it.
+//
+// Never used in a customer message: it carries money. The customer-facing
+// version below is titles only.
+function chosenBlockPriced(q: QuoteInfo): string[] {
+  const c = q.chosen;
+  if (!c || c.accepted.length === 0) return [];
+  const line = (o: ChosenOption) => `${o.title} - ${usd(o.amount)}`;
+  return [
+    ...block("Approved:", ...c.accepted.map(line)),
+    ...(c.declined.length > 0 ? block("Turned down:", ...c.declined.map((o) => o.title)) : []),
+  ];
+}
 // PRICE NEVER GOES IN A CUSTOMER TEXT.
 //
 // A figure in a text is a figure out of context: no scope beside it, no
@@ -871,13 +892,28 @@ export async function notifyQuoteUpdated(q: QuoteInfo): Promise<SendResult> {
 export async function notifyQuoteSent(
   q: QuoteInfo,
   sender: { name?: string | null; phone?: string | null; isOwner: boolean },
-  delivered: boolean,
+  // How the customer's own text went, as the send itself reported it. Three
+  // outcomes, not two: it reached the provider, quiet hours are holding it
+  // until morning, or it actually failed.
+  //
+  // This used to be a bare `delivered` boolean, which folded the middle case
+  // into the last one: a contractor quoting a job at 9pm was told their quote
+  // "did NOT go out" and to ring the office, about a text that was queued and
+  // fine. That is a wrong answer at the worst moment - they either send it
+  // again, or they spend the evening believing the job is stalled.
+  outcome: { ok: boolean; held?: boolean; sendAfterLabel?: string },
   // A correction to a quote the customer had already been sent, rather than a
   // first send. Same money moment, different story: the office needs to know a
   // number they may have already discussed has moved.
   revised = false,
 ): Promise<void> {
   const by = sender.name?.trim() || "A contractor";
+  const delivered = outcome.ok;
+  // Held is only ever true on a customer send, which is the only kind quiet
+  // hours touch. The crew's own copy of this message is role "crew" and goes
+  // out now, whatever time it is.
+  const held = !delivered && Boolean(outcome.held);
+  const when = outcome.sendAfterLabel ?? "in the morning";
 
   await alertOwner(
     delivered
@@ -891,14 +927,24 @@ export async function notifyQuoteSent(
             ? "This replaces the quote they were already sent. Waiting on them to approve or decline."
             : "Waiting on them to approve or decline.",
         ])
-      : text([
-          "QUOTE TEXT FAILED",
-          "",
-          ...block("Tried by:", by),
-          ...block("Customer:", q.name),
-          ...block("Their number:", q.phone),
-          "The quote link did NOT reach them. Give them a call.",
-        ]),
+      : held
+        ? text([
+            revised ? "QUOTE UPDATED, QUEUED" : "QUOTE SENT, QUEUED",
+            "",
+            ...block("Sent by:", by),
+            ...block("Customer:", q.name),
+            ...block(revised ? "New amount:" : "Amount:", usd(q.quote_amount)),
+            `We don't text customers between 7pm and 8am, so theirs goes out ${when}.`,
+            "Nothing to do. The quote link is already live if it can't wait.",
+          ])
+        : text([
+            "QUOTE TEXT FAILED",
+            "",
+            ...block("Tried by:", by),
+            ...block("Customer:", q.name),
+            ...block("Their number:", q.phone),
+            "The quote link did NOT reach them. Give them a call.",
+          ]),
     // Whoever pressed the button doesn't need to be told what they just did.
     sender.phone,
     { quoteId: q.id, kind: "quote_sent" },
@@ -920,12 +966,23 @@ export async function notifyQuoteSent(
           ...block(revised ? "New amount:" : "Amount:", usd(q.quote_amount)),
           "Now wait for them to review it. You'll get a text as soon as they approve or decline - there's no need to send it again.",
         ])
-      : text([
-          `Hi ${firstName(by)},`,
-          `your quote for ${q.name} did NOT go out - the text to them failed.`,
-          "",
-          `Please call ${CALL_NUMBER} so we can reach them another way.`,
-        ]),
+      : held
+        ? text([
+            `Hi ${firstName(by)},`,
+            `your quote for ${q.name} is saved and their text is scheduled.`,
+            "",
+            ...block(revised ? "New amount:" : "Amount:", usd(q.quote_amount)),
+            `We don't text customers between 7pm and 8am, so theirs goes out ${when}.`,
+            // Not "tonight": a quote written at 3am is held too, and its text
+            // goes out at 8 the same morning.
+            "Nothing else to do. You'll get a text as soon as they approve or decline.",
+          ])
+        : text([
+            `Hi ${firstName(by)},`,
+            `your quote for ${q.name} did NOT go out - the text to them failed.`,
+            "",
+            `Please call ${CALL_NUMBER} so we can reach them another way.`,
+          ]),
     { quoteId: q.id, kind: "quote_sent", role: "crew" },
   ).catch(() => {});
 }
@@ -940,6 +997,13 @@ export async function notifyCustomerApproved(q: QuoteInfo): Promise<void> {
       `Hi ${firstName(q.name)},`,
       "thanks for approving your quote.",
       "",
+      // Titles only, never the prices - the same rule as every other customer
+      // text. Reading back what they chose is the receipt for a decision they
+      // made on a phone in about four taps.
+      q.chosen && q.chosen.accepted.length > 0
+        ? `We've got you down for: ${q.chosen.accepted.map((o) => o.title).join(", ")}.`
+        : null,
+      q.chosen && q.chosen.accepted.length > 0 ? "" : null,
       "We're checking the crew's schedule against the days you picked and will text you shortly to confirm your project date and time.",
       "",
       BUSINESS,
@@ -959,6 +1023,7 @@ export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: stri
       "",
       ...block("Customer:", q.name),
       ...block("Amount:", usd(q.quote_amount)),
+      ...chosenBlockPriced(q),
       ...wanted,
       "Needs a confirmed date and time.",
       "",
@@ -976,6 +1041,7 @@ export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: stri
         "",
         customerBrief(q),
         "",
+        ...chosenBlockPriced(q),
         ...wanted,
         "Confirm the day that works:",
         jobLink(q.job_token ?? ""),

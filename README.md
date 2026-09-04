@@ -110,7 +110,7 @@ approved, declined, date confirmed or moved, can't-confirm, completed, and paid.
 You're never texted about an action you performed yourself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql` and `supabase/locale.sql` in the SQL Editor.
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql` and `supabase/locale.sql` in the SQL Editor.
 
    `supabase/crew-reminders.sql` also (re)adds `scheduled_time`, so running just
    that one file is enough to fix "Could not save that date" when confirming a
@@ -236,7 +236,7 @@ The queue drains from three places, because a serverless app has nothing sitting
 
 One customer text ignores quiet hours: **the quote-request receipt**. They pressed the button seconds ago and are looking at a page that says we'll text them; holding that until 8am reads as the form having failed, which is how somebody at 10pm fills it in twice or calls the next contractor. Nothing that arrives out of the blue belongs in that category. The exception is `{ force: true }` on `sendSms`/`sendSmsResult`, so grepping for it shows the whole list - one call site.
 
-A held message shows in the job's **Texts sent** log as "Waiting until 8:00 AM" rather than as a failure, and the CRM says so where it reports a send - the quote banner, the contractor invite and password notes.
+A held message shows in the job's **Texts sent** log as "Waiting until 8:00 AM" rather than as a failure, and every place that reports a send says so in its own words: the CRM quote banner, the contractor invite and password notes, the crew's own job page after they send a quote, and the confirmation text that crew member gets ("their text is scheduled", not "it failed"). A contractor quoting a job at 9pm is told the quote is saved and when it goes out - being told it failed is how somebody sends it twice, or spends the evening believing the job is stalled.
 
 **Time is Eastern, everywhere**
 `src/lib/crm/clock.ts` owns every reading of the clock: `now()`, today's date, day arithmetic, quiet hours. Vercel runs in UTC and phones are set to whatever their owners set them to, so anything asking "what day is it" or printing a timestamp goes through there and comes back in `America/New_York` - Eastern, which is EST in winter and EDT in summer, not a pinned -05:00 that would be an hour out all summer.
@@ -252,6 +252,40 @@ The price. A figure in a text has no scope beside it, gets forwarded and shopped
 Every quote answers Scope, Permits, Demolition and prep, Pour and finish, and Clean up. All five must say something before it can be sent, but "Not applicable" is a valid answer and each field has a one-tap button for it. Quotes written before this change fall back to their old free-text summary.
 
 A sent quote link is good for `QUOTE_TTL_DAYS` (7) days from the last send. Re-sending re-stamps the clock, which is how an expired quote is revived. Expiry only applies while the customer still has a decision to make - once they've accepted, the page is their record of the job and the payment text links back to it.
+
+**Quotes with options: one quote, several answers**
+A quote can be a single price, or a list of **line items** the customer answers one at a time. The
+customer who wants a patio and asks "what would the sidewalk cost while you're here?" gets both
+prices on one page and takes either, both, or neither - and the total is whatever they picked.
+Nothing changes for a quote with no line items: it stays exactly the single-price quote it was.
+
+- **Two kinds of item.** *Part of the job* is shown with its price but can't be dropped, and *their
+  choice* is an extra the customer says yes or no to. Without that split a customer could decline
+  the driveway and accept the $800 apron extension that only exists because of it.
+- **Nothing is pre-ticked.** Each optional item starts unanswered and **Approve** stays disabled
+  until every one has a yes or no against it. An untouched box is somebody who scrolled past it, not
+  a decision, and billing either way from silence is where a dispute starts. Saying no to everything
+  points them at Decline rather than approving a $0 job.
+- **The price follows the answers.** While the quote is out, `quote_amount` is the all-in figure. The
+  moment they answer it becomes what they actually bought, so the owner's texts, the payment request
+  and the customer's own page all keep reading the one column they always read. The $150 save credit
+  comes off the selected total, not the all-in one.
+- **Each item keeps its own answer.** `quote_options.customer_response` is stamped per row, so
+  "what did they agree to" survives any later edit to the quote, and the crew reads it off their job
+  page as **What they approved** before they load the truck.
+- **Built in both places.** The builder is on the CRM quote editor and on the crew's own
+  `/job/<token>` page, in English and Spanish - so the crew standing in the back yard being asked
+  about the sidewalk can answer it there instead of over the phone the next day.
+- **Locked once answered.** After the customer responds the items become a read-only record with
+  each answer beside it. The server refuses to rewrite them even if a stale form posts them.
+- Up to **12** line items per quote. The five sections (Scope, Permits, Demolition and prep, Pour and
+  finish, Clean up) still cover the job as a whole and are still required to send; each item's own
+  description covers what is specific to it.
+
+Run `supabase/quote-options.sql` for this (the `quote_options` table plus its RLS, scoped exactly like
+the job itself: owners see everything, a contractor sees the jobs assigned to them). Safe to re-run.
+Until it is run, quoting still works - the app treats a missing table as "this quote has no line
+items" - and the builder says which file to run if a save is attempted.
 
 **Routing leads to contractors**
 Each contractor has the job types they take (CRM → Crew → Edit details), keyed to the services in `quoteServiceOptions`. A new lead goes to the first active contractor who takes that service, falling back to the primary contractor in Settings when nothing claims it. Nothing ticked means no restriction, so routing is inert until an owner sets a rule.

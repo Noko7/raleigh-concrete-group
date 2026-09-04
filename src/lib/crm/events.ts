@@ -54,10 +54,22 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return `Quote text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` - ${String(m.error)}` : ""}`;
     case "customer_viewed":
       return "Customer opened their quote";
+    // Line items were added, removed, repriced or reordered. The count and the
+    // all-in figure are what tell a repriced quote from a reshuffled one.
+    case "options_changed": {
+      const n = Number(m.count ?? 0);
+      const total = m.total != null ? ` ($${Number(m.total).toLocaleString("en-US")} all in)` : "";
+      return n === 0 ? "Line items removed - back to a single price" : `Line items updated: ${n} item(s)${total}`;
+    }
     case "customer_accepted": {
       const picks = Array.isArray(m.preferred_dates) ? (m.preferred_dates as string[]) : [];
       const wanted = picks.length ? `, prefers ${picks.join(", ")}` : "";
-      return `Customer approved the quote${wanted}${m.discount ? " ($150 credit)" : ""}`;
+      // On a quote with options, which ones they took is the whole story - the
+      // total alone doesn't say whether the sidewalk is in it.
+      const yes = Array.isArray(m.accepted_options) ? (m.accepted_options as string[]) : [];
+      const no = Array.isArray(m.declined_options) ? (m.declined_options as string[]) : [];
+      const chose = yes.length ? `: took ${yes.join(", ")}${no.length ? `, left ${no.join(", ")}` : ""}` : "";
+      return `Customer approved the quote${chose}${wanted}${m.discount ? " ($150 credit)" : ""}`;
     }
     case "date_confirmed":
       return `Work day confirmed for ${String(m.to ?? "a date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;

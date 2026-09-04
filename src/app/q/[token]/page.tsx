@@ -8,7 +8,7 @@ import {
   QUOTE_SECTION_LABELS,
   QUOTE_TTL_DAYS,
 } from "@/lib/crm/constants";
-import { getQuoteByToken, isQuoteExpired } from "@/lib/crm/queries";
+import { getQuoteByToken, isQuoteExpired, listQuoteOptionsAdmin } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
 import { QuoteActions } from "./quote-actions";
 import { ViewBeacon } from "./view-beacon";
@@ -50,6 +50,18 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   const { token } = await params;
   const quote = await getQuoteByToken("public_token", token);
   if (!quote) notFound();
+
+  // Line items, if this quote was written as a list of choices. Fetched before
+  // the expired/responded branches below use them.
+  const options = (await listQuoteOptionsAdmin(quote.id)).map((o) => ({
+    id: o.id,
+    title: o.title,
+    description: o.description,
+    amount: Number(o.amount),
+    required: o.required,
+    customer_response: o.customer_response,
+  }));
+  const itemised = options.length > 0;
 
   const hasPrice = quote.quote_amount != null;
   const amount = hasPrice ? `$${Number(quote.quote_amount).toLocaleString("en-US")}` : null;
@@ -123,6 +135,29 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               </strong>
             </p>
           )}
+          {/* What they approved, item by item. This page is their record of the
+              job from here on, and on a quote with options "approved" on its
+              own doesn't say which ones. */}
+          {itemised && (
+            <ul className="cq-confirm-items">
+              {options
+                .filter((o) => o.customer_response !== "declined")
+                .map((o) => (
+                  <li key={o.id}>
+                    <span>{o.title}</span>
+                    <strong>${o.amount.toLocaleString("en-US")}</strong>
+                  </li>
+                ))}
+              {options
+                .filter((o) => o.customer_response === "declined")
+                .map((o) => (
+                  <li key={o.id} className="cq-confirm-item-no">
+                    <span>{o.title}</span>
+                    <strong>Not included</strong>
+                  </li>
+                ))}
+            </ul>
+          )}
           {amount && (
             <div className="cq-confirm-price">
               {quote.discount_accepted && <span className="cq-confirm-save">${DECLINE_CREDIT} credit applied</span>}
@@ -187,19 +222,31 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
         {hasPrice ? (
           <>
             <p className="cq-lead">
-              Here&apos;s your quote{quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We&apos;d love to do the work for you.
+              {itemised
+                ? "Here's your quote. Some of it is up to you - say yes or no to each option below and your total updates as you go."
+                : `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We'd love to do the work for you.`}
             </p>
-            <div className="cq-price">
-              <span className="cq-price-label">Your price, all in</span>
-              <span className="cq-price-value">{amount}</span>
-              <span className="cq-price-sub">Free quote · no obligation until you approve</span>
-              {/* Under the price, because that is what the deadline is
-                  actually about. Only shown once the quote has been sent -
-                  a draft has no clock running. */}
-              {quote.quote_expires_at && (
-                <span className="cq-expiry">Good through {prettyDate(quote.quote_expires_at.slice(0, 10))}</span>
-              )}
-            </div>
+            {/* On an itemised quote there is no single price to print here: the
+                number depends on what they pick, so it lives with the options
+                and moves as they answer. One price on the page, never two. */}
+            {!itemised && (
+              <div className="cq-price">
+                <span className="cq-price-label">Your price, all in</span>
+                <span className="cq-price-value">{amount}</span>
+                <span className="cq-price-sub">Free quote · no obligation until you approve</span>
+                {/* Under the price, because that is what the deadline is
+                    actually about. Only shown once the quote has been sent -
+                    a draft has no clock running. */}
+                {quote.quote_expires_at && (
+                  <span className="cq-expiry">Good through {prettyDate(quote.quote_expires_at.slice(0, 10))}</span>
+                )}
+              </div>
+            )}
+            {itemised && quote.quote_expires_at && (
+              <p className="cq-expiry cq-expiry-line">
+                Good through {prettyDate(quote.quote_expires_at.slice(0, 10))}
+              </p>
+            )}
             {/* Trust markers echo the site's own published copy (clear pricing,
                 on time, local) - no warranty or licensing claims per business
                 policy in site-data.ts. */}
@@ -255,7 +302,19 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           )
         )}
 
-        {hasPrice ? <QuoteActions token={token} amount={Number(quote.quote_amount)} /> : null}
+        {hasPrice ? (
+          <QuoteActions
+            token={token}
+            amount={Number(quote.quote_amount)}
+            options={options.map((o) => ({
+              id: o.id,
+              title: o.title,
+              description: o.description,
+              amount: o.amount,
+              required: o.required,
+            }))}
+          />
+        ) : null}
 
         {/* One real review from the site's testimonials, right below the
             decision point - the moment a nervous customer looks for a reason

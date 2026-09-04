@@ -2,7 +2,19 @@
 // user go through pgUser (RLS enforces owner/contractor scoping). Token-page
 // lookups, view tracking and signed URLs use pgAdmin (no user context).
 import { todayYmd, ymdInDays } from "./clock";
-import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, TIME_RE, visitDateOf } from "./constants";
+import {
+  DECLINE_CREDIT,
+  LEAD_TIME_DAYS,
+  MAX_PREFERRED_DATES,
+  MAX_QUOTE_OPTIONS,
+  OPTION_DESC_MAX,
+  OPTION_TITLE_MAX,
+  TIME_RE,
+  noEmDash,
+  optionsTotal,
+  visitDateOf,
+  type QuoteOptionDraft,
+} from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
 import type {
@@ -11,6 +23,7 @@ import type {
   LoginAttempt,
   Quote,
   QuoteEvent,
+  QuoteOption,
   Session,
   Staff,
 } from "./types";
@@ -106,6 +119,163 @@ export async function updateQuoteResult(
 
 export async function updateQuote(session: Session, id: string, patch: Partial<Quote>): Promise<Quote | null> {
   return (await updateQuoteResult(session, id, patch)).quote;
+}
+
+// ── Quote line items ────────────────────────────────────────────────────────
+// A quote either has none of these - the single-price quote the app has always
+// had - or a list of them, each answered on its own by the customer. Nothing
+// here runs for a quote without options, so the old shape is untouched.
+
+export async function listQuoteOptions(session: Session, quoteId: string): Promise<QuoteOption[]> {
+  const res = await pgUser(
+    `quote_options?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
+    session.accessToken,
+  );
+  // An empty list is also what a database without the table yet returns, and
+  // that is the right answer for every caller: this quote has no line items.
+  if (!res.ok) return [];
+  return (await res.json()) as QuoteOption[];
+}
+
+// Same list with the service-role key, for the two surfaces that have no user
+// session: the customer's own quote page and the endpoint behind its buttons.
+export async function listQuoteOptionsAdmin(quoteId: string): Promise<QuoteOption[]> {
+  const res = await pgAdmin(
+    `quote_options?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as QuoteOption[];
+}
+
+// Clean, capped values straight off the wire. Both editors post the same JSON
+// and neither is trusted: the title cap, the price ceiling and the row limit
+// are enforced here as well as in the check constraint.
+export function parseQuoteOptions(raw: unknown): { rows: QuoteOptionDraft[]; error?: string } {
+  if (!Array.isArray(raw)) return { rows: [] };
+  const rows: QuoteOptionDraft[] = [];
+  for (const item of raw.slice(0, MAX_QUOTE_OPTIONS)) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const title = noEmDash(String(o.title ?? "").trim()).slice(0, OPTION_TITLE_MAX);
+    // A blank row is what an editor leaves behind when somebody adds one and
+    // changes their mind, so it's dropped rather than refused.
+    if (!title) continue;
+    const amount = Number(o.amount);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 99_999_999) {
+      return { rows: [], error: `Enter a valid price for "${title}".` };
+    }
+    const id = typeof o.id === "string" && /^[0-9a-f-]{36}$/i.test(o.id) ? o.id : undefined;
+    rows.push({
+      id,
+      title,
+      description: noEmDash(String(o.description ?? "").trim()).slice(0, OPTION_DESC_MAX),
+      amount: Math.round(amount * 100) / 100,
+      required: o.required === true,
+    });
+  }
+  return { rows };
+}
+
+// Two drafts describe the same line item to the customer. Used to decide
+// whether a save changed anything they would read, which is what separates a
+// corrected quote from a second copy of the same one.
+export function sameOptions(a: QuoteOptionDraft[], b: QuoteOptionDraft[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((x, i) => {
+    const y = b[i];
+    return (
+      x.title === y.title &&
+      x.description === y.description &&
+      Number(x.amount) === Number(y.amount) &&
+      x.required === y.required
+    );
+  });
+}
+
+// The stored rows in the shape parseQuoteOptions produces, so the two can be
+// compared directly.
+export function optionsAsDrafts(rows: QuoteOption[]): QuoteOptionDraft[] {
+  return rows.map((o) => ({
+    id: o.id,
+    title: o.title,
+    description: o.description ?? "",
+    amount: Number(o.amount),
+    required: o.required,
+  }));
+}
+
+// Make the stored line items match what was just submitted. Rows keep their id
+// - and with it the customer's answer, once there is one - so this is an
+// update rather than a delete-and-recreate. Runs as the logged-in user, so RLS
+// is what stops a contractor editing somebody else's job.
+export async function saveQuoteOptions(
+  session: Session,
+  quoteId: string,
+  rows: QuoteOptionDraft[],
+): Promise<{ ok: boolean; error?: string }> {
+  const existing = await listQuoteOptions(session, quoteId);
+  const byId = new Map(existing.map((o) => [o.id, o]));
+  const keep = new Set(rows.map((r) => r.id).filter((id): id is string => Boolean(id && byId.has(id))));
+
+  const gone = existing.filter((o) => !keep.has(o.id)).map((o) => o.id);
+  if (gone.length > 0) {
+    const res = await pgUser(`quote_options?id=in.(${gone.join(",")})`, session.accessToken, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    });
+    if (!res.ok) return { ok: false, error: await optionError(res, "remove") };
+  }
+
+  const inserts: Record<string, unknown>[] = [];
+  for (const [i, r] of rows.entries()) {
+    const current = r.id ? byId.get(r.id) : undefined;
+    const body = {
+      title: r.title,
+      description: r.description || null,
+      amount: r.amount,
+      required: r.required,
+      sort_order: i,
+    };
+    if (!current) {
+      inserts.push({ quote_id: quoteId, ...body });
+      continue;
+    }
+    const unchanged =
+      current.title === body.title &&
+      (current.description ?? null) === body.description &&
+      Number(current.amount) === body.amount &&
+      current.required === body.required &&
+      current.sort_order === i;
+    if (unchanged) continue;
+    const res = await pgUser(`quote_options?id=eq.${current.id}`, session.accessToken, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return { ok: false, error: await optionError(res, "save") };
+  }
+
+  if (inserts.length > 0) {
+    const res = await pgUser("quote_options", session.accessToken, {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(inserts),
+    });
+    if (!res.ok) return { ok: false, error: await optionError(res, "save") };
+  }
+
+  return { ok: true };
+}
+
+// The one failure worth naming: the migration hasn't been run, which no amount
+// of trying again will fix.
+async function optionError(res: Response, verb: string): Promise<string> {
+  const body = await res.text().catch(() => "");
+  console.error("[quoteOptions] failed", { status: res.status, body });
+  if (res.status === 404 || (/quote_options/.test(body) && /does not exist|schema cache/i.test(body))) {
+    return "Line items need one more migration: run supabase/quote-options.sql in Supabase, then try again.";
+  }
+  return `Could not ${verb} the line items (error ${res.status}). Please try again.`;
 }
 
 // A lead a staff member logs themselves - a customer who called in - rather
@@ -908,10 +1078,28 @@ export async function recordCustomerView(token: string): Promise<void> {
 
 // Customer accepts (with a scheduled date, optionally taking the $150 save offer)
 // or declines, straight from the branded quote page. Service role; token-gated.
+export type OptionChoice = "accepted" | "declined";
+
+export type CustomerResponseResult = {
+  ok: boolean;
+  error?: string;
+  // What they said yes and no to, in the order they read them. Only the texts
+  // to the owner and crew use these - the customer already knows.
+  accepted?: QuoteOption[];
+  declined?: QuoteOption[];
+};
+
 export async function recordCustomerResponse(
   token: string,
-  input: { action: "accept" | "decline"; discount?: boolean; preferredDates?: string[] },
-): Promise<{ ok: boolean; error?: string }> {
+  input: {
+    action: "accept" | "decline";
+    discount?: boolean;
+    preferredDates?: string[];
+    // One answer per optional line item, keyed by option id. Ignored on a quote
+    // that has no line items, required on one that does.
+    options?: Record<string, OptionChoice>;
+  },
+): Promise<CustomerResponseResult> {
   if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
   const res = await pgAdmin(
     `quote_requests?public_token=eq.${token}` +
@@ -931,12 +1119,16 @@ export async function recordCustomerResponse(
     return { ok: false, error: "This quote has expired. Please call us and we'll send you an updated one." };
   }
 
+  const options = await listQuoteOptionsAdmin(q.id);
   const patch: Partial<Quote> = { customer_responded_at: new Date().toISOString() };
+  let accepted: QuoteOption[] = [];
+  let declined: QuoteOption[] = [];
   let eventType: string;
 
   if (input.action === "decline") {
     patch.customer_response = "declined";
     patch.status = "lost";
+    declined = options;
     eventType = "customer_declined";
   } else {
     // Approving no longer books a day. The customer proposes dates that suit
@@ -959,13 +1151,39 @@ export async function recordCustomerResponse(
       return { ok: false, error: `Please pick at least one date ${LEAD_TIME_DAYS} days from now or later.` };
     }
 
+    // Line items, if this quote has any. Every optional one needs an answer:
+    // a blank is not a no, it is a customer who scrolled past it, and billing
+    // either way from silence is how a dispute starts.
+    if (options.length > 0) {
+      const answers = input.options ?? {};
+      const unanswered = options.filter((o) => !o.required && !answers[o.id]);
+      if (unanswered.length > 0) {
+        return { ok: false, error: "Please answer yes or no to each option before approving." };
+      }
+      accepted = options.filter((o) => o.required || answers[o.id] === "accepted");
+      declined = options.filter((o) => !o.required && answers[o.id] === "declined");
+      if (accepted.length === 0) {
+        return {
+          ok: false,
+          error: "You've said no to everything. Use Decline below if you don't want any of it.",
+        };
+      }
+      // The price follows the answers: the quote is now worth what they said
+      // yes to, and every downstream reader (the owner's text, the payment
+      // request, the calendar) goes on reading quote_amount as it always has.
+      patch.quote_amount = optionsTotal(accepted);
+    }
+
     patch.customer_response = "accepted";
     patch.status = "approved";
     patch.preferred_dates = dates;
     if (input.discount && !q.discount_accepted) {
       patch.discount_accepted = true;
-      if (q.quote_amount != null) {
-        patch.quote_amount = Math.max(0, Math.round((Number(q.quote_amount) - DECLINE_CREDIT) * 100) / 100);
+      // Off whatever they actually bought, not off the all-in figure they
+      // didn't take.
+      const base = patch.quote_amount ?? q.quote_amount;
+      if (base != null) {
+        patch.quote_amount = Math.max(0, Math.round((Number(base) - DECLINE_CREDIT) * 100) / 100);
       }
     }
     eventType = "customer_accepted";
@@ -978,16 +1196,39 @@ export async function recordCustomerResponse(
   });
   if (!upd.ok) return { ok: false, error: "Could not save your response. Please call us." };
 
+  // Stamp each line item with its own answer, so the record of what was bought
+  // survives any later edit to the quote and the crew can read it off the job
+  // page. After the quote row, deliberately: the customer's decision is
+  // recorded even if this second write fails.
+  const stamp = new Date().toISOString();
+  for (const [response, rows] of [
+    ["accepted", accepted],
+    ["declined", declined],
+  ] as const) {
+    if (rows.length === 0) continue;
+    await pgAdmin(`quote_options?id=in.(${rows.map((o) => o.id).join(",")})`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ customer_response: response, responded_at: stamp }),
+    }).catch(() => {});
+  }
+
   await pgAdmin("quote_events", {
     method: "POST",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({
       quote_id: q.id,
       type: eventType,
-      meta: { discount: Boolean(input.discount), preferred_dates: patch.preferred_dates ?? null },
+      meta: {
+        discount: Boolean(input.discount),
+        preferred_dates: patch.preferred_dates ?? null,
+        accepted_options: accepted.map((o) => o.title),
+        declined_options: declined.map((o) => o.title),
+        total: patch.quote_amount ?? null,
+      },
     }),
   });
-  return { ok: true };
+  return { ok: true, accepted, declined };
 }
 
 // Confirm (or move) the work day. Runs as the logged-in user so RLS keeps a
