@@ -23,7 +23,15 @@ function fmt(iso: string) {
 export function MessageLog({ messages }: { messages: QuoteMessage[] }) {
   // A text waiting for 8am is neither sent nor failed, and counting it as
   // failed would put a red number on a night that went fine.
+  //
+  // Two different reasons a row is waiting, and the role is what separates
+  // them: quiet hours only ever holds a CUSTOMER text, so anything else in the
+  // queue is there because a cron run spread its texts out. Same badge, because
+  // both mean "this is going to send"; different sentence, because only one of
+  // them is a rule about the hour.
   const held = messages.filter(isHeld);
+  const heldForMorning = held.filter((m) => m.role === "customer");
+  const spaced = held.length - heldForMorning.length;
   const failed = messages.filter((m) => !m.ok && !isHeld(m)).length;
 
   return (
@@ -42,8 +50,10 @@ export function MessageLog({ messages }: { messages: QuoteMessage[] }) {
             {failed > 0
               ? `${failed} of ${messages.length} did not send. "Accepted" means your provider took it; carrier delivery is a separate step we aren't told about.`
               : `${messages.length} sent. "Accepted" means your provider took it; carrier delivery is a separate step we aren't told about.`}
-            {held.length > 0 &&
-              ` ${held.length} ${held.length === 1 ? "text is" : "texts are"} waiting for the morning: nothing goes out between 7pm and 8am.`}
+            {heldForMorning.length > 0 &&
+              ` ${heldForMorning.length} ${heldForMorning.length === 1 ? "text is" : "texts are"} waiting for the morning: nothing goes out to a customer between 7pm and 8am.`}
+            {spaced > 0 &&
+              ` ${spaced} ${spaced === 1 ? "text is" : "texts are"} queued a few minutes apart, so the crew get them one at a time rather than all at once.`}
           </p>
 
           <ul className="msg-log">
@@ -55,7 +65,11 @@ export function MessageLog({ messages }: { messages: QuoteMessage[] }) {
                       m.ok ? "crm-badge-success" : isHeld(m) ? "crm-badge-warning" : "crm-badge-danger"
                     }`}
                   >
-                    {m.ok ? "Accepted" : isHeld(m) ? `Waiting until ${clockLabel(new Date(m.send_after!))}` : "Failed"}
+                    {m.ok
+                      ? "Accepted"
+                      : isHeld(m)
+                        ? `${m.role === "customer" ? "Waiting until" : "Queued for"} ${clockLabel(new Date(m.send_after!))}`
+                        : "Failed"}
                   </span>
                   <strong className="msg-kind">{messageLabel(m.kind)}</strong>
                   <span className="crm-muted crm-sm msg-to">
@@ -68,6 +82,7 @@ export function MessageLog({ messages }: { messages: QuoteMessage[] }) {
                 {/* A hold explains itself in the badge; the detail line is for
                     a provider's own words about a real failure. */}
                 {m.detail && !m.ok && !isHeld(m) && <pre className="msg-detail">{m.detail}</pre>}
+
 
                 {m.body && (
                   <details className="msg-body">

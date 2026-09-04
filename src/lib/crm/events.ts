@@ -107,9 +107,12 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     case "crew_reminded": {
       const d = Number(m.days_out);
       const when = d === 0 ? "morning of" : d === 1 ? "day before" : `${d} days out`;
-      return m.delivered
-        ? `Crew reminder texted (${when})`
-        : `Crew reminder FAILED (${when}) to ${String(m.to ?? "the crew")}`;
+      // Three outcomes again: sent, queued behind that person's other texts
+      // from the same run, or failed. A spaced reminder that reads as a failure
+      // sends somebody chasing a text that is about to arrive.
+      if (m.delivered) return `Crew reminder texted (${when})`;
+      if (m.queued_for) return `Crew reminder queued for ${String(m.queued_for)} (${when}, spaced out)`;
+      return `Crew reminder FAILED (${when}) to ${String(m.to ?? "the crew")}`;
     }
     case "customer_confirmed":
       return "Customer confirmed their job";

@@ -39,6 +39,10 @@ export type SendResult = {
   // the provider, so anything counting successful sends still counts honestly -
   // but a screen showing this to a person needs to say "waiting", not "failed".
   held?: boolean;
+  // Held because a run deliberately spread its texts out, not because of the
+  // hour. Both wait in the same queue; only quiet hours is a rule anybody needs
+  // explaining to them.
+  spaced?: boolean;
   // When it will go out, ISO, and the same in words: "tomorrow at 8:00 AM".
   sendAfter?: string;
   sendAfterLabel?: string;
@@ -181,7 +185,11 @@ export async function sendSmsResult(
   toRaw: string,
   messageRaw: string,
   log?: SmsLog,
-  opts?: { force?: boolean },
+  // `delayMinutes` parks a text in the same queue quiet hours use, due that
+  // many minutes from now. It is how a cron run that has six things to tell one
+  // contractor spreads them out instead of firing all six into their pocket at
+  // 10:00:03 - see spacer() below.
+  opts?: { force?: boolean; delayMinutes?: number },
 ): Promise<SendResult> {
   // Every text goes through the dash guard, not just the ones written today.
   // Doing it here rather than in each builder means a message assembled from
@@ -200,17 +208,25 @@ export async function sendSmsResult(
     return empty;
   }
 
-  // Quiet hours: park it and say when it leaves. Recorded through the same log
-  // as everything else, because the queue entry and the log line are one row.
-  // Customers only - see the note above.
-  if (!opts?.force && log?.role === "customer" && inQuietHours()) {
-    const due = nextSendableAt();
+  // Two reasons a text waits, and they use one queue: quiet hours (customers
+  // only, see the note above) and deliberate spacing (anyone). When both apply
+  // the later of the two wins - spacing must never be the thing that sneaks a
+  // customer text out at 11pm.
+  const quietHold = !opts?.force && log?.role === "customer" && inQuietHours();
+  const delayMinutes = Math.max(0, Math.trunc(opts?.delayMinutes ?? 0));
+  if (quietHold || delayMinutes > 0) {
+    const quietDue = quietHold ? nextSendableAt() : null;
+    const spacedDue = delayMinutes > 0 ? new Date(now().getTime() + delayMinutes * 60_000) : null;
+    const due =
+      quietDue && spacedDue ? (spacedDue.getTime() > quietDue.getTime() ? spacedDue : quietDue) : (quietDue ?? spacedDue!);
     const label = clockLabel(due);
-    const detail = `Quiet hours (${hourLabel(QUIET_FROM_HOUR)} to ${hourLabel(QUIET_UNTIL_HOUR)}). Held, and goes out ${label}.`;
+    const detail = quietDue
+      ? `Quiet hours (${hourLabel(QUIET_FROM_HOUR)} to ${hourLabel(QUIET_UNTIL_HOUR)}). Held, and goes out ${label}.`
+      : `Spaced out so this run doesn't send several at once. Goes out ${label}.`;
     await logMessage({
-      quote_id: log.quoteId ?? null,
-      kind: log.kind,
-      role: "customer",
+      quote_id: log?.quoteId ?? null,
+      kind: log?.kind ?? "spaced",
+      role: log?.role ?? "crew",
       to_phone: to,
       body: message,
       ok: false,
@@ -221,6 +237,10 @@ export async function sendSmsResult(
     return {
       ok: false,
       held: true,
+      // Spaced rather than held by the clock. The two read differently to a
+      // person: one is a rule about the hour, the other is us being polite
+      // about volume, and only the first is worth explaining to anybody.
+      spaced: !quietDue,
       provider: SMS_PROVIDER,
       to,
       detail,
@@ -260,9 +280,48 @@ export async function sendSms(
   toRaw: string,
   message: string,
   log?: SmsLog,
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; delayMinutes?: number },
 ): Promise<boolean> {
   return (await sendSmsResult(toRaw, message, log, opts)).ok;
+}
+
+// ── Spreading a run's texts out ─────────────────────────────────────────────
+//
+// A daily cron does all of its thinking in one second, and without this every
+// conclusion it reaches about one contractor lands on their phone in that same
+// second. Six buzzes at 10:00:03 is read as one interruption and answered like
+// one: the crew skim the last and lose the other five.
+//
+// So each person's texts from a single run are handed out slots, and the slot
+// becomes a `send_after` on the queue. The FIRST is never delayed - whatever a
+// run has to say to somebody, the most urgent thing reaches them exactly as
+// fast as it did before, and only the pile behind it is spread.
+//
+// Set REMINDER_SPACING_MINUTES to 0 to turn this off and go back to sending
+// everything at once.
+export const REMINDER_SPACING_MINUTES = (() => {
+  const raw = Number(process.env.REMINDER_SPACING_MINUTES);
+  return Number.isFinite(raw) && raw >= 0 ? Math.trunc(raw) : 15;
+})();
+
+/**
+ * Hands out "how many minutes should this one wait" per phone number, for the
+ * length of one cron run. First text to a given person: 0. Second: 15. Third:
+ * 30. Somebody else's first is still 0 - the queue is per person, because two
+ * contractors are not interrupting each other.
+ *
+ * Call it once per run and pass the result down; a fresh spacer per section
+ * would restart everybody at 0 and undo the spacing between sections.
+ */
+export function spacer(minutes = REMINDER_SPACING_MINUTES): (phone?: string | null) => number {
+  const used = new Map<string, number>();
+  return (phone?: string | null) => {
+    if (!phone || minutes <= 0) return 0;
+    const key = toE164(phone) ?? phone;
+    const n = used.get(key) ?? 0;
+    used.set(key, n + 1);
+    return n * minutes;
+  };
 }
 
 // ── The morning flush ───────────────────────────────────────────────────────
@@ -282,17 +341,25 @@ export type FlushResult = { due: number; sent: number; failed: number; skipped?:
  * at once still texts each person once.
  */
 export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<FlushResult> {
-  // Never during quiet hours. Held messages come due at 8am, so this can only
-  // fire early if the clock is wrong - and the whole point is that it doesn't.
-  if (inQuietHours()) return { due: 0, sent: 0, failed: 0, skipped: "quiet hours" };
+  // Quiet hours is a rule about CUSTOMERS, so it is checked per row rather than
+  // used to abandon the whole flush. It used to stop the run outright, which
+  // was right while the queue only ever held customer texts; a spaced crew
+  // reminder queued at 6:50pm would have sat there until morning for a rule
+  // that was never about them. The crew get everything, any hour.
+  const quiet = inQuietHours();
 
   const startedAt = now().getTime();
   const due = await listDueMessages(now().toISOString(), limit);
   let sent = 0;
   let failed = 0;
 
+  let waiting = 0;
   for (const m of due) {
     if (now().getTime() - startedAt > budgetMs) break;
+    if (quiet && m.role === "customer") {
+      waiting += 1;
+      continue;
+    }
     if (!m.to_phone || !m.body) {
       await finishMessage(m.id, { ok: false, provider: SMS_PROVIDER, detail: "Held with no number or body to send." });
       continue;
@@ -313,7 +380,12 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
   }
 
   if (failed > 0) console.error("[sms-queue] held messages that failed to send", { due: due.length, sent, failed });
-  return { due: due.length, sent, failed };
+  return {
+    due: due.length,
+    sent,
+    failed,
+    ...(waiting > 0 ? { skipped: `${waiting} customer text(s) still waiting on quiet hours` } : {}),
+  };
 }
 
 // Drain the queue without making the caller wait for it. `after` runs the work
@@ -1385,13 +1457,21 @@ export async function notifyCrewReminder(
   q: QuoteInfo,
   daysOut: number,
   contractorName?: string | null,
+  // Minutes to hold this one back so a crew member with several jobs isn't sent
+  // all of them at once. 0 sends now.
+  delayMinutes = 0,
 ): Promise<SendResult | null> {
   if (!contractorPhone) return null;
-  return sendSmsResult(contractorPhone, crewReminderMessage(q, daysOut, contractorName), {
-    quoteId: q.id,
-    kind: `crew_reminder_${daysOut}`,
-    role: "crew",
-  }).catch(() => null);
+  return sendSmsResult(
+    contractorPhone,
+    crewReminderMessage(q, daysOut, contractorName),
+    {
+      quoteId: q.id,
+      kind: `crew_reminder_${daysOut}`,
+      role: "crew",
+    },
+    { delayMinutes },
+  ).catch(() => null);
 }
 
 // ── 12. Stale lead: still nothing sent 12h after it came in ────────────────
@@ -1478,6 +1558,9 @@ export type StaleLeadGroup = {
   phone?: string | null;
   name?: string | null;
   leads: QuoteInfo[];
+  // Set by the caller's spacer, so this contractor's nudge queues behind the
+  // job reminders the same run already sent them rather than arriving with them.
+  delayMinutes?: number;
 };
 
 /**
@@ -1528,7 +1611,10 @@ export async function notifyStaleLeads(
       g.leads.length === 1
         ? { quoteId: g.leads[0].id, kind: "stale_lead", role: "crew" as const }
         : { kind: "stale_lead_digest", role: "crew" as const };
-    if (await sendSms(phone, msg, log).catch(() => false)) contractors += 1;
+    // A queued text is not a failure, so it counts as handled either way: the
+    // caller's tally is "who did we have something to say to", and the queue
+    // row is the record of what happens next.
+    if (await sendSms(phone, msg, log, { delayMinutes: g.delayMinutes ?? 0 }).catch(() => false)) contractors += 1;
   }
 
   return { owner: true, contractors, leads: leadCount };
@@ -1560,6 +1646,7 @@ export async function notifyVisitReminderCrew(
   contractorPhone: string | null | undefined,
   q: QuoteInfo,
   contractorName?: string | null,
+  delayMinutes = 0,
 ): Promise<SendResult | null> {
   if (!contractorPhone) return null;
   const when = `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`;
@@ -1580,6 +1667,7 @@ export async function notifyVisitReminderCrew(
       q.job_token ? jobLink(q.job_token) : null,
     ]),
     { quoteId: q.id, kind: "visit_reminder", role: "crew" },
+    { delayMinutes },
   ).catch(() => null);
 }
 

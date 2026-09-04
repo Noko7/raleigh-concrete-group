@@ -3,11 +3,13 @@ import { NextResponse } from "next/server";
 import { ymdInDays } from "@/lib/crm/clock";
 import { CREW_REMINDER_DAYS } from "@/lib/crm/constants";
 import {
+  REMINDER_SPACING_MINUTES,
   flushHeldMessages,
   notifyCrewReminder,
   notifyQuoteFollowup,
   notifyReminder,
   notifyStaleLeads,
+  spacer,
   type StaleLeadGroup,
 } from "@/lib/crm/notify";
 import {
@@ -29,6 +31,7 @@ export const dynamic = "force-dynamic";
 //   0. Send anything quiet hours held overnight (see flushHeldMessages).
 //   1. Ask the customer to confirm a job that's ~2 days out.
 //   2. Remind the assigned crew 3 days out, the day before, and the morning of.
+//      Soonest first, and spaced 15 minutes apart per person (see spacer()).
 //   3. Nudge the assigned contractor (+owner) about leads nobody has quoted
 //      or scheduled a visit for, 12+ hours old - one text listing all of
 //      theirs, not one per lead.
@@ -58,6 +61,15 @@ export async function GET(request: Request) {
   // than anything below, and it has been waiting longer.
   const flushed = await flushHeldMessages();
 
+  // One spacer for the whole run, shared by the crew countdown and the stale
+  // nudge below. A contractor with two jobs starting this week and three
+  // untouched leads has five things to hear from us; sent together they are one
+  // buzz nobody unpacks. Their first goes now, the rest queue 15 minutes apart.
+  //
+  // Deliberately not shared with the customer-facing sections: customers get at
+  // most one text each from a run, and they are not each other's noise.
+  const nextSlot = spacer();
+
   // ── 1. Customer confirmation, two days out ────────────────────────────────
   const target = ymdInDays(2);
   const jobs = await listBookedForReminder(target);
@@ -74,7 +86,12 @@ export async function GET(request: Request) {
   // Each stage is recorded on the job, so a retried or manually triggered cron
   // run can't text the same crew member the same reminder twice.
   let crewSent = 0;
-  for (const daysOut of CREW_REMINDER_DAYS) {
+  let crewQueued = 0;
+  // Soonest job first, which decides who gets the un-delayed slot. The list is
+  // written [3, 1, 0] because that is how it reads as a policy, but sending it
+  // in that order would put "you are on site this morning" behind a job three
+  // days out. Nothing urgent waits on something that isn't.
+  for (const daysOut of [...CREW_REMINDER_DAYS].sort((a, b) => a - b)) {
     const stage = String(daysOut);
     const day = ymdInDays(daysOut);
     for (const q of await listJobsOn(day)) {
@@ -84,7 +101,7 @@ export async function GET(request: Request) {
       const crew = await getStaffContactById(q.assigned_to);
       if (!crew?.phone) continue;
 
-      const res = await notifyCrewReminder(crew.phone, q, daysOut, crew.full_name);
+      const res = await notifyCrewReminder(crew.phone, q, daysOut, crew.full_name, nextSlot(crew.phone));
       // Marked either way: a failed send is logged by sendSmsResult, and
       // retrying it tomorrow would be a reminder for the wrong day.
       await markCrewReminded(q, stage);
@@ -92,8 +109,12 @@ export async function GET(request: Request) {
         days_out: daysOut,
         to: crew.phone,
         delivered: Boolean(res?.ok),
+        // Queued behind their earlier texts rather than sent this second. The
+        // log has to say so, or a spaced reminder reads as one that failed.
+        queued_for: res?.spaced ? (res.sendAfterLabel ?? null) : null,
       });
       if (res?.ok) crewSent += 1;
+      else if (res?.spaced) crewQueued += 1;
     }
   }
 
@@ -116,7 +137,11 @@ export async function GET(request: Request) {
     }
     group.leads.push(q);
   }
-  const staleSent = await notifyStaleLeads([...byContractor.values()]).catch(() => null);
+  // Behind whatever this run has already told them about actual booked work:
+  // "you have five leads going cold" is the least time-critical thing here.
+  const staleSent = await notifyStaleLeads(
+    [...byContractor.values()].map((g) => ({ ...g, delayMinutes: nextSlot(g.phone) })),
+  ).catch(() => null);
   // Marked and recorded per lead either way: the digest is how it was sent, but
   // "this job was chased" still belongs on this job's own activity log.
   for (const q of stale) {
@@ -144,6 +169,8 @@ export async function GET(request: Request) {
     found: jobs.length,
     sent,
     crewSent,
+    crewQueued,
+    spacingMinutes: REMINDER_SPACING_MINUTES,
     staleSent,
     followupSent,
   });

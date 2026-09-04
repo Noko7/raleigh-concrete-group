@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { ymdInDays } from "@/lib/crm/clock";
-import { flushHeldMessages, notifyVisitReminder, notifyVisitReminderCrew } from "@/lib/crm/notify";
+import { flushHeldMessages, notifyVisitReminder, notifyVisitReminderCrew, spacer } from "@/lib/crm/notify";
 import {
   addAdminEvent,
   getStaffContactById,
@@ -41,6 +41,10 @@ export async function GET(request: Request) {
   const tomorrow = ymdInDays(1);
   let customerSent = 0;
   let crewSent = 0;
+  // A contractor with three visits tomorrow gets three texts. Their first
+  // arrives now; the others queue 15 minutes apart, so the evening brief is
+  // read as three appointments rather than one blur.
+  const nextSlot = spacer();
 
   for (const q of await listVisitsOn(tomorrow)) {
     let touched = false;
@@ -55,7 +59,7 @@ export async function GET(request: Request) {
     if (!q.visit_crew_reminded_at && q.assigned_to) {
       const crew = await getStaffContactById(q.assigned_to);
       if (crew?.phone) {
-        const res = await notifyVisitReminderCrew(crew.phone, q, crew.full_name);
+        const res = await notifyVisitReminderCrew(crew.phone, q, crew.full_name, nextSlot(crew.phone));
         await markVisitCrewReminded(q.id);
         touched = true;
         if (res?.ok) crewSent += 1;

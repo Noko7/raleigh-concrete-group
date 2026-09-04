@@ -246,6 +246,53 @@ Two daily crons, both declared in `vercel.json` and both free on the Hobby plan 
 
 Since both crons only run once a day, a 12h or 48h threshold can be noticed up to ~24h late - an acceptable tradeoff for staying on the free plan.
 
+**Reminders arrive one at a time, not all at once**
+A daily cron does all of its thinking in one second, so everything it worked out
+about one contractor used to land on their phone in that same second. A crew
+member with two jobs starting this week and three untouched leads got five texts
+at 10:00:03, which is read as one interruption and answered like one: they skim
+the last and lose the other four.
+
+Each person's texts from a single run now get slots, 15 minutes apart. **The
+first is never delayed** - whatever a run has to tell somebody, the most urgent
+thing reaches them exactly as fast as it always did, and only the pile behind it
+is spread out. Slots are per person, so two contractors never wait on each
+other. Set `REMINDER_SPACING_MINUTES` (default `15`) to change the gap, or `0`
+to go back to sending everything at once.
+
+Which reminder gets the un-delayed slot is decided by how soon it matters. The
+crew countdown is sent **soonest job first** - the morning-of text goes now, the
+day-before queues behind it, the 3-days-out behind that - and the stale-lead
+nudge queues last, because "five leads are going cold" is the least
+time-critical thing in the run.
+
+Spacing reuses the quiet-hours queue: a spaced text is a `quote_messages` row
+with a `send_after` on it, and it shows in the job's **Texts sent** log as
+"Queued for 10:15 AM" rather than as a failure. The activity log says the same.
+Quiet hours is now checked per row rather than being a reason to abandon the
+whole flush, since it is a rule about customers and the crew get everything at
+any hour.
+
+**The catch, and the fix.** Nothing in a serverless app sits around waiting to
+send the 10:15 text. The queue drains on the way past: both daily crons on their
+way in, and every text sent during business hours. So on a busy day a spaced
+reminder goes out close to its slot, and on a quiet morning it can wait for the
+6pm cron. That is fine for a 3-days-out notice and poor for anything sharper,
+which is exactly why the first text is never spaced.
+
+To make the spacing exact, add a third cron that drains the queue - the route
+already exists at `/api/cron/drain` (same `CRON_SECRET`, inert until it is
+scheduled):
+
+```json
+{ "path": "/api/cron/drain", "schedule": "*/15 * * * *" }
+```
+
+Vercel's Hobby plan allows **two** cron jobs, each once a day, and both slots
+are taken, so this needs a plan that allows a third and a schedule more often
+than daily. Without it, everything above still works - the spacing just resolves
+against the coarser drain the two daily crons already provide.
+
 **One text, not six.** The stale-lead nudge used to send one text per lead, so a contractor who was off yesterday came back to six near-identical alerts and read none of them. It is now a single message per person per run listing every lead of theirs that has gone quiet - the first six spelled out, the rest as a count pointing at the CRM. A single stale lead still gets the fuller one-lead text it always had. The owner's copy spans every contractor and labels each entry with whose it is, so the unassigned pile finally has somewhere to be reported. Each job still records its own `stale_lead_reminded` event, so the per-job trace survives the batching.
 
 The two nudges only chase work from the last **14 days** (`REMINDER_MAX_AGE_DAYS` in `src/lib/crm/queries.ts`). That keeps them off stale pipeline nobody intends to work, and - because every existing row counts as un-reminded the first time this runs - stops the first cron after deploy texting every historical lead and old unanswered quote at once.
