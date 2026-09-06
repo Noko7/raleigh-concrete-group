@@ -25,7 +25,6 @@ export type BoardQuote = {
   scheduled_time: string | null;
   visit_date: string | null;
   visit_time: string | null;
-  confirmed_at: string | null;
   job_token: string | null;
 };
 
@@ -74,11 +73,16 @@ function ageBadge(q: BoardQuote, today: string): { text: string; tone: "warn" | 
 const OLDEST_FIRST: ReadonlySet<Status> = new Set(["new", "quoted", "approved", "scheduled"]);
 
 // One clear label per lead type so a card reads at a glance.
+//
+// Null is labelled "In-person quote" rather than a vaguer "Lead". Everything
+// else in the system - visitDateOf, the calendar, the crew reminders - reads a
+// null quote_type as in-person, because that is what every row predating the
+// column actually was. A card calling it something else was the only place that
+// disagreed, and it made a row occupying a visit slot look like it wasn't one.
 function typeLabel(q: BoardQuote, t: Dict): { text: string; cls: string } {
   if (q.quote_type === "online") return { text: t.pipeline.typeOnline, cls: "online" };
   if (q.quote_type === "plans") return { text: t.pipeline.typePlans, cls: "plans" };
-  if (q.quote_type === "inperson") return { text: t.pipeline.typeInPerson, cls: "inperson" };
-  return { text: t.pipeline.typeLead, cls: "inperson" };
+  return { text: t.pipeline.typeInPerson, cls: "inperson" };
 }
 
 function telHref(phone: string): string {
@@ -336,13 +340,35 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                       {q.service || t.pipeline.serviceTBD}
                       {q.city ? ` \u00b7 ${q.city}` : ""}
                     </p>
+                    {/* Pills earn their place or they don't appear. A card that
+                        wears five of them is read as decoration and skimmed
+                        past, which costs more than any one of them adds. Three
+                        rules keep the count down:
+
+                        1. The date pill already says which kind of appointment
+                           it is ("Job Sep 12" / "Visit Sep 12"), so the type
+                           pill is dropped whenever one is showing and the type
+                           is the in-person default. Online and From-plans stay:
+                           those genuinely change what you'd do next.
+                        2. Confirmed / Not confirmed is gone entirely. The
+                           column heading already says Scheduled; the pair added
+                           nothing but a red flag on every booked job that
+                           hadn't yet answered a reminder that goes out two days
+                           before the pour. Worse, "Not confirmed" meant one
+                           thing here and a different thing on the crew's own
+                           job page, where it sat on a slot the customer had
+                           merely offered.
+                        3. Viewed and the assignee are per-card facts nothing
+                           else on screen carries, so they stay. */}
                     {(() => {
                       const kind = typeLabel(q, t);
                       const jobDate = shortDate(q.scheduled_date, locale);
                       const visitDate = shortDate(visitDateOf(q), locale);
+                      const dated = Boolean(jobDate || visitDate);
+                      const showType = !dated || kind.cls !== "inperson";
                       return (
                         <div className="kb-card-meta">
-                          <span className={`kb-pill kb-pill-${kind.cls}`}>{kind.text}</span>
+                          {showType && <span className={`kb-pill kb-pill-${kind.cls}`}>{kind.text}</span>}
                           {jobDate && (
                             <span className="kb-pill kb-pill-date">
                               {t.pipeline.pillJob} {jobDate}
@@ -355,12 +381,6 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                               {q.visit_time ? ` ${q.visit_time}` : ""}
                             </span>
                           )}
-                          {q.status === "scheduled" &&
-                            (q.confirmed_at ? (
-                              <span className="kb-pill kb-pill-confirmed">{t.pipeline.pillConfirmed}</span>
-                            ) : (
-                              <span className="kb-pill kb-pill-unconfirmed">{t.pipeline.pillUnconfirmed}</span>
-                            ))}
                           {q.view_count > 0 && (
                             <span className="kb-pill kb-pill-view">
                               {t.pipeline.pillViewed} {q.view_count}x

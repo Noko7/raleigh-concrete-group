@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/crm/auth";
 import { isLocale } from "@/lib/crm/i18n";
 import { BUSINESS_TZ, now } from "@/lib/crm/clock";
+import { readWorkHours } from "@/lib/crm/constants";
 import { ownerRecipients, sendSmsResult, toE164 } from "@/lib/crm/notify";
 import { setPrimaryContractorId, updateOwnProfile } from "@/lib/crm/queries";
 import { rateLimit } from "@/lib/rate-limit";
@@ -44,6 +45,55 @@ export async function saveSettings(_prev: SaveState, formData: FormData): Promis
 
   revalidatePath("/crm/settings");
   revalidatePath("/crm");
+  return { ok: true, saved: true };
+}
+
+/**
+ * When this person takes on-site quote visits.
+ *
+ * Separate from saveSettings deliberately: the two forms are saved
+ * independently, and a contractor narrowing their hours shouldn't be able to
+ * blank their own alert number as a side effect of a stale name field.
+ *
+ * Everything is re-derived through readWorkHours rather than trusted, so a
+ * hand-posted form can't write a window the check constraint would reject or a
+ * day list that leaves them unbookable.
+ */
+export async function saveWorkHours(_prev: SaveState, formData: FormData): Promise<SaveState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+
+  const startHour = Number(formData.get("work_start_hour"));
+  const endHour = Number(formData.get("work_end_hour"));
+  const days = formData.getAll("work_days").map(Number);
+
+  if (!Number.isFinite(startHour) || !Number.isFinite(endHour)) {
+    return { ok: false, error: "Pick a first and last visit time." };
+  }
+  if (endHour < startHour) {
+    return { ok: false, error: "The last visit can't be earlier than the first." };
+  }
+  // An empty list would be read as "no restriction" by readWorkHours, which is
+  // the right default for a row nobody has touched and the wrong answer to
+  // somebody deliberately unticking every box - so it's refused here instead.
+  if (days.length === 0) {
+    return { ok: false, error: "Pick at least one day, otherwise nobody can book you." };
+  }
+
+  const hours = readWorkHours({ work_start_hour: startHour, work_end_hour: endHour, work_days: days });
+  const ok = await updateOwnProfile(session, {
+    work_start_hour: hours.startHour,
+    work_end_hour: hours.endHour,
+    work_days: hours.days,
+  });
+  if (!ok) {
+    return {
+      ok: false,
+      error: "Could not save your hours. If this keeps happening, run supabase/appointments.sql.",
+    };
+  }
+
+  revalidatePath("/crm/settings");
   return { ok: true, saved: true };
 }
 

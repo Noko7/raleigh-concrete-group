@@ -1,4 +1,5 @@
 import { requireSession } from "@/lib/crm/auth";
+import { readWorkHours } from "@/lib/crm/constants";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { ownerRecipientDetails, smsDiagnostics } from "@/lib/crm/notify";
 import { checkClockDrift } from "@/lib/crm/time-check";
@@ -7,6 +8,7 @@ import { ClockCard } from "./clock-card";
 import { SettingsForm } from "./settings-form";
 import { PrimaryContractorForm } from "./primary-contractor-form";
 import { TestSms } from "./test-sms";
+import { WorkHoursForm } from "./work-hours-form";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,13 @@ export default async function SettingsPage() {
         phone={staff.phone ?? ""}
         email={staff.email ?? session.user.email ?? ""}
         role={staff.role}
+        locale={isLocale(staff.locale) ? staff.locale : "en"}
+      />
+      {/* Directly under your own details, because it is one of them. Owners get
+          it too: an owner who goes out on estimates is on the same routing as
+          anyone else and needs a window of their own. */}
+      <WorkHoursForm
+        hours={readWorkHours(staff)}
         locale={isLocale(staff.locale) ? staff.locale : "en"}
       />
       {isOwner && (

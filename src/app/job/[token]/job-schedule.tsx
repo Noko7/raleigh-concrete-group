@@ -5,7 +5,7 @@ import { useActionState, useState } from "react";
 import { to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
 import { setJobDate } from "@/app/crm/quotes/[id]/actions";
-import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
+import type { PreferredSlot, ScheduleState } from "@/app/crm/quotes/[id]/types";
 import { DateField } from "./date-field";
 
 // Settling the work day from the crew's own job page. Same server action the CRM
@@ -25,19 +25,22 @@ function pretty(s: string, locale: Locale): string {
 
 export function JobSchedule({
   id,
-  preferredDates,
+  preferred,
   minDate,
   locale,
 }: {
   id: string;
-  preferredDates: string[];
+  preferred: PreferredSlot[];
   minDate: string;
   locale: Locale;
 }) {
   const [state, formAction, pending] = useActionState<ScheduleState, FormData>(setJobDate, { ok: false });
   const t = dict(locale);
-  // The start time rides along with whichever day gets tapped.
-  const [time, setTime] = useState("9:00 AM");
+  // Seeded from the time the customer asked for, so the crew standing in the
+  // yard confirms the appointment that was actually agreed rather than a house
+  // default. Touching the box overrides it for every day - see `overridden`.
+  const [time, setTime] = useState(preferred.find((p) => p.time)?.time ?? "9:00 AM");
+  const [overridden, setOverridden] = useState(false);
 
   return (
     <section className="js-card">
@@ -54,19 +57,27 @@ export function JobSchedule({
         <input
           type="time"
           value={to24Hour(time)}
-          onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
+          onChange={(e) => {
+            if (!e.target.value) return;
+            setTime(to12Hour(e.target.value));
+            setOverridden(true);
+          }}
         />
       </label>
 
-      {preferredDates.length > 0 && (
+      {preferred.length > 0 && (
         <div className="js-choices">
-          {preferredDates.map((d) => (
-            <form action={formAction} key={d}>
+          {preferred.map((p) => (
+            <form action={formAction} key={p.date}>
               <input type="hidden" name="id" value={id} />
-              <input type="hidden" name="date" value={d} />
-              <input type="hidden" name="time" value={time} />
+              <input type="hidden" name="date" value={p.date} />
+              <input type="hidden" name="time" value={overridden ? time : (p.time ?? time)} />
               <button type="submit" className="js-choice" disabled={pending}>
-                <span className="js-choice-date">{pretty(d, locale)}</span>
+                <span className="js-choice-date">{pretty(p.date, locale)}</span>
+                {/* The hour is on the button because it is half of what they
+                    are agreeing to. A day alone reads as "any time that day",
+                    which is how a crew turns up at 9 for a 7 o'clock pour. */}
+                {p.time && !overridden && <span className="js-choice-time">{p.time}</span>}
                 <span className="js-choice-cta">{t.contractorJob.schedConfirm}</span>
               </button>
             </form>
@@ -75,7 +86,7 @@ export function JobSchedule({
       )}
 
       <details className="js-other">
-        <summary>{t.contractorJob.schedOther}</summary>
+        <summary>{preferred.length > 0 ? t.contractorJob.schedOther : t.schedule.workDay}</summary>
         <form action={formAction} className="js-other-form">
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="time" value={time} />

@@ -14,6 +14,60 @@ export type Staff = {
   service_types: string[] | null;
   // Which language the CRM renders in for this person.
   locale: string;
+  // When this person takes quote visits (CRM → Settings → Working hours). Both
+  // hours are the hour a slot STARTS, so 8..16 is nine hourly slots, 8:00 AM
+  // through 4:00 PM. work_days is 0=Sunday..6=Saturday. Nullable for rows that
+  // predate supabase/appointments.sql - always read through readWorkHours().
+  work_start_hour: number | null;
+  work_end_hour: number | null;
+  work_days: number[] | null;
+  // Their Stripe account, once an owner has linked it. The three flags are
+  // Stripe's answer to "can this person be paid" - cached from the API and
+  // kept current by the account.updated webhook, because every screen with a
+  // payment button needs them and none should wait on a round-trip.
+  stripe_account_id: string | null;
+  stripe_charges_enabled: boolean;
+  stripe_payouts_enabled: boolean;
+  stripe_details_submitted: boolean;
+  stripe_checked_at: string | null;
+  created_at: string;
+};
+
+// One payment against a job. A card row moved through Stripe; every other
+// method is money the crew received and recorded.
+export type QuotePayment = {
+  id: string;
+  quote_id: string;
+  method: string;
+  amount_cents: number;
+  // The office's cut taken out of this payment. Only ever non-zero on a card
+  // row, where Stripe moved it as the application fee.
+  fee_cents: number;
+  status: "pending" | "paid" | "failed" | "refunded";
+  // Whose account received it. Stored per payment because a job can be
+  // reassigned after money has moved.
+  stripe_account_id: string | null;
+  checkout_session_id: string | null;
+  payment_intent_id: string | null;
+  refunded_cents: number;
+  // Null means the customer paid it themselves and the webhook wrote the row.
+  recorded_by: string | null;
+  note: string | null;
+  created_at: string;
+  paid_at: string | null;
+  refunded_at: string | null;
+};
+
+// A contractor clearing what they owe the office on cash jobs. Owner-recorded
+// only - the debt runs one way and so does the right to say it is settled.
+export type FeeSettlement = {
+  id: string;
+  staff_id: string;
+  quote_id: string | null;
+  amount_cents: number;
+  method: string;
+  note: string | null;
+  recorded_by: string | null;
   created_at: string;
 };
 
@@ -67,6 +121,15 @@ export type Quote = {
   scheduled_time: string | null;
   // Days the customer said work for them; the crew confirms one of these.
   preferred_dates: string[] | null;
+  // The start time they asked for on each of those days, index-aligned with
+  // preferred_dates. An entry is null on a quote accepted before the customer
+  // was asked for a time, and the crew's card falls back to its own default.
+  preferred_times: (string | null)[] | null;
+  // The office's cut, frozen onto the job the first time money moves. Never
+  // recalculated: a contractor crossing the 3-job threshold mid-job must not
+  // silently reprice work that was already quoted and agreed.
+  fee_rate: number | null;
+  fee_total_cents: number | null;
   scheduled_by: string | null;
   scheduled_at: string | null;
   discount_accepted: boolean;

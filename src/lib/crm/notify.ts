@@ -14,6 +14,10 @@ import { phoneDisplay } from "@/lib/site-data";
 import { clockLabel, hourLabel, inQuietHours, nextSendableAt, now, QUIET_FROM_HOUR, QUIET_UNTIL_HOUR } from "./clock";
 import { QUOTE_TTL_DAYS, noEmDash, visitDateOf } from "./constants";
 import { SITE_ORIGIN } from "./env";
+// Named apart from the local dollars-only `usd` below: money that came from the
+// ledger is in cents and must be printed with them, or a $6,172.50 deposit goes
+// out as "$6,172.5".
+import { usd as money } from "./fees";
 import {
   claimMessage,
   finishMessage,
@@ -544,6 +548,12 @@ export function quoteLink(token: string): string {
 export function confirmLink(token: string): string {
   return `${SITE_ORIGIN}/confirm/${token}`;
 }
+// The customer's payment page. Same token as their quote, and the same link for
+// the life of the job - deposit, balance and anything in between - so the
+// office can text it again at any point without minting a new one.
+export function payLink(token: string): string {
+  return `${SITE_ORIGIN}/pay/${token}`;
+}
 
 // Used to introduce the business in the FIRST text a customer ever gets, and
 // nowhere else. A name on that one message is a person saying hello; a name on
@@ -601,6 +611,9 @@ type QuoteInfo = {
   scheduled_date?: string | null;
   scheduled_time?: string | null;
   preferred_dates?: string[] | null;
+  // Index-aligned with preferred_dates: the start time they asked for on each
+  // of those days. Null entries are quotes accepted before we asked for one.
+  preferred_times?: (string | null)[] | null;
   visit_date?: string | null;
   visit_time?: string | null;
   public_token?: string;
@@ -1054,7 +1067,14 @@ export async function notifyQuoteSent(
 // ── 6. Customer approved: thank them, but don't promise a day yet ───────────
 // They've proposed dates; the crew confirms one. Saying "we'll confirm" here is
 // what stops the customer assuming their first choice is locked in.
-export async function notifyCustomerApproved(q: QuoteInfo): Promise<void> {
+export async function notifyCustomerApproved(
+  q: QuoteInfo,
+  // The deposit to ask for, in cents, when the crew on this job can take a
+  // card. Null on a cash-only job: a payment link nobody can pay is worse than
+  // no link, and the crew will collect on site.
+  depositCents?: number | null,
+): Promise<void> {
+  const asking = Boolean(depositCents && depositCents > 0 && q.public_token);
   await sendSms(
     q.phone,
     text([
@@ -1069,6 +1089,20 @@ export async function notifyCustomerApproved(q: QuoteInfo): Promise<void> {
         : null,
       q.chosen && q.chosen.accepted.length > 0 ? "" : null,
       "We're checking the crew's schedule against the days you picked and will text you shortly to confirm your project date and time.",
+      // The deposit ask rides on the message they were always going to get,
+      // rather than arriving as a second text a minute later. It goes last, on
+      // its own lines, and it is an offer rather than an instruction - a
+      // customer who would rather hand the crew cash has not done anything
+      // wrong and shouldn't be told to pay online.
+      ...(asking
+        ? [
+            "",
+            `Your deposit is ${money(depositCents as number)}, and paying it locks your date in:`,
+            payLink(q.public_token as string),
+            "",
+            "Prefer cash, check, Zelle or Venmo? Just settle up with the crew on the day.",
+          ]
+        : []),
       "",
       BUSINESS,
     ]),
@@ -1078,7 +1112,16 @@ export async function notifyCustomerApproved(q: QuoteInfo): Promise<void> {
 
 // ── 6b. Approved: tell the owner + crew it needs a date ─────────────────────
 export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: string | null): Promise<void> {
-  const picks = (q.preferred_dates ?? []).map((d) => dayOrNull(d)).filter((d): d is string => Boolean(d));
+  // The day AND the hour they asked for. A list of bare days sends the crew
+  // back to the customer to ask what time, which is the phone call this whole
+  // propose-and-confirm split exists to remove.
+  const times = q.preferred_times ?? [];
+  const picks = (q.preferred_dates ?? [])
+    .map((d, i) => {
+      const day = dayOrNull(d);
+      return day ? `${day}${times[i] ? ` at ${times[i]}` : ""}` : null;
+    })
+    .filter((d): d is string => Boolean(d));
   const wanted = picks.length ? block("Customer prefers:", ...picks) : block("Customer prefers:", "No days given");
 
   await alertOwner(
@@ -1716,29 +1759,59 @@ export async function notifyComplete(q: QuoteInfo): Promise<void> {
   ).catch(() => {});
 }
 
-// ── Payment: text the customer how to pay (Zelle / bank deposit) ────────────
-// PAYMENT_INSTRUCTIONS holds your real payment details, e.g.
-//   "Zelle to pay@raleighconcrete.net or 919-555-0142 (Raleigh Concrete Group)."
-// Falls back to a safe generic line so a missing env var never sends a broken text.
-const PAYMENT_INSTRUCTIONS = (process.env.PAYMENT_INSTRUCTIONS || "").trim();
-export async function notifyPaymentRequest(q: QuoteInfo): Promise<SendResult> {
-  const how = PAYMENT_INSTRUCTIONS || "Reply here and we'll send your payment details.";
+// ── Payment: text the customer their card link ──────────────────────────────
+// The crew's "send a card link" button. Deliberately says the amount and then
+// stops: the page itself is where the customer chooses deposit or balance, and
+// a text that argues the case for paying reads like a collections notice on a
+// job that isn't finished.
+export async function notifyPayLink(q: QuoteInfo, dueCents: number): Promise<SendResult> {
   return sendSmsResult(
     q.phone,
     text([
       `Hi ${firstName(q.name)},`,
-      `your project with ${BUSINESS} is complete.`,
+      `here's your secure payment link for your project with ${BUSINESS}.`,
       "",
-      // The amount they agreed to is on their quote page and not in this
-      // text - see the note on `usd`. An accepted quote's page never expires,
-      // so this link keeps working however long the job ran.
-      ...(q.public_token ? ["Your approved total is on your quote:", quoteLink(q.public_token), ""] : []),
-      "How to pay:",
-      how,
+      ...(dueCents > 0 ? [`Balance: ${money(dueCents)}`, ""] : []),
+      payLink(q.public_token ?? ""),
       "",
-      "Thank you for your business.",
+      "Card, Apple Pay or Google Pay. You can pay it all or part of it.",
+      "",
+      BUSINESS,
     ]),
-    { quoteId: q.id, kind: "payment_request", role: "customer" },
+    { quoteId: q.id, kind: "pay_link", role: "customer" },
+  );
+}
+
+// ── Payment: the crew took money on site ────────────────────────────────────
+// Cash counts the moment the crew says it landed, so this text IS the control.
+// Nobody is approving anything - the owner is being told, immediately, what was
+// taken and what it means for what they're owed, while the crew is still
+// standing in the driveway and a mistake is cheap to fix.
+export async function notifyCashRecorded(input: {
+  q: QuoteInfo;
+  amountCents: number;
+  method: string;
+  who: string;
+  dueCents: number;
+  feeOwedCents: number;
+}): Promise<void> {
+  const { q, amountCents, method, who, dueCents, feeOwedCents } = input;
+  await alertOwner(
+    text([
+      `PAYMENT RECORDED - ${method.toUpperCase()}`,
+      "",
+      ...block("Amount:", money(amountCents)),
+      ...block("Customer:", q.name),
+      ...block("Taken by:", who),
+      ...block("Still due from customer:", dueCents > 0 ? money(dueCents) : "Nothing - paid in full"),
+      // The line the whole cash board exists for. Card payments pay the office
+      // automatically; this one didn't, so the fee is now a debt somebody has
+      // to remember - and the owner should learn that here, not at month end.
+      ...block("They now owe you:", feeOwedCents > 0 ? money(feeOwedCents) : "Nothing on this job"),
+      q.job_token ? jobLink(q.job_token) : null,
+    ]),
+    null,
+    { quoteId: q.id, kind: "cash_recorded" },
   );
 }
 

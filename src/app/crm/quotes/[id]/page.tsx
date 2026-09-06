@@ -8,6 +8,7 @@ import { SITE_ORIGIN } from "@/lib/crm/env";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText } from "@/lib/crm/events";
+import { jobLedger, payeeState } from "@/lib/crm/payments";
 import {
   getQuote,
   listAgreementsForQuote,
@@ -26,8 +27,10 @@ import { CompleteCard } from "./complete-card";
 import { MessageLog } from "./message-log";
 import { QuoteEditor } from "./quote-editor";
 import { CancelAppointment } from "./cancel-appointment";
+import { QuotePayments } from "./quote-payments";
 import { ScheduleCard } from "./schedule-card";
-import { markPaid, requestPayment, rotateTokens } from "./actions";
+import { preferredSlots } from "./types";
+import { rotateTokens } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +93,11 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const minJobDate = todayYmd();
   // Scheduling only makes sense once the customer has actually said yes.
   const showSchedule = quote.customer_response === "accepted" && quote.status !== "lost";
+
+  // Same gate for the money: there is nothing to collect against a price the
+  // customer hasn't agreed to.
+  const money = showSchedule ? await jobLedger(quote) : null;
+  const cardReady = money ? (await payeeState(quote)).ok : false;
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
   const jobLink = `${SITE_ORIGIN}/job/${quote.job_token}`;
@@ -328,7 +336,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               id={quote.id}
               scheduledDate={quote.scheduled_date}
               scheduledTime={quote.scheduled_time}
-              preferredDates={quote.preferred_dates ?? []}
+              preferred={preferredSlots(quote.preferred_dates, quote.preferred_times)}
               minDate={minJobDate}
               locale={locale}
             />
@@ -355,46 +363,54 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               id={quote.id}
               title={t.finish.title}
               hint={t.finish.hint}
-              statusNote={quote.confirmed_at ? t.finish.confirmed : t.finish.awaitingConfirm}
-              statusIsWarning={!quote.confirmed_at}
+              // Not a warning. The customer accepted and the crew booked one of
+              // their own days: the job is on. The reminder two days out is a
+              // courtesy check-in, and a job that hasn't had one yet is not a
+              // job in trouble - which is what the amber here used to imply for
+              // the entire fortnight before the pour.
+              statusNote={quote.confirmed_at ? t.finish.confirmed : t.finish.scheduledNote}
+              statusIsWarning={false}
               buttonLabel={t.finish.markCompleted}
               beforeCount={quote.before_urls?.length ?? 0}
               afterCount={quote.after_urls?.length ?? 0}
             />
           )}
 
-          {quote.status === "completed" && (
-            <div className="crm-card">
-              <h2 className="crm-card-title">{t.finish.payTitle}</h2>
-              <p className="crm-muted crm-sm">
-                {quote.payment_requested_at
-                  ? t.finish.paySent
-                  : t.finish.payHint}
-              </p>
-              <div className="crm-editor-foot">
-                <form action={requestPayment}>
-                  <input type="hidden" name="id" value={quote.id} />
-                  <button type="submit" className="crm-btn crm-btn-ghost">
-                    {quote.payment_requested_at ? t.finish.resendPayment : t.finish.requestPayment}
-                  </button>
-                </form>
-                <form action={markPaid}>
-                  <input type="hidden" name="id" value={quote.id} />
-                  <button type="submit" className="crm-btn crm-btn-primary">
-                    {t.finish.markPaid}
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
+          {/* The money on this job, from the moment they approve rather than
+              only once the work is finished - a deposit is collected long
+              before that, and a card that appears at the end can't be where
+              deposits are recorded.
 
-          {quote.status === "paid" && (
-            <div className="crm-card">
-              <h2 className="crm-card-title">{t.finish.paidTitle}</h2>
-              <p className="crm-muted crm-sm">
-                This job is paid and closed out{quote.paid_at ? ` (${fmt(quote.paid_at)})` : ""}. Nothing else to do.
-              </p>
-            </div>
+              This replaced a "Get paid" card whose Mark paid button wrote a
+              timestamp and nothing else. With a real ledger underneath, a job
+              that reads as paid with no payment recorded against it is worse
+              than no button at all. */}
+          {money && (
+            <QuotePayments
+              id={quote.id}
+              locale={locale}
+              isOwner={isOwner}
+              cardReady={cardReady}
+              totalCents={money.ledger.totalCents}
+              paidCents={money.ledger.paidCents}
+              dueCents={money.ledger.dueCents}
+              feeTotalCents={money.ledger.feeTotalCents}
+              feeCollectedCents={money.ledger.feeCollectedCents}
+              feeDueCents={money.ledger.feeDueNowCents}
+              rows={money.rows.map((r) => ({
+                id: r.id,
+                method: r.method,
+                amount_cents: r.amount_cents,
+                refunded_cents: r.refunded_cents,
+                status: r.status,
+                paid_at: r.paid_at,
+                created_at: r.created_at,
+                // Cash goes back the way it came; only a settled card payment
+                // has anything on Stripe's side to reverse.
+                refundable:
+                  r.method === "card" && r.status !== "pending" && Boolean(r.payment_intent_id && r.stripe_account_id),
+              }))}
+            />
           )}
 
           <div className="crm-card">

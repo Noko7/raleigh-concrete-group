@@ -6,6 +6,7 @@ import { AgreementList, AgreementStatusBadge } from "../agreements/agreement-lis
 import { AddContractor } from "./add-contractor";
 import { DeleteContractor } from "./delete-contractor";
 import { EditContact } from "./edit-contact";
+import { StripePayee } from "./stripe-payee";
 import { InviteContractor } from "./invite-contractor";
 import { ResetPassword } from "./reset-password";
 import { revokeContractorInvite, setContractorActive } from "./actions";
@@ -157,6 +158,7 @@ export default async function ContractorsPage() {
                   <th>Phone</th>
                   <th>Job types</th>
                   <th>Status</th>
+                  <th>Gets paid</th>
                   <th>Agreement</th>
                   <th></th>
                 </tr>
@@ -183,6 +185,15 @@ export default async function ContractorsPage() {
                       ) : (
                         <span className="crm-badge crm-badge-lost">Inactive</span>
                       )}
+                    </td>
+                    <td>
+                      <StripePayee
+                        staffId={c.id}
+                        name={c.full_name || "them"}
+                        accountId={c.stripe_account_id}
+                        chargesEnabled={c.stripe_charges_enabled}
+                        detailsSubmitted={c.stripe_details_submitted}
+                      />
                     </td>
                     <td>
                       {(() => {

@@ -2,9 +2,13 @@
 // and the Security dashboard so both describe an event the same way.
 import { clockLabel } from "./clock";
 import { STATUS_LABELS } from "./constants";
+import { usd } from "./fees";
 import type { QuoteEvent } from "./types";
 
 const statusLabel = (v: unknown) => STATUS_LABELS[String(v) as keyof typeof STATUS_LABELS] ?? String(v ?? "N/A");
+
+// Money in the log is always stored in cents, same as the ledger it came from.
+const money = (v: unknown) => (v == null ? "$0.00" : usd(Number(v) || 0));
 
 // When a text held by quiet hours is due, in Raleigh time - "tomorrow at
 // 8:00 AM" rather than the ISO stamp the event actually stores.
@@ -63,7 +67,11 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     }
     case "customer_accepted": {
       const picks = Array.isArray(m.preferred_dates) ? (m.preferred_dates as string[]) : [];
-      const wanted = picks.length ? `, prefers ${picks.join(", ")}` : "";
+      // The hour they asked for on each day, where the log has one. Older
+      // entries recorded days only and still read correctly.
+      const at = Array.isArray(m.preferred_times) ? (m.preferred_times as (string | null)[]) : [];
+      const asked = picks.map((d, i) => `${d}${at[i] ? ` ${at[i]}` : ""}`);
+      const wanted = asked.length ? `, prefers ${asked.join(", ")}` : "";
       // On a quote with options, which ones they took is the whole story - the
       // total alone doesn't say whether the sidewalk is in it.
       const yes = Array.isArray(m.accepted_options) ? (m.accepted_options as string[]) : [];
@@ -136,8 +144,35 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "Custom text FAILED to send";
     case "payment_requested":
       return "Payment instructions texted to the customer";
+    case "pay_link_sent":
+      return m.delivered
+        ? `Card payment link texted to ${String(m.to ?? "the customer")}`
+        : `Card payment link FAILED to send${m.error ? ` - ${String(m.error)}` : ""}`;
+    // What they said at the moment they approved. Not a commitment - it just
+    // tells the crew whether to expect a card or a cheque book.
+    case "payment_choice":
+      return m.choice === "card"
+        ? "Customer chose to pay by card"
+        : "Customer chose to pay the crew directly";
+    case "payment_received": {
+      const how = String(m.method ?? "payment");
+      const fee = Number(m.fee_cents ?? 0);
+      // The office's cut is on the line because this is the only record that
+      // says whether it was collected with the payment or left owed.
+      return `${how === "card" ? "Card payment" : `${how.charAt(0).toUpperCase()}${how.slice(1)} recorded`}: ${money(m.amount_cents)}${
+        how === "card" ? ` (fee ${money(fee)})` : ""
+      }`;
+    }
+    case "payment_refunded":
+      return `Refunded ${money(m.amount_cents)}`;
     case "job_paid":
-      return `Marked paid${m.amount != null ? ` ($${Number(m.amount).toLocaleString("en-US")})` : ""}`;
+      return `Marked paid${
+        m.amount_cents != null
+          ? ` (${money(m.amount_cents)})`
+          : m.amount != null
+            ? ` ($${Number(m.amount).toLocaleString("en-US")})`
+            : ""
+      }`;
     case "links_rotated":
       return "Customer/job links regenerated (old links disabled)";
     case "quote_created_manually":

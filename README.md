@@ -50,7 +50,7 @@ Clicking any **Get Free Quote** button opens a multi-step modal (`src/components
 1. **Choose a path** - Online quote (fastest) or In-person visit.
 2. **Address** - with free autocomplete (Photon/OpenStreetMap, no API key needed), biased to Raleigh.
 3a. **Online:** upload photos/video (saved to Supabase Storage) so we can quote from satellite + pics.
-3b. **In-person:** pick a scheduling window.
+3b. **In-person:** pick a day and an hourly slot from the crew's own working hours.
 4. **Contact** - name, phone, email → saved as a lead.
 
 Everything is captured early and the form is split into small steps, which converts far better than a
@@ -95,7 +95,7 @@ status drags - ever texts the customer.
 
 1. **New** - quote arrives, auto-assigned to your primary contractor. Owner + contractor get the full brief; the customer gets an acknowledgement (in-person includes their visit date/time).
 2. You set a price + description and hit **Send Quote** → customer gets their quote link (**Quoted**).
-3. Customer approves and picks **up to 3 days that suit them** → they're told we'll confirm shortly; owner + contractor are told it **needs a date** (**Needs scheduling**). Declining notifies owner + contractor (**Lost**).
+3. Customer approves and picks **up to 3 days that suit them, each with a start time** → they're told we'll confirm shortly; owner + contractor are told it **needs a date**, with the hours they asked for (**Needs scheduling**). Declining notifies owner + contractor (**Lost**).
 4. The assigned contractor (or an owner) confirms one of those days on the job page → **this is what books it**: the customer is texted their date, the crew gets the brief, and it lands on Google Calendar (**Scheduled**).
 5. Changing that date later texts the customer that it moved, re-notifies the crew, and updates the calendar. The 2-day reminder resets so they still get one.
 6. Two days before, a daily cron texts the customer a confirm link. "Need to reschedule" pings owner + contractor.
@@ -135,7 +135,7 @@ there. So:
   clicking, which used to mean the office texting itself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql` and `supabase/locale.sql` in the SQL Editor.
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql` and `supabase/appointments.sql` in the SQL Editor.
 
    `supabase/crew-reminders.sql` also (re)adds `scheduled_time`, so running just
    that one file is enough to fix "Could not save that date" when confirming a
@@ -359,6 +359,121 @@ the job itself: owners see everything, a contractor sees the jobs assigned to th
 Until it is run, quoting still works - the app treats a missing table as "this quote has no line
 items" - and the builder says which file to run if a save is attempted.
 
+**Quote visits: back to back, an hour apart, per contractor**
+A visit used to be one of **five fixed slots** two hours apart, capped at **five
+a day for the whole business**, and the cap was checked against whoever happened
+to be the primary contractor. That is three separate ways of losing work: a crew
+member with a free afternoon could not be booked into it, a busy one could be
+booked on top of, and a day looked full to a customer while a second contractor
+sat idle.
+
+A visit is now **an hourly slot on one named contractor's day**. They run back to
+back with **one hour between them**, and the only limits are that person's own
+working window and the hour of clearance either side.
+
+- **Whose calendar** is decided by the same routing that assigns the lead
+  (`staff.service_types` → the primary contractor as a fallback), so the day the
+  customer is shown is the day of the person who will actually drive out. The
+  public form now passes its service to `/api/availability` for exactly this.
+- **The hour of clearance is a distance, not a slot width.** A contractor who
+  books an odd time from their job page - a 9:30 visit - blocks both the 9:00
+  and the 10:00 slot, which a list of fixed slots could not express.
+- **A booked work day still takes the whole day.** A pour is a crew, a truck and
+  a day, so nothing else goes on that contractor's calendar that day.
+- **Installs are unchanged: one per calendar day for the whole business.** Only
+  visits stack.
+- **The crew are not held to their own window** when they book a visit from the
+  job page. The window decides what a *customer* is offered; fitting a visit
+  around a real day is the thing a fixed window can't do.
+
+**Working hours (CRM → Settings)**
+Every person sets when they take visits: the **first** and **last** slot of the
+day (default 8:00 AM to 4:00 PM, which is nine slots) and **which days of the
+week** they take them. The panel shows the resulting slot list as you change it,
+because two hour pickers and seven checkboxes don't tell anybody how many
+appointments a day that adds up to.
+
+Days default to **all seven**, not Monday-Friday. Customers could already book a
+Saturday visit, and a migration that quietly cancels weekend availability for
+every contractor at once is a policy change nobody asked for - so the preference
+starts as "no restriction" and only narrows when somebody sets it.
+
+**Scheduling conflict protection**
+Every path that commits a date runs the same check before it writes:
+
+| Path | Checked |
+| --- | --- |
+| Public quote form (`/api/quote`) | working day, slot exists, one hour clear |
+| `confirmVisit` (job page + CRM) | one hour clear |
+| `rescheduleVisit` (job page, CRM, calendar drag) | one hour clear |
+| `setJobDate` → `confirmSchedule` | one install that day, contractor free |
+| Reassigning a **dated** job (owner) | the new assignee is free that day/slot |
+
+Staff screens name the customer already in the slot, which is what makes a clash
+resolvable. The public form deliberately does not: that endpoint answers to
+anyone, and "already with Jane Smith at 10am" hands a stranger a customer's name
+and schedule.
+
+There is **no unique index** behind the one-hour gap. It is a distance between
+start times rather than a repeated value, so it isn't expressible as uniqueness,
+and a 9:30 visit has to block two slots - which an index on
+`(assigned_to, visit_date, visit_time)` would let straight through. Two things
+narrow the race instead: the public form now writes `assigned_to` **with** the
+row rather than patching it in a moment later, and every check above runs
+server-side against live data rather than the browser's copy of it.
+
+**Three bugs found auditing the accept-to-booked path**
+1. **A duplicate approval put the price back up by $150.** Nothing stopped
+   `recordCustomerResponse` running twice - a double tap, a retried request, a
+   link open in two tabs. The second pass recomputed `quote_amount` from the
+   line items while the $150 save credit was correctly guarded against being
+   applied twice, so the customer's total went *up*, and the office got a second
+   "QUOTE APPROVED" text about a job it already knew about. The same answer is
+   now reported as the success it is with nothing written; a *different* answer
+   is refused rather than quietly applied, because flipping an accepted quote to
+   declined from a stale tab would strand a booked day and a crew already told
+   to turn up.
+2. **A lost job held its calendar day forever.** `qr_one_job_per_day` and
+   `countJobsOn` both matched on `customer_response = 'accepted'` without
+   excluding lost jobs, so a customer who accepted, got a date and then pulled
+   out kept that day locked if the lead was dragged to Lost rather than having
+   its appointment cancelled - with nothing on any screen explaining why the day
+   was full. Both now exclude lost.
+3. **Reassigning a dated job skipped every conflict check.** Every other path
+   picks a date for a known person; this one picks a person for a known date,
+   and nothing looked at the new assignee's calendar. It now runs the same
+   checks a booking does, for the work day and the quote visit both.
+
+**"Confirmed" now means what it says**
+An accepted quote whose day the crew has confirmed reads as **Installation
+scheduled**, in green, on the contractor's job page. It used to read "Customer
+hasn't confirmed yet" in red until they answered the reminder link that goes out
+*two days before the pour* - so a job both sides had agreed spent a fortnight
+looking like it was falling through.
+
+`confirmed_at` is still recorded when the customer answers that reminder; it just
+isn't a warning any more. The pipeline card's **Confirmed / Not confirmed** pill
+pair is gone with it: the column heading already says Scheduled, and worse,
+"Not confirmed" meant something completely different on the crew's own job page,
+where it sat on a slot a customer had merely *offered*. That one now reads **Not
+booked yet**.
+
+**Pipeline card pills**
+A card that wears five pills is read as decoration and skimmed past. Three rules
+keep the count down:
+1. The date pill already says which kind of appointment it is (`Job Sep 12` /
+   `Visit Sep 12`), so the **type** pill is dropped whenever a date is showing
+   and the type is the in-person default. Online and From-plans stay - those
+   change what you'd do next.
+2. **Confirmed / Not confirmed** is gone (above).
+3. **Viewed** and the **assignee** stay: nothing else on screen carries them.
+
+A null `quote_type` is also labelled "In-person quote" rather than a vague
+"Lead". Everything else in the system - `visitDateOf`, the calendar, the crew
+reminders - reads null as in-person, because that is what every row predating the
+column actually was. The card was the only place that disagreed, and it made a
+row occupying a visit slot look like it wasn't one.
+
 **Routing leads to contractors**
 Each contractor has the job types they take (CRM → Crew → Edit details), keyed to the services in `quoteServiceOptions`. A new lead goes to the first active contractor who takes that service, falling back to the primary contractor in Settings when nothing claims it. Nothing ticked means no restriction, so routing is inert until an owner sets a rule.
 
@@ -384,6 +499,104 @@ Setup (one-time):
    - `GOOGLE_REDIRECT_URI` - e.g. `https://crm.raleighconcrete.net/api/google/callback` (must be registered in step 2, exactly).
    - `GOOGLE_CALENDAR_TZ` *(optional)* - IANA zone for timed visit events (default `America/New_York`).
 4. Redeploy, then go to **CRM → Calendar** and click **Connect Google Calendar** (owner only). The contractor's login email is the address that receives invites.
+
+## Getting paid (Stripe Connect + cash)
+
+Run `supabase/payments.sql` once. It adds the Stripe columns on `staff`, the fee
+columns on `quote_requests`, the `quote_payments` ledger and `fee_settlements`.
+
+**The one rule everything else follows:** money moves in one direction. The
+customer pays the **contractor**, and the contractor pays the office its
+percentage out of that. The office never holds a customer's money and never owes
+a contractor anything, so every balance in the system is something owed *to* the
+office and never the other way round.
+
+**Direct charges.** Every card payment is created on the contractor's own
+connected account (`Stripe-Account: acct_…`), so they are the merchant of record:
+their balance, their card fees, their 1099-K. Only the office's cut moves, as a
+Stripe `application_fee_amount`. Leave that header off and the money lands in the
+platform account instead, which is the exact thing this design exists to avoid.
+
+**The fee.** 15% of the job total for a contractor's first three *paid* jobs,
+10% after. The rate is frozen onto the job the first time money actually moves
+(`ensureFeeOnJob`) and never recalculated, so crossing the threshold mid-job
+can't reprice work that was already agreed. The **total** is re-derived against
+the job's current price, so a job that grows tops the office up.
+
+Card payments carry as much of the fee as they can (`applicationFeeFor`), capped
+one cent below the charge because Stripe rejects a fee equal to the payment. On a
+normal job the whole fee comes out of the deposit and the final payment is
+entirely the contractor's. Cash collects nothing, so the fee stays owed and shows
+up on the cash board until they Zelle or Venmo it over.
+
+What a contractor owes *today* is bounded by what the customer has actually
+handed them (`feeDueNowCents`): a $500 cash deposit on a $10,000 job makes $500
+due, not $1,500. The rest becomes due as the balance comes in.
+
+**Where each person meets it**
+
+| Who | Where | What they can do |
+| --- | --- | --- |
+| Customer | `/q/<token>` at the moment they approve | Pay the 50% deposit by card, or approve and pay the crew directly |
+| Customer | `/pay/<token>` | Deposit, balance, or part of it. Same link for the life of the job |
+| Crew | `/job/<token>` → Money on this job | Text a card link, or record cash / check / Zelle / Venmo |
+| Office | `/crm/quotes/<id>` → Money on this job | Same two, plus refunds |
+| Owner | `/crm/money` | Everything collected, what each contractor owes, who still owes you |
+
+The card-or-cash choice is put to the customer at the point of highest intent -
+the approval itself - and never as a separate step later. Both answers approve
+the quote; only the route afterwards differs.
+
+**Cash counts immediately.** No approval queue: the crew records what they were
+handed and you get a text within seconds saying how much, from whom, what is left
+to collect and what they now owe you. A queue would only mean the balance on
+screen is wrong for a day.
+
+**Setup**
+
+1. Vercel env: `STRIPE_PRIV_KEY` (secret key), `STRIPE_WEBHOOK_SEC` (signing
+   secret). `STRIPE_PUB_KEY` is not used - checkout is a server-side redirect to
+   Stripe's hosted page, so no publishable key ever reaches the browser.
+2. Stripe → **Developers → Event destinations** → endpoint
+   `https://www.raleighconcrete.net/api/stripe/webhook`, with **Events from:
+   Connected accounts**. This is not optional: direct charges belong to the
+   connected account, so with the default "Your account" scope you receive
+   **zero** `checkout.session.completed` events and every payment silently stays
+   unpaid. Subscribe to `checkout.session.completed`, `charge.refunded` and
+   `account.updated`.
+3. Per contractor: create an **Express** account in the Stripe Dashboard, send
+   them the onboarding link, then paste the `acct_…` into CRM → Crew → Gets paid.
+   Account settings: country **United States**, Stripe fees paid by **the
+   connected account**, negative balance liability **your platform**,
+   capabilities **card_payments** + **transfers**, MCC **1771 (Concrete Work
+   Services)**, payouts **daily automatic**.
+
+The endpoint lives at `/api/stripe/webhook`, not under `/crm`, because the CRM
+middleware redirects any cookie-less request to the login page - Stripe sends no
+cookies, so an endpoint under `/crm` would answer every delivery with a 307.
+
+**Belt and braces.** The webhook is the primary path, but the customer lands back
+on `/pay/<token>?done=cs_…` within a second of paying and the two race, so that
+page asks Stripe directly (`reconcileCheckout`) and settles up if the webhook
+hasn't yet. Both paths use the same conditional update, so whichever arrives
+second finds nothing to do. It also means a misconfigured endpoint degrades to
+"a beat slower" rather than "nothing is ever marked paid".
+
+**Affirm** is not hard-coded anywhere: `payment_method_types` is deliberately
+left off the Checkout Session, so each contractor's checkout offers whatever
+their own account has enabled. Apply for it on one account and it appears with no
+deploy. Worth knowing first - Affirm's prohibited list names "home improvement
+services, including contractors and special trade contractors", MCC 1771 is
+*Restricted*, it costs 6% + 30¢ (which the contractor bears under direct
+charges), and platforms don't qualify for the 0% APR plans.
+
+**Refunds** always pass `refund_application_fee`. Without it Stripe returns the
+customer's money out of the contractor's balance while the platform keeps its
+cut, so a refunded job would cost the crew the full amount *plus* the fee.
+
+**The ledger is append-only.** `supabase/payments.sql` grants no `delete` on
+`quote_payments`. A payment that turns out to be wrong is refunded or corrected,
+never erased - it is the record the office and the contractor settle up from.
 
 ## Deploy to Vercel
 This is a standard Next.js app - Vercel builds it in the cloud (no local build needed).

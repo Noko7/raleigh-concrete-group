@@ -8,10 +8,13 @@ import { STATUS_LABELS, requestedVisitOf, visitDateOf } from "@/lib/crm/constant
 import { todayYmd } from "@/lib/crm/clock";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
+import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, listQuoteOptionsAdmin, signFiles } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
+import { preferredSlots } from "@/app/crm/quotes/[id]/types";
 import { JobFinish } from "./job-finish";
+import { JobPayments } from "./job-payments";
 import { JobQuote } from "./job-quote";
 import { JobReschedule } from "./job-reschedule";
 import { JobSchedule } from "./job-schedule";
@@ -78,6 +81,11 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   const options = await listQuoteOptionsAdmin(quote.id);
   const chosen = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response !== "declined") : [];
   const rejected = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response === "declined") : [];
+  // Money only exists once the customer has agreed to a number. Before that
+  // there is nothing to collect and nothing to owe, and a card showing four
+  // zeroes is a card the crew learns to scroll past.
+  const money = accepted ? await jobLedger(quote) : null;
+  const cardReady = accepted ? (await payeeState(quote)).ok : false;
   const photos = quote.file_urls?.length ? await signFiles(quote.file_urls, 7200) : [];
   // What the crew has already put on this job, so the finish card can show
   // counts rather than asking them to remember.
@@ -102,8 +110,16 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // visit that produced it stops being the thing they're driving to.
   //
   // An online request's offered slot comes last and is flagged `pending`, which
-  // renders it in a different colour with "not confirmed" on it. A date shown
-  // the same way as a booking is a date somebody drives to.
+  // renders it in a different colour with "not booked" on it. A date shown the
+  // same way as a booking is a date somebody drives to.
+  //
+  // A booked work day gets the opposite treatment: a green "Installation
+  // scheduled". The customer accepted, the crew picked one of the days they
+  // offered, and that is the job settled - which is exactly what this line
+  // used to deny. It read "Customer hasn't confirmed yet" in red until they
+  // answered the reminder link two days before the pour, so a job that was
+  // agreed on both sides spent a fortnight looking like it was falling
+  // through. confirmed_at is still recorded; it just isn't a warning.
   const isPlans = quote.quote_type === "plans";
   const isInPerson = !isPlans && quote.quote_type !== "online";
   const when = prettyJob
@@ -112,22 +128,17 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         day: prettyJob,
         time: quote.scheduled_time,
         pending: false,
-        // A booked work day the customer hasn't confirmed yet (the 2-day
-        // reminder link) is the one date on this page still at risk of
-        // falling through, so it gets called out in red right where the
-        // crew's eye already lands. Only while it's still ahead of them:
-        // on a finished job nobody needs chasing for a confirmation.
-        unconfirmed: quote.status === "scheduled" && !quote.confirmed_at,
+        booked: quote.status === "scheduled",
       }
     : prettyVisit
-      ? { label: t.contractorJob.quoteVisit, day: prettyVisit, time: quote.visit_time, pending: false, unconfirmed: false }
+      ? { label: t.contractorJob.quoteVisit, day: prettyVisit, time: quote.visit_time, pending: false, booked: false }
       : requestedVisit
         ? {
             label: t.contractorJob.visitAsked,
             day: fmtDay(requestedVisit),
             time: quote.visit_time,
             pending: true,
-            unconfirmed: false,
+            booked: false,
           }
         : null;
 
@@ -156,7 +167,17 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
 
         <div className="job-head">
           <h1 className="job-title">{t.contractorJob.title}</h1>
-          <span className={`crm-badge crm-badge-${quote.status}`}>{t.status[quote.status] ?? STATUS_LABELS[quote.status]}</span>
+          {/* The stage badge steps aside for the green tag on the date below,
+              which says the same word - "scheduled" - louder, and next to the
+              day it is actually about. Two labels saying one thing is how a
+              screen full of little pills stops being read at all. Every other
+              stage still shows it: New, Quoted, Needs scheduling, Completed,
+              Paid and Lost have nothing else on the page announcing them. */}
+          {!when?.booked && (
+            <span className={`crm-badge crm-badge-${quote.status}`}>
+              {t.status[quote.status] ?? STATUS_LABELS[quote.status]}
+            </span>
+          )}
         </div>
         <Link href={`${base}/`} className="job-back">
           {t.contractorJob.backToJobs}
@@ -178,8 +199,8 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               <span className="job-when-label">{when.label}</span>
               <strong className="job-when-day">{when.day}</strong>
               {when.time && <strong className="job-when-time">{when.time}</strong>}
-              {when.pending && <span className="job-when-tag">{t.contractorJob.visitNotConfirmed}</span>}
-              {when.unconfirmed && <span className="job-when-tag job-when-tag-danger">{t.contractorJob.jobNotConfirmed}</span>}
+              {when.pending && <span className="job-when-tag">{t.contractorJob.visitNotBooked}</span>}
+              {when.booked && <span className="job-when-tag job-when-tag-ok">{t.contractorJob.jobScheduled}</span>}
             </div>
           ) : (
             // "No date set yet" on an online quote reads like something is
@@ -229,7 +250,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         {showSchedule && (
           <JobSchedule
             id={quote.id}
-            preferredDates={quote.preferred_dates ?? []}
+            preferred={preferredSlots(quote.preferred_dates, quote.preferred_times)}
             minDate={minJobDate}
             locale={locale}
           />
@@ -260,6 +281,31 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             <h2 className="js-title">{t.contractorJob.doneTitle}</h2>
             <p className="js-lead">{t.contractorJob.doneNote}</p>
           </section>
+        )}
+
+        {/* Getting paid is an action like any other, so it sits with them
+            rather than in a separate place the crew has to remember exists.
+            Below the close-out card because on a finished job the last thing
+            anyone did was tick it off. */}
+        {money && (
+          <JobPayments
+            id={quote.id}
+            locale={locale}
+            cardReady={cardReady}
+            totalCents={money.ledger.totalCents}
+            paidCents={money.ledger.paidCents}
+            dueCents={money.ledger.dueCents}
+            feeDueCents={money.ledger.feeDueNowCents}
+            rows={money.rows.map((r) => ({
+              id: r.id,
+              method: r.method,
+              amount_cents: r.amount_cents,
+              refunded_cents: r.refunded_cents,
+              status: r.status,
+              paid_at: r.paid_at,
+              created_at: r.created_at,
+            }))}
+          />
         )}
 
         {/* What they actually bought, above the customer details, because on a

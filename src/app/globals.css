@@ -1641,9 +1641,10 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.07em;
   border-radius: 999px; padding: 0.25rem 0.6rem; line-height: 1;
 }
-/* A booked work day the customer hasn't confirmed yet - red everywhere else on
-   the site means the same thing, so it does here too. */
-.job-when-tag-danger { background: #b91c1c; color: #fff; }
+/* A work day the customer accepted and the crew booked. Green because it is
+   the good news it sounds like: this used to be a red "customer hasn't
+   confirmed yet" that stayed up for the whole fortnight before the pour. */
+.job-when-tag-ok { background: #15803d; color: #fff; }
 
 .job-meta { display: grid; gap: 0; margin-bottom: 1.4rem; }
 .job-meta > div { display: grid; grid-template-columns: 132px 1fr; gap: 0.5rem; font-size: 1rem; padding: 0.6rem 0; border-bottom: 1px solid #e5e7eb; }
@@ -1689,6 +1690,10 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .js-choice:active { background: rgba(194, 104, 42, 0.08); }
 .js-choice:disabled { opacity: 0.55; }
 .js-choice-date { font-weight: 800; color: #1f2328; }
+/* The hour the customer asked for on that day, beside the day itself. Set in
+   the amber the rest of the page uses for a time so it reads as part of the
+   appointment rather than as a second, competing label. */
+.js-choice-time { flex: none; font-weight: 800; color: var(--amber-dark); font-size: 0.92rem; white-space: nowrap; }
 .js-choice-cta { flex: none; background: var(--amber); color: #fff; font-weight: 800; font-size: 0.8rem; border-radius: 999px; padding: 0.45rem 0.85rem; white-space: nowrap; }
 /* Was sitting flush against whatever came before it (the confirm button on an
    offered slot, or the day-choice buttons) - close enough to read as part of
@@ -1891,8 +1896,9 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .kb-pill-view { background: rgba(74, 222, 128, 0.18); color: #86efac; }
 .kb-pill-assigned { background: rgba(194, 104, 42, 0.24); color: #f0b489; }
 .kb-pill-date { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
-.kb-pill-confirmed { background: rgba(34, 197, 94, 0.22); color: #4ade80; }
-.kb-pill-unconfirmed { background: rgba(248, 113, 113, 0.22); color: #f87171; }
+/* No confirmed/unconfirmed pair here any more: the column heading already says
+   Scheduled, and "Not confirmed" meant something different on the crew's job
+   page, where it sat on a slot a customer had merely offered. */
 /* How long a lead has gone unquoted. Amber at 12 hours (when the contractor
    gets nudged), red at 48, so the card matches the texts going out about it. */
 .kb-age { font-size: 0.72rem; font-weight: 900; padding: 0.1rem 0.45rem; border-radius: 0.35rem; white-space: nowrap; }
@@ -1974,6 +1980,43 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 
 /* ── Scheduling card (confirm / move the work day) ── */
 .sched-time { max-width: 220px; margin-top: 0.6rem; }
+
+/* ── Contractors: who can take card payments ──
+   Three states, not two. "Linked" and "can actually take money" are different
+   facts - an account can be attached and still be mid-review - and collapsing
+   them is how the office sends a customer a payment link that dies on open. */
+.sp { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; }
+.sp-toggle {
+  background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+  font-size: .74rem; font-weight: 700; color: var(--amber); text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sp-toggle:hover { color: var(--amber-dark); }
+/* Wide enough to read a full acct_ id without scrubbing, and pulled out of the
+   table cell so a rarely-used field doesn't set the column width. */
+.sp-panel {
+  position: relative; z-index: 2; min-width: 300px; margin-top: .35rem;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.6rem; padding: .8rem .85rem;
+  display: flex; flex-direction: column; gap: .6rem;
+}
+.sp-form { display: flex; flex-direction: column; gap: .55rem; }
+.sp-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
+.sp-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
+
+/* ── Settings: working hours ── */
+.wh-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+.wh-days { border: none; margin: 0.9rem 0 0.3rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.wh-days legend { font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.75; margin-bottom: 0.45rem; }
+.wh-day { display: inline-flex; align-items: center; gap: 0.35rem; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 999px; padding: 0.35rem 0.7rem; font-size: 0.82rem; font-weight: 800; cursor: pointer; min-height: 38px; }
+.wh-day input { accent-color: var(--amber); }
+.wh-day-on { background: rgba(194, 104, 42, 0.24); border-color: rgba(194, 104, 42, 0.55); }
+/* The panel's output, spelled out. Two hour pickers and seven checkboxes do not
+   tell anybody how many appointments a day that adds up to. */
+.wh-preview { margin-top: 0.6rem; line-height: 1.7; }
+@media (max-width: 520px) {
+  .wh-row { grid-template-columns: 1fr; }
+}
 .sched-picks { margin: 0.9rem 0 0.4rem; }
 .sched-picks-label { color: var(--crm-muted); margin-bottom: 0.4rem; }
 .sched-pick-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
@@ -1985,6 +2028,12 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cq-pick { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; background: #fff; border: 2px solid var(--amber); border-radius: 0.7rem; padding: 0.75rem 0.9rem; font-size: 0.95rem; text-align: left; min-height: 52px; }
 .cq-pick em { display: block; font-style: normal; color: #b45309; font-size: 0.82rem; }
 .cq-pick-taken { border-color: rgba(43, 26, 18, 0.25); }
+/* Each chosen day carries its own start time, so somebody who wants an early
+   Monday and a later Friday can say so without three separate steps. */
+.cq-pick-time { flex: none; padding: 0.4rem 0.5rem; border: 1px solid rgba(43, 26, 18, 0.22); border-radius: 0.5rem; font: inherit; font-weight: 700; background: #fff; min-height: 40px; }
+.cq-pick-add { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; align-items: end; }
+.cq-pick-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; font-weight: 800; color: rgba(43, 26, 18, 0.7); text-transform: uppercase; letter-spacing: 0.04em; }
+.cq-pick-field .cq-date { margin-bottom: 0; }
 .cq-pick button { background: rgba(43, 26, 18, 0.06); border: none; border-radius: 50%; width: 36px; height: 36px; flex: none; font-size: 1.2rem; line-height: 1; cursor: pointer; color: rgba(43, 26, 18, 0.6); }
 .cq-pick button:hover { color: #2b1a12; background: rgba(43, 26, 18, 0.12); }
 
@@ -2361,4 +2410,204 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .qo-row-main { flex-direction: column; }
   .qo-field-price { flex: 1 1 auto; }
   .cq-opt-choice { flex-direction: column; }
+}
+
+/* ── Customer: paying for the job ─────────────────────────────────────────
+   Shares the quote page's ivory-on-charcoal card, because it is the same
+   customer on the same phone one tap later. The one new idea is that money
+   already handed over is stated as plainly as money still owed - a balance
+   with no history behind it is where arguments start. */
+
+/* The deposit choice, offered at the moment they approve. */
+.cq-pay { display: flex; flex-direction: column; gap: 0.55rem; }
+.cq-pay-lead { font-size: 0.9rem; color: rgba(43, 26, 18, 0.75); margin: 0 0 0.15rem; }
+/* Second, not lesser. A customer paying the crew in cash has chosen, not
+   refused, so this reads as an alternative rather than a way out. */
+.cq-pay-alt { background: #fff; color: #2b1a12; border: 2px solid rgba(43, 26, 18, 0.25); cursor: pointer; font: inherit; font-weight: 800; }
+.cq-pay-alt:hover { border-color: #2b1a12; }
+.cq-pay-alt:disabled { opacity: 0.55; cursor: not-allowed; }
+.cq-pay-fine { margin-top: 0.1rem; }
+.cq-confirm-paid { font-size: 0.95rem; color: rgba(43, 26, 18, 0.75); margin-bottom: 1rem; }
+.cq-confirm-pay { display: inline-flex; margin-bottom: 1.25rem; }
+
+.pay-card { display: flex; flex-direction: column; }
+/* Balance due, set at headline size: it is the only number on this page that
+   decides anything, and it is read at arm's length. */
+.pay-due { background: #fff; border: 2px solid var(--amber); border-radius: 0.9rem; padding: 1.1rem 1.25rem; margin-bottom: 1.1rem; }
+.pay-due-clear { border-color: rgba(22, 163, 74, 0.55); }
+.pay-due-label { display: block; font-weight: 700; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.08em; color: rgba(43, 26, 18, 0.55); }
+.pay-due-value { display: block; font-family: var(--font-headline), sans-serif; font-size: 2.8rem; line-height: 1.05; color: #2b1a12; font-variant-numeric: tabular-nums; }
+.pay-bar { height: 6px; border-radius: 999px; background: rgba(43, 26, 18, 0.12); overflow: hidden; margin: 0.7rem 0 0.6rem; }
+.pay-bar span { display: block; height: 100%; background: var(--amber); border-radius: 999px; }
+.pay-due-clear .pay-bar span { background: #16a34a; }
+.pay-split { display: flex; gap: 1.5rem; margin: 0; font-size: 0.85rem; }
+.pay-split dt { color: rgba(43, 26, 18, 0.55); font-weight: 700; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.05em; }
+.pay-split dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* Every payment on the job, cash included. */
+.pay-history { list-style: none; margin: 0 0 1.25rem; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.pay-history li { display: grid; grid-template-columns: 4.5rem 1fr auto; gap: 0.6rem; align-items: baseline; font-size: 0.88rem; padding: 0.45rem 0.7rem; background: rgba(43, 26, 18, 0.04); border-radius: 0.5rem; }
+.pay-history-when { color: rgba(43, 26, 18, 0.55); }
+.pay-history-how { font-weight: 700; }
+.pay-history-amount { font-weight: 800; font-variant-numeric: tabular-nums; }
+.pay-history-amount em { font-style: normal; font-weight: 600; color: rgba(43, 26, 18, 0.55); }
+
+.pay-receipt { background: rgba(22, 163, 74, 0.1); border: 1px solid rgba(22, 163, 74, 0.4); border-radius: 0.9rem; padding: 1rem 1.15rem; margin-bottom: 1.1rem; color: #14532d; }
+.pay-receipt-eyebrow { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; margin: 0; }
+.pay-receipt strong { display: block; font-family: var(--font-headline), sans-serif; font-size: 2rem; line-height: 1.1; }
+.pay-receipt p { margin: 0.25rem 0 0; font-size: 0.9rem; }
+.pay-note { background: rgba(43, 26, 18, 0.06); border-radius: 0.7rem; padding: 0.75rem 0.9rem; margin-bottom: 1.1rem; font-size: 0.88rem; color: rgba(43, 26, 18, 0.8); }
+
+.pay-form { display: flex; flex-direction: column; gap: 0.65rem; margin-bottom: 1.25rem; }
+.pay-choices { display: flex; flex-direction: column; gap: 0.5rem; }
+/* One tap picks the amount. The number leads and the explanation follows it,
+   because the number is what is being agreed to. */
+.pay-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem; width: 100%; text-align: left; padding: 0.8rem 1rem; border: 2px solid rgba(43, 26, 18, 0.18); border-radius: 0.7rem; background: #fff; font: inherit; color: #2b1a12; cursor: pointer; }
+.pay-choice:hover { border-color: rgba(43, 26, 18, 0.45); }
+.pay-choice-on { border-color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); }
+.pay-choice:disabled { opacity: 0.6; cursor: not-allowed; }
+.pay-choice-amount { font-family: var(--font-headline), sans-serif; font-size: 1.7rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pay-choice-note { font-size: 0.82rem; color: rgba(43, 26, 18, 0.7); }
+.pay-choice-other .pay-choice-amount { font-size: 1.15rem; }
+.pay-custom { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(43, 26, 18, 0.6); }
+.pay-custom-field { display: flex; align-items: center; gap: 0.3rem; background: #fff; border: 2px solid rgba(43, 26, 18, 0.2); border-radius: 0.6rem; padding: 0.5rem 0.75rem; font-family: var(--font-headline), sans-serif; font-size: 1.5rem; color: #2b1a12; }
+.pay-custom-field input { flex: 1 1 auto; min-width: 0; border: none; outline: none; background: transparent; font: inherit; color: inherit; font-variant-numeric: tabular-nums; }
+.pay-custom-field:focus-within { border-color: var(--amber); }
+.pay-custom-hint { font-weight: 600; text-transform: none; letter-spacing: 0; }
+.pay-go { width: 100%; text-align: center; }
+.pay-err { background: rgba(185, 28, 28, 0.1); border: 1px solid rgba(185, 28, 28, 0.35); border-radius: 0.6rem; padding: 0.6rem 0.8rem; margin: 0; font-size: 0.88rem; font-weight: 700; color: #991b1b; }
+.pay-fine { font-size: 0.78rem; color: rgba(43, 26, 18, 0.6); margin: 0; line-height: 1.45; }
+.pay-done { font-size: 1rem; }
+.pay-offline { background: #fff; border-radius: 0.9rem; padding: 1.1rem 1.25rem; margin-bottom: 1.25rem; }
+.pay-offline h2 { font-weight: 800; font-size: 0.95rem; margin-bottom: 0.35rem; }
+.pay-offline p { font-size: 0.9rem; color: rgba(43, 26, 18, 0.8); margin: 0; }
+
+@media (max-width: 640px) {
+  .pay-due-value { font-size: 3.2rem; }
+  .pay-choice { min-height: 68px; }
+  .pay-history li { grid-template-columns: 3.6rem 1fr auto; gap: 0.4rem; }
+}
+
+/* ── Crew: money on the job ───────────────────────────────────────────────
+   Read on a phone in a driveway. Two numbers, then two ways to get paid that
+   carry equal weight - cash is not the sad path here, it is half the jobs. */
+.jp-head { border: 2px solid var(--amber); border-radius: 0.7rem; padding: 0.85rem 1rem; margin-bottom: 0.7rem; }
+.jp-head-clear { border-color: #16a34a; }
+.jp-head-label { display: block; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; }
+.jp-head-value { display: block; font-size: 2.1rem; line-height: 1.1; font-weight: 800; color: #1f2328; font-variant-numeric: tabular-nums; }
+.jp-split { display: flex; gap: 1.4rem; margin: 0.5rem 0 0; }
+.jp-split dt { font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; }
+.jp-split dd { margin: 0; font-size: 0.95rem; font-weight: 800; color: #374151; font-variant-numeric: tabular-nums; }
+
+/* The fee. Always shown, including at zero - a percentage somebody meets for
+   the first time at the end of a month is a percentage they argue about. */
+.jp-fee { display: grid; grid-template-columns: 1fr auto; gap: 0.1rem 0.75rem; padding: 0.7rem 0.85rem; border-radius: 0.6rem; background: #f3f4f6; margin-bottom: 1rem; }
+.jp-fee-owed { background: rgba(180, 83, 9, 0.1); }
+.jp-fee-label { font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
+.jp-fee strong { font-size: 1.1rem; font-weight: 800; color: #1f2328; font-variant-numeric: tabular-nums; text-align: right; }
+.jp-fee-note { grid-column: 1 / -1; font-size: 0.82rem; color: #6b7280; line-height: 1.4; }
+
+.jp-ways { display: grid; gap: 0.7rem; }
+.jp-way { border: 1px solid #e2e5ea; border-radius: 0.7rem; padding: 0.85rem 0.9rem; }
+.jp-way h3 { font-size: 0.98rem; font-weight: 800; color: #1f2328; margin-bottom: 0.2rem; }
+.jp-way p { font-size: 0.86rem; color: #6b7280; line-height: 1.45; margin: 0 0 0.7rem; }
+.jp-ghost { background: #fff; color: var(--amber-dark); border: 2px solid var(--amber); }
+
+.jp-form { display: flex; flex-direction: column; gap: 0.6rem; }
+.jp-label { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
+/* Thumb-sized, because this is filled in one-handed while holding something. */
+.jp-methods { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.jp-method { flex: 1 1 30%; min-height: 46px; padding: 0.5rem 0.6rem; border: 2px solid #d1d5db; border-radius: 0.55rem; background: #fff; font: inherit; font-weight: 800; font-size: 0.88rem; color: #374151; cursor: pointer; }
+.jp-method-on { border-color: var(--amber); background: var(--amber); color: #fff; }
+.jp-method:disabled { opacity: 0.55; cursor: not-allowed; }
+.jp-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
+.jp-amount { display: flex; align-items: center; gap: 0.35rem; border: 1px solid #d1d5db; border-radius: 0.6rem; padding: 0.55rem 0.75rem; background: #fff; font-size: 1.4rem; font-weight: 800; color: #1f2328; }
+.jp-amount input { flex: 1 1 auto; min-width: 0; border: none; outline: none; background: transparent; font: inherit; color: inherit; font-variant-numeric: tabular-nums; }
+.jp-amount:focus-within { border-color: var(--amber); }
+.jp-input { padding: 0.65rem 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; font-weight: 600; text-transform: none; letter-spacing: 0; color: #1f2328; background: #fff; min-height: 46px; }
+
+.jp-history-title { margin-top: 1rem; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #9ca3af; }
+.jp-history { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.jp-row { display: grid; grid-template-columns: 1fr auto; gap: 0 0.75rem; padding: 0.5rem 0.7rem; background: #f9fafb; border-radius: 0.5rem; }
+.jp-row-how { font-size: 0.9rem; font-weight: 800; color: #1f2328; }
+.jp-row-when { grid-column: 1; font-size: 0.78rem; color: #9ca3af; }
+.jp-row-amount { grid-row: 1 / span 2; align-self: center; font-size: 1rem; font-weight: 800; color: #1f2328; font-variant-numeric: tabular-nums; }
+/* A card payment the bank hasn't finished. Dimmed rather than hidden: the crew
+   should know something is on its way before they chase the customer. */
+.jp-row-pending { opacity: 0.6; border: 1px dashed #d1d5db; background: #fff; }
+
+@media (min-width: 560px) {
+  .jp-ways { grid-template-columns: 1fr 1fr; align-items: start; }
+}
+
+/* ── Owner: the cash board ────────────────────────────────────────────────
+   One page, three questions: what came in, who owes the office, which
+   customers haven't finished paying. Only the debt gets a colour. */
+.cash-stat-owed { border-color: #b45309; }
+.cash-stat-owed strong { color: #f59e0b; }
+.cash-owed { color: #f59e0b; font-weight: 800; }
+
+/* How the money arrived, with the split drawn rather than described - the
+   cash share is the share that doesn't pay the office on its way past. */
+.cash-methods { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.cash-methods li { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; padding: 0.55rem 0.7rem; border-radius: 0.5rem; background: var(--crm-surface-solid); overflow: hidden; }
+.cash-methods span { position: relative; z-index: 1; font-weight: 700; }
+.cash-methods strong { position: relative; z-index: 1; font-variant-numeric: tabular-nums; }
+.cash-methods i { position: absolute; inset: 0 auto 0 0; background: rgba(194, 104, 42, 0.22); }
+
+.cash-table td { font-variant-numeric: tabular-nums; }
+.cash-note { margin-top: 0.8rem; }
+
+.cash-settle { display: flex; flex-direction: column; align-items: flex-end; gap: 0.6rem; }
+.cash-settle-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; width: min(520px, 100%); background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.8rem; padding: 1rem; text-align: left; }
+.cash-settle-form .crm-btn { grid-column: 1 / -1; }
+.cash-settle-note { grid-column: 1 / -1; }
+
+.cash-feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.cash-feed li { display: grid; grid-template-columns: 4rem 1fr 5rem auto; gap: 0.75rem; align-items: baseline; padding: 0.5rem 0.7rem; border-radius: 0.5rem; background: var(--crm-surface-solid); font-size: 0.9rem; }
+.cash-feed-when { color: var(--crm-muted); font-size: 0.8rem; }
+.cash-feed-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cash-feed-how { color: var(--crm-muted); }
+.cash-feed-amount { font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.cash-feed-amount em { display: block; font-style: normal; font-size: 0.72rem; font-weight: 600; color: var(--crm-muted); }
+
+@media (max-width: 640px) {
+  .cash-settle { align-items: stretch; }
+  .cash-settle-form { grid-template-columns: 1fr; }
+  .cash-feed li { grid-template-columns: 3.4rem 1fr auto; }
+  .cash-feed-how { grid-column: 2; font-size: 0.78rem; }
+}
+
+/* ── Office: money on one job (CRM quote page) ───────────────────────────── */
+.qp-figures { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.7rem; }
+.qp-fig { flex: 1 1 30%; min-width: 110px; display: flex; flex-direction: column; gap: 0.15rem; padding: 0.6rem 0.75rem; border: 1px solid var(--crm-border); border-radius: 0.6rem; }
+.qp-fig span { font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--crm-muted); }
+.qp-fig strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.qp-fig-due { border-color: var(--amber); }
+.qp-fig-clear { border-color: #16a34a; }
+.qp-owed { color: #f59e0b; }
+.qp-fee { margin-bottom: 0.8rem; line-height: 1.5; }
+.qp-actions { flex-wrap: wrap; margin-bottom: 0.6rem; }
+.qp-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; margin: 0.8rem 0; padding: 0.9rem; border: 1px solid var(--crm-border); border-radius: 0.7rem; }
+.qp-form .crm-btn { grid-column: 1 / -1; }
+.qp-note { grid-column: 1 / -1; }
+
+.qp-rows { list-style: none; margin: 0.9rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.qp-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.75rem; align-items: baseline; padding: 0.5rem 0.7rem; border-radius: 0.5rem; background: var(--crm-surface-solid); font-size: 0.9rem; }
+.qp-row-how { font-weight: 700; }
+.qp-row-how em { font-style: normal; font-weight: 400; color: var(--crm-muted); }
+.qp-row-when { color: var(--crm-muted); font-size: 0.8rem; }
+.qp-row-amount { font-weight: 800; font-variant-numeric: tabular-nums; }
+.qp-refund { background: none; border: none; padding: 0; font: inherit; font-size: 0.8rem; font-weight: 700; color: var(--crm-muted); text-decoration: underline; cursor: pointer; }
+.qp-refund:hover { color: #f59e0b; }
+/* The amount going back, spelled out beside the button that sends it. A
+   browser confirm() would say "are you sure" without saying how much. */
+.qp-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; margin-top: 0.3rem; padding: 0.6rem 0.7rem; border: 1px solid rgba(220, 38, 38, 0.4); border-radius: 0.5rem; font-size: 0.85rem; }
+.crm-btn-danger { background: #b91c1c; color: #fff; border-color: #b91c1c; }
+.crm-btn-danger:hover { background: #991b1b; }
+
+@media (max-width: 640px) {
+  .qp-form { grid-template-columns: 1fr; }
+  .qp-row { grid-template-columns: 1fr auto; row-gap: 0.2rem; }
+  .qp-row-when { grid-column: 1; }
 }

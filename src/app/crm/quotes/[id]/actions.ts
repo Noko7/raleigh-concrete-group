@@ -22,7 +22,6 @@ import {
   notifyComplete,
   notifyCustomerRescheduled,
   notifyCustomerScheduled,
-  notifyPaymentRequest,
   notifyQuoteReady,
   notifyQuoteSent,
   notifyQuoteUpdated,
@@ -32,12 +31,11 @@ import {
   type SendResult,
 } from "@/lib/crm/notify";
 import {
-  MAX_VISITS_PER_DAY,
   addEvent,
   clearAppointment,
   confirmSchedule,
   conflictMessage,
-  countVisitsOn,
+  findJobConflict,
   findVisitConflict,
   getQuote,
   getStaffById,
@@ -50,6 +48,7 @@ import {
   updateQuote,
   updateQuoteResult,
 } from "@/lib/crm/queries";
+import { settleJobIfPaid } from "@/lib/crm/payments";
 import type { Quote } from "@/lib/crm/types";
 import type { QuoteOptionDraft } from "@/lib/crm/constants";
 import type { FinishState, SaveState, ScheduleState } from "./types";
@@ -94,6 +93,22 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     const raw = String(formData.get("assigned_to") ?? "").trim();
     const next = raw === "" ? null : raw;
     if (next !== current.assigned_to) {
+      // Moving a job that already has a date onto somebody else puts a date on
+      // THEIR calendar, so it is a booking and has to clear the same checks a
+      // booking does. It didn't, which was the one way left to double-book a
+      // contractor: every other path picks a date for a known person, and this
+      // one picks a person for a known date.
+      //
+      // Both appointments are tested, because a row can be carrying a booked
+      // work day and a quote visit at once and neither may land on top of
+      // something the new assignee already has.
+      const jobDate = current.scheduled_date;
+      const seeDate = visitDateOf(current);
+      const clash =
+        (jobDate ? await findJobConflict(next, jobDate, id) : null) ??
+        (seeDate ? await findVisitConflict(next, seeDate, current.visit_time ?? "", id) : null);
+      if (clash) return { ok: false, error: conflictMessage(clash) };
+
       patch.assigned_to = next;
       events.push({ type: "assigned", meta: { to: next } });
     }
@@ -522,16 +537,14 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
 
-  // Re-confirming the day this job is already on shouldn't report it as full on
-  // account of itself.
-  const alreadyOnThisDay = current.quote_type === "inperson" && current.visit_date === date;
-  if (!alreadyOnThisDay && (await countVisitsOn(date)) >= MAX_VISITS_PER_DAY) {
-    return { ok: false, error: "That day is already full for quote visits. Pick another." };
-  }
-
   // Whoever this job belongs to has to actually be free. Confirming here is the
   // moment an offered slot becomes somewhere a person has to be, so it's the
   // moment to find out they're already booked - not on the morning.
+  //
+  // There is no per-day cap to check any more: visits stack an hour apart, so
+  // the only thing that can be full is the one person's day, and that is
+  // exactly what this asks. A contractor is still not held to their own
+  // Settings window here - they need to fit a visit around a real day.
   const clash = await findVisitConflict(current.assigned_to, date, time, id);
   if (clash) return { ok: false, error: conflictMessage(clash) };
 
@@ -786,6 +799,11 @@ export async function completeJob(_prev: FinishState, formData: FormData): Promi
     session.staff.phone,
   ).catch(() => {});
 
+  // A job the customer already paid in full has been sitting on a paid_at with
+  // no status to match it, because money arriving cannot be allowed to skip
+  // this close-out. Now that the work is done, it can move.
+  await settleJobIfPaid(id).catch(() => {});
+
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
   // The crew marks jobs done from their own job page.
@@ -793,73 +811,10 @@ export async function completeJob(_prev: FinishState, formData: FormData): Promi
   return { ok: true, message: "Job closed out and the customer has been thanked." };
 }
 
-// Text the customer how to pay (Zelle / bank deposit). The actual instructions
-// live in the PAYMENT_INSTRUCTIONS env var so you can change your Zelle handle
-// without a code change.
-export async function requestPayment(formData: FormData): Promise<void> {
-  const session = await getSession();
-  if (!session) return;
-  const id = String(formData.get("id") ?? "");
-  if (!id) return;
-
-  const current = await getQuote(session, id);
-  if (!current) return;
-
-  const sent = await notifyPaymentRequest({
-    id,
-    name: current.name,
-    phone: current.phone,
-    quote_amount: current.quote_amount,
-    // Carries the link to their approved total, since the text itself never
-    // states a figure.
-    public_token: current.public_token,
-  }).catch(() => null);
-
-  await updateQuote(session, id, { payment_requested_at: new Date().toISOString() });
-  await addEvent(session, id, "payment_requested", { delivered: Boolean(sent?.ok) });
-
-  revalidatePath(`/crm/quotes/${id}`);
-  revalidatePath("/crm");
-}
-
-// Money's in. Move it to Paid - the end of the pipeline.
-export async function markPaid(formData: FormData): Promise<void> {
-  const session = await getSession();
-  if (!session) return;
-  const id = String(formData.get("id") ?? "");
-  if (!id) return;
-
-  const current = await getQuote(session, id);
-  if (!current || current.status === "paid") return;
-
-  const updated = await updateQuote(session, id, {
-    status: "paid",
-    paid_at: new Date().toISOString(),
-    completed_at: current.completed_at ?? new Date().toISOString(),
-  });
-  if (!updated) return;
-
-  await addEvent(session, id, "status_changed", { from: current.status, to: "paid" });
-  await addEvent(session, id, "job_paid", { amount: current.quote_amount });
-  await alertOwner(
-    [
-      "PAID",
-      "",
-      "Customer:",
-      current.name,
-      ...(current.quote_amount != null
-        ? ["", "Amount:", `$${Number(current.quote_amount).toLocaleString("en-US")}`]
-        : []),
-      "",
-      "Recorded by:",
-      session.staff.full_name || "crew",
-    ].join("\n"),
-    session.staff.phone,
-  ).catch(() => {});
-
-  revalidatePath(`/crm/quotes/${id}`);
-  revalidatePath("/crm");
-}
+// Payment used to live here: a Zelle-instructions text and a Mark paid button
+// that stamped paid_at and nothing else. Both are gone. Money is recorded
+// against the ledger now - see payment-actions.ts - so "is this paid" has one
+// answer, arrived at by adding up payments rather than by somebody asserting it.
 
 // Regenerate the customer + contractor capability tokens. Use this if a link is
 // leaked or shared too widely: the old /q/<token> and /job/<token> URLs stop

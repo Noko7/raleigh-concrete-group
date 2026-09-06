@@ -4,16 +4,23 @@
 import { todayYmd, ymdInDays } from "./clock";
 import {
   DECLINE_CREDIT,
+  DEFAULT_WORK_HOURS,
   LEAD_TIME_DAYS,
   MAX_PREFERRED_DATES,
   MAX_QUOTE_OPTIONS,
   OPTION_DESC_MAX,
   OPTION_TITLE_MAX,
   TIME_RE,
+  VISIT_GAP_MINUTES,
+  minutesOfTime,
   noEmDash,
   optionsTotal,
+  readWorkHours,
+  slotsFor,
   visitDateOf,
+  worksOn,
   type QuoteOptionDraft,
+  type WorkHours,
 } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
@@ -386,15 +393,26 @@ export async function getStaffById(session: Session, id: string): Promise<Staff 
 
 // Self-service profile update. Uses the service role so a contractor can edit
 // their own row, but the server restricts the write to their own id and to the
-// name/phone columns only - role and active can never be changed here.
+// name/phone/language/hours columns only - role and active can never be changed
+// here.
 export async function updateOwnProfile(
   session: Session,
-  patch: { full_name?: string | null; phone?: string | null; locale?: string },
+  patch: {
+    full_name?: string | null;
+    phone?: string | null;
+    locale?: string;
+    work_start_hour?: number;
+    work_end_hour?: number;
+    work_days?: number[];
+  },
 ): Promise<boolean> {
   const body: Record<string, unknown> = {};
   if (patch.full_name !== undefined) body.full_name = patch.full_name;
   if (patch.phone !== undefined) body.phone = patch.phone;
   if (patch.locale !== undefined) body.locale = patch.locale;
+  if (patch.work_start_hour !== undefined) body.work_start_hour = patch.work_start_hour;
+  if (patch.work_end_hour !== undefined) body.work_end_hour = patch.work_end_hour;
+  if (patch.work_days !== undefined) body.work_days = patch.work_days;
   if (Object.keys(body).length === 0) return true;
   const res = await pgAdmin(`staff?id=eq.${encodeURIComponent(session.staff.id)}`, {
     method: "PATCH",
@@ -582,35 +600,34 @@ export async function lastMessageOf(session: Session, quoteId: string, kind: str
 }
 
 // ── Booking capacity ────────────────────────────────────────────────────────
-// One booked job per day; up to five in-person quote visits per day.
+// One booked WORK day per day, for the whole business: a pour is a crew, a
+// truck and a day, and there is no second one to run alongside it.
+//
+// Quote visits have no per-day cap at all any more. They are an hour each on
+// one named contractor's calendar, so what limits them is that person's working
+// window and the hour of clearance either side - see visitAvailability below.
+// A business-wide count was the wrong shape for them twice over: it told a
+// customer a day was full while a second contractor sat idle, and it counted
+// against whoever happened to be the primary contractor rather than the person
+// the lead actually routes to.
 export const MAX_JOBS_PER_DAY = 1;
-export const MAX_VISITS_PER_DAY = 5;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const UUID_RE = /^[0-9a-fA-F-]{36}$/;
 
 // How many work jobs are already booked on a date (accepted quotes). Optionally
 // ignore one quote id (so re-accepting the same quote doesn't count against it).
+//
+// Lost jobs don't count, and didn't used to be excluded. A customer who
+// accepted, got a date, then pulled out leaves an accepted row with its
+// scheduled_date still on it if the lead was dragged to Lost rather than having
+// its appointment cancelled - and that day then read as full for the rest of
+// time, with nothing on any screen to explain why. supabase/appointments.sql
+// widens the matching unique index the same way, so the two agree.
 export async function countJobsOn(date: string, excludeId?: string): Promise<number> {
   if (!ISO_DATE.test(date)) return 0;
-  let path = `quote_requests?scheduled_date=eq.${date}&customer_response=eq.accepted&select=id`;
+  let path = `quote_requests?scheduled_date=eq.${date}&customer_response=eq.accepted&status=neq.lost&select=id`;
   if (excludeId && /^[0-9a-fA-F-]{36}$/.test(excludeId)) path += `&id=neq.${excludeId}`;
   const res = await pgAdmin(path);
-  if (!res.ok) return 0;
-  return ((await res.json()) as unknown[]).length;
-}
-
-// How many in-person quote visits are already scheduled on a date. Online
-// requests are excluded even when the row carries a date - they're a photo
-// review, not a slot in anyone's day, and counting them told real customers a
-// day was full when nobody was going anywhere. Rows saved before quote_type
-// existed are null and still count, since those were all visits.
-export async function countVisitsOn(date: string): Promise<number> {
-  if (!ISO_DATE.test(date)) return 0;
-  // Allow-list, mirroring visitDateOf: only in-person rows and legacy nulls
-  // occupy a slot. A 'plans' row is desk work with no place to be, so it must
-  // not make a day look full.
-  const res = await pgAdmin(
-    `quote_requests?visit_date=eq.${date}&or=(quote_type.is.null,quote_type.eq.inperson)&select=id`,
-  );
   if (!res.ok) return 0;
   return ((await res.json()) as unknown[]).length;
 }
@@ -630,17 +647,25 @@ export type Commitment = {
 
 // Everything one contractor is already committed to on a date.
 //
+// A null staffId is the unassigned pile, read as one shared calendar rather
+// than as "nobody, so anything goes". Routing can fail to name a contractor -
+// no rule matches the service and no primary is set - and when it does, two
+// customers booking the same 10am still have to be stopped: somebody will end
+// up owning both, and it will be the same somebody.
+//
 // Two things deliberately don't count. An online request's visit_date is a slot
 // the customer offered, not an appointment anyone agreed to, so it can't block
 // a real booking. And a lost job isn't happening at all.
 export async function contractorCommitments(
-  staffId: string,
+  staffId: string | null,
   date: string,
   excludeId?: string,
 ): Promise<Commitment[]> {
-  if (!ISO_DATE.test(date) || !/^[0-9a-fA-F-]{36}$/.test(staffId)) return [];
+  if (!ISO_DATE.test(date)) return [];
+  if (staffId !== null && !UUID_RE.test(staffId)) return [];
+  const who = staffId === null ? "assigned_to=is.null" : `assigned_to=eq.${staffId}`;
   const res = await pgAdmin(
-    `quote_requests?assigned_to=eq.${staffId}&status=neq.lost` +
+    `quote_requests?${who}&status=neq.lost` +
       `&or=(scheduled_date.eq.${date},visit_date.eq.${date})` +
       `&select=id,name,quote_type,customer_response,scheduled_date,scheduled_time,visit_date,visit_time`,
   );
@@ -673,9 +698,27 @@ export async function contractorCommitments(
 
 const clockKey = (t?: string | null) => (t ?? "").trim().toUpperCase().replace(/\s+/g, " ");
 
+// Do two appointments sit too close together on one person's day?
+//
+// The rule is a distance between start times, not two slots overlapping, which
+// is what lets an odd time booked from the job page behave correctly: a 9:30
+// visit is within the hour of both the 9:00 and the 10:00 slot and blocks both.
+// A time we can't parse falls back to an exact string match rather than
+// silently letting everything through.
+function tooClose(a: string | null | undefined, b: string | null | undefined): boolean {
+  const x = minutesOfTime(a);
+  const y = minutesOfTime(b);
+  if (x === null || y === null) return clockKey(a) === clockKey(b);
+  return Math.abs(x - y) < VISIT_GAP_MINUTES;
+}
+
 // A booked work day is a full day on site, so anything else already on that
 // contractor's date blocks it - including a quote visit, which would otherwise
 // sit in the middle of a pour.
+//
+// Nobody assigned means nobody to double-book, and the one-job-per-day cap
+// above already covers the business, so this answers null rather than reading
+// the unassigned pile the way the visit check does.
 export async function findJobConflict(
   staffId: string | null | undefined,
   date: string,
@@ -685,17 +728,17 @@ export async function findJobConflict(
   return (await contractorCommitments(staffId, date, excludeId))[0] ?? null;
 }
 
-// A visit is about an hour, so another visit only clashes at the same time. A
-// job that day still blocks every slot.
+// A visit is an hour of somebody's day plus the drive either side, so another
+// visit clashes if it starts within VISIT_GAP_MINUTES. A booked work day that
+// day still blocks every slot on it.
 export async function findVisitConflict(
   staffId: string | null | undefined,
   date: string,
   time: string,
   excludeId?: string,
 ): Promise<Commitment | null> {
-  if (!staffId) return null;
-  const busy = await contractorCommitments(staffId, date, excludeId);
-  return busy.find((c) => c.kind === "job" || clockKey(c.time) === clockKey(time)) ?? null;
+  const busy = await contractorCommitments(staffId ?? null, date, excludeId);
+  return busy.find((c) => c.kind === "job" || tooClose(c.time, time)) ?? null;
 }
 
 // For staff-facing screens only. Names the customer already in that slot, which
@@ -704,22 +747,49 @@ export function conflictMessage(c: Commitment): string {
   const when = c.time ? ` at ${c.time}` : "";
   return c.kind === "job"
     ? `That crew is already booked on ${c.name}'s job that day${when}. Pick another day, or assign this to someone else first.`
-    : `That crew already has a quote visit with ${c.name}${when}. Pick another time, or assign this to someone else first.`;
+    : `That crew has a quote visit with ${c.name}${when}, and visits need an hour between them. Pick another time, or assign this to someone else first.`;
 }
 
-// Which visit slots a contractor has already spoken for on a date, for the
-// public booking form. Returns times only - no names - because this answer is
-// served to anyone who asks. `wholeDay` means they're on a job and no slot works.
-export async function takenVisitTimes(
+// One contractor's working window, for the public booking form and for the
+// server checks that back it. Missing or nonsense values fall back to the
+// shared default rather than leaving somebody unbookable.
+export async function getWorkHours(staffId: string | null | undefined): Promise<WorkHours> {
+  if (!staffId || !UUID_RE.test(staffId)) return DEFAULT_WORK_HOURS;
+  const res = await pgAdmin(`staff?id=eq.${staffId}&select=work_start_hour,work_end_hour,work_days&limit=1`);
+  // The columns arrive with supabase/appointments.sql. Until it is run,
+  // PostgREST 400s on the select and everyone keeps the default window, which
+  // is exactly the behaviour that shipped before hours were editable.
+  if (!res.ok) return DEFAULT_WORK_HOURS;
+  const rows = (await res.json()) as Parameters<typeof readWorkHours>[0][];
+  return readWorkHours(rows[0]);
+}
+
+/**
+ * What a contractor's day looks like to somebody trying to book a visit on it.
+ *
+ * Times only, never names: this feeds an endpoint that answers to anyone, so it
+ * must not leak who is on the calendar. The staff-facing version of the same
+ * question is findVisitConflict + conflictMessage.
+ *
+ *   slots     every start time they offer that day, from their own hours
+ *   taken     the ones within an hour of something already booked
+ *   wholeDay  they're on a pour; nothing on this day is bookable
+ *   works     they don't work this weekday at all
+ */
+export async function visitAvailability(
   staffId: string | null | undefined,
   date: string,
-): Promise<{ times: string[]; wholeDay: boolean }> {
-  // With nobody assigned there is no personal calendar to clash with; the
-  // per-day cap is the only limit that applies.
-  if (!staffId) return { times: [], wholeDay: false };
-  const busy = await contractorCommitments(staffId, date);
-  if (busy.some((c) => c.kind === "job")) return { times: [], wholeDay: true };
-  return { times: busy.map((c) => c.time).filter((t): t is string => Boolean(t)), wholeDay: false };
+): Promise<{ slots: string[]; taken: string[]; wholeDay: boolean; works: boolean }> {
+  const hours = await getWorkHours(staffId);
+  const slots = slotsFor(hours);
+  if (!ISO_DATE.test(date)) return { slots, taken: [], wholeDay: false, works: true };
+  if (!worksOn(hours, date)) return { slots, taken: slots, wholeDay: false, works: false };
+
+  const busy = await contractorCommitments(staffId ?? null, date);
+  if (busy.some((c) => c.kind === "job")) return { slots, taken: slots, wholeDay: true, works: true };
+
+  const taken = slots.filter((s) => busy.some((c) => tooClose(c.time, s)));
+  return { slots, taken, wholeDay: false, works: true };
 }
 
 // Service-role phone lookup for one staff member (used by token-gated server code
@@ -1083,6 +1153,10 @@ export type OptionChoice = "accepted" | "declined";
 export type CustomerResponseResult = {
   ok: boolean;
   error?: string;
+  // This answer was already on file and nothing was written. The caller uses it
+  // to skip the texts: the owner and the crew heard the first time, and a
+  // second "QUOTE APPROVED" for the same quote reads as a second job.
+  duplicate?: boolean;
   // What they said yes and no to, in the order they read them. Only the texts
   // to the owner and crew use these - the customer already knows.
   accepted?: QuoteOption[];
@@ -1095,6 +1169,10 @@ export async function recordCustomerResponse(
     action: "accept" | "decline";
     discount?: boolean;
     preferredDates?: string[];
+    // The start time the customer wants on each of those days, index-aligned
+    // with preferredDates. Anything missing or malformed becomes null and the
+    // crew's card falls back to its own default.
+    preferredTimes?: (string | null)[];
     // One answer per optional line item, keyed by option id. Ignored on a quote
     // that has no line items, required on one that does.
     options?: Record<string, OptionChoice>;
@@ -1119,6 +1197,31 @@ export async function recordCustomerResponse(
     return { ok: false, error: "This quote has expired. Please call us and we'll send you an updated one." };
   }
 
+  // ── Already answered ──
+  // A double tap, a retried request, a link opened in two tabs. This used to
+  // fall straight through and run the whole block below again, which was not
+  // harmless: on an itemised quote the second pass recomputed quote_amount from
+  // the line items, while the $150 credit was correctly guarded against being
+  // applied twice - so a duplicate submit put the customer's price back UP by
+  // $150 and re-texted the office about a job it already knew about.
+  //
+  // The same answer is therefore reported as the success it is, with nothing
+  // written. A DIFFERENT answer is refused rather than quietly applied: flipping
+  // an accepted quote to declined from a stale tab would strand a booked day and
+  // a crew who had already been told to turn up.
+  const already = q.customer_response;
+  if (already) {
+    const want = input.action === "accept" ? "accepted" : "declined";
+    if (already === want) return { ok: true, duplicate: true };
+    return {
+      ok: false,
+      error:
+        already === "accepted"
+          ? "You've already approved this quote. Give us a call if you need to change anything."
+          : "You've already declined this quote. Give us a call if you've changed your mind.",
+    };
+  }
+
   const options = await listQuoteOptionsAdmin(q.id);
   const patch: Partial<Quote> = { customer_responded_at: new Date().toISOString() };
   let accepted: QuoteOption[] = [];
@@ -1139,12 +1242,20 @@ export async function recordCustomerResponse(
     const min = ymdInDays(LEAD_TIME_DAYS);
     const seen = new Set<string>();
     const dates: string[] = [];
-    for (const raw of input.preferredDates ?? []) {
+    // Kept index-aligned with `dates` as they're filtered, so a day rejected
+    // for being too early doesn't shunt every later day onto the wrong time.
+    const times: (string | null)[] = [];
+    const rawTimes = input.preferredTimes ?? [];
+    for (const [i, raw] of (input.preferredDates ?? []).entries()) {
       const date = String(raw).slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || seen.has(date)) continue;
       if (date < min) continue;
       seen.add(date);
       dates.push(date);
+      // Shape-checked the same way every other stored time is, so a tampered
+      // form can't put a paragraph in the text the crew reads.
+      const t = typeof rawTimes[i] === "string" ? (rawTimes[i] as string).trim().toUpperCase().replace(/\s+/, " ") : "";
+      times.push(t && TIME_RE.test(t) ? t : null);
       if (dates.length >= MAX_PREFERRED_DATES) break;
     }
     if (dates.length === 0) {
@@ -1177,6 +1288,9 @@ export async function recordCustomerResponse(
     patch.customer_response = "accepted";
     patch.status = "approved";
     patch.preferred_dates = dates;
+    // Written even when every entry is null, so the two arrays always have the
+    // same length and the crew's card can index straight into it.
+    patch.preferred_times = times;
     if (input.discount && !q.discount_accepted) {
       patch.discount_accepted = true;
       // Off whatever they actually bought, not off the all-in figure they
@@ -1189,11 +1303,25 @@ export async function recordCustomerResponse(
     eventType = "customer_accepted";
   }
 
-  const upd = await pgAdmin(`quote_requests?id=eq.${q.id}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify(patch),
-  });
+  const savePatch = (body: Partial<Quote>) =>
+    pgAdmin(`quote_requests?id=eq.${q.id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(body),
+    });
+
+  let upd = await savePatch(patch);
+  // preferred_times arrives with supabase/appointments.sql, and code deploys
+  // before SQL gets run. Without this retry, the window between the two turns
+  // every approval into "Could not save your response. Please call us." for a
+  // customer who has just decided to give us the job - the single worst moment
+  // in the funnel to fail. Their day is still recorded; only the hour they
+  // asked for is lost, and the crew's card has a fallback for exactly that.
+  if (!upd.ok && patch.preferred_times !== undefined) {
+    const { preferred_times: _dropped, ...withoutTimes } = patch;
+    console.error("[quote-response] preferred_times rejected - run supabase/appointments.sql");
+    upd = await savePatch(withoutTimes);
+  }
   if (!upd.ok) return { ok: false, error: "Could not save your response. Please call us." };
 
   // Stamp each line item with its own answer, so the record of what was bought
@@ -1222,6 +1350,7 @@ export async function recordCustomerResponse(
       meta: {
         discount: Boolean(input.discount),
         preferred_dates: patch.preferred_dates ?? null,
+        preferred_times: patch.preferred_times ?? null,
         accepted_options: accepted.map((o) => o.title),
         declined_options: declined.map((o) => o.title),
         total: patch.quote_amount ?? null,
@@ -1307,15 +1436,9 @@ export async function rescheduleVisit(
     return { ok: true, previous: date, previousTime: cleanTime, unchanged: true };
   }
 
-  // Don't overbook the day, same rule the public form enforces. Moving a visit
-  // onto its own existing day is fine, so the current row is excluded.
-  if (current.visit_date !== date) {
-    const used = await countVisitsOn(date);
-    if (used >= MAX_VISITS_PER_DAY) return { ok: false, error: "That day is already full for quote visits." };
-  }
-
-  // The day having room doesn't mean the crew does. Another visit only clashes
-  // at the same time; a job that day blocks every slot.
+  // Visits have no per-day cap any more: they stack an hour apart on one
+  // person's calendar, so the only thing that can be full is that person. A
+  // visit within the hour clashes; a booked work day blocks every slot on it.
   const clash = await findVisitConflict(current.assigned_to, date, cleanTime, id);
   if (clash) return { ok: false, error: conflictMessage(clash) };
 

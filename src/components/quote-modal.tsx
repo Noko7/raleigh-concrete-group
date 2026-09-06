@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
 import { ymdInDays } from "@/lib/crm/clock";
-import { VISIT_LEAD_DAYS, VISIT_TIME_SLOTS } from "@/lib/crm/constants";
+import { DEFAULT_VISIT_SLOTS, VISIT_LEAD_DAYS } from "@/lib/crm/constants";
 import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
 
 // Supabase via REST (no SDK). Set these in Vercel → Settings → Environment Variables:
@@ -53,7 +53,11 @@ const STEPS = ["contact", "service", "schedule"] as const;
 
 type Step = (typeof STEPS)[number];
 
-const TIME_SLOTS = VISIT_TIME_SLOTS;
+// The slots shown before a date is picked. Once one is, the real list comes
+// back from /api/availability - it belongs to the contractor this job type
+// routes to, whose working hours are theirs to set, so it cannot be a constant
+// baked into the bundle.
+const DEFAULT_SLOTS = DEFAULT_VISIT_SLOTS;
 
 // Soonest an in-person visit can be requested, as YYYY-MM-DD. The server checks
 // this too: `min` on a date input is a convenience, not a rule, and picking a
@@ -287,24 +291,52 @@ function Modal({ onClose }: { onClose: () => void }) {
   // it is not the guard - the server re-checks, because two people can be on
   // this form at once and the browser's copy of "free" goes stale immediately.
   const [takenTimes, setTakenTimes] = useState<string[]>([]);
+  // The slots this contractor actually offers on the chosen day, which is a
+  // function of their own working hours rather than a fixed list of five.
+  const [slots, setSlots] = useState<string[]>(DEFAULT_SLOTS);
+  // They don't work that weekday at all. Distinct from "every hour is taken",
+  // because the answer is a different day rather than a different time.
+  const [dayOff, setDayOff] = useState(false);
   const minDate = useRef(minVisitDate()).current;
 
-  async function checkVisitDate(date: string) {
+  // `service` decides whose calendar this is: a lead goes to the contractor who
+  // takes that job type. Checking against the primary contractor regardless,
+  // which is what this used to do, answered about the wrong person's day for
+  // every lead the routing rules send elsewhere.
+  async function checkVisitDate(date: string, service: string) {
     setDateFull(false);
+    setDayOff(false);
     setTakenTimes([]);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     setDateChecking(true);
     try {
-      const res = await fetch(`/api/availability?type=quote&date=${date}`);
-      const json = (await res.json()) as { available?: boolean; taken?: string[] };
+      const res = await fetch(
+        `/api/availability?type=quote&date=${date}&service=${encodeURIComponent(service)}`,
+      );
+      const json = (await res.json()) as {
+        available?: boolean;
+        slots?: string[];
+        taken?: string[];
+        works?: boolean;
+      };
       setDateFull(json.available === false);
+      setDayOff(json.works === false);
+      const open = Array.isArray(json.slots) && json.slots.length > 0 ? json.slots : DEFAULT_SLOTS;
       const taken = Array.isArray(json.taken) ? json.taken : [];
+      setSlots(open);
       setTakenTimes(taken);
-      // If they had already chosen a time and it's gone, drop it rather than
-      // leaving a selected chip that will be rejected on submit.
-      setData((d) => (d.visitTime && taken.includes(d.visitTime) ? { ...d, visitTime: "" } : d));
+      // If they had already chosen a time and it's gone - taken, or no longer
+      // a slot this contractor offers - drop it rather than leaving a selected
+      // chip that will be rejected on submit.
+      setData((d) =>
+        d.visitTime && (taken.includes(d.visitTime) || !open.includes(d.visitTime))
+          ? { ...d, visitTime: "" }
+          : d,
+      );
     } catch {
-      setDateFull(false); // don't block on a network hiccup; server re-checks
+      // Don't block on a network hiccup; the server re-checks either way.
+      setDateFull(false);
+      setDayOff(false);
     } finally {
       setDateChecking(false);
     }
@@ -362,8 +394,15 @@ function Modal({ onClose }: { onClose: () => void }) {
       );
     }
     if (current === "service") return data.service !== "";
-    if (current === "schedule")
-      return /^\d{4}-\d{2}-\d{2}$/.test(data.visitDate) && data.visitTime !== "" && !dateFull && !dateChecking;
+    if (current === "schedule") {
+      const picked = /^\d{4}-\d{2}-\d{2}$/.test(data.visitDate) && data.visitTime !== "";
+      // A full or non-working day only blocks an in-person request, which is
+      // the only one taking a slot out of somebody's day. An online customer is
+      // offering a fallback we may never use, so "that day is busy" is not a
+      // reason to stop them submitting their photos.
+      if (mode === "online") return picked && !dateChecking;
+      return picked && !dateFull && !dayOff && !dateChecking;
+    }
     return false;
   }
 
@@ -722,9 +761,13 @@ function Modal({ onClose }: { onClose: () => void }) {
                   value={data.visitDate}
                   onChange={(e) => {
                     set({ visitDate: e.target.value });
-                    // Only in-person requests take a slot out of the day, so
-                    // only they need to check whether one is left.
-                    if (mode === "inperson") checkVisitDate(e.target.value);
+                    // Both modes ask, for different reasons. In-person is
+                    // taking a slot out of somebody's day and has to know it's
+                    // free. Online is only offering a fallback, but the hours
+                    // still have to be hours that crew works - a slot offered
+                    // at 6pm to somebody who finishes at 4 is a fallback that
+                    // can never be taken up.
+                    checkVisitDate(e.target.value, data.service);
                   }}
                 />
                 <span
@@ -743,6 +786,8 @@ function Modal({ onClose }: { onClose: () => void }) {
                     )
                   ) : dateChecking ? (
                     "Checking that day…"
+                  ) : dayOff ? (
+                    "We don't take visits that day, please pick another."
                   ) : dateFull ? (
                     "That day is fully booked, please pick another."
                   ) : data.visitDate ? (
@@ -755,7 +800,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 </span>
                 <label className="qm-label">Time</label>
                 <div className="qm-chips">
-                  {TIME_SLOTS.map((t) => {
+                  {slots.map((t) => {
                     const taken = takenTimes.includes(t);
                     return (
                       <button

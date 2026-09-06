@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
@@ -7,8 +8,11 @@ import {
   QUOTE_SECTION_FIELDS,
   QUOTE_SECTION_LABELS,
   QUOTE_TTL_DAYS,
+  slotsFor,
 } from "@/lib/crm/constants";
-import { getQuoteByToken, isQuoteExpired, listQuoteOptionsAdmin } from "@/lib/crm/queries";
+import { usd } from "@/lib/crm/fees";
+import { jobLedger, payeeState } from "@/lib/crm/payments";
+import { getQuoteByToken, getWorkHours, isQuoteExpired, listQuoteOptionsAdmin } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
 import { QuoteActions } from "./quote-actions";
 import { ViewBeacon } from "./view-beacon";
@@ -98,12 +102,27 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
     );
   }
 
+  // Whether the crew on this job can take a card. Asked once, here, and used
+  // both to offer the deposit at approval and to show the balance afterwards -
+  // a payment button that dies on tap is worse than never offering one.
+  const payee = await payeeState(quote);
+
   // ── Full-screen confirmation once the customer has responded ──
   if (responded === "accepted") {
     // Approving no longer books a day - the crew confirms one of the customer's
     // preferred days first. Until then this must not claim a date is locked in.
     const awaitingDate = !quote.scheduled_date;
-    const preferred = (quote.preferred_dates ?? []).filter(Boolean);
+    // Read back by index: preferred_times[i] is the start they asked for on
+    // preferred_dates[i], and is null on a quote accepted before we asked.
+    const preferredTimes = quote.preferred_times ?? [];
+    const preferred = (quote.preferred_dates ?? [])
+      .filter(Boolean)
+      .map((d, i) => `${prettyDate(d)}${preferredTimes[i] ? ` at ${preferredTimes[i]}` : ""}`);
+    // What is still owed, so this page keeps being useful after the approval.
+    // It is the link the office texts when a balance is due, and a customer who
+    // opens their old quote expecting to pay should not have to ring for a new
+    // one.
+    const { ledger } = await jobLedger(quote);
     return (
       <main className="cq-wrap">
         <ViewBeacon token={token} />
@@ -122,7 +141,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               {preferred.length > 0 && (
                 <>
                   {" "}
-                  You told us these work: <strong>{preferred.map((d) => prettyDate(d)).join(", ")}</strong>.
+                  You told us these work: <strong>{preferred.join(", ")}</strong>.
                 </>
               )}
             </p>
@@ -164,6 +183,30 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               <span>{amount}</span>
             </div>
           )}
+
+          {/* Money, once there is any to talk about. A job nobody has paid
+              anything on says nothing here - the customer has just approved a
+              quote and does not need a second invoice-shaped thing in front of
+              them until they have chosen to pay. */}
+          {ledger.paidCents > 0 && (
+            <p className="cq-confirm-paid">
+              {ledger.dueCents > 0 ? (
+                <>
+                  Paid <strong>{usd(ledger.paidCents)}</strong> · <strong>{usd(ledger.dueCents)}</strong> to go
+                </>
+              ) : (
+                <>
+                  Paid in full · <strong>{usd(ledger.paidCents)}</strong>
+                </>
+              )}
+            </p>
+          )}
+          {payee.ok && ledger.dueCents > 0 && (
+            <Link href={`/pay/${token}`} className="cq-btn cq-btn-primary cq-confirm-pay">
+              {ledger.paidCents > 0 ? `Pay the ${usd(ledger.dueCents)} balance` : "Pay your deposit"}
+            </Link>
+          )}
+
           <p className="cq-confirm-note">
             {awaitingDate
               ? "If none of those days end up working, we'll call you to find one that does. Thanks for choosing Raleigh Concrete Group."
@@ -306,6 +349,10 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           <QuoteActions
             token={token}
             amount={Number(quote.quote_amount)}
+            // The hours the crew who'd do this job actually work, so the
+            // customer isn't offered a 7am start by somebody who begins at 9.
+            slots={slotsFor(await getWorkHours(quote.assigned_to))}
+            cardReady={payee.ok}
             options={options.map((o) => ({
               id: o.id,
               title: o.title,

@@ -45,7 +45,6 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
     scheduled_time: q.scheduled_time,
     visit_date: q.visit_date,
     visit_time: q.visit_time,
-    confirmed_at: q.confirmed_at,
     job_token: q.job_token,
   }));
 

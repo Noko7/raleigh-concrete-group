@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { todayYmd } from "@/lib/crm/clock";
-import { to12Hour, to24Hour, VISIT_TIME_SLOTS } from "@/lib/crm/constants";
+import { DEFAULT_VISIT_SLOTS, to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { deleteEvent, moveEvent, type CalActionState } from "./actions";
 
@@ -575,7 +575,7 @@ function EventPanel({
   const [date, setDate] = useState(event.date);
   // Only what the field opens on when the appointment has no time yet. The
   // office isn't held to either list - see the picker below.
-  const [time, setTime] = useState(event.time ?? (isJob ? "9:00 AM" : VISIT_TIME_SLOTS[0]));
+  const [time, setTime] = useState(event.time ?? (isJob ? "9:00 AM" : DEFAULT_VISIT_SLOTS[0]));
   const [notify, setNotify] = useState(true);
 
   return (

@@ -23,6 +23,25 @@ export type SaveState = {
 
 export type ScheduleState = { ok: boolean; error?: string; message?: string };
 
+// One day the customer said works, and the start time they asked for on it.
+// `time` is null on a quote accepted before customers were asked for a time,
+// and the scheduling cards fall back to their own default for those.
+//
+// Shared by the CRM's ScheduleCard and the crew's JobSchedule so the two
+// screens can't drift on how a preferred day is read.
+export type PreferredSlot = { date: string; time: string | null };
+
+// The two index-aligned columns, zipped into the shape above. Kept here rather
+// than in each page because both pages have to agree that preferred_times[i]
+// belongs to preferred_dates[i], and an off-by-one would quietly book somebody
+// at the wrong hour.
+export function preferredSlots(
+  dates: string[] | null | undefined,
+  times: (string | null)[] | null | undefined,
+): PreferredSlot[] {
+  return (dates ?? []).filter(Boolean).map((date, i) => ({ date, time: times?.[i] ?? null }));
+}
+
 // Closing a job out. Same shape as ScheduleState, named separately because the
 // one thing it reports that matters is the refusal: no before/after photos.
 export type FinishState = { ok: boolean; error?: string; message?: string };

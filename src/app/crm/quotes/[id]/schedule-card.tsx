@@ -5,7 +5,7 @@ import { useActionState, useState } from "react";
 import { to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
 import { setJobDate } from "./actions";
-import type { ScheduleState } from "./types";
+import type { PreferredSlot, ScheduleState } from "./types";
 
 function pretty(s: string): string {
   return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
@@ -24,22 +24,29 @@ export function ScheduleCard({
   id,
   scheduledDate,
   scheduledTime,
-  preferredDates,
+  preferred,
   minDate,
   locale,
 }: {
   id: string;
   scheduledDate: string | null;
   scheduledTime: string | null;
-  preferredDates: string[];
+  preferred: PreferredSlot[];
   minDate: string;
   locale: Locale;
 }) {
   const [state, formAction, pending] = useActionState<ScheduleState, FormData>(setJobDate, { ok: false });
   const t = dict(locale);
   const booked = Boolean(scheduledDate);
-  // One shared start time that rides along with whichever day gets tapped.
-  const [time, setTime] = useState(scheduledTime ?? "9:00 AM");
+  // Seeded from what the customer asked for, not from a house default. On a
+  // quote where they said "Tuesday at 7:00 AM", 9:00 AM in this box is a
+  // different appointment than the one they agreed to.
+  const [time, setTime] = useState(scheduledTime ?? preferred.find((p) => p.time)?.time ?? "9:00 AM");
+  // Whether the box above has been touched. Until it is, each of the customer's
+  // days is confirmed at the time they asked for on THAT day - three days can
+  // carry three different times. Once the crew sets one deliberately, it wins
+  // on every day, because that is what they just said they can do.
+  const [overridden, setOverridden] = useState(false);
 
   return (
     <div className="crm-card">
@@ -68,28 +75,39 @@ export function ScheduleCard({
           type="time"
           className="crm-input"
           value={to24Hour(time, "09:00")}
-          onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
+          onChange={(e) => {
+            if (!e.target.value) return;
+            setTime(to12Hour(e.target.value));
+            setOverridden(true);
+          }}
         />
       </label>
 
-      {preferredDates.length > 0 && (
+      {preferred.length > 0 && (
         <div className="sched-picks">
           <p className="crm-sm sched-picks-label">{t.schedule.customerPrefers}</p>
           <div className="sched-pick-row">
-            {preferredDates.map((d) => (
-              <form action={formAction} key={d}>
-                <input type="hidden" name="id" value={id} />
-                <input type="hidden" name="date" value={d} />
-                <input type="hidden" name="time" value={time} />
-                <button
-                  type="submit"
-                  className={`crm-btn ${d === scheduledDate ? "crm-btn-ghost" : "crm-btn-primary"}`}
-                  disabled={pending}
-                >
-                  {d === scheduledDate ? `${pretty(d)} (${t.schedule.booked})` : pretty(d)}
-                </button>
-              </form>
-            ))}
+            {/* Each button carries the time the customer asked for on THAT day
+                rather than one shared value, so tapping their Tuesday books
+                their Tuesday. See `overridden` above for when the box wins. */}
+            {preferred.map((p) => {
+              return (
+                <form action={formAction} key={p.date}>
+                  <input type="hidden" name="id" value={id} />
+                  <input type="hidden" name="date" value={p.date} />
+                  <input type="hidden" name="time" value={overridden ? time : (p.time ?? time)} />
+                  <button
+                    type="submit"
+                    className={`crm-btn ${p.date === scheduledDate ? "crm-btn-ghost" : "crm-btn-primary"}`}
+                    disabled={pending}
+                  >
+                    {p.date === scheduledDate
+                      ? `${pretty(p.date)} (${t.schedule.booked})`
+                      : `${pretty(p.date)}${p.time ? ` · ${p.time}` : ""}`}
+                  </button>
+                </form>
+              );
+            })}
           </div>
         </div>
       )}
@@ -98,7 +116,7 @@ export function ScheduleCard({
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="time" value={time} />
         <label className="crm-field">
-          <span>{preferredDates.length > 0 ? t.schedule.orPickAnother : t.schedule.workDay}</span>
+          <span>{preferred.length > 0 ? t.schedule.orPickAnother : t.schedule.workDay}</span>
           <input type="date" name="date" className="crm-input" min={minDate} defaultValue={scheduledDate ?? ""} required />
         </label>
         <div className="crm-editor-foot">

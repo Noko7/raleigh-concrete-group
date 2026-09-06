@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 
-import { TIME_RE, to12Hour, to24Hour, VISIT_TIME_SLOTS } from "@/lib/crm/constants";
+import { DEFAULT_VISIT_SLOTS, TIME_RE, to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
 import { confirmVisit } from "@/app/crm/quotes/[id]/actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
@@ -49,7 +49,7 @@ export function JobVisit({
   // The customer's own offered time if it's a real one, otherwise the first
   // public slot as a sane starting point - the contractor isn't limited to
   // this list themselves, this is only what the field opens on.
-  const fallbackTime = requestedTime && TIME_RE.test(requestedTime) ? requestedTime : VISIT_TIME_SLOTS[0];
+  const fallbackTime = requestedTime && TIME_RE.test(requestedTime) ? requestedTime : DEFAULT_VISIT_SLOTS[0];
   const [time, setTime] = useState(fallbackTime);
 
   // Only an online request arrives with something to accept.

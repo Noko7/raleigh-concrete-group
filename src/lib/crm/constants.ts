@@ -35,12 +35,115 @@ export const LEAD_TIME_DAYS = 7;
 // truck, so it can happen sooner.
 export const VISIT_LEAD_DAYS = 4;
 
-// The visit slots offered on the PUBLIC quote form only. Shared with the
-// server so a tampered form can't book "3:00 AM"; both sides check the same
-// list. A contractor confirming a visit from the job page isn't held to this
-// list - they need to fit a visit around a real day, not five fixed slots -
-// so confirmVisit validates against TIME_RE instead.
-export const VISIT_TIME_SLOTS = ["8:00 AM", "10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM"];
+// ── Appointment slots ───────────────────────────────────────────────────────
+// Quote visits are booked back to back against ONE contractor's day, an hour
+// apart. The gap is what "back to back" means here: two visits for the same
+// person must start at least this far apart, because between them is a drive
+// across Raleigh, not a coffee.
+//
+// It is a distance between start times, not a slot width, so it keeps working
+// when a contractor books an odd time from the job page: a 9:30 visit blocks
+// both the 9:00 and the 10:00 slot, which a list of fixed slots could not say.
+export const VISIT_GAP_MINUTES = 60;
+
+// A booked WORK day is still one per day for the whole business - a pour is a
+// crew, a truck and a day, and nothing about hourly visits changes that. Only
+// the visits above stack.
+
+// The window a contractor offers visits in, before they set their own under
+// CRM → Settings → Working hours. Both numbers are the hour a slot STARTS, so
+// 8..16 is nine slots, 8:00 AM through 4:00 PM.
+export const DEFAULT_WORK_START_HOUR = 8;
+export const DEFAULT_WORK_END_HOUR = 16;
+// Sanity rails on what an owner or contractor may type. Wide enough for an
+// early pour or a late evening estimate, narrow enough that a typo can't offer
+// customers a 3am appointment.
+export const WORK_HOUR_MIN = 5;
+export const WORK_HOUR_MAX = 21;
+
+// Days of the week are 0=Sunday..6=Saturday, matching Date#getUTCDay.
+export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export type WorkHours = { startHour: number; endHour: number; days: number[] };
+
+// Every day of the week, on purpose. Before this existed a customer could book
+// a Saturday visit, and defaulting new rows to Monday-Friday would have taken
+// that away from every contractor at once without anyone asking for it. The
+// preference starts as "no restriction" and only narrows when somebody sets it.
+export const DEFAULT_WORK_HOURS: WorkHours = {
+  startHour: DEFAULT_WORK_START_HOUR,
+  endHour: DEFAULT_WORK_END_HOUR,
+  days: [0, 1, 2, 3, 4, 5, 6],
+};
+
+const clampHour = (n: unknown, fallback: number): number => {
+  const h = Math.round(Number(n));
+  return Number.isFinite(h) && h >= WORK_HOUR_MIN && h <= WORK_HOUR_MAX ? h : fallback;
+};
+
+/**
+ * A staff row's working-hours columns, read defensively.
+ *
+ * Every caller goes through here rather than reading the three columns
+ * directly: they are nullable for rows that predate the migration, an owner
+ * can type anything into the form, and a window whose end is before its start
+ * would silently produce a day with no slots in it at all.
+ */
+export function readWorkHours(
+  raw?: { work_start_hour?: number | null; work_end_hour?: number | null; work_days?: number[] | null } | null,
+): WorkHours {
+  if (!raw) return DEFAULT_WORK_HOURS;
+  const startHour = clampHour(raw.work_start_hour, DEFAULT_WORK_START_HOUR);
+  const endHour = Math.max(startHour, clampHour(raw.work_end_hour, DEFAULT_WORK_END_HOUR));
+  const days = Array.isArray(raw.work_days)
+    ? [...new Set(raw.work_days.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort()
+    : [];
+  // No days ticked means no restriction rather than "never available", which
+  // would strand every lead routed to that contractor with nothing bookable.
+  return { startHour, endHour, days: days.length > 0 ? days : DEFAULT_WORK_HOURS.days };
+}
+
+/** "9:00 AM" -> 540 minutes past midnight. Null on anything we didn't write. */
+export function minutesOfTime(t?: string | null): number | null {
+  const m = (t ?? "").trim().match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
+  if (!m) return null;
+  const h = Number(m[1]) % 12;
+  const min = Number(m[2]);
+  if (Number(m[1]) > 12 || min > 59) return null;
+  return (m[3].toUpperCase() === "PM" ? h + 12 : h) * 60 + min;
+}
+
+/** 9 -> "9:00 AM", 13 -> "1:00 PM". Spelled the way TIME_RE expects. */
+export function hourSlot(h: number): string {
+  return `${h % 12 || 12}:00 ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** Every start time a contractor offers on a day they work. */
+export function slotsFor(w: WorkHours): string[] {
+  const out: string[] = [];
+  for (let h = w.startHour; h <= w.endHour; h += 1) out.push(hourSlot(h));
+  return out;
+}
+
+/** The slots shown before a date is picked and before we know whose day it is. */
+export const DEFAULT_VISIT_SLOTS = slotsFor(DEFAULT_WORK_HOURS);
+
+/**
+ * The weekday of a YYYY-MM-DD, 0=Sunday.
+ *
+ * Read as a bare calendar date in UTC. `new Date("2026-03-08")` is midnight
+ * UTC, which is the evening of the 7th in Raleigh, so asking it for a local
+ * weekday returns the day before for every date in the western hemisphere.
+ */
+export function weekdayOf(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/** Does this contractor work that day at all? */
+export function worksOn(w: WorkHours, ymd: string): boolean {
+  return w.days.includes(weekdayOf(ymd));
+}
 
 // The shape every stored time string is in: "H:MM AM/PM", e.g. "9:00 AM" or
 // "2:15 PM". Not tied to any particular list of slots - this is what

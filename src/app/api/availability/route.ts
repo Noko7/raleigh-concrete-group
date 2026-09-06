@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
 
-import {
-  MAX_JOBS_PER_DAY,
-  MAX_VISITS_PER_DAY,
-  countJobsOn,
-  countVisitsOn,
-  getPrimaryContractorId,
-  takenVisitTimes,
-} from "@/lib/crm/queries";
+import { MAX_JOBS_PER_DAY, countJobsOn, resolveAssignee, visitAvailability } from "@/lib/crm/queries";
 
 // Public, token-free availability check used by the customer scheduling UIs.
-// type=job  → booked work days (max 1/day)
-// type=quote → in-person quote visits (max 5/day, and never two in one slot)
 //
-// For quote visits this also returns which times the crew already has, so the
-// form can grey those chips out. Times only, never names: this endpoint answers
-// to anyone, so it must not leak who is on the calendar.
+//   type=job    booked work days. Still one a day for the whole business, so
+//               the answer is a yes/no on the date.
+//   type=quote  in-person quote visits. These stack an hour apart on ONE
+//               contractor's calendar, so the answer is that person's slots for
+//               the day and which of them are spoken for.
+//
+// Times only, never names: this endpoint answers to anyone, so it must not leak
+// who is on the calendar or which customer is in a slot.
+//
+// The `service` parameter is what decides whose calendar is read. A lead routes
+// to the contractor who takes that job type (staff.service_types), falling back
+// to the primary contractor - so checking against the primary regardless, as
+// this used to, answered about the wrong person's day for every lead the
+// routing rules sent elsewhere.
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type") === "quote" ? "quote" : "job";
@@ -30,18 +32,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, available: remaining > 0, remaining, capacity: MAX_JOBS_PER_DAY });
   }
 
-  const used = await countVisitsOn(date);
-  const remaining = Math.max(0, MAX_VISITS_PER_DAY - used);
-  const { times, wholeDay } = await takenVisitTimes(await getPrimaryContractorId(), date);
+  const service = (searchParams.get("service") || "").slice(0, 120);
+  const { slots, taken, wholeDay, works } = await visitAvailability(await resolveAssignee(service), date);
 
   return NextResponse.json({
     ok: true,
-    // A day the crew is pouring on has no usable slot, however much room the
-    // per-day cap says is left.
-    available: remaining > 0 && !wholeDay,
-    remaining,
-    capacity: MAX_VISITS_PER_DAY,
-    taken: times,
+    // A day with no slot left on it is full, however that came about: every
+    // hour booked, a pour taking the whole day, or a day they don't work.
+    available: works && !wholeDay && taken.length < slots.length,
+    slots,
+    taken,
     wholeDay,
+    works,
   });
 }

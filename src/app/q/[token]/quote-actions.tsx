@@ -4,9 +4,32 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ymdInDays } from "@/lib/crm/clock";
-import { DECLINE_CREDIT, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, selectedTotal } from "@/lib/crm/constants";
+import {
+  DECLINE_CREDIT,
+  DEFAULT_VISIT_SLOTS,
+  LEAD_TIME_DAYS,
+  MAX_PREFERRED_DATES,
+  selectedTotal,
+} from "@/lib/crm/constants";
+import { DEFAULT_DEPOSIT_PERCENT, depositCents, usd as money } from "@/lib/crm/fees";
 
-type Mode = "choose" | "save" | "schedule" | "submitting" | "accepted" | "declined";
+// One day the customer says works, and the time they'd like the crew to start.
+// Nothing here is a booking - the crew confirms one of these against their own
+// schedule - but a day with no time on it puts the crew back on the phone to
+// ask, which is the call this step exists to remove.
+//
+// Not called `Pick`: that is a TypeScript built-in, and shadowing it in a file
+// is a trap for whoever next needs `Pick<Quote, "id">` in here.
+type DayPick = { date: string; time: string };
+
+type Mode = "choose" | "save" | "schedule" | "submitting" | "accepted" | "paying" | "declined";
+
+// How the customer said they want to pay, chosen at the moment they approve -
+// the point they are most decided, and the only point where asking costs
+// nothing. It is a statement of intent, not a commitment: "card" sends them
+// straight to checkout, "direct" leaves the balance for the crew to take on
+// site, and either way the payment page stays open to them afterwards.
+type PayChoice = "card" | "direct";
 
 // One line item as the customer sees it. `required` items are part of the job
 // and shown so they can see what they are paying for; the rest are theirs to
@@ -24,23 +47,38 @@ function pretty(s: string): string {
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 }
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+const DEPOSIT_LABEL = `${DEFAULT_DEPOSIT_PERCENT}%`;
 
 export function QuoteActions({
   token,
   amount,
   options = [],
+  // The start times the assigned crew offers, from their own working hours.
+  // Falls back to the default window on a quote with nobody assigned yet.
+  slots = DEFAULT_VISIT_SLOTS,
+  // Whether the crew on this job can actually take a card. False means the
+  // deposit button is never offered - a payment button that dies on tap is
+  // worse than never having shown one.
+  cardReady = false,
 }: {
   token: string;
   amount: number | null;
   options?: PublicOption[];
+  slots?: string[];
+  cardReady?: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("choose");
   const [discount, setDiscount] = useState(false);
-  // Days the customer says work for them. The crew confirms one of these against
-  // their own schedule, so nothing here is a booking.
-  const [picks, setPicks] = useState<string[]>([]);
+  // Days the customer says work for them, each with a start time. The crew
+  // confirms one of these against their own schedule, so nothing here is a
+  // booking.
+  const [picks, setPicks] = useState<DayPick[]>([]);
   const [draft, setDraft] = useState("");
+  // The time a newly added day gets. One control above the list rather than one
+  // per row: almost nobody wants a different hour on each of three days, and
+  // any row can still be changed on its own afterwards.
+  const [time, setTime] = useState(slots[1] ?? slots[0] ?? "9:00 AM");
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
   const [taken, setTaken] = useState<string[]>([]);
@@ -70,7 +108,7 @@ export function QuoteActions({
   async function addDate(d: string) {
     setError("");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
-    if (picks.includes(d)) {
+    if (picks.some((p) => p.date === d)) {
       setDraft("");
       return;
     }
@@ -78,7 +116,7 @@ export function QuoteActions({
       setError(`You can suggest up to ${MAX_PREFERRED_DATES} days.`);
       return;
     }
-    setPicks((p) => [...p, d].sort());
+    setPicks((p) => [...p, { date: d, time }].sort((a, b) => a.date.localeCompare(b.date)));
     setDraft("");
 
     setChecking(true);
@@ -94,8 +132,12 @@ export function QuoteActions({
   }
 
   function removeDate(d: string) {
-    setPicks((p) => p.filter((x) => x !== d));
+    setPicks((p) => p.filter((x) => x.date !== d));
     setTaken((t) => t.filter((x) => x !== d));
+  }
+
+  function setPickTime(d: string, t: string) {
+    setPicks((p) => p.map((x) => (x.date === d ? { ...x, time: t } : x)));
   }
 
   // What the save offer is quoted against. On an itemised quote somebody can
@@ -104,7 +146,7 @@ export function QuoteActions({
   const offerBase = itemised && running === 0 ? (amount ?? 0) : total;
   const discounted = Math.max(0, Math.round((offerBase - DECLINE_CREDIT) * 100) / 100);
 
-  async function submit(action: "accept" | "decline") {
+  async function submit(action: "accept" | "decline", pay?: PayChoice) {
     setError("");
     const fallback: Mode = action === "accept" ? "schedule" : "save";
     setMode("submitting");
@@ -116,7 +158,14 @@ export function QuoteActions({
           token,
           action,
           discount,
-          preferred_dates: action === "accept" ? picks : undefined,
+          // Recorded on the job so the crew knows what to expect before they
+          // turn up. It changes nothing about what is owed.
+          pay: action === "accept" ? pay : undefined,
+          // Two arrays rather than a list of pairs, because that is the shape
+          // the two columns already have and the crew's card reads them by
+          // index.
+          preferred_dates: action === "accept" ? picks.map((p) => p.date) : undefined,
+          preferred_times: action === "accept" ? picks.map((p) => p.time) : undefined,
           // Every item, including the required ones, so the server records a
           // decision against each rather than inferring one.
           options: action === "accept" && itemised ? answersWithRequired(options, answers) : undefined,
@@ -124,6 +173,15 @@ export function QuoteActions({
       });
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
       if (res.ok && json.ok) {
+        // Straight to checkout when they asked to pay now. The approval is
+        // already recorded, so a customer who changes their mind on the Stripe
+        // page still has an approved job and a link back to it - the two
+        // decisions are separate and only one of them is reversible.
+        if (action === "accept" && pay === "card") {
+          setMode("paying");
+          router.push(`/pay/${token}`);
+          return;
+        }
         setMode(action === "accept" ? "accepted" : "declined");
         // Re-render the server page into its full-screen confirmed/declined view.
         router.refresh();
@@ -135,6 +193,19 @@ export function QuoteActions({
       setError("Something went wrong. Please call us.");
       setMode(fallback);
     }
+  }
+
+  // Approved, and on their way to Stripe. Its own state rather than the
+  // confirmation panel: showing "we'll confirm your date shortly" and then
+  // yanking the page out from under them reads as a glitch.
+  if (mode === "paying") {
+    return (
+      <div className="cq-result cq-result-ok">
+        <p className="cq-result-eyebrow">Quote approved</p>
+        <h3>Opening your secure checkout&hellip;</h3>
+        <p className="cq-result-note">One moment. If nothing happens, tap the payment link we just texted you.</p>
+      </div>
+    );
   }
 
   if (mode === "accepted") {
@@ -153,7 +224,7 @@ export function QuoteActions({
         </p>
         {picks.length > 0 && (
           <p className="cq-result-note">
-            You told us these work: {picks.map((d) => pretty(d)).join(", ")}.
+            You told us these work: {picks.map((p) => `${pretty(p.date)} at ${p.time}`).join(", ")}.
           </p>
         )}
         <p className="cq-result-note">
@@ -208,8 +279,9 @@ export function QuoteActions({
       <div className="cq-schedule">
         <h3>Which days work for you?</h3>
         <p className="cq-fine">
-          Pick up to {MAX_PREFERRED_DATES} days that suit you, starting {LEAD_TIME_DAYS} days from now. Our crew will
-          confirm one of them and text you back. Nothing is booked until then.
+          Pick up to {MAX_PREFERRED_DATES} days that suit you, starting {LEAD_TIME_DAYS} days from now, and the time
+          you&apos;d like us to start. Our crew will confirm one of them and text you back. Nothing is booked until
+          then.
         </p>
         {/* What they are approving, carried into this step: the decision they
             just made is two taps behind them and worth restating before they
@@ -228,13 +300,34 @@ export function QuoteActions({
 
         {picks.length > 0 && (
           <ul className="cq-picks">
-            {picks.map((d) => (
-              <li key={d} className={taken.includes(d) ? "cq-pick cq-pick-taken" : "cq-pick"}>
+            {picks.map((p) => (
+              <li key={p.date} className={taken.includes(p.date) ? "cq-pick cq-pick-taken" : "cq-pick"}>
                 <span>
-                  {pretty(d)}
-                  {taken.includes(d) && <em> (likely full, we&apos;ll suggest another)</em>}
+                  {pretty(p.date)}
+                  {taken.includes(p.date) && <em> (likely full, we&apos;ll suggest another)</em>}
                 </span>
-                <button type="button" onClick={() => removeDate(d)} disabled={busy} aria-label={`Remove ${pretty(d)}`}>
+                {/* Per row, so somebody who wants an early start on the Monday
+                    and a later one on the Friday can say so. Seeded from the
+                    control below rather than left blank. */}
+                <select
+                  className="cq-pick-time"
+                  value={p.time}
+                  disabled={busy}
+                  aria-label={`Start time on ${pretty(p.date)}`}
+                  onChange={(e) => setPickTime(p.date, e.target.value)}
+                >
+                  {slots.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => removeDate(p.date)}
+                  disabled={busy}
+                  aria-label={`Remove ${pretty(p.date)}`}
+                >
                   &times;
                 </button>
               </li>
@@ -243,29 +336,85 @@ export function QuoteActions({
         )}
 
         {picks.length < MAX_PREFERRED_DATES && (
-          <input
-            type="date"
-            className="cq-date"
-            min={minDate}
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              addDate(e.target.value);
-            }}
-            disabled={busy}
-          />
+          <div className="cq-pick-add">
+            <label className="cq-pick-field">
+              <span>Day</span>
+              <input
+                type="date"
+                className="cq-date"
+                min={minDate}
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  addDate(e.target.value);
+                }}
+                disabled={busy}
+              />
+            </label>
+            <label className="cq-pick-field">
+              <span>Start time</span>
+              <select
+                className="cq-date"
+                value={time}
+                disabled={busy}
+                onChange={(e) => setTime(e.target.value)}
+              >
+                {slots.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         )}
         {checking && <p className="cq-fine">Checking that day&hellip;</p>}
         {error && <p className="cq-err">{error}</p>}
 
-        <button
-          type="button"
-          className="cq-btn cq-btn-accept"
-          disabled={picks.length === 0 || busy}
-          onClick={() => submit("accept")}
-        >
-          {busy ? "Sending…" : "Approve quote"}
-        </button>
+        {/* The payment question is asked here and nowhere else: this is the
+            one moment the customer has decided and hasn't yet moved on. Asked
+            a day later by text it becomes a chase; asked before they have
+            chosen their days it is a toll booth in front of the decision.
+
+            Both answers approve the quote. Only the route afterwards differs,
+            which is why neither is styled as a refusal - a customer who wants
+            to hand the crew cash has not done anything wrong. */}
+        {cardReady ? (
+          <div className="cq-pay">
+            <p className="cq-pay-lead">
+              A {DEPOSIT_LABEL} deposit books your date and covers materials. The rest is due when the work is finished.
+            </p>
+            <button
+              type="button"
+              className="cq-btn cq-btn-accept"
+              disabled={picks.length === 0 || busy}
+              onClick={() => submit("accept", "card")}
+            >
+              {busy ? "Sending…" : `Approve & pay ${money(depositCents(Math.round((discount ? discounted : total) * 100)))} deposit`}
+            </button>
+            <button
+              type="button"
+              className="cq-btn cq-pay-alt"
+              disabled={picks.length === 0 || busy}
+              onClick={() => submit("accept", "direct")}
+            >
+              Approve now, pay the crew directly
+            </button>
+            <p className="cq-fine cq-pay-fine">
+              Cash, check, Zelle or Venmo on site - whatever suits you. You can still pay by card later from the link
+              we text you.
+            </p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="cq-btn cq-btn-accept"
+            disabled={picks.length === 0 || busy}
+            onClick={() => submit("accept", "direct")}
+          >
+            {busy ? "Sending…" : "Approve quote"}
+          </button>
+        )}
         <button type="button" className="cq-textlink" disabled={busy} onClick={() => setMode("choose")}>
           Back
         </button>
