@@ -25,6 +25,21 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 /** Everything except `card` is money the crew received and told us about. */
 export const RECORDED_METHODS = PAYMENT_METHODS.filter((m) => m !== "card");
 
+/** A method somebody types into a form. Never `card` - that only comes from Stripe. */
+export type RecordedMethod = Exclude<PaymentMethod, "card">;
+
+/**
+ * Is this string one of the methods the crew can record by hand?
+ *
+ * A guard rather than a bare `RECORDED_METHODS.includes(x)`, because the array's
+ * element type genuinely excludes "card" and passing a wider PaymentMethod to
+ * `includes` is a type error - correctly so. This is the narrowing the callers
+ * actually want: string in, RecordedMethod out.
+ */
+export function isRecordedMethod(value: string): value is RecordedMethod {
+  return (RECORDED_METHODS as readonly string[]).includes(value);
+}
+
 export const METHOD_LABELS: Record<PaymentMethod, string> = {
   card: "Card",
   cash: "Cash",

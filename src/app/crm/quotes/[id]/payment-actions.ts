@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { RECORDED_METHODS, usd, type PaymentMethod } from "@/lib/crm/fees";
+import { isRecordedMethod, usd } from "@/lib/crm/fees";
 import { notifyCashRecorded, notifyPayLink } from "@/lib/crm/notify";
 import {
   applyRefund,
@@ -120,8 +120,8 @@ export async function recordManualPayment(_prev: PaymentState, formData: FormDat
   const quote = await getQuote(session, id);
   if (!quote) return { ok: false, error: "You don't have access to this job." };
 
-  const method = String(formData.get("method") ?? "") as PaymentMethod;
-  if (!RECORDED_METHODS.includes(method)) {
+  const method = String(formData.get("method") ?? "");
+  if (!isRecordedMethod(method)) {
     return { ok: false, error: "Pick how the customer paid." };
   }
 

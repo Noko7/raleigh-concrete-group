@@ -8,7 +8,10 @@ import type { QuoteEvent } from "./types";
 const statusLabel = (v: unknown) => STATUS_LABELS[String(v) as keyof typeof STATUS_LABELS] ?? String(v ?? "N/A");
 
 // Money in the log is always stored in cents, same as the ledger it came from.
-const money = (v: unknown) => (v == null ? "$0.00" : usd(Number(v) || 0));
+// Named for its unit because the quote_revised case below has its own local
+// helper that formats DOLLARS - two "money" functions disagreeing by a factor
+// of a hundred is not a bug anyone finds by reading.
+const centsUsd = (v: unknown) => (v == null ? "$0.00" : usd(Number(v) || 0));
 
 // When a text held by quiet hours is due, in Raleigh time - "tomorrow at
 // 8:00 AM" rather than the ISO stamp the event actually stores.
@@ -159,16 +162,16 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       const fee = Number(m.fee_cents ?? 0);
       // The office's cut is on the line because this is the only record that
       // says whether it was collected with the payment or left owed.
-      return `${how === "card" ? "Card payment" : `${how.charAt(0).toUpperCase()}${how.slice(1)} recorded`}: ${money(m.amount_cents)}${
-        how === "card" ? ` (fee ${money(fee)})` : ""
+      return `${how === "card" ? "Card payment" : `${how.charAt(0).toUpperCase()}${how.slice(1)} recorded`}: ${centsUsd(m.amount_cents)}${
+        how === "card" ? ` (fee ${centsUsd(fee)})` : ""
       }`;
     }
     case "payment_refunded":
-      return `Refunded ${money(m.amount_cents)}`;
+      return `Refunded ${centsUsd(m.amount_cents)}`;
     case "job_paid":
       return `Marked paid${
         m.amount_cents != null
-          ? ` (${money(m.amount_cents)})`
+          ? ` (${centsUsd(m.amount_cents)})`
           : m.amount != null
             ? ` ($${Number(m.amount).toLocaleString("en-US")})`
             : ""

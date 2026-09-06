@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { RECORDED_METHODS, usd, type PaymentMethod } from "@/lib/crm/fees";
+import { isRecordedMethod, usd } from "@/lib/crm/fees";
 import { recordSettlement } from "@/lib/crm/payments";
 import { getStaffById } from "@/lib/crm/queries";
 
@@ -38,8 +38,8 @@ export async function recordFeeSettlement(_prev: SettleState, formData: FormData
   }
   const amountCents = Math.round(dollars * 100);
 
-  const method = String(formData.get("method") ?? "") as PaymentMethod;
-  if (!RECORDED_METHODS.includes(method)) return { ok: false, error: "Pick how they sent it." };
+  const method = String(formData.get("method") ?? "");
+  if (!isRecordedMethod(method)) return { ok: false, error: "Pick how they sent it." };
 
   const saved = await recordSettlement(session, {
     staffId,
