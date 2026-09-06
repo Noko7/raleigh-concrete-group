@@ -520,7 +520,7 @@ function Modal({ onClose }: { onClose: () => void }) {
         setStatus("idle");
         setStepIndex(STEPS.indexOf("schedule"));
         setErrorMsg(json.error || "");
-        void checkVisitDate(data.visitDate);
+        void checkVisitDate(data.visitDate, data.service);
       } else {
         setErrorMsg(json.error || `Something went wrong saving your request. Please call us at ${phoneDisplay}.`);
         setStatus("error");
