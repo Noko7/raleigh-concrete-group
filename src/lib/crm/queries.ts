@@ -466,12 +466,22 @@ export type QuoteMessage = {
   // every row written before quiet-hours.sql was run.
   send_after?: string | null;
   sent_at?: string | null;
+  // Set when somebody called the text back before the queue got to it. See
+  // supabase/cancel-held-text.sql: the row stays, it just never sends.
+  cancelled_at?: string | null;
 };
 
 // Still waiting for the morning: due in the future, or due already and not yet
-// picked up by a flush.
+// picked up by a flush. A cancelled row is no longer waiting for anything -
+// counting it as held would leave "goes out at 8:00 AM" on a text that never will.
 export function isHeld(m: QuoteMessage): boolean {
-  return Boolean(m.send_after) && !m.sent_at;
+  return Boolean(m.send_after) && !m.sent_at && !m.cancelled_at;
+}
+
+// Called back by staff before it sent. Its own state, not a failure: nothing
+// went wrong, somebody decided against it.
+export function isCancelled(m: QuoteMessage): boolean {
+  return Boolean(m.cancelled_at) && !m.sent_at;
 }
 
 // Service-role: sends happen from the public quote endpoint and from cron, where
@@ -526,7 +536,7 @@ export async function logMessage(row: {
 
 export async function listDueMessages(nowIso: string, limit = 25): Promise<QuoteMessage[]> {
   const res = await pgAdmin(
-    `quote_messages?sent_at=is.null&send_after=lte.${encodeURIComponent(nowIso)}` +
+    `quote_messages?sent_at=is.null&cancelled_at=is.null&send_after=lte.${encodeURIComponent(nowIso)}` +
       `&select=*&order=send_after.asc&limit=${limit}`,
   );
   if (!res.ok) return [];
@@ -542,10 +552,14 @@ export async function listDueMessages(nowIso: string, limit = 25): Promise<Quote
  * back, everyone else gets an empty list and moves on. Stamped before the send
  * rather than after, so a crash mid-send leaves a text unsent rather than sent
  * twice - the safer half of a choice that has to be made one way or the other.
+ *
+ * `cancelled_at is null` is in the filter for the same reason `sent_at` is: a
+ * cancel landing between the list and the claim has to win, or a text somebody
+ * stopped goes out anyway and the log says it was cancelled.
  */
 export async function claimMessage(id: string, nowIso: string): Promise<boolean> {
   try {
-    const res = await pgAdmin(`quote_messages?id=eq.${encodeURIComponent(id)}&sent_at=is.null`, {
+    const res = await pgAdmin(`quote_messages?id=eq.${encodeURIComponent(id)}&sent_at=is.null&cancelled_at=is.null`, {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({ sent_at: nowIso }),
@@ -574,6 +588,36 @@ export async function finishMessage(
     });
   } catch (e) {
     console.error("[sms-queue] could not record the result of a held message", e);
+  }
+}
+
+/**
+ * Call a queued text back. Returns the row it stopped, or null if it was too
+ * late - or was never queued in the first place.
+ *
+ * Service-role, because staff only ever SELECT the message log - but scoped to
+ * one job by the caller, which has already checked the session can reach it.
+ * The row must still be queued: `sent_at=is.null` is what makes a cancel that
+ * arrives a second after the flush claimed the row come back empty, rather than
+ * marking a text cancelled that is already on somebody's phone.
+ */
+export async function cancelMessage(id: string, quoteId: string, nowIso: string): Promise<QuoteMessage | null> {
+  try {
+    const res = await pgAdmin(
+      `quote_messages?id=eq.${encodeURIComponent(id)}&quote_id=eq.${encodeURIComponent(quoteId)}` +
+        `&sent_at=is.null&cancelled_at=is.null&send_after=not.is.null`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ cancelled_at: nowIso, detail: "Cancelled by staff before it went out." }),
+      },
+    );
+    if (!res.ok) return null;
+    // The cancelled row itself, so the caller can say in the activity log which
+    // text it was rather than logging that "a text" was stopped.
+    return ((await res.json()) as QuoteMessage[])[0] ?? null;
+  } catch {
+    return null;
   }
 }
 

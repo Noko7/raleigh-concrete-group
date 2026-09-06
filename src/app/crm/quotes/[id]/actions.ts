@@ -32,6 +32,7 @@ import {
 } from "@/lib/crm/notify";
 import {
   addEvent,
+  cancelMessage,
   clearAppointment,
   confirmSchedule,
   conflictMessage,
@@ -815,6 +816,39 @@ export async function completeJob(_prev: FinishState, formData: FormData): Promi
 // that stamped paid_at and nothing else. Both are gone. Money is recorded
 // against the ledger now - see payment-actions.ts - so "is this paid" has one
 // answer, arrived at by adding up payments rather than by somebody asserting it.
+
+/**
+ * Stop a text that hasn't gone out yet.
+ *
+ * A customer text raised at 9pm sits in the queue until 8am, and a crew text
+ * can sit for a few minutes while a run spaces itself out. That gap is the
+ * whole point of this button: the customer rings back, or somebody spots the
+ * wrong price in the quote they just sent, and the only thing worse than the
+ * text being late is it arriving anyway in the morning.
+ *
+ * Void, and no confirmation state: the log re-renders straight underneath, and
+ * the row itself is the answer - "Cancelled" if it worked, and if the queue
+ * beat us to it by a second, the honest "Accepted" it now deserves.
+ */
+export async function cancelHeldMessage(formData: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session) return;
+  const id = String(formData.get("id") ?? "");
+  const messageId = String(formData.get("messageId") ?? "");
+  if (!id || !messageId) return;
+
+  // The message log has no policy of its own for writes, so access is checked
+  // here the same way every other action on this page checks it: can this
+  // person load the job? The quote id then scopes the update to that job, so a
+  // guessed message id from somebody else's lead does nothing.
+  const current = await getQuote(session, id);
+  if (!current) return;
+
+  const cancelled = await cancelMessage(messageId, id, new Date().toISOString());
+  if (cancelled) await addEvent(session, id, "message_cancelled", { kind: cancelled.kind, role: cancelled.role });
+
+  revalidatePath(`/crm/quotes/${id}`);
+}
 
 // Regenerate the customer + contractor capability tokens. Use this if a link is
 // leaked or shared too widely: the old /q/<token> and /job/<token> URLs stop

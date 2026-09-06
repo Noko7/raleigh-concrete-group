@@ -2085,8 +2085,15 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   font-family: inherit; font-size: 0.85rem; white-space: pre-wrap; word-break: break-word;
 }
 
+/* Taking a queued text back. Quiet, and beside its own row: it is only ever
+   relevant for the few minutes or few hours one text is waiting. */
+.msg-cancel { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.55rem; }
+.msg-cancel-btn { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+
 @media (max-width: 640px) {
   .msg-when { width: 100%; }
+  /* Thumb-sized on a phone, where this gets pressed in a hurry. */
+  .msg-cancel-btn { min-height: 40px; }
 }
 
 /* ── Security dashboard ── */

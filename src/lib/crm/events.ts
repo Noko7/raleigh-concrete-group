@@ -3,6 +3,7 @@
 import { clockLabel } from "./clock";
 import { STATUS_LABELS } from "./constants";
 import { usd } from "./fees";
+import { messageLabel } from "./messages";
 import type { QuoteEvent } from "./types";
 
 const statusLabel = (v: unknown) => STATUS_LABELS[String(v) as keyof typeof STATUS_LABELS] ?? String(v ?? "N/A");
@@ -176,6 +177,11 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
             ? ` ($${Number(m.amount).toLocaleString("en-US")})`
             : ""
       }`;
+    // A queued text somebody stopped before the morning flush reached it. The
+    // kind is the point of the line: "a text was cancelled" tells nobody
+    // whether the customer is still waiting on their quote.
+    case "message_cancelled":
+      return `Queued text cancelled before it sent${m.kind ? ` (${messageLabel(String(m.kind))})` : ""}`;
     case "links_rotated":
       return "Customer/job links regenerated (old links disabled)";
     case "quote_created_manually":

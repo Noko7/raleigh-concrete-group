@@ -1,6 +1,8 @@
 import { BUSINESS_TZ, clockLabel } from "@/lib/crm/clock";
 import { messageLabel, roleLabel } from "@/lib/crm/messages";
-import { isHeld, type QuoteMessage } from "@/lib/crm/queries";
+import { isCancelled, isHeld, type QuoteMessage } from "@/lib/crm/queries";
+
+import { cancelHeldMessage } from "./actions";
 
 // Every text this job has produced, and whether it left the building.
 //
@@ -32,7 +34,9 @@ export function MessageLog({ messages }: { messages: QuoteMessage[] }) {
   const held = messages.filter(isHeld);
   const heldForMorning = held.filter((m) => m.role === "customer");
   const spaced = held.length - heldForMorning.length;
-  const failed = messages.filter((m) => !m.ok && !isHeld(m)).length;
+  // A cancelled text is not a failed one. It never left because somebody
+  // decided it shouldn't, which is the queue working, not the queue breaking.
+  const failed = messages.filter((m) => !m.ok && !isHeld(m) && !isCancelled(m)).length;
 
   return (
     <div className="crm-card">
@@ -58,18 +62,26 @@ export function MessageLog({ messages }: { messages: QuoteMessage[] }) {
 
           <ul className="msg-log">
             {messages.map((m) => (
-              <li key={m.id} className={m.ok || isHeld(m) ? "" : "msg-bad"}>
+              <li key={m.id} className={m.ok || isHeld(m) || isCancelled(m) ? "" : "msg-bad"}>
                 <div className="msg-head">
                   <span
                     className={`crm-badge ${
-                      m.ok ? "crm-badge-success" : isHeld(m) ? "crm-badge-warning" : "crm-badge-danger"
+                      m.ok
+                        ? "crm-badge-success"
+                        : isHeld(m)
+                          ? "crm-badge-warning"
+                          : isCancelled(m)
+                            ? "crm-badge-lost"
+                            : "crm-badge-danger"
                     }`}
                   >
                     {m.ok
                       ? "Accepted"
                       : isHeld(m)
                         ? `${m.role === "customer" ? "Waiting until" : "Queued for"} ${clockLabel(new Date(m.send_after!))}`
-                        : "Failed"}
+                        : isCancelled(m)
+                          ? "Cancelled"
+                          : "Failed"}
                   </span>
                   <strong className="msg-kind">{messageLabel(m.kind)}</strong>
                   <span className="crm-muted crm-sm msg-to">
@@ -79,9 +91,27 @@ export function MessageLog({ messages }: { messages: QuoteMessage[] }) {
                   <span className="crm-muted crm-sm msg-when">{fmt(m.created_at)}</span>
                 </div>
 
-                {/* A hold explains itself in the badge; the detail line is for
-                    a provider's own words about a real failure. */}
-                {m.detail && !m.ok && !isHeld(m) && <pre className="msg-detail">{m.detail}</pre>}
+                {/* A hold and a cancellation both explain themselves in the
+                    badge; the detail line is for a provider's own words about a
+                    real failure. */}
+                {m.detail && !m.ok && !isHeld(m) && !isCancelled(m) && <pre className="msg-detail">{m.detail}</pre>}
+
+                {/* The window between "queued" and "sent" is the only chance
+                    anyone gets to take a text back, so the button lives on the
+                    row rather than behind a menu. A plain form, like the rest
+                    of this page: the log re-renders and the badge is the
+                    receipt. If the queue sent it in the meantime the row comes
+                    back "Accepted" and the button is gone, which is the truth. */}
+                {isHeld(m) && (
+                  <form action={cancelHeldMessage} className="msg-cancel">
+                    <input type="hidden" name="id" value={m.quote_id ?? ""} />
+                    <input type="hidden" name="messageId" value={m.id} />
+                    <button type="submit" className="crm-btn crm-btn-ghost msg-cancel-btn">
+                      Cancel this text
+                    </button>
+                    <span className="crm-muted crm-sm">It hasn&apos;t gone out yet - this stops it for good.</span>
+                  </form>
+                )}
 
 
                 {m.body && (
