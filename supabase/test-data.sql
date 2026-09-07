@@ -39,6 +39,26 @@ set is_test = true
 where name ilike '%test%'
   and is_test = false;
 
+-- ── The ones whose names do not say test ────────────────────────────────────
+-- A pattern only finds leads somebody happened to name after what they were
+-- doing. The practice job called "Marcus" looks exactly like a customer called
+-- Marcus, and no filter will ever tell them apart - only you can.
+--
+-- Put their names in the list below, check the select, then run the update.
+-- After this initial tidy-up, use the Test lead card at the bottom of a job
+-- page instead: it is one button, it is owner-only, and it writes a line in
+-- the job's activity log saying who decided and when.
+select id, name, status, quote_amount, is_test, created_at,
+       (select count(*) from public.quote_payments p where p.quote_id = q.id) as payment_rows
+from public.quote_requests q
+where q.name in ('Jose', 'Marcus', 'James P')
+order by q.created_at desc;
+
+update public.quote_requests
+set is_test = true
+where name in ('Jose', 'Marcus', 'James P')
+  and is_test = false;
+
 -- ── Undo ────────────────────────────────────────────────────────────────────
 -- A real lead caught by the filter. Put its id in and run it.
 update public.quote_requests

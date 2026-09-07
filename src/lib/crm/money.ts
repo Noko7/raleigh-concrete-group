@@ -241,8 +241,17 @@ export async function moneyBoard(
   const jobs = includeTests ? allJobs : allJobs.filter((j) => !j.isTest);
 
   // Fees the contractor has already sent over by hand.
+  //
+  // Gated like everything else that reads money. A settlement recorded against
+  // a practice job is practice: without this the tile would report a fee
+  // received against a job whose fee was never earned, and "your fees,
+  // received" would disagree with the ledger it sits above. A settlement with
+  // no job on it cannot be told apart from a real one, so it stays - that is
+  // the honest reading of a payment somebody made against a balance rather
+  // than against a job.
   const settledByStaff = new Map<string, number>();
   for (const s of settlementsRes.rows) {
+    if (!counts(s.quote_id)) continue;
     settledByStaff.set(s.staff_id, (settledByStaff.get(s.staff_id) ?? 0) + s.amount_cents);
   }
 
