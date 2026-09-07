@@ -212,7 +212,7 @@ const en = {
   },
   calendar: {
     title: "Calendar",
-    subtitle: "Booked jobs and in-person quote visits.",
+    subtitle: "Booked jobs, in-person quote visits, and slots customers have asked for.",
     job: "Job",
     visit: "Visit",
     today: "Today",
@@ -235,6 +235,11 @@ const en = {
     allDay: "All day",
     empty: "Nothing scheduled yet. Booked jobs and quote visits show up here.",
     dragHint: "Drag an appointment to another day to reschedule it.",
+    // A slot an online customer offered in case photos aren't enough. Nobody
+    // has agreed to it, so it says so on its face rather than only in a colour.
+    notBooked: "Not booked",
+    requestedNote:
+      "This is a slot {name} offered in case photos aren't enough to price the job. Nobody has agreed to it and nobody is driving to it. Open the job to confirm it as a real visit, or price it from the photos and it disappears.",
     call: "Call",
     map: "Map",
     directions: "Directions",
@@ -349,7 +354,10 @@ const en = {
     service: "Service",
     address: "Address",
     openInMaps: "Open in Maps",
-    scheduledJob: "Scheduled job",
+    // The label over the date at the top of the page. Once a work day is booked
+    // the pill above it already says "Installation scheduled", so this names
+    // what the date IS rather than repeating the state: the day of the pour.
+    scheduledJob: "Work day",
     quoteVisit: "Quote visit",
     preferredTime: "Preferred time",
     projectNotes: "Project notes",
@@ -383,6 +391,29 @@ const en = {
     notScheduled: "No date set yet",
     jobScheduled: "Installation scheduled",
     noVisitNeeded: "No visit needed - quote from the photos",
+    // What has actually happened on this job, newest first. Deliberately not the
+    // office's full audit log: a contractor needs the handful of moments that
+    // change what they do next, not every note edit and internal price tweak.
+    logTitle: "What's happened",
+    logEmpty: "Nothing has happened on this job yet.",
+    logMore: "Show earlier activity",
+    log: {
+      assigned: "Job assigned to the crew",
+      quoteSent: "Quote sent to the customer",
+      quoteRevised: "Corrected quote sent",
+      customerViewed: "Customer opened the quote",
+      customerAccepted: "Customer approved the quote",
+      customerDeclined: "Customer declined the quote",
+      visitConfirmed: "Quote visit confirmed",
+      visitMoved: "Quote visit moved",
+      visitCancelled: "Quote visit cancelled",
+      dateConfirmed: "Work day confirmed",
+      dateChanged: "Work day moved",
+      bookingCancelled: "Work day released",
+      customerConfirmed: "Customer confirmed the day",
+      jobCompleted: "Work marked completed",
+      paymentReceived: "Payment received",
+    },
     visitTitle: "Need to see it in person?",
     visitLead:
       "This came in as an online quote, so price it from the photos if you can. If the job is too big to call from pictures, confirm a visit and we'll text the customer.",
@@ -743,7 +774,7 @@ const es: typeof en = {
   },
   calendar: {
     title: "Calendario",
-    subtitle: "Trabajos agendados y visitas de cotización en persona.",
+    subtitle: "Trabajos agendados, visitas de cotización en persona y horarios que los clientes han pedido.",
     job: "Trabajo",
     visit: "Visita",
     today: "Hoy",
@@ -765,6 +796,9 @@ const es: typeof en = {
     allDay: "Todo el día",
     empty: "Todavía no hay nada agendado. Aquí aparecen los trabajos y las visitas de cotización.",
     dragHint: "Arrastra una cita a otro día para reprogramarla.",
+    notBooked: "Sin confirmar",
+    requestedNote:
+      "Este es un horario que {name} ofreció por si las fotos no alcanzan para cotizar el trabajo. Nadie lo ha confirmado y nadie va a manejar hasta allá. Abre el trabajo para confirmarlo como visita real, o cotiza con las fotos y desaparece.",
     call: "Llamar",
     map: "Mapa",
     directions: "Cómo llegar",
@@ -879,7 +913,7 @@ const es: typeof en = {
     service: "Servicio",
     address: "Dirección",
     openInMaps: "Abrir en Maps",
-    scheduledJob: "Trabajo agendado",
+    scheduledJob: "Día de trabajo",
     quoteVisit: "Visita de cotización",
     preferredTime: "Horario preferido",
     projectNotes: "Notas del proyecto",
@@ -910,6 +944,26 @@ const es: typeof en = {
     notScheduled: "Todavía sin fecha",
     jobScheduled: "Instalación programada",
     noVisitNeeded: "No hace falta visita - cotiza con las fotos",
+    logTitle: "Lo que ha pasado",
+    logEmpty: "Todavía no ha pasado nada en este trabajo.",
+    logMore: "Ver actividad anterior",
+    log: {
+      assigned: "Trabajo asignado al equipo",
+      quoteSent: "Cotización enviada al cliente",
+      quoteRevised: "Cotización corregida enviada",
+      customerViewed: "El cliente abrió la cotización",
+      customerAccepted: "El cliente aprobó la cotización",
+      customerDeclined: "El cliente rechazó la cotización",
+      visitConfirmed: "Visita de cotización confirmada",
+      visitMoved: "Visita de cotización movida",
+      visitCancelled: "Visita de cotización cancelada",
+      dateConfirmed: "Día de trabajo confirmado",
+      dateChanged: "Día de trabajo movido",
+      bookingCancelled: "Día de trabajo liberado",
+      customerConfirmed: "El cliente confirmó el día",
+      jobCompleted: "Trabajo marcado como completado",
+      paymentReceived: "Pago recibido",
+    },
     visitTitle: "¿Necesitas verlo en persona?",
     visitLead:
       "Esta llegó como cotización en línea, así que cotízala con las fotos si puedes. Si el trabajo es muy grande para calcularlo por fotos, confirma una visita y le avisamos al cliente por mensaje.",

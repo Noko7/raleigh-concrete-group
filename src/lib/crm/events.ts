@@ -3,6 +3,7 @@
 import { clockLabel } from "./clock";
 import { STATUS_LABELS } from "./constants";
 import { usd } from "./fees";
+import type { Dict } from "./i18n";
 import { messageLabel } from "./messages";
 import type { QuoteEvent } from "./types";
 
@@ -20,6 +21,61 @@ const heldWhen = (v: unknown) => {
   const d = new Date(String(v));
   return Number.isNaN(d.getTime()) ? "in the morning" : clockLabel(d);
 };
+
+/**
+ * The same log, cut down to what a contractor needs, in their own language.
+ *
+ * eventText above is the office's audit trail: every note edit, every price
+ * tweak, every text that failed, written in English because the CRM is. A crew
+ * standing on a driveway is asking a smaller question - where is this job, and
+ * what did the customer say - so this returns a line only for the moments that
+ * answer it, and null for everything else.
+ *
+ * A whitelist rather than a blocklist on purpose: a new event type added for
+ * the office shows up in the CRM and stays out of the crew's page until
+ * somebody decides it belongs there. The other way round, every internal thing
+ * we ever log leaks onto a screen customers sometimes read over a shoulder.
+ */
+export function crewEventText(e: QuoteEvent, t: Dict): string | null {
+  const l = t.contractorJob.log;
+  const m = (e.meta ?? {}) as Record<string, unknown>;
+  switch (e.type) {
+    case "assigned":
+      // Only the assignment itself. "Unassigned" is an office decision and the
+      // person reading this has just lost the job from their list anyway.
+      return m.to ? l.assigned : null;
+    case "quote_sent":
+      return l.quoteSent;
+    case "quote_revised":
+      return l.quoteRevised;
+    case "customer_viewed":
+      return l.customerViewed;
+    case "customer_accepted":
+      return l.customerAccepted;
+    case "customer_declined":
+      return l.customerDeclined;
+    case "visit_confirmed":
+      return l.visitConfirmed;
+    case "visit_moved":
+      return l.visitMoved;
+    case "visit_cancelled":
+      return l.visitCancelled;
+    case "date_confirmed":
+      return l.dateConfirmed;
+    case "date_changed":
+      return l.dateChanged;
+    case "booking_cancelled":
+      return l.bookingCancelled;
+    case "customer_confirmed":
+      return l.customerConfirmed;
+    case "job_completed":
+      return l.jobCompleted;
+    case "payment_received":
+      return l.paymentReceived;
+    default:
+      return null;
+  }
+}
 
 // Who triggered the event: a named teammate, the customer, or an automatic change.
 export function eventActor(e: QuoteEvent, names: Map<string, string>): string {

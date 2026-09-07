@@ -1618,6 +1618,13 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 /* Priced off drawings: no visit, no photos. Slate keeps it clearly apart
    from the amber "somebody is driving out" pill. */
 .job-type-plans { background: #334155; color: var(--ivory); }
+/* Once a work day is booked the pill stops naming the quote type and names the
+   stage. Same green as the "Installation scheduled" tag this replaces, moved up
+   to where the eye lands first. Green because it is the good news it sounds
+   like: the line here was once a red "customer hasn't confirmed yet" that
+   stayed up for the whole fortnight before the pour. */
+.job-type-booked { background: #15803d; color: #fff; }
+.job-type-done { background: var(--charcoal-end); color: var(--ivory); }
 .job-when { display: flex; flex-direction: column; gap: 0.1rem; }
 .job-when-label { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: #6b7280; }
 /* Same display face the rest of the site uses for its big numbers (.crm-stat
@@ -1641,11 +1648,6 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.07em;
   border-radius: 999px; padding: 0.25rem 0.6rem; line-height: 1;
 }
-/* A work day the customer accepted and the crew booked. Green because it is
-   the good news it sounds like: this used to be a red "customer hasn't
-   confirmed yet" that stayed up for the whole fortnight before the pour. */
-.job-when-tag-ok { background: #15803d; color: #fff; }
-
 .job-meta { display: grid; gap: 0; margin-bottom: 1.4rem; }
 .job-meta > div { display: grid; grid-template-columns: 132px 1fr; gap: 0.5rem; font-size: 1rem; padding: 0.6rem 0; border-bottom: 1px solid #e5e7eb; }
 .job-meta > div:last-child { border-bottom: none; }
@@ -1658,6 +1660,30 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .job-muted { color: #6b7280; }
 .job-photos-title { font-weight: 800; font-size: 1rem; margin-bottom: 0.7rem; }
 .job-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.7rem; }
+
+/* What's happened. A rail with dots rather than a hairline under every row: a
+   rule per line reads as a table, and this is a sequence. Same neutrals as
+   .job-meta so it sits in the page rather than announcing itself. */
+.job-log { margin-top: 1.5rem; }
+.job-log-list { list-style: none; margin: 0; padding: 0 0 0 1.1rem; border-left: 2px solid #e5e7eb; }
+.job-log-list > li { position: relative; padding: 0 0 0.85rem 0.35rem; }
+.job-log-list > li:last-child { padding-bottom: 0; }
+.job-log-list > li::before {
+  content: ""; position: absolute; left: -1.47rem; top: 0.34rem;
+  width: 9px; height: 9px; border-radius: 50%; background: #d1d5db; border: 2px solid #fff;
+}
+/* The newest line is the answer to "where is this job", so it gets the accent
+   and the others stay quiet. */
+.job-log-list > li:first-child::before { background: var(--amber); }
+.job-log-list strong { display: block; font-size: 0.98rem; font-weight: 700; color: #0f172a; }
+.job-log-list span { font-size: 0.82rem; color: #6b7280; }
+.job-log-more { margin-top: 0.9rem; }
+.job-log-more > summary {
+  cursor: pointer; color: #b45309; font-weight: 800; font-size: 0.88rem;
+  padding: 0.35rem 0; list-style-position: inside;
+}
+.job-log-more > summary:hover { color: var(--amber-dark); }
+.job-log-more .job-log-list { margin-top: 0.7rem; }
 .job-photo { display: block; border-radius: 0.6rem; overflow: hidden; border: 1px solid #e2e5ea; aspect-ratio: 1; }
 .job-photo img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -1675,6 +1701,10 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .job-meta dd { font-size: 1.12rem; font-weight: 700; }
   .job-meta a { display: inline-block; padding: 0.15rem 0; }
   .job-details p { font-size: 1.02rem; color: #1f2937; }
+  /* Same bump the rest of this page gets on a phone: read at arm's length,
+     outdoors, usually one-handed. */
+  .job-log-list strong { font-size: 1.02rem; }
+  .job-log-more > summary { padding: 0.6rem 0; }
   .job-photos { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 }
 
@@ -2180,7 +2210,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-filter-on { color: #fff; }
 .cal-filter-job.cal-filter-on { background: #16a34a; border-color: #16a34a; }
 .cal-filter-inperson.cal-filter-on { background: var(--crm-accent); border-color: var(--crm-accent); }
-.cal-filter-online.cal-filter-on { background: #3b82f6; border-color: #3b82f6; }
+.cal-filter-online.cal-filter-on { background: rgba(59, 130, 246, 0.3); border-color: #3b82f6; color: #dbeafe; }
 
 /* ── Schedule view: what's next, grouped by day ── */
 .cal-agenda { display: flex; flex-direction: column; gap: 1.15rem; }
@@ -2206,7 +2236,18 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-row { display: flex; align-items: stretch; background: var(--crm-bg2); border: 1px solid var(--crm-border); border-left: 4px solid var(--crm-border); border-radius: 0.6rem; overflow: hidden; }
 .cal-row-job { border-left-color: #16a34a; }
 .cal-row-inperson { border-left-color: var(--crm-accent); }
-.cal-row-online { border-left-color: #3b82f6; }
+/* Nobody agreed to this one. A dashed edge and a faded fill say "provisional"
+   at a glance, the way a pencilled-in entry does on a paper calendar. */
+.cal-row-online { border-left-color: rgba(59, 130, 246, 0.55); border-left-style: dashed; }
+.cal-row-online .cal-row-time,
+.cal-row-online .cal-row-name { opacity: 0.72; }
+/* "Not booked" beside the kind. Small, because the fade is doing most of the
+   work - but the fade alone is invisible to anyone who can't see the colour. */
+.cal-tentative {
+  margin-left: 0.4rem; padding: 0.05rem 0.35rem; border-radius: 999px;
+  border: 1px dashed rgba(59, 130, 246, 0.7); color: #93c5fd;
+  font-style: normal; font-size: 0.68rem; letter-spacing: 0.03em;
+}
 .cal-row-main { flex: 1; min-width: 0; display: flex; gap: 0.7rem; align-items: flex-start; text-align: left; background: none; border: none; font: inherit; color: var(--crm-text); cursor: pointer; padding: 0.75rem 0.6rem; min-height: 62px; }
 .cal-row-time { flex: none; width: 4.7rem; font-size: 0.95rem; font-weight: 900; color: var(--crm-text); }
 .cal-row-body { display: flex; flex-direction: column; gap: 0.12rem; min-width: 0; }
@@ -2239,7 +2280,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
 .cal-dot-job { background: #16a34a; }
 .cal-dot-inperson { background: var(--crm-accent); }
-.cal-dot-online { background: #3b82f6; }
+.cal-dot-online { background: rgba(59, 130, 246, 0.42); box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.8); }
 .cal-help { display: none; }
 .cal-busy { opacity: 0.6; pointer-events: none; }
 
@@ -2247,7 +2288,10 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-chip:hover { filter: brightness(1.12); }
 .cal-chip-job { background: #16a34a; }
 .cal-chip-inperson { background: var(--crm-accent); }
-.cal-chip-online { background: #3b82f6; }
+.cal-chip-online {
+  background: rgba(59, 130, 246, 0.26); border: 1px dashed rgba(147, 197, 253, 0.75);
+  color: #dbeafe; padding: calc(0.18rem - 1px) calc(0.4rem - 1px);
+}
 .cal-chip-time { font-weight: 800; font-size: 0.66rem; opacity: 0.95; }
 .cal-chip-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal-chip[draggable="true"] { cursor: grab; }
@@ -2327,7 +2371,12 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-daylist { display: flex; flex-direction: column; gap: 0.45rem; }
 .cal-bg-job { background: #16a34a; }
 .cal-bg-inperson { background: var(--crm-accent); }
-.cal-bg-online { background: #3b82f6; }
+.cal-bg-online { background: rgba(59, 130, 246, 0.32); box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.7); }
+.cal-panel-note {
+  margin: 0.85rem 0 0; padding: 0.7rem 0.8rem; border-radius: 0.55rem;
+  background: rgba(59, 130, 246, 0.12); border: 1px dashed rgba(59, 130, 246, 0.45);
+  color: var(--crm-text); font-size: 0.86rem; line-height: 1.45;
+}
 
 /* ── Quote line items ──────────────────────────────────────────────────────
    Three surfaces, one idea: a quote can be a list of things the customer

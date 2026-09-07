@@ -1,5 +1,5 @@
 import { requireSession } from "@/lib/crm/auth";
-import { visitDateOf } from "@/lib/crm/constants";
+import { requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { googleConfigured, googleStatus } from "@/lib/crm/gcal";
 import { crmBase } from "@/lib/crm/nav";
@@ -47,13 +47,29 @@ export default async function CalendarPage({
     if (q.scheduled_date) {
       events.push({ ...common, date: q.scheduled_date, kind: "job", time: q.scheduled_time });
     }
-    // An in-person quote visit: a real slot with a drive attached. Online
-    // requests are deliberately absent even when the row still holds a date,
-    // because there is no appointment - a card on a day tells the crew to be
-    // somewhere, and for an online quote nobody is going anywhere.
+    // An in-person quote visit: a real slot with a drive attached.
     const visitDate = visitDateOf(q);
     if (visitDate) {
       events.push({ ...common, date: visitDate, kind: "inperson", time: q.visit_time });
+    }
+    // The slot an online customer offered in case photos aren't enough to price
+    // the job. It used to be left off the calendar on the grounds that a card on
+    // a day tells the crew to be somewhere and nobody is going anywhere - true,
+    // but it meant the one appointment somebody still has to answer was the one
+    // appointment you couldn't see. It shows now, faded and labelled Not booked,
+    // and it is the only kind you cannot drag: nothing here is agreed yet, so
+    // there is nothing to reschedule and nobody to text about it.
+    //
+    // Only while it is still an open question. Once the job is booked, or the
+    // lead is lost or finished, the slot the customer offered weeks ago is not
+    // something anybody still has to answer - and a faded card that can never
+    // be actioned is the kind of thing people learn to look past, taking the
+    // live ones with it.
+    const requested = requestedVisitOf(q);
+    const stillOpen =
+      !q.scheduled_date && q.status !== "lost" && q.status !== "completed" && q.status !== "paid";
+    if (requested && stillOpen) {
+      events.push({ ...common, date: requested, kind: "online", time: q.visit_time });
     }
   }
 

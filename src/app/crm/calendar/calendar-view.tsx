@@ -8,10 +8,21 @@ import { DEFAULT_VISIT_SLOTS, to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { deleteEvent, moveEvent, type CalActionState } from "./actions";
 
-// Only things somebody has to show up for. An online quote is desk work with no
-// place to be, so it never becomes a calendar event and there is no filter for
-// one - a chip that can never match anything is just another thing to read.
-export type CalKind = "job" | "inperson";
+// Two things somebody has to show up for, and one nobody has agreed to yet:
+//
+//   job        a booked work day
+//   inperson   a quote visit with a drive attached
+//   online     a slot an online customer offered in case photos aren't enough
+//
+// The third is not an appointment and is never drawn like one - it is faded,
+// labelled "Not booked", and can't be dragged. It is here because it is the
+// only date on this page that still needs answering, and leaving it off meant
+// the office found it by opening leads one at a time.
+export type CalKind = "job" | "inperson" | "online";
+
+// Nobody has agreed to this one. Drives the faded styling, the "Not booked"
+// label, and the absence of the drag/reschedule/cancel affordances.
+const isRequested = (k: CalKind) => k === "online";
 
 export type CalEvent = {
   id: string;
@@ -25,7 +36,8 @@ export type CalEvent = {
   status: string;
 };
 
-const kindLabel = (t: Dict, k: CalKind) => (k === "job" ? t.calendar.kindJob : t.calendar.kindInPerson);
+const kindLabel = (t: Dict, k: CalKind) =>
+  k === "job" ? t.calendar.kindJob : k === "online" ? t.calendar.kindOnline : t.calendar.kindInPerson;
 
 // Month names and weekday initials come from the browser rather than a hand
 // written list, so Spanish gets "enero" and "L M X J V S D" without a second
@@ -131,7 +143,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
   // wide screen flips to Month on first load, then whatever you last chose.
   const [view, setView] = useState<"list" | "month">("list");
   const [cursor, setCursor] = useState({ y: todayY, m: todayM - 1 });
-  const [show, setShow] = useState<Record<CalKind, boolean>>({ job: true, inperson: true });
+  const [show, setShow] = useState<Record<CalKind, boolean>>({ job: true, inperson: true, online: true });
 
   const [selected, setSelected] = useState<CalEvent | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
@@ -312,7 +324,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
       </div>
 
       <div className="cal-filters">
-        {(["job", "inperson"] as CalKind[]).map((k) => (
+        {(["job", "inperson", "online"] as CalKind[]).map((k) => (
           <button
             key={k}
             type="button"
@@ -399,7 +411,11 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
                         key={e.id + e.kind}
                         type="button"
                         className={`cal-chip cal-chip-${e.kind}${dragId === e.id ? " cal-chip-dragging" : ""}`}
-                        draggable={!busy}
+                        // A requested slot has nothing to move: it is the
+                        // customer's suggestion, not a date we hold. Dragging
+                        // it would text them that a visit they were never
+                        // promised had been rescheduled.
+                        draggable={!busy && !isRequested(e.kind)}
                         onDragStart={(ev) => {
                           ev.dataTransfer.setData("text/plain", e.id);
                           ev.dataTransfer.effectAllowed = "move";
@@ -407,7 +423,9 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
                         }}
                         onDragEnd={() => setDragId(null)}
                         onClick={() => setSelected(e)}
-                        title={`${kindLabel(t, e.kind)}: ${e.title}${e.time ? ` · ${e.time}` : ""}`}
+                        title={`${kindLabel(t, e.kind)}: ${e.title}${e.time ? ` · ${e.time}` : ""}${
+                          isRequested(e.kind) ? ` · ${t.calendar.notBooked}` : ""
+                        }`}
                       >
                         {e.time && <span className="cal-chip-time">{e.time}</span>}
                         <span className="cal-chip-title">{e.title}</span>
@@ -464,7 +482,10 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
                     <span className="cal-row-time">{e.time ?? t.calendar.allDay}</span>
                     <span className="cal-row-body">
                       <span className="cal-row-name">{e.title}</span>
-                      <span className="cal-row-kind">{kindLabel(t, e.kind)}</span>
+                      <span className="cal-row-kind">
+                        {kindLabel(t, e.kind)}
+                        {isRequested(e.kind) && <em className="cal-tentative">{t.calendar.notBooked}</em>}
+                      </span>
                     </span>
                   </button>
                 </article>
@@ -523,7 +544,10 @@ function DayGroup({
             <span className="cal-row-time">{e.time ?? t.calendar.allDay}</span>
             <span className="cal-row-body">
               <span className="cal-row-name">{e.title}</span>
-              <span className="cal-row-kind">{kindLabel(t, e.kind)}</span>
+              <span className="cal-row-kind">
+                {kindLabel(t, e.kind)}
+                {isRequested(e.kind) && <em className="cal-tentative">{t.calendar.notBooked}</em>}
+              </span>
               {e.address && <span className="cal-row-addr">{e.address}</span>}
             </span>
           </button>
@@ -628,16 +652,34 @@ function EventPanel({
               )}
             </dl>
 
+            {/* Reschedule and Cancel are for dates we hold. A requested slot
+                is the customer's suggestion, and both buttons would text them
+                about an appointment nobody ever made - so the only way on is
+                Open job, where confirming it is a real decision with a real
+                text attached. */}
+            {isRequested(event.kind) && (
+              <p className="cal-panel-note">{fill(t.calendar.requestedNote, { name: event.title })}</p>
+            )}
+
             <div className="cal-panel-actions">
               <button type="button" className="crm-btn crm-btn-primary" onClick={onOpen}>
                 {t.calendar.openJob}
               </button>
-              <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setMode("move")} disabled={busy}>
-                {t.calendar.reschedule}
-              </button>
-              <button type="button" className="crm-btn cal-btn-danger" onClick={() => setMode("delete")} disabled={busy}>
-                {t.calendar.remove}
-              </button>
+              {!isRequested(event.kind) && (
+                <>
+                  <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setMode("move")} disabled={busy}>
+                    {t.calendar.reschedule}
+                  </button>
+                  <button
+                    type="button"
+                    className="crm-btn cal-btn-danger"
+                    onClick={() => setMode("delete")}
+                    disabled={busy}
+                  >
+                    {t.calendar.remove}
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}

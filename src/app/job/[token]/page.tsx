@@ -5,11 +5,12 @@ import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
 import { STATUS_LABELS, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
-import { todayYmd } from "@/lib/crm/clock";
+import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
+import { crewEventText } from "@/lib/crm/events";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
-import { getQuoteByToken, listQuoteOptionsAdmin, signFiles } from "@/lib/crm/queries";
+import { getQuoteByToken, listEvents, listQuoteOptionsAdmin, signFiles } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
 import { preferredSlots } from "@/app/crm/quotes/[id]/types";
@@ -94,12 +95,37 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
     7200,
   );
 
+  // What has actually happened on this job, in the crew's own language and cut
+  // to the moments that change what they do next. Read through the session
+  // rather than the service role: quote_events already has a policy that gives
+  // a contractor their assigned jobs and nothing else, and leaning on it here
+  // means the crew page cannot accidentally show a job somebody was taken off.
+  const activity = (await listEvents(session, quote.id))
+    .map((e) => ({ id: e.id, text: crewEventText(e, t), at: e.created_at }))
+    .filter((r): r is { id: string; text: string; at: string } => r.text !== null);
+  // Five is what fits before the section stops being a glance and starts being
+  // a document. The rest is one tap away rather than gone.
+  const recentActivity = activity.slice(0, 5);
+  const earlierActivity = activity.slice(5);
+
   // Dates read in the contractor's own language, same as the rest of the page.
   const fmtDay = (ymd: string) =>
     new Date(`${ymd}T00:00:00`).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
       weekday: "long",
       month: "long",
       day: "numeric",
+    });
+  // Raleigh time on the log, for the same reason the message log uses it: a
+  // stamp that disagrees with the phone in your hand is a stamp you stop
+  // trusting. Time included, because "this morning" and "last Tuesday" are
+  // different answers to "have they seen the quote yet?"
+  const fmtStamp = (iso: string) =>
+    new Date(iso).toLocaleString(locale === "es" ? "es-US" : "en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: BUSINESS_TZ,
     });
   const prettyVisit = visitDate ? fmtDay(visitDate) : null;
   const prettyJob = quote.scheduled_date ? fmtDay(quote.scheduled_date) : null;
@@ -122,24 +148,34 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // through. confirmed_at is still recorded; it just isn't a warning.
   const isPlans = quote.quote_type === "plans";
   const isInPerson = !isPlans && quote.quote_type !== "online";
-  const when = prettyJob
+
+  // The pill at the top of the key block used to say how the job was quoted -
+  // "In-person quote" - for the entire life of the job, which meant a booked
+  // installation announced itself as a quote visit and left the crew reading
+  // the small print underneath to find out otherwise. How it was quoted stops
+  // mattering the moment there is a work day on the books. What the job IS
+  // takes the slot from then on.
+  const bookedDay = Boolean(quote.scheduled_date) && quote.status !== "lost";
+  const pill = bookedDay
     ? {
-        label: t.contractorJob.scheduledJob,
-        day: prettyJob,
-        time: quote.scheduled_time,
-        pending: false,
-        booked: quote.status === "scheduled",
+        text: isDone ? (t.status[quote.status] ?? STATUS_LABELS[quote.status]) : t.contractorJob.jobScheduled,
+        tone: isDone ? "done" : "booked",
       }
+    : {
+        text: isPlans
+          ? t.contractorJob.typePlans
+          : isInPerson
+            ? t.contractorJob.typeInPerson
+            : t.contractorJob.typeOnline,
+        tone: isPlans ? "plans" : isInPerson ? "inperson" : "online",
+      };
+
+  const when = prettyJob
+    ? { label: t.contractorJob.scheduledJob, day: prettyJob, time: quote.scheduled_time, pending: false }
     : prettyVisit
-      ? { label: t.contractorJob.quoteVisit, day: prettyVisit, time: quote.visit_time, pending: false, booked: false }
+      ? { label: t.contractorJob.quoteVisit, day: prettyVisit, time: quote.visit_time, pending: false }
       : requestedVisit
-        ? {
-            label: t.contractorJob.visitAsked,
-            day: fmtDay(requestedVisit),
-            time: quote.visit_time,
-            pending: true,
-            booked: false,
-          }
+        ? { label: t.contractorJob.visitAsked, day: fmtDay(requestedVisit), time: quote.visit_time, pending: true }
         : null;
 
   // Which appointment the Reschedule button moves: always the one the block
@@ -167,13 +203,13 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
 
         <div className="job-head">
           <h1 className="job-title">{t.contractorJob.title}</h1>
-          {/* The stage badge steps aside for the green tag on the date below,
-              which says the same word - "scheduled" - louder, and next to the
-              day it is actually about. Two labels saying one thing is how a
-              screen full of little pills stops being read at all. Every other
-              stage still shows it: New, Quoted, Needs scheduling, Completed,
-              Paid and Lost have nothing else on the page announcing them. */}
-          {!when?.booked && (
+          {/* The stage badge steps aside whenever the pill below is already
+              carrying the stage, which it does from the moment a work day is
+              booked. Two labels saying one thing is how a screen full of little
+              pills stops being read at all. Every other stage still shows it
+              here: New, Quoted, Needs scheduling and Lost have nothing else on
+              the page announcing them. */}
+          {!bookedDay && (
             <span className={`crm-badge crm-badge-${quote.status}`}>
               {t.status[quote.status] ?? STATUS_LABELS[quote.status]}
             </span>
@@ -187,20 +223,13 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             are set large and heavy. They shout through size rather than through
             a colour of their own - this is one card in a stack, not a banner. */}
         <div className="job-key">
-          <span className={`job-type job-type-${isPlans ? "plans" : isInPerson ? "inperson" : "online"}`}>
-            {isPlans
-              ? t.contractorJob.typePlans
-              : isInPerson
-                ? t.contractorJob.typeInPerson
-                : t.contractorJob.typeOnline}
-          </span>
+          <span className={`job-type job-type-${pill.tone}`}>{pill.text}</span>
           {when ? (
             <div className={`job-when${when.pending ? " job-when-pending" : ""}`}>
               <span className="job-when-label">{when.label}</span>
               <strong className="job-when-day">{when.day}</strong>
               {when.time && <strong className="job-when-time">{when.time}</strong>}
               {when.pending && <span className="job-when-tag">{t.contractorJob.visitNotBooked}</span>}
-              {when.booked && <span className="job-when-tag job-when-tag-ok">{t.contractorJob.jobScheduled}</span>}
             </div>
           ) : (
             // "No date set yet" on an online quote reads like something is
@@ -459,6 +488,43 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             customerFirstName={quote.name.trim().split(/\s+/)[0] || quote.name}
           />
         )}
+
+        {/* Last on the page, because it is the only block nothing depends on.
+            It answers the question the crew used to have to ring the office
+            for: has the customer seen it, did they say yes, who moved the day.
+            Newest first, the way you would ask it. */}
+        <section className="job-log">
+          <h2 className="job-photos-title">{t.contractorJob.logTitle}</h2>
+          {activity.length === 0 ? (
+            <p className="job-muted">{t.contractorJob.logEmpty}</p>
+          ) : (
+            <>
+              <ol className="job-log-list">
+                {recentActivity.map((r) => (
+                  <li key={r.id}>
+                    <strong>{r.text}</strong>
+                    <span>{fmtStamp(r.at)}</span>
+                  </li>
+                ))}
+              </ol>
+              {earlierActivity.length > 0 && (
+                <details className="job-log-more">
+                  <summary>
+                    {t.contractorJob.logMore} ({earlierActivity.length})
+                  </summary>
+                  <ol className="job-log-list">
+                    {earlierActivity.map((r) => (
+                      <li key={r.id}>
+                        <strong>{r.text}</strong>
+                        <span>{fmtStamp(r.at)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              )}
+            </>
+          )}
+        </section>
       </div>
     </main>
   );
