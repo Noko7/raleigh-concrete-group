@@ -1817,6 +1817,47 @@ export async function logLoginAttempt(input: {
   });
 }
 
+// How many times in a row this ACCOUNT has failed to sign in.
+//
+// The IP limiter in the middleware answers a different question. It stops one
+// machine hammering the form; it does nothing about the same password list
+// tried against noah@ from a hundred addresses, which is the shape a real
+// attempt on an owner account takes. This table was already recording every
+// one of those and nothing ever read it back.
+//
+// Counted since the last SUCCESS, so signing in correctly clears the streak -
+// somebody who mistypes their password four times, gets in, and mistypes it
+// again tomorrow is never locked out. Service role: there is no session yet.
+export async function recentFailuresFor(email: string, windowMs: number): Promise<number> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return 0;
+  const since = new Date(Date.now() - windowMs).toISOString();
+  const params = new URLSearchParams({
+    select: "success,created_at",
+    email: `eq.${normalized}`,
+    created_at: `gte.${since}`,
+    // A refusal is not an attempt. Counting the rows the lockout itself writes
+    // would mean somebody who keeps clicking during the cool-off never gets
+    // back in - each click would push the window forward. So the clock runs
+    // from the last real password attempt.
+    reason: "neq.locked_out",
+    order: "created_at.desc",
+    limit: "40",
+  });
+  const res = await pgAdmin(`login_attempts?${params.toString()}`);
+  // A failure to read the log must not become a failure to sign in. This is a
+  // throttle, not the authorization itself - the password still has to be
+  // right - so the safe direction here is to let the attempt through.
+  if (!res.ok) return 0;
+  const rows = (await res.json()) as { success: boolean }[];
+  let streak = 0;
+  for (const row of rows) {
+    if (row.success) break;
+    streak += 1;
+  }
+  return streak;
+}
+
 // `since` (ISO timestamp) bounds the window so the per-person sign-in stats on
 // the Security dashboard aren't silently truncated by the row limit.
 export async function listLoginAttempts(
