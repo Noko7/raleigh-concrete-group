@@ -1,7 +1,7 @@
 // Plain-English rendering of the activity log. Shared by the job detail page
 // and the Security dashboard so both describe an event the same way.
 import { clockLabel } from "./clock";
-import { STATUS_LABELS } from "./constants";
+import { dollars, STATUS_LABELS } from "./constants";
 import { usd } from "./fees";
 import type { Dict } from "./i18n";
 import { messageLabel } from "./messages";
@@ -134,7 +134,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     case "assigned":
       return m.to ? `Assigned to ${names.get(String(m.to)) ?? "a contractor"}` : "Unassigned";
     case "amount_changed":
-      return `Price set to ${m.to != null ? `$${Number(m.to).toLocaleString("en-US")}` : "(cleared)"}`;
+      return `Price set to ${dollars(m.to as number) ?? "(cleared)"}`;
     case "summary_changed":
       return "Customer description updated";
     case "notes_changed":
@@ -145,7 +145,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     // Both figures are on the line, because "did the price move, and by how
     // much" is the only question anyone opens this row to answer.
     case "quote_revised": {
-      const money = (v: unknown) => (v != null ? `$${Number(v).toLocaleString("en-US")}` : "no price");
+      const money = (v: unknown) => dollars(v as number) ?? "no price";
       return m.from !== m.to
         ? `Corrected quote sent to the customer (was ${money(m.from)}, now ${money(m.to)})`
         : "Corrected quote sent to the customer (wording changed)";
@@ -163,7 +163,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     // all-in figure are what tell a repriced quote from a reshuffled one.
     case "options_changed": {
       const n = Number(m.count ?? 0);
-      const total = m.total != null ? ` ($${Number(m.total).toLocaleString("en-US")} all in)` : "";
+      const total = m.total != null ? ` (${dollars(m.total as number)} all in)` : "";
       return n === 0 ? "Line items removed - back to a single price" : `Line items updated: ${n} item(s)${total}`;
     }
     case "customer_accepted": {
@@ -271,7 +271,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
         m.amount_cents != null
           ? ` (${centsUsd(m.amount_cents)})`
           : m.amount != null
-            ? ` ($${Number(m.amount).toLocaleString("en-US")})`
+            ? ` (${dollars(m.amount as number)})`
             : ""
       }`;
     // A queued text somebody stopped before the morning flush reached it. The
@@ -282,7 +282,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     // The quote went to the wrong person, or went out before it should have.
     // The link is dead and the pricing is gone; this is the row that says so.
     case "quote_retracted":
-      return `Quote retracted and wiped${m.amount != null ? ` (was $${Number(m.amount).toLocaleString("en-US")})` : ""}${
+      return `Quote retracted and wiped${m.amount != null ? ` (was ${dollars(m.amount as number)})` : ""}${
         m.texts_cancelled ? `, ${Number(m.texts_cancelled)} queued text(s) stopped` : ""
       }`;
     case "marked_test":

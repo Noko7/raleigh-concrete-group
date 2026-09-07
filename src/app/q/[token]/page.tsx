@@ -3,13 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import {
-  DECLINE_CREDIT,
-  QUOTE_SECTION_FIELDS,
-  QUOTE_SECTION_LABELS,
-  QUOTE_TTL_DAYS,
-  slotsFor,
-} from "@/lib/crm/constants";
+import { DECLINE_CREDIT, dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, slotsFor } from "@/lib/crm/constants";
 import { usd } from "@/lib/crm/fees";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, getWorkHours, isQuoteExpired, listQuoteOptionsAdmin } from "@/lib/crm/queries";
@@ -68,7 +62,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   const itemised = options.length > 0;
 
   const hasPrice = quote.quote_amount != null;
-  const amount = hasPrice ? `$${Number(quote.quote_amount).toLocaleString("en-US")}` : null;
+  const amount = hasPrice ? dollars(quote.quote_amount) : null;
   const responded = quote.customer_response;
   const firstName = quote.name.split(" ")[0];
 
@@ -164,7 +158,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
                 .map((o) => (
                   <li key={o.id}>
                     <span>{o.title}</span>
-                    <strong>${o.amount.toLocaleString("en-US")}</strong>
+                    <strong>{dollars(o.amount)}</strong>
                   </li>
                 ))}
               {options

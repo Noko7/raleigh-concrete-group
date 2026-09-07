@@ -4,14 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { dict } from "@/lib/crm/i18n";
-import {
-  QUOTE_SECTION_FIELDS,
-  QUOTE_SECTION_HINTS,
-  QUOTE_SECTION_LABELS,
-  STATUSES,
-  STATUS_LABELS,
-  type QuoteSectionField,
-} from "@/lib/crm/constants";
+import { dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_HINTS, QUOTE_SECTION_LABELS, STATUS_LABELS, STATUSES, type QuoteSectionField } from "@/lib/crm/constants";
 import { saveQuote } from "./actions";
 import {
   OptionBuilder,
@@ -143,7 +136,7 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
   const itemTotal = rowsTotal(rows);
   const amountNum = itemised ? itemTotal : Number(amount);
   const amountValid = itemised ? itemTotal > 0 : amount.trim() !== "" && Number.isFinite(amountNum) && amountNum > 0;
-  const previewPrice = amountValid ? `$${amountNum.toLocaleString("en-US")}` : "N/A";
+  const previewPrice = amountValid ? (dollars(amountNum) ?? "N/A") : "N/A";
 
   // Which of the five are still blank. A quote written before the sections
   // existed is allowed out on its old summary instead, matching the server.
@@ -351,7 +344,7 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
                 .map((r) => (
                   <li key={r.key}>
                     <span>{r.title}</span>
-                    <strong>${Number(r.amount || 0).toLocaleString("en-US")}</strong>
+                    <strong>{dollars(Number(r.amount) || 0)}</strong>
                     <em>{r.required ? "included" : "they choose"}</em>
                   </li>
                 ))}

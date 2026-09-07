@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { STATUS_LABELS, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
+import { dollars, requestedVisitOf, STATUS_LABELS, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
 import { crewEventText, quoteSends } from "@/lib/crm/events";
 import { dict, isLocale } from "@/lib/crm/i18n";
@@ -364,7 +364,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               {chosen.map((o) => (
                 <li key={o.id}>
                   <strong>{o.title}</strong>
-                  <span>${Number(o.amount).toLocaleString("en-US")}</span>
+                  <span>{dollars(Number(o.amount))}</span>
                   {o.description && <em>{o.description}</em>}
                 </li>
               ))}

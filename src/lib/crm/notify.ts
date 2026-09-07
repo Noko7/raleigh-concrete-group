@@ -12,7 +12,7 @@
 // [sms] prefix so they can be diagnosed.
 import { phoneDisplay } from "@/lib/site-data";
 import { clockLabel, hourLabel, inQuietHours, nextSendableAt, now, QUIET_FROM_HOUR, QUIET_UNTIL_HOUR } from "./clock";
-import { QUOTE_TTL_DAYS, noEmDash, visitDateOf } from "./constants";
+import { dollars, noEmDash, QUOTE_TTL_DAYS, visitDateOf } from "./constants";
 import { SITE_ORIGIN } from "./env";
 // Named apart from the local dollars-only `usd` below: money that came from the
 // ledger is in cents and must be printed with them, or a $6,172.50 deposit goes
@@ -652,7 +652,7 @@ function chosenBlockPriced(q: QuoteInfo): string[] {
 //
 // So `usd` is for OWNER and CREW messages only. Before using it, check the
 // `role` on the send: "owner" and "crew" may show money, "customer" may not.
-const usd = (n?: number | null) => (n != null ? `$${Number(n).toLocaleString("en-US")}` : null);
+const usd = (n?: number | null) => dollars(n);
 
 // 1st, 2nd, 3rd, 4th... Spelled-out dates read as a date rather than as data,
 // which matters when the whole message is one line on a lock screen.

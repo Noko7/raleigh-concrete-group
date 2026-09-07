@@ -1,6 +1,6 @@
 "use client";
 
-import { MAX_QUOTE_OPTIONS, OPTION_TITLE_MAX } from "@/lib/crm/constants";
+import { dollars, MAX_QUOTE_OPTIONS, OPTION_TITLE_MAX } from "@/lib/crm/constants";
 import type { dict } from "@/lib/crm/i18n";
 
 // The line-item builder, shared by the CRM editor and the crew's job page so a
@@ -84,7 +84,7 @@ export function rowsMatch(a: OptionRow[], b: OptionRow[]): boolean {
   return x.length === y.length && x.every((v, i) => v === y[i]);
 }
 
-const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+const usd = (n: number) => dollars(n) ?? "$0";
 
 export function OptionBuilder({
   rows,

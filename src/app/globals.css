@@ -2330,26 +2330,61 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qs-none { margin-bottom: 0; }
 .qs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 /* A row is a line, not a card: the amount is the thing being compared down the
-   column, so it gets a fixed slot and the rest fills in around it. */
+   column, so it gets a fixed slot and the rest fills in around it.
+   
+   The tracks are FIXED, not auto. Each row is its own grid - CSS grid does not
+   share column widths between separate elements - so an auto track sized itself
+   per row and the dates and tags landed at a different x on every line. Fixed
+   widths are what actually makes a column a column here. */
 .qs-row {
-  display: grid; grid-template-columns: 2.2rem minmax(5.5rem, auto) 1fr auto;
+  display: grid;
+  grid-template-columns: 2.4rem 7.5rem 1fr auto;
+  grid-template-areas: "n amount when tags";
   align-items: baseline; gap: 0.6rem;
+  /* Every row the same height whatever is in it. A send with no price uses a
+     smaller type size, and without this the list develops a limp. */
+  min-height: 2.8rem;
   padding: 0.55rem 0.7rem; border-radius: 0.55rem;
   background: rgba(255, 255, 255, 0.04); border: 1px solid transparent;
 }
 /* The live one. Amber rather than a heavier weight: this is the number the
    customer is holding, and it is the only row anybody acts on. */
 .qs-row-live { border-color: rgba(194, 104, 42, 0.55); background: rgba(194, 104, 42, 0.08); }
-.qs-n { font-size: 0.8rem; font-weight: 800; color: var(--crm-muted); }
-.qs-amount { font-size: 1.05rem; font-weight: 800; color: var(--crm-text); }
-.qs-when { font-size: 0.82rem; color: var(--crm-muted); }
-.qs-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; justify-content: flex-end; }
+.qs-n { grid-area: n; font-size: 0.8rem; font-weight: 800; color: var(--crm-muted); }
+/* Right aligned with tabular figures, so $950 and $12,400 line up on their last
+   digit. Comparing prices down a column is the only reason this list exists. */
+.qs-amount {
+  grid-area: amount; text-align: right; font-variant-numeric: tabular-nums;
+  font-size: 1.05rem; font-weight: 800; color: var(--crm-text);
+}
+/* A send with no price on it is a sentence, not a figure: it gets the smaller
+   muted treatment so it never pretends to be a number in the column. */
+.qs-amount:not(.qs-has-amount) { font-size: 0.82rem; font-weight: 700; color: var(--crm-muted); }
+.qs-when { grid-area: when; font-size: 0.82rem; color: var(--crm-muted); min-width: 0; }
+.qs-tags { grid-area: tags; display: flex; gap: 0.3rem; flex-wrap: wrap; justify-content: flex-end; }
 .qs-tag {
   font-style: normal; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
   letter-spacing: 0.05em; padding: 0.15rem 0.45rem; border-radius: 999px;
   border: 1px solid var(--crm-border); color: var(--crm-muted); white-space: nowrap;
 }
 .qs-tag-live { border-color: var(--crm-accent); color: var(--crm-accent); }
+
+/* On a phone the four tracks do not fit, and they did not degrade gracefully:
+   the tags overflowed the card and ran off the left of the screen. Stacked, with
+   the number keeping its own column down the side so the rows still scan. */
+@media (max-width: 560px) {
+  .qs-row {
+    grid-template-columns: 2.4rem 1fr;
+    grid-template-areas:
+      "n amount"
+      "n when"
+      "n tags";
+    align-items: center; row-gap: 0.1rem;
+  }
+  .qs-n { align-self: start; padding-top: 0.15rem; }
+  .qs-amount { text-align: left; }
+  .qs-tags { justify-content: flex-start; margin-top: 0.2rem; }
+}
 
 /* Retracting. Kept quiet until it is needed: it is the rarest thing on the
    page and the only one that throws work away. */

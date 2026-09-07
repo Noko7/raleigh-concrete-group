@@ -9,7 +9,7 @@
 // Google emails everyone a real calendar invite.
 //
 // Required env: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI.
-import { visitDateOf } from "./constants";
+import { dollars, visitDateOf } from "./constants";
 import { pgAdmin } from "./rest";
 import type { Quote } from "./types";
 
@@ -172,7 +172,7 @@ function describe(q: Quote, isVisit: boolean): string {
     q.phone ? `Phone: ${q.phone}` : "",
     q.service ? `Service: ${q.service}` : "",
     q.address ? `Address: ${q.address}` : "",
-    q.quote_amount != null ? `Quote: $${Number(q.quote_amount).toLocaleString("en-US")}` : "",
+    q.quote_amount != null ? `Quote: ${dollars(q.quote_amount)}` : "",
     isVisit && q.visit_time ? `Requested time: ${q.visit_time}` : "",
     !isVisit && q.scheduled_time ? `Start time: ${q.scheduled_time}` : "",
     q.details ? `\nProject notes: ${q.details}` : "",

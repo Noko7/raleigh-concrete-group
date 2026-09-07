@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { BUSINESS_TZ } from "@/lib/crm/clock";
-import { QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm/constants";
+import { dollars, QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/actions";
 import {
@@ -161,7 +161,7 @@ export function JobQuote({
         <h2 className="js-title">{t.contractorJob.quoteWaitingTitle}</h2>
         <p className="js-lead">
           {fill(t.contractorJob.quoteWaitingLead, { name: customerFirstName })}
-          {amount != null ? ` - $${amount.toLocaleString("en-US")}` : ""}
+          {amount != null ? ` - ${dollars(amount)}` : ""}
         </p>
         {when && <p className="js-hint">{fill(t.contractorJob.quoteWaitingSent, { when })}</p>}
         <p className="js-hint">{t.contractorJob.quoteWaitingHint}</p>
@@ -179,7 +179,7 @@ export function JobQuote({
         <h2 className="js-title">{alreadySent ? t.contractorJob.quoteResend : t.contractorJob.quoteTitle}</h2>
         <p className="js-lead">
           {alreadySent
-            ? `${t.contractorJob.quoteSentAlready}${amount != null ? ` $${amount.toLocaleString("en-US")}` : ""}`
+            ? `${t.contractorJob.quoteSentAlready}${amount != null ? ` ${dollars(amount)}` : ""}`
             : t.contractorJob.quoteLead}
         </p>
         <button type="button" className="js-confirm" onClick={() => setOpen(true)}>

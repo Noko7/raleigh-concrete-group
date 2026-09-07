@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { BUSINESS_TZ } from "@/lib/crm/clock";
+import { dollars } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import type { QuoteSend } from "@/lib/crm/events";
 import { retractQuote } from "./actions";
@@ -28,8 +29,6 @@ function stamp(iso: string, locale: Locale) {
     timeZone: BUSINESS_TZ,
   });
 }
-
-const money = (n: number | null) => (n == null ? null : `$${Number(n).toLocaleString("en-US")}`);
 
 export function QuoteSends({
   quoteId,
@@ -74,7 +73,9 @@ export function QuoteSends({
               .map((s) => (
                 <li key={s.id} className={s.live ? "qs-row qs-row-live" : "qs-row"}>
                   <span className="qs-n">#{s.n}</span>
-                  <span className="qs-amount">{money(s.amount) ?? t.quoteLog.noPrice}</span>
+                  <span className={`qs-amount${s.amount == null ? "" : " qs-has-amount"}`}>
+                    {dollars(s.amount) ?? t.quoteLog.noPrice}
+                  </span>
                   <span className="qs-when">{stamp(s.at, locale)}</span>
                   <span className="qs-tags">
                     {s.live && <em className="qs-tag qs-tag-live">{t.quoteLog.current}</em>}

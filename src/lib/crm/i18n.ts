@@ -368,7 +368,9 @@ const en = {
     current: "Current",
     corrected: "Correction",
     first: "First quote",
-    noPrice: "No price recorded",
+    // Short on purpose: it sits in the price column, where a long string
+    // wraps and makes one row taller than the rest.
+    noPrice: "No price",
     retract: "Sent to the wrong customer?",
     retractWarn:
       "This kills the link {name} is holding, clears the price, the wording and any line items, stops a text that hasn't sent yet, and puts the job back in New. It cannot be undone.",
@@ -950,7 +952,7 @@ const es: typeof en = {
     current: "Actual",
     corrected: "Corrección",
     first: "Primera cotización",
-    noPrice: "Sin precio registrado",
+    noPrice: "Sin precio",
     retract: "¿Se envió al cliente equivocado?",
     retractWarn:
       "Esto anula el enlace que tiene {name}, borra el precio, el texto y las partidas, detiene cualquier mensaje que no haya salido, y regresa el trabajo a Nuevo. No se puede deshacer.",

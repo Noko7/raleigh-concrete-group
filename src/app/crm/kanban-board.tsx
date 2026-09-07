@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { todayYmd } from "@/lib/crm/clock";
-import { STATUSES, visitDateOf, type Status } from "@/lib/crm/constants";
+import { dollars, STATUSES, visitDateOf, type Status } from "@/lib/crm/constants";
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { assignQuote, deleteQuote, moveQuote } from "./board-actions";
 
@@ -109,7 +109,7 @@ type Props = {
 };
 
 function money(n: number | null): string {
-  return n == null ? "" : `$${Number(n).toLocaleString("en-US")}`;
+  return dollars(n) ?? "";
 }
 
 export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, locale }: Props) {

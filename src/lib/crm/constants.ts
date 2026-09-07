@@ -208,6 +208,27 @@ export const QUOTE_SECTION_HINTS: Record<QuoteSectionField, string> = {
 // while material costs move.
 export const QUOTE_TTL_DAYS = 7;
 
+/**
+ * A quote amount, written the way money is written.
+ *
+ * Quote amounts are stored in DOLLARS (the ledger's own figures are in cents
+ * and have `usd()` in ./fees for that - do not mix them up, they disagree by a
+ * factor of a hundred).
+ *
+ * Cents only when there are cents: $950, but $8,250.50. Every call site used to
+ * be a bare toLocaleString, which drops a trailing zero and renders a real
+ * quote as "$8,250.5" - a price with one decimal place is not a price, and it
+ * was going out in texts as well as onto screens.
+ */
+export function dollars(n: number | null | undefined): string | null {
+  if (n == null || !Number.isFinite(Number(n))) return null;
+  const v = Number(n);
+  return `$${v.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(v) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 // No em dashes in anything a customer reads.
 //
 // Applied to every outbound text and to the quote body on save, rather than
