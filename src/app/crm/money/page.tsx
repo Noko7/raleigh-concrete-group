@@ -23,11 +23,17 @@ export const dynamic = "force-dynamic";
  * jobs do, and that column is the entire cost of being flexible about how
  * customers pay - stated plainly rather than discovered at the end of a month.
  */
-export default async function MoneyPage() {
+export default async function MoneyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tests?: string }>;
+}) {
   const session = await requireOwner();
   const base = await crmBase();
+  const { tests } = await searchParams;
+  const includeTests = tests === "1";
   const staff = await listStaff(session);
-  const board = await moneyBoard(session, staff);
+  const board = await moneyBoard(session, staff, { includeTests });
 
   const owedBy = board.contractors.filter((c) => c.balanceCents > 0 && c.staffId);
   const crew = board.contractors
@@ -42,7 +48,27 @@ export default async function MoneyPage() {
   return (
     <main className="crm-page crm-page-wide">
       <div className="crm-page-head">
-        <h1>Money</h1>
+        <div>
+          <h1>Money</h1>
+          {/* Only ever rendered when there is something being left out. A
+              switch for a state you are not in is one more thing to read. */}
+          {board.testCount > 0 && (
+            <p className="crm-muted crm-sm money-tests">
+              {board.includingTests ? (
+                <>
+                  Practice leads are <strong>in</strong> these figures.{" "}
+                  <Link href={`${base}/money`}>Hide the {board.testCount} test {board.testCount === 1 ? "lead" : "leads"}</Link>
+                </>
+              ) : (
+                <>
+                  {board.testCount} test {board.testCount === 1 ? "lead is" : "leads are"} left out of every figure
+                  below.{" "}
+                  <Link href={`${base}/money?tests=1`}>Show them</Link>
+                </>
+              )}
+            </p>
+          )}
+        </div>
         <SettleForm
           contractors={owedBy.map((c) => ({
             staffId: c.staffId as string,

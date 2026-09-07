@@ -31,7 +31,7 @@ import { CancelAppointment } from "./cancel-appointment";
 import { QuotePayments } from "./quote-payments";
 import { ScheduleCard } from "./schedule-card";
 import { preferredSlots } from "./types";
-import { rotateTokens } from "./actions";
+import { rotateTokens, setTestFlag } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -448,6 +448,34 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               <span className="crm-muted crm-sm">{t.links.regenerateHint}</span>
             </div>
           </div>
+
+          {/* Owner only, and last on the page: it is the least-used control
+              here and the only one that changes what the business thinks it
+              earned. A practice lead behaves exactly like a real one - quote
+              it, approve it, take a card payment on it - and stays out of
+              every figure on the Money page while it does. */}
+          {isOwner && (
+            <div className={`crm-card${quote.is_test ? " test-card-on" : ""}`}>
+              <h2 className="crm-card-title">
+                Test lead
+                {quote.is_test && <span className="test-pill">Practice</span>}
+              </h2>
+              <p className="crm-muted crm-sm">
+                {quote.is_test
+                  ? "This lead is practice. Payments on it are real rows written by the real code, and none of them count on the Money page."
+                  : "Use this on a lead you are testing a feature or a payment with. Nothing about how it behaves changes; it just stops counting as money."}
+              </p>
+              <div className="crm-editor-foot">
+                <form action={setTestFlag}>
+                  <input type="hidden" name="id" value={quote.id} />
+                  <input type="hidden" name="isTest" value={quote.is_test ? "0" : "1"} />
+                  <button type="submit" className="crm-btn crm-btn-ghost">
+                    {quote.is_test ? "This is a real job" : "Mark as a test lead"}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
         </section>
       </div>
     </main>

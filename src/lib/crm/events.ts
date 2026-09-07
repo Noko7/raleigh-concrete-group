@@ -285,6 +285,10 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return `Quote retracted and wiped${m.amount != null ? ` (was $${Number(m.amount).toLocaleString("en-US")})` : ""}${
         m.texts_cancelled ? `, ${Number(m.texts_cancelled)} queued text(s) stopped` : ""
       }`;
+    case "marked_test":
+      return "Marked as a test lead (left out of the Money page)";
+    case "unmarked_test":
+      return "No longer a test lead (counted on the Money page again)";
     case "links_rotated":
       return "Customer/job links regenerated (old links disabled)";
     case "quote_created_manually":

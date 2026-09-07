@@ -26,6 +26,8 @@ export type BoardQuote = {
   visit_date: string | null;
   visit_time: string | null;
   job_token: string | null;
+  /** A practice lead. Real everywhere except the Money page. */
+  is_test: boolean;
 };
 
 function shortDate(ymd: string | null, locale: Locale): string {
@@ -436,6 +438,10 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                       const showType = !dated || kind.cls !== "inperson";
                       return (
                         <div className="kb-card-meta">
+                          {/* First pill on the card, before anything about the
+                              job itself: what this row IS changes how you read
+                              every other pill on it. */}
+                          {q.is_test && <span className="kb-pill kb-pill-test">Test</span>}
                           {showType && <span className={`kb-pill kb-pill-${kind.cls}`}>{kind.text}</span>}
                           {jobDate && (
                             <span className="kb-pill kb-pill-date">

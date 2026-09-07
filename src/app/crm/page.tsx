@@ -46,6 +46,7 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
     visit_date: q.visit_date,
     visit_time: q.visit_time,
     job_token: q.job_token,
+    is_test: q.is_test === true,
   }));
 
   return (

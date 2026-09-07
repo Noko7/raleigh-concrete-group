@@ -32,6 +32,7 @@ type JobRow = {
   paid_at: string | null;
   completed_at: string | null;
   created_at: string;
+  is_test: boolean | null;
 };
 
 export type JobMoney = {
@@ -55,6 +56,8 @@ export type JobMoney = {
    * nobody is chasing the balance of a job that is over.
    */
   onBooks: boolean;
+  /** A practice lead. Real rows, real arithmetic, kept out of the real totals. */
+  isTest: boolean;
 };
 
 // ── The ledger itself ───────────────────────────────────────────────────────
@@ -147,6 +150,10 @@ export type MoneyBoard = {
   attention: AttentionRow[];
   /** True when supabase/payments.sql hasn't been run yet. */
   missingTables: boolean;
+  /** How many practice leads were left out. Zero hides the switch entirely. */
+  testCount: number;
+  /** Whether this board was built with them in. */
+  includingTests: boolean;
 };
 
 async function readRows<T>(session: Session, path: string): Promise<{ rows: T[]; ok: boolean }> {
@@ -158,14 +165,24 @@ async function readRows<T>(session: Session, path: string): Promise<{ rows: T[];
   return { rows: (await res.json()) as T[], ok: true };
 }
 
-export async function moneyBoard(session: Session, staff: Staff[]): Promise<MoneyBoard> {
+export async function moneyBoard(
+  session: Session,
+  staff: Staff[],
+  // Testing a payment writes a real row through the real code, which is the
+  // only kind of test worth running - and the reason a morning of trying
+  // things out otherwise shows up as takings. Practice leads are left out of
+  // every figure here by default and put back in when somebody is checking
+  // that a test payment landed the way they expected.
+  opts: { includeTests?: boolean } = {},
+): Promise<MoneyBoard> {
+  const includeTests = opts.includeTests === true;
   const names = new Map(staff.map((s) => [s.id, s.full_name || s.email || "Unnamed"]));
 
   const [jobsRes, paymentsRes, settlementsRes] = await Promise.all([
     readRows<JobRow>(
       session,
       "quote_requests?customer_response=eq.accepted&status=neq.lost" +
-        "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,status,paid_at,completed_at,created_at" +
+        "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,status,paid_at,completed_at,created_at,is_test" +
         "&order=created_at.desc&limit=1000",
     ),
     readRows<QuotePayment>(session, "quote_payments?select=*&order=created_at.desc&limit=2000"),
@@ -192,12 +209,12 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
     const extra = await readRows<JobRow>(
       session,
       `quote_requests?id=in.(${strays.slice(0, 200).join(",")})` +
-        "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,status,paid_at,completed_at,created_at",
+        "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,status,paid_at,completed_at,created_at,is_test",
     );
     jobsRes.rows.push(...extra.rows);
   }
 
-  const jobs: JobMoney[] = jobsRes.rows.map((j) => ({
+  const allJobs: JobMoney[] = jobsRes.rows.map((j) => ({
     id: j.id,
     name: j.name,
     staffId: j.assigned_to,
@@ -207,6 +224,7 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
     createdAt: j.created_at,
     payments: byJob.get(j.id) ?? [],
     onBooks: known.has(j.id),
+    isTest: j.is_test === true,
     // The same function the crew's page and the customer's page read through.
     // A second implementation here would drift, and the first anyone would know
     // of it is a contractor disputing a figure. The rate goes in with it, so
@@ -214,6 +232,13 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
     // whatever it was worth the day the rate was frozen.
     ledger: readLedger(toCents(j.quote_amount), j.fee_total_cents, byJob.get(j.id) ?? [], j.fee_rate),
   }));
+
+  // One gate, applied everywhere a figure is summed. Anything that reads a
+  // payment has to ask this too, or the tiles and the ledger under them
+  // disagree about which morning actually happened.
+  const testIds = new Set(allJobs.filter((j) => j.isTest).map((j) => j.id));
+  const counts = (quoteId: string | null) => includeTests || !quoteId || !testIds.has(quoteId);
+  const jobs = includeTests ? allJobs : allJobs.filter((j) => !j.isTest);
 
   // Fees the contractor has already sent over by hand.
   const settledByStaff = new Map<string, number>();
@@ -263,6 +288,7 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
   let recentCents = 0;
   for (const p of payments) {
     if (p.status !== "paid" && p.status !== "refunded") continue;
+    if (!counts(p.quote_id)) continue;
     const when = new Date(p.paid_at ?? p.created_at).getTime();
     if (!Number.isFinite(when) || when < since) continue;
     const net = p.amount_cents - p.refunded_cents;
@@ -279,6 +305,7 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
   const entries: LedgerEntry[] = [];
   for (const p of payments) {
     if (p.status !== "paid" && p.status !== "refunded") continue;
+    if (!counts(p.quote_id)) continue;
     const job = jobsById.get(p.quote_id);
     const common = {
       jobId: p.quote_id,
@@ -308,6 +335,7 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
     }
   }
   for (const st of settlementsRes.rows) {
+    if (!counts(st.quote_id)) continue;
     entries.push({
       id: st.id,
       kind: "settlement",
@@ -427,5 +455,7 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
     entries,
     attention,
     missingTables: !paymentsRes.ok || !settlementsRes.ok,
+    testCount: allJobs.filter((j) => j.isTest).length,
+    includingTests: includeTests,
   };
 }

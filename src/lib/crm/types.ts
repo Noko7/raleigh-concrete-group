@@ -145,6 +145,10 @@ export type Quote = {
   paid_at: string | null;
   payment_requested_at: string | null;
   archived_at: string | null;
+  // A lead that exists to be practised on. Behaves like any other lead
+  // everywhere in the app; the Money page leaves it out of every figure unless
+  // asked to show it. See supabase/test-data.sql.
+  is_test?: boolean;
   // 12h nudge: a new lead nobody has quoted or scheduled a visit for.
   stale_lead_reminded_at: string | null;
   // Night-before reminders for an in-person quote VISIT (not the booked work day).

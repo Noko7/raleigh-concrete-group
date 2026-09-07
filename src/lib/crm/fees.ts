@@ -70,8 +70,19 @@ export function fromCents(cents: number): number {
   return Math.round(cents) / 100;
 }
 
-export const usd = (cents: number): string =>
-  `$${(Math.round(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/**
+ * Cents to dollars, with the sign where accountants put it.
+ *
+ * Naively interpolating a negative number puts the minus inside the amount -
+ * "$-352.50" - which is not how money is written anywhere, and on a ledger
+ * whose whole job is being checked against a bank statement it reads as a
+ * typo. The sign belongs in front of the symbol.
+ */
+export const usd = (cents: number): string => {
+  const value = Math.round(cents) / 100;
+  const body = Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${value < 0 ? "-" : ""}$${body}`;
+};
 
 /**
  * What the office earns on a job, in cents.

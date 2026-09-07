@@ -1935,6 +1935,9 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .kb-pill-view { background: rgba(74, 222, 128, 0.18); color: #86efac; }
 .kb-pill-assigned { background: rgba(194, 104, 42, 0.24); color: #f0b489; }
 .kb-pill-date { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
+/* A practice lead. Outlined rather than filled, so it reads as a note ABOUT
+   the card rather than another fact on it. */
+.kb-pill-test { background: none; border: 1px dashed var(--crm-muted); color: var(--crm-muted); }
 /* No confirmed/unconfirmed pair here any more: the column heading already says
    Scheduled, and "Not confirmed" meant something different on the crew's job
    page, where it sat on a slot a customer had merely offered. */
@@ -2161,6 +2164,19 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .sms-result-bad { border-color: rgba(220, 38, 38, 0.5); }
 .sms-result-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
 .sms-detail { margin: 0.6rem 0 0; padding: 0.6rem 0.7rem; background: #15181c; border-radius: 0.45rem; font-family: ui-monospace, monospace; font-size: 0.78rem; color: #fca5a5; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto; }
+
+/* ── Test leads ────────────────────────────────────────────────────────────
+   Real rows that must not count as money. Marked the same way wherever they
+   appear: dashed and grey, never a colour that competes with a figure. */
+.test-pill {
+  margin-left: 0.5rem; padding: 0.1rem 0.45rem; border-radius: 999px;
+  border: 1px dashed var(--crm-muted); color: var(--crm-muted);
+  font-family: var(--font-body), sans-serif; font-size: 0.6rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.07em; vertical-align: middle;
+}
+.test-card-on { border-style: dashed; }
+.money-tests { margin-top: 0.3rem; }
+.money-tests a { color: var(--crm-accent); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 
 /* ── The ledger ────────────────────────────────────────────────────────────
    Accounting conventions, not decoration. Money right-aligned so digits line

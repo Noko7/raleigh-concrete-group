@@ -1011,6 +1011,38 @@ export async function retractQuote(_prev: ScheduleState, formData: FormData): Pr
   };
 }
 
+/**
+ * Mark this lead as practice, or put it back.
+ *
+ * Testing a payment means writing a real row through the real code, which is
+ * the only kind of test worth running - and the reason an afternoon of trying
+ * things out turns up on the Money page as takings. The flag is how a fixture
+ * stays a fixture: the lead behaves exactly as it always did everywhere else,
+ * and the money board leaves it out of every figure unless asked.
+ *
+ * Owner only. It moves numbers on the one page the business is run from, and a
+ * real job quietly marked as practice is revenue that stops being counted.
+ */
+export async function setTestFlag(formData: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const current = await getQuote(session, id);
+  if (!current) return;
+
+  const isTest = String(formData.get("isTest") ?? "") === "1";
+  const updated = await updateQuote(session, id, { is_test: isTest });
+  if (!updated) return;
+
+  await addEvent(session, id, isTest ? "marked_test" : "unmarked_test");
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+  revalidatePath("/crm/money");
+}
+
 // Regenerate the customer + contractor capability tokens. Use this if a link is
 // leaked or shared too widely: the old /q/<token> and /job/<token> URLs stop
 // resolving immediately and you re-text the fresh customer link.

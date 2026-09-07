@@ -108,6 +108,7 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
                             is still in the takings; its balance is nobody's to
                             chase. Worth saying on the row, because the numbers
                             beside it follow a different rule from the rest. */}
+                        {j.isTest && <em className="led-offbooks">test</em>}
                         {!j.onBooks && <em className="led-offbooks">off the books</em>}
                       </span>
                     </td>

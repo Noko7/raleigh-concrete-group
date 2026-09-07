@@ -131,15 +131,23 @@ export function LedgerTable({
                   <tr key={e.id} className={e.kind === "refund" ? "led-out" : ""}>
                     <td className="led-when">{day(e.at)}</td>
                     <td>
+                      {/* A payment names the customer, with the crew who
+                          earned it underneath: two facts about one row, and
+                          the second is only asked about after the first. A
+                          settlement has no customer - it is the contractor
+                          paying the office - so it names them once and says
+                          what the row is instead of repeating them. */}
                       {e.jobId ? (
-                        <Link href={`${base}/quotes/${e.jobId}`}>{e.customer}</Link>
+                        <>
+                          <Link href={`${base}/quotes/${e.jobId}`}>{e.customer}</Link>
+                          <span className="led-sub">{e.staffName}</span>
+                        </>
                       ) : (
-                        <span className="crm-muted">{e.staffName}</span>
+                        <>
+                          {e.staffName}
+                          <span className="led-sub">paid you directly</span>
+                        </>
                       )}
-                      {/* The crew who earned it, under the customer who paid
-                          it: two facts about one row, and the second is only
-                          ever asked about after the first. */}
-                      <span className="led-sub">{e.staffName}</span>
                     </td>
                     <td>
                       <span className={`led-tag led-tag-${e.kind}`}>{KIND_LABEL[e.kind]}</span>
@@ -175,7 +183,7 @@ export function LedgerTable({
                   <span className="led-card-amount">{usd(e.amountCents - e.feeCents)}</span>
                 </div>
                 <div className="led-card-who">
-                  {e.jobId ? <Link href={`${base}/quotes/${e.jobId}`}>{e.customer}</Link> : e.staffName}
+                  {e.jobId ? <Link href={`${base}/quotes/${e.jobId}`}>{e.customer}</Link> : `${e.staffName} paid you directly`}
                 </div>
                 <div className="led-card-meta">
                   {day(e.at)} · {METHOD_LABELS[e.method as PaymentMethod] ?? e.method} · {e.staffName}
