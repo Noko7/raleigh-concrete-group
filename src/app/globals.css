@@ -1260,22 +1260,101 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   max-width: 1100px; margin: 0 auto; padding: 0.7rem 1.25rem;
   display: flex; align-items: center; gap: 1.5rem;
 }
-.crm-logo { display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; }
+.crm-logo { display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; flex: none; }
 .crm-logo-badge { background: #fff; border-radius: 0.4rem; padding: 0.22rem 0.45rem; display: inline-flex; align-items: center; }
 .crm-logo-badge img { height: 22px; width: auto; display: block; }
-.crm-logo-tag { font-weight: 800; letter-spacing: 0.1em; color: var(--crm-accent); font-size: 0.82rem; }
-.crm-nav { display: flex; gap: 1.1rem; flex: 1; }
-.crm-nav a { text-decoration: none; font-weight: 600; font-size: 0.92rem; color: #cbd2da; }
-.crm-nav a:hover { color: #fff; }
-.crm-topbar-right { display: flex; align-items: center; gap: 0.9rem; }
-.crm-who { font-size: 0.8rem; color: #cbd2da; text-align: right; line-height: 1.2; }
-.crm-who em { display: block; font-style: normal; text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.08em; color: var(--crm-accent); }
+/* The wordmark's "CRM" tag. Muted rather than amber: amber is now reserved for
+   one job on this bar - saying which page you are on. A label that never
+   changes should not be competing with the one thing that does. */
+.crm-logo-tag {
+  font-weight: 800; letter-spacing: 0.1em; font-size: 0.82rem;
+  color: var(--crm-muted);
+}
+
+/* ── Primary nav ───────────────────────────────────────────────────────────
+   Nine links that used to be indistinguishable from one another. What changed
+   is not how they look so much as how much they say: which one you are on,
+   and which four of them only an owner has. */
+/* Scrolls at EVERY width, not just on a phone.
+   An owner has nine of these and the widest is "Contractors", so on a laptop at
+   1180px the row runs past the end of its box - and a flex item that overflows
+   does not push, it paints over. Settings landed on top of the user's own name.
+   Letting the strip scroll is what keeps the two apart at any width; the mask
+   below is what says it is scrolling. */
+.crm-nav {
+  flex: 1 1 auto; min-width: 0;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 1.1rem, #000 calc(100% - 1.1rem), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 1.1rem, #000 calc(100% - 1.1rem), transparent);
+  scrollbar-width: none;
+}
+.crm-nav::-webkit-scrollbar { display: none; }
+.crm-nav-list {
+  list-style: none; margin: 0; padding: 0 1.1rem;
+  display: flex; align-items: stretch; gap: 0.1rem;
+  width: max-content;
+}
+.crm-nav-li { display: flex; }
+
+/* The divider between "everybody" and "owner only". A hairline rather than a
+   heading, because this is a fact about the items and not a section anybody
+   needs to read. */
+.crm-nav-rule { margin-left: 0.55rem; padding-left: 0.7rem; border-left: 1px solid rgba(255, 255, 255, 0.14); }
+
+.crm-nav-link {
+  display: inline-flex; align-items: center;
+  /* 44px of height on a phone. The crew tap this with gloves on. */
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  text-decoration: none;
+  font-weight: 600; font-size: 0.92rem; white-space: nowrap;
+  color: var(--crm-muted);
+  border-radius: 0.35rem;
+  position: relative;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.crm-nav-link:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+
+/* You are here. Two signals, not one: the text comes up to full strength and a
+   rail lights under it. Colour alone would leave this invisible to anybody who
+   cannot separate amber from grey, and it is the only state on the bar that
+   actually has to be read. */
+.crm-nav-link-on { color: #fff; }
+.crm-nav-link-on::after {
+  content: "";
+  position: absolute; left: 0.5rem; right: 0.5rem; bottom: 0.32rem;
+  height: 2px; border-radius: 2px;
+  background: var(--crm-accent);
+}
+.crm-nav-link:focus-visible {
+  outline: 2px solid var(--crm-accent);
+  outline-offset: -2px;
+  color: #fff;
+}
+
+.crm-topbar-right { display: flex; align-items: center; gap: 0.9rem; flex: none; }
+.crm-who { font-size: 0.8rem; color: var(--crm-muted); text-align: right; line-height: 1.25; }
+.crm-who-name { display: block; color: #fff; font-weight: 600; }
+.crm-who em {
+  display: block; font-style: normal; text-transform: uppercase;
+  font-size: 0.65rem; letter-spacing: 0.08em; color: var(--crm-muted);
+}
 @media (max-width: 760px) {
   .crm-topbar-inner { flex-wrap: wrap; gap: 0.55rem 1rem; padding: 0.6rem 1rem; }
-  .crm-nav { order: 3; width: 100%; overflow-x: auto; gap: 1.1rem; padding-bottom: 0.15rem; flex: none; -webkit-overflow-scrolling: touch; }
-  .crm-nav a { white-space: nowrap; }
+  /* The strip drops to its own full-width row under the logo and the user,
+     where it has the whole screen to scroll in rather than the sliver left
+     between them. The fade at each edge is doing the talking: the last three
+     destinations used to exist only if you happened to swipe. */
+  .crm-nav { order: 3; width: 100%; flex: none; -webkit-overflow-scrolling: touch; }
+  .crm-nav-list { padding: 0 1.1rem 0.15rem; }
   .crm-topbar-right { margin-left: auto; }
   .crm-who { text-align: right; }
+}
+
+/* A colour change and a rail appearing are the whole motion budget here. Even
+   so: somebody who has asked for less gets none of it. */
+@media (prefers-reduced-motion: reduce) {
+  .crm-nav-link { transition: none; }
 }
 
 .crm-main { max-width: 1100px; margin: 0 auto; }
