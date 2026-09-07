@@ -135,7 +135,10 @@ there. So:
   clicking, which used to mean the office texting itself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql` and `supabase/appointments.sql` in the SQL Editor.
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql` and `supabase/appointments.sql` in the SQL Editor. Once
+   `supabase/payments.sql` is in (see **Getting paid** below), run
+   `supabase/least-privilege.sql` last - it is what stops a contractor rewriting
+   the money columns on their own jobs.
 
    `supabase/crew-reminders.sql` also (re)adds `scheduled_time`, so running just
    that one file is enough to fix "Could not save that date" when confirming a
@@ -597,6 +600,36 @@ cut, so a refunded job would cost the crew the full amount *plus* the fee.
 **The ledger is append-only.** `supabase/payments.sql` grants no `delete` on
 `quote_payments`. A payment that turns out to be wrong is refunded or corrected,
 never erased - it is the record the office and the contractor settle up from.
+
+**And the ledger is not writable after the fact** (`supabase/least-privilege.sql`).
+A contractor does not only reach the database through the CRM: the project URL
+and the anon key both ship in the browser, and they know their own password, so
+they can get an access token and talk to PostgREST directly. Whatever RLS allows
+is what they can do, whatever the screens offer. Read that way, two grants were
+doing far more than the app ever asked of them - a table-wide `update` on
+`quote_requests` reaches `fee_rate`, and `quote_payments` granted an `update` the
+app never uses - and either one is a contractor setting what they owe the office
+to zero. So:
+
+- **The fee columns are the office's.** A trigger refuses a non-owner write to
+  `fee_rate`, `fee_total_cents`, `is_test` or `archived_at`. The service role is
+  exempt, because that is the key the server's own code holds and it has already
+  decided who is asking.
+- **A staff insert on the ledger can only say one thing:** money the crew were
+  handed. Never `card`, no fee attached, already paid, and `recorded_by` is you.
+  Card payments are Stripe's word and are written by the webhook with the
+  service role, which does not consult that policy at all.
+- **Two people cannot collect the same balance twice.** `recordManualPayment`
+  reads the ledger, checks the amount, then inserts - three steps a second
+  person can slip between. The same check now exists as one statement in the
+  database, where it cannot be raced. Insert-only and signed-in-only: a webhook
+  recording money that has *already* moved is never refused, because refusing it
+  would not un-charge the customer, only lose the record of it.
+
+Tokens are deliberately left writable (whoever holds a job may rotate its links)
+and so are `status` and `paid_at` (the crew move their own cards, and a job
+marked paid with no payment behind it already shows up on the cash board's
+"check these rows").
 
 ## Deploy to Vercel
 This is a standard Next.js app - Vercel builds it in the cloud (no local build needed).
