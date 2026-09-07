@@ -9,6 +9,7 @@ import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
 import { crewEventText, quoteSends } from "@/lib/crm/events";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
+import { signMediaPath } from "@/lib/crm/media-token";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, listEvents, listQuoteOptionsAdmin } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
@@ -108,8 +109,15 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // outlive, and - the point of the exercise - the proxy can hand back a
   // thumbnail instead of the four-megabyte original the grid was decoding on
   // the main thread as you scrolled past it.
+  //
+  // Signed against this contractor. The page has already established that the
+  // job is theirs (the job_token plus the assigned_to check above), and the
+  // signature carries that decision to the proxy - so the same URL pasted into
+  // another crew member's browser is refused rather than served. The width is
+  // deliberately outside the signature: one signature covers both the 150px
+  // thumbnail and the full-size original the lightbox opens.
   const fileUrl = (path: string, w?: number) =>
-    `${base}/api/file?p=${encodeURIComponent(path)}${w ? `&w=${w}` : ""}`;
+    `${base}/api/file?${signMediaPath(path, session.staff.id)}${w ? `&w=${w}` : ""}`;
   const photos = quote.file_urls ?? [];
   // What the crew has already put on this job, so the finish card can show
   // counts rather than asking them to remember.

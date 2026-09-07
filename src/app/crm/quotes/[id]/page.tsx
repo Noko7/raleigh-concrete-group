@@ -8,6 +8,7 @@ import { SITE_ORIGIN } from "@/lib/crm/env";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText, quoteSends } from "@/lib/crm/events";
+import { signMediaPath } from "@/lib/crm/media-token";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
 import {
   getQuote,
@@ -76,8 +77,13 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const nameMap = new Map(allStaff.map((s) => [s.id, s.full_name || s.email || "Staff"]));
   // Every photo on this page is served through the same authenticated proxy,
   // so a signed URL never leaves the CRM.
+  //
+  // Signed against whoever is looking. This page has already decided they may
+  // see this job - getQuote ran as them, through RLS - and the signature is
+  // that decision travelling with the URL, so the proxy can honour it without
+  // asking the database again per thumbnail.
   const viaProxy = (paths: string[] | null) =>
-    (paths ?? []).map((p) => `${base}/api/file?p=${encodeURIComponent(p)}`);
+    (paths ?? []).map((p) => `${base}/api/file?${signMediaPath(p, session.staff.id)}`);
   const photoUrls = viaProxy(quote.file_urls);
   const internalUrls = viaProxy(quote.internal_urls);
   const beforeUrls = viaProxy(quote.before_urls);

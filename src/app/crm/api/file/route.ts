@@ -1,9 +1,25 @@
 import { getSession } from "@/lib/crm/auth";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET } from "@/lib/crm/env";
+import { verifyMediaPath } from "@/lib/crm/media-token";
 
 // Authenticated image/video proxy for the CRM. Streams a private storage object
 // through the server (service-role) only for signed-in staff. Avoids signed-URL
 // expiry and keeps job media gated behind the CRM login.
+//
+// A session is not on its own enough, and used to be. Being signed in says you
+// are staff; it does not say this photo is on a job of yours, and this route
+// took a raw object path - so any contractor could read any customer's photos,
+// and a path was a capability that outlived the job being reassigned. The
+// sibling route for signed contracts (/crm/api/agreement) never worked that
+// way: it takes an id and re-reads the row through RLS.
+//
+// The same scoping, without a database round-trip per thumbnail: the page that
+// renders the <img> has already loaded the job through RLS, so it signs each
+// path against the VIEWER. This route re-computes that signature from the
+// session's own staff id, which is what makes a URL copied out of one person's
+// page useless on anybody else's. See lib/crm/media-token.
+export const runtime = "nodejs";
+
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session) return new Response("Unauthorized", { status: 401 });
@@ -16,6 +32,14 @@ export async function GET(request: Request) {
   // Only allow paths inside our bucket; block traversal.
   if (!obj || obj.includes("..") || obj.startsWith("/")) {
     return new Response("Bad request", { status: 400 });
+  }
+
+  // Signed for THIS viewer, and still in date. 403 rather than 404: the caller
+  // is a real staff member holding a link that is not theirs (or has aged out),
+  // and "not found" would send them looking for a missing photo instead of
+  // reloading the page that mints a fresh one.
+  if (!verifyMediaPath(raw, searchParams.get("e"), searchParams.get("s"), session.staff.id)) {
+    return new Response("Forbidden", { status: 403 });
   }
 
   // ── Thumbnails ──────────────────────────────────────────────────────────

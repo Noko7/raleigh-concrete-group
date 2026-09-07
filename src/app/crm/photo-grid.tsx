@@ -6,7 +6,11 @@ import { useState } from "react";
 // proxy, so they only load for a signed-in staff member.
 export function PhotoGrid({ urls }: { urls: string[] }) {
   const [open, setOpen] = useState<number | null>(null);
-  const isVideo = (u: string) => /\.(mp4|mov|webm|quicktime)(\?|$)/i.test(u);
+  // The extension is inside the proxy URL's `p` parameter, so it is followed by
+  // `&` as often as by the end of the string - the signature and expiry are
+  // appended after it. Matching only `?|$` meant every video started rendering
+  // as a broken <img> the moment those parameters arrived.
+  const isVideo = (u: string) => /\.(mp4|mov|webm|quicktime)(\?|&|$)/i.test(u);
 
   // The grid asks the proxy for a thumbnail; the lightbox asks for the file.
   // 640 rather than the 150 it is drawn at, so a retina screen still gets a
