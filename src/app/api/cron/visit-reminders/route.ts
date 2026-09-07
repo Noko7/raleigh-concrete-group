@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { cronAuthorized } from "@/lib/crm/cron-auth";
 import { ymdInDays } from "@/lib/crm/clock";
 import { flushHeldMessages, notifyVisitReminder, notifyVisitReminderCrew, spacer } from "@/lib/crm/notify";
 import {
@@ -22,14 +23,9 @@ export const dynamic = "force-dynamic";
 // (with the address) once.
 // Protected by CRON_SECRET (Vercel sends it as a Bearer token) - same env var
 // as /api/cron/reminders.
-function authorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET || "";
-  if (!secret) return false;
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
 
 export async function GET(request: Request) {
-  if (!authorized(request)) {
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 

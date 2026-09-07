@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 
+import { clientIp, rateLimit } from "@/lib/rate-limit";
+
 // Free US address autocomplete via the US Census Geocoder (authoritative TIGER
 // data, house-number level). No API key, no billing. We proxy it server-side
 // because the Census endpoint doesn't send CORS headers for browser fetches.
+//
+// Which makes this an open proxy on our domain, and it needs its own limit:
+// the middleware only rate-limits the CRM surface, so nothing was standing
+// between a script and an unbounded number of outbound requests made in our
+// name - our function invocations, our reputation with the Census.
 
 type CensusMatch = { matchedAddress?: string };
 type CensusResponse = { result?: { addressMatches?: CensusMatch[] } };
@@ -27,9 +34,18 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") ?? "").trim();
 
-  // Census needs a fairly complete address to match; skip tiny queries.
+  // Census needs a fairly complete address to match; skip tiny queries. Checked
+  // before the limiter so a short query costs nobody a slot - the form fires
+  // one of these as somebody types.
   if (q.length < 6) {
     return NextResponse.json({ suggestions: [] });
+  }
+
+  // Generous: this is a real person typing an address into a debounced field,
+  // and a limit that bites them is a lost lead. It is here to stop a loop, not
+  // to ration the form.
+  if (await rateLimit(`address:${clientIp(request)}`, 60, 5 * 60 * 1000)) {
+    return NextResponse.json({ suggestions: [] }, { status: 429 });
   }
 
   const endpoint =

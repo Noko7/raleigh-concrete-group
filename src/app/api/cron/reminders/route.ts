@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { cronAuthorized } from "@/lib/crm/cron-auth";
 import { ymdInDays } from "@/lib/crm/clock";
 import { CREW_REMINDER_DAYS } from "@/lib/crm/constants";
 import {
@@ -43,14 +44,9 @@ export const dynamic = "force-dynamic";
 // staying on the free plan. See /api/cron/visit-reminders for the other daily
 // cron (night-before quote-visit reminders, which need an evening run time).
 // Protected by CRON_SECRET (Vercel sends it as a Bearer token).
-function authorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET || "";
-  if (!secret) return false;
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
 
 export async function GET(request: Request) {
-  if (!authorized(request)) {
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 

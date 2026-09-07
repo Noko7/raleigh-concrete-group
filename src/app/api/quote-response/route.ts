@@ -10,6 +10,7 @@ import {
   recordCustomerResponse,
   type OptionChoice,
 } from "@/lib/crm/queries";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 // One answer per optional line item, keyed by option id. Anything that isn't a
 // uuid mapped to accepted/declined is dropped here rather than trusted through
@@ -47,6 +48,17 @@ export async function POST(request: Request) {
   const token = typeof body.token === "string" ? body.token : "";
   const action = body.action === "accept" || body.action === "decline" ? body.action : null;
   if (!action) return NextResponse.json({ ok: false, error: "Invalid request." }, { status: 400 });
+
+  // Approving a quote is a once-in-a-job decision that texts three people. A
+  // duplicate answer is already handled downstream (recordCustomerResponse
+  // reports it as the success it is and writes nothing), so this is only here
+  // to stop a script sitting on the endpoint.
+  if (await rateLimit(`qresp:${clientIp(request)}`, 20, 10 * 60 * 1000)) {
+    return NextResponse.json(
+      { ok: false, error: "Too many attempts. Please give us a call." },
+      { status: 429 },
+    );
+  }
 
   // How they said they'd like to pay, taken at the moment they approved. It is
   // recorded, not enforced: what a job is owed comes from the ledger, and a
