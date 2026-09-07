@@ -240,6 +240,11 @@ const en = {
     daysAgo: "{n} days ago",
     earlier: "Earlier",
     allDay: "All day",
+    // Who is driving to this appointment. Shown on the calendar only for
+    // owners: a contractor sees nothing but their own jobs, so a name on every
+    // chip would be their own name, repeated.
+    crew: "Crew",
+    unassigned: "Unassigned",
     empty: "Nothing scheduled yet. Booked jobs and quote visits show up here.",
     dragHint: "Drag an appointment to another day to reschedule it.",
     // A slot an online customer offered in case photos aren't enough. Nobody
@@ -824,6 +829,8 @@ const es: typeof en = {
     daysAgo: "hace {n} días",
     earlier: "Anteriores",
     allDay: "Todo el día",
+    crew: "Equipo",
+    unassigned: "Sin asignar",
     empty: "Todavía no hay nada agendado. Aquí aparecen los trabajos y las visitas de cotización.",
     dragHint: "Arrastra una cita a otro día para reprogramarla.",
     notBooked: "Sin confirmar",

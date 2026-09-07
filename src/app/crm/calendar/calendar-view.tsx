@@ -34,10 +34,83 @@ export type CalEvent = {
   service: string | null;
   address: string | null;
   status: string;
+  /** Who is driving to this. Null is a real answer: nobody is, yet. */
+  assigneeId: string | null;
+  assigneeName: string | null;
 };
 
 const kindLabel = (t: Dict, k: CalKind) =>
   k === "job" ? t.calendar.kindJob : k === "online" ? t.calendar.kindOnline : t.calendar.kindInPerson;
+
+// ── Who owns this appointment ───────────────────────────────────────────────
+//
+// The chip already carries the customer's name and the kind of appointment via
+// its colour, so the crew member cannot have another colour of its own without
+// the calendar turning into a colour puzzle. What it gets instead is initials
+// on a tinted dot: one glyph, the same glyph for the same person on every chip,
+// legible at the size a month cell allows.
+//
+// The hue is derived from the staff id, so a person keeps their colour across
+// sessions, devices and re-renders without a colour ever being stored on them.
+// Ten steps around the wheel, which is more crew than this business will have
+// and few enough that neighbours stay distinguishable.
+const ASSIGNEE_HUES = 10;
+
+function assigneeHue(staffId: string): number {
+  let hash = 0;
+  for (let i = 0; i < staffId.length; i++) {
+    hash = (hash * 31 + staffId.charCodeAt(i)) % 100000;
+  }
+  return Math.round((hash % ASSIGNEE_HUES) * (360 / ASSIGNEE_HUES));
+}
+
+// First letter of the first two words: "Jane Smith" reads JS, "Mike" reads M.
+// Falls back to the first two characters for a single long token, and to "?"
+// for a name that is somehow empty, because a blank dot looks like a bug.
+function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+function AssigneePill({ event, t, withName = false }: { event: CalEvent; t: Dict; withName?: boolean }) {
+  // Unassigned is not a person and is deliberately not given a colour. It is a
+  // gap in the schedule - somebody has to be sent to this - so it reads as a
+  // hollow marker rather than as one more crew member.
+  if (!event.assigneeId || !event.assigneeName) {
+    return (
+      <span className="cal-who cal-who-none" title={t.calendar.unassigned}>
+        <span className="cal-who-dot" aria-hidden="true">
+          &ndash;
+        </span>
+        {withName && <span className="cal-who-name">{t.calendar.unassigned}</span>}
+      </span>
+    );
+  }
+
+  const hue = assigneeHue(event.assigneeId);
+  return (
+    <span className="cal-who" title={event.assigneeName}>
+      <span
+        className="cal-who-dot"
+        aria-hidden="true"
+        style={{
+          // Set here rather than in a class because the hue is per person and
+          // there is no fixed set of classes to write for it.
+          background: `hsl(${hue} 62% 42%)`,
+          borderColor: `hsl(${hue} 62% 58%)`,
+        }}
+      >
+        {initialsOf(event.assigneeName)}
+      </span>
+      {withName && <span className="cal-who-name">{event.assigneeName}</span>}
+      {/* The dot is decorative; the name is what a screen reader should hear,
+          and it needs to be present even when the layout only draws initials. */}
+      {!withName && <span className="crm-sr-only">{event.assigneeName}</span>}
+    </span>
+  );
+}
 
 // Month names and weekday initials come from the browser rather than a hand
 // written list, so Spanish gets "enero" and "L M X J V S D" without a second
@@ -127,7 +200,20 @@ function timeKey(t: string | null): number {
 const telHref = (p: string) => `tel:${p.replace(/[^0-9+]/g, "")}`;
 const mapHref = (a: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a)}`;
 
-export function CalendarView({ events, base, locale }: { events: CalEvent[]; base: string; locale: Locale }) {
+export function CalendarView({
+  events,
+  base,
+  locale,
+  // Owners only. A contractor's calendar is already nothing but their own
+  // jobs - RLS sees to that - so a name on every chip would be their own name
+  // repeated down the month, which is noise dressed as information.
+  showCrew,
+}: {
+  events: CalEvent[];
+  base: string;
+  locale: Locale;
+  showCrew: boolean;
+}) {
   const router = useRouter();
   const t = dict(locale);
   const MONTHS = useMemo(() => monthNames(locale), [locale]);
@@ -342,7 +428,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
           {upcoming.length === 0 && earlier.length === 0 && <p className="cal-empty">{t.calendar.empty}</p>}
 
           {upcoming.map((g) => (
-            <DayGroup key={g.date} group={g} todayStr={todayStr} t={t} locale={locale} onPick={setSelected} />
+            <DayGroup key={g.date} group={g} todayStr={todayStr} t={t} locale={locale} showCrew={showCrew} onPick={setSelected} />
           ))}
 
           {earlier.length > 0 && (
@@ -352,7 +438,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
                 <span>{earlier.reduce((n, g) => n + g.items.length, 0)}</span>
               </h4>
               {earlier.map((g) => (
-                <DayGroup key={g.date} group={g} todayStr={todayStr} t={t} locale={locale} past onPick={setSelected} />
+                <DayGroup key={g.date} group={g} todayStr={todayStr} t={t} locale={locale} showCrew={showCrew} past onPick={setSelected} />
               ))}
             </>
           )}
@@ -429,6 +515,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
                       >
                         {e.time && <span className="cal-chip-time">{e.time}</span>}
                         <span className="cal-chip-title">{e.title}</span>
+                        {showCrew && <AssigneePill event={e} t={t} />}
                       </button>
                     ))}
                     {hidden > 0 && (
@@ -486,6 +573,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
                         {kindLabel(t, e.kind)}
                         {isRequested(e.kind) && <em className="cal-tentative">{t.calendar.notBooked}</em>}
                       </span>
+                      {showCrew && <AssigneePill event={e} t={t} withName />}
                     </span>
                   </button>
                 </article>
@@ -502,6 +590,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
           busy={busy}
           t={t}
           locale={locale}
+          showCrew={showCrew}
           error={moveState.error || delState.error}
           onClose={() => setSelected(null)}
           onOpen={() => router.push(`${base}/quotes/${selected.id}`)}
@@ -520,6 +609,7 @@ function DayGroup({
   todayStr,
   t,
   locale,
+  showCrew,
   past = false,
   onPick,
 }: {
@@ -527,6 +617,7 @@ function DayGroup({
   todayStr: string;
   t: Dict;
   locale: Locale;
+  showCrew: boolean;
   past?: boolean;
   onPick: (e: CalEvent) => void;
 }) {
@@ -548,6 +639,7 @@ function DayGroup({
                 {kindLabel(t, e.kind)}
                 {isRequested(e.kind) && <em className="cal-tentative">{t.calendar.notBooked}</em>}
               </span>
+              {showCrew && <AssigneePill event={e} t={t} withName />}
               {e.address && <span className="cal-row-addr">{e.address}</span>}
             </span>
           </button>
@@ -576,6 +668,7 @@ function EventPanel({
   busy,
   t,
   locale,
+  showCrew,
   error,
   onClose,
   onOpen,
@@ -587,6 +680,7 @@ function EventPanel({
   busy: boolean;
   t: Dict;
   locale: Locale;
+  showCrew: boolean;
   error?: string;
   onClose: () => void;
   onOpen: () => void;
@@ -609,6 +703,14 @@ function EventPanel({
           <div>
             <span className={`cal-panel-kind cal-bg-${event.kind}`}>{kindLabel(t, event.kind)}</span>
             <h3>{event.title}</h3>
+            {/* Directly under the customer, because the first question asked of
+                an appointment on this panel is who is going to it. */}
+            {showCrew && (
+              <p className="cal-panel-crew">
+                <span className="cal-panel-crew-label">{t.calendar.crew}</span>
+                <AssigneePill event={event} t={t} withName />
+              </p>
+            )}
           </div>
           <button type="button" className="cal-panel-x" onClick={onClose} aria-label={t.common.close}>
             ×

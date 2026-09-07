@@ -3,7 +3,8 @@ import { requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { googleConfigured, googleStatus } from "@/lib/crm/gcal";
 import { crmBase } from "@/lib/crm/nav";
-import { listScheduled } from "@/lib/crm/queries";
+import { listScheduled, listStaff } from "@/lib/crm/queries";
+import type { Staff } from "@/lib/crm/types";
 import { CalendarView, type CalEvent } from "./calendar-view";
 import { disconnectGoogle } from "./actions";
 
@@ -30,7 +31,20 @@ export default async function CalendarPage({
   const t = dict(locale);
   const { google } = await searchParams;
 
-  const quotes = await listScheduled(session);
+  // Who owns which appointment. Only an owner is shown this: RLS gives a
+  // contractor nothing but their own jobs, so every chip on their calendar
+  // would carry their own name - a column of identical badges teaching them to
+  // stop reading badges.
+  //
+  // Fetched alongside the appointments rather than joined onto them: the same
+  // handful of staff rows answer for every event on the month, and a PostgREST
+  // embed would repeat each crew member's row once per job they hold.
+  const [quotes, staff] = await Promise.all([
+    listScheduled(session),
+    isOwner ? listStaff(session) : Promise.resolve<Staff[]>([]),
+  ]);
+  const crewNames = new Map(staff.map((s) => [s.id, s.full_name?.trim() || s.email || "Staff"]));
+
   const events: CalEvent[] = [];
   for (const q of quotes) {
     // Enough on each event to act without opening the job: the panel shows the
@@ -42,6 +56,10 @@ export default async function CalendarPage({
       service: q.service,
       address: q.address,
       status: q.status,
+      // Null is a real answer and is drawn as one - an unassigned job is a gap
+      // in the schedule somebody has to fill, not a missing field.
+      assigneeId: q.assigned_to ?? null,
+      assigneeName: q.assigned_to ? (crewNames.get(q.assigned_to) ?? null) : null,
     };
     // Booked work day = a job install (only ever set once a customer accepts).
     if (q.scheduled_date) {
@@ -138,7 +156,7 @@ export default async function CalendarPage({
         </details>
       )}
 
-      <CalendarView events={events} base={base} locale={locale} />
+      <CalendarView events={events} base={base} locale={locale} showCrew={isOwner} />
     </main>
   );
 }
