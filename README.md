@@ -649,3 +649,30 @@ npx vercel --prod # production deploy
 npm install
 npm run dev   # http://localhost:3000
 ```
+
+## Checks
+```bash
+npm run typecheck   # tsc --noEmit
+npm test            # the fee engine's own suite
+```
+
+Both run on every push (`.github/workflows/ci.yml`).
+
+`npm test` is Node's own runner - no test framework, no new dependencies, in
+keeping with the rest of the repo. It needs **Node 22+**, which strips the
+TypeScript types natively, so the suite runs against `src/lib/crm/fees.ts`
+with nothing installed to compile it.
+
+Only the fee engine is covered, and deliberately so rather than as a first
+instalment of "tests everywhere". `fees.ts` is pure - no network, no database -
+it is read by the customer's payment page, the crew's job page and the cash
+board, and it decides what people are actually paid. A mistake in there does
+not throw; it quietly bills the wrong number, and the first anybody hears of it
+is a contractor disputing a figure. Everything else in this app fails loudly
+enough to be found another way.
+
+The suite is written to be read as documentation of the rules: the $10,000 job
+with a $500 cash deposit owing $500 of fee today rather than $1,500, the
+application fee capped one cent below the payment carrying it, a pending
+checkout reserving the fee it already carries. If you change one of those
+rules, the test that fails tells you which promise you just broke.
