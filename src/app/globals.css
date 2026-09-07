@@ -2261,6 +2261,20 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cash-attention { border-color: rgba(217, 119, 6, 0.55); }
 .cash-attention .crm-card-title { color: #fcd34d; }
 
+/* Sits above the four figures rather than in the attention panel below them.
+   The panel lists rows you can open and fix; this one says the totals
+   themselves are short, which has to be read before the numbers are. Solid
+   border, not the dashed "nothing here yet" one - this is a warning, not an
+   empty state. */
+.money-truncated {
+  text-align: left;
+  padding: 0.9rem 1.1rem;
+  border-style: solid;
+  border-color: rgba(217, 119, 6, 0.55);
+  color: var(--crm-text);
+}
+.money-truncated strong { color: #fcd34d; }
+
 /* Phone: the ledger table becomes the ledger cards. */
 .led-cards { display: none; list-style: none; margin: 0; padding: 0; }
 @media (max-width: 760px) {

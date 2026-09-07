@@ -18,6 +18,16 @@ import type { FeeSettlement, QuotePayment, Session, Staff } from "./types";
 // How far back the "collected recently" figures look.
 export const MONEY_WINDOW_DAYS = 30;
 
+// Row ceilings on the three reads this page is built from.
+//
+// Named rather than inlined because the page has to be able to say when it hit
+// one. Every figure here is a sum over rows, so a read that came back capped is
+// a total that is quietly too small - and an accounting page that under-reports
+// without saying so is worse than one that refuses to load.
+const JOB_LIMIT = 1000;
+const PAYMENT_LIMIT = 2000;
+const SETTLEMENT_LIMIT = 1000;
+
 type JobRow = {
   id: string;
   name: string;
@@ -150,6 +160,14 @@ export type MoneyBoard = {
   attention: AttentionRow[];
   /** True when supabase/payments.sql hasn't been run yet. */
   missingTables: boolean;
+  /**
+   * Which of the three reads came back at its row ceiling, if any.
+   *
+   * Empty is the normal state and the only one where the totals above can be
+   * trusted. Non-empty means this page is summing a slice, and it says so on
+   * screen rather than quietly reporting a smaller business than there is.
+   */
+  truncated: string[];
   /** How many practice leads were left out. Zero hides the switch entirely. */
   testCount: number;
   /** Whether this board was built with them in. */
@@ -189,11 +207,20 @@ export async function moneyBoard(
       session,
       "quote_requests?customer_response=eq.accepted&status=neq.lost" +
         "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,status,paid_at,completed_at,created_at,is_test" +
-        "&order=created_at.desc&limit=1000",
+        `&order=created_at.desc&limit=${JOB_LIMIT}`,
     ),
-    readRows<QuotePayment>(session, "quote_payments?select=*&order=created_at.desc&limit=2000"),
-    readRows<FeeSettlement>(session, "fee_settlements?select=*&order=created_at.desc&limit=1000"),
+    readRows<QuotePayment>(session, `quote_payments?select=*&order=created_at.desc&limit=${PAYMENT_LIMIT}`),
+    readRows<FeeSettlement>(session, `fee_settlements?select=*&order=created_at.desc&limit=${SETTLEMENT_LIMIT}`),
   ]);
+
+  // A read that came back exactly full is a read that was probably cut short.
+  // Measured here, before the stray-job top-up below adds rows of its own and
+  // makes the count unreadable.
+  const truncated = [
+    jobsRes.rows.length >= JOB_LIMIT ? "jobs" : null,
+    paymentsRes.rows.length >= PAYMENT_LIMIT ? "payments" : null,
+    settlementsRes.rows.length >= SETTLEMENT_LIMIT ? "settlements" : null,
+  ].filter((v): v is string => v !== null);
 
   const payments = paymentsRes.rows;
   const byJob = new Map<string, QuotePayment[]>();
@@ -472,6 +499,7 @@ export async function moneyBoard(
     entries,
     attention,
     missingTables: !paymentsRes.ok || !settlementsRes.ok,
+    truncated,
     testCount: allJobs.filter((j) => j.isTest).length,
     includingTests: includeTests,
   };

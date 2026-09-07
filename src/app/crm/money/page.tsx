@@ -85,6 +85,20 @@ export default async function MoneyPage({
         </p>
       )}
 
+      {/* Above the figures, not below them, and worded as a warning rather than
+          a note: every total on this page is a sum over rows, so a read that
+          came back at its ceiling means the numbers underneath are too small.
+          Somebody reconciling against a bank statement has to know that before
+          they read the first one, not after. */}
+      {board.truncated.length > 0 && (
+        <p className="crm-empty money-truncated">
+          <strong>These totals are incomplete.</strong> This page reads the most recent{" "}
+          {board.truncated.join(" and ")} and you now have more than it loads, so every figure below
+          is a sum over part of the business rather than all of it. Nothing is wrong with the data -
+          the page needs date filtering before it can be trusted again.
+        </p>
+      )}
+
       {/* The four figures the business actually runs on. Owed-to-you last,
           because it is the one that turns into a phone call. */}
       <div className="crm-stats">

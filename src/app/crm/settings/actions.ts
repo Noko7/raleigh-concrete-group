@@ -12,17 +12,18 @@ import { rateLimit } from "@/lib/rate-limit";
 import type { SaveState, TestSmsState } from "./types";
 
 // Returns the E.164 form, null to clear, or "invalid".
+//
+// The conversion itself is toE164 in notify.ts - the same function the senders
+// use, so a number this form accepts is by definition a number a text can go
+// to. This used to be a second copy of that logic, which is the kind of
+// duplicate that only announces itself the day the two disagree about what a
+// valid number is and somebody's alerts stop arriving.
+//
+// The wrapper exists for the one thing toE164 has no answer for: an empty box
+// means "clear my number", which is a valid instruction and not a bad number.
 function normalizePhone(raw: string): string | null | "invalid" {
-  const t = raw.trim();
-  if (t === "") return null;
-  if (t.startsWith("+")) {
-    const cleaned = "+" + t.slice(1).replace(/\D/g, "");
-    return cleaned.length >= 11 && cleaned.length <= 16 ? cleaned : "invalid";
-  }
-  const d = t.replace(/\D/g, "");
-  if (d.length === 10) return `+1${d}`;
-  if (d.length === 11 && d.startsWith("1")) return `+${d}`;
-  return "invalid";
+  if (raw.trim() === "") return null;
+  return toE164(raw) ?? "invalid";
 }
 
 export async function saveSettings(_prev: SaveState, formData: FormData): Promise<SaveState> {
