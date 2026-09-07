@@ -484,6 +484,21 @@ export function isCancelled(m: QuoteMessage): boolean {
   return Boolean(m.cancelled_at) && !m.sent_at;
 }
 
+/**
+ * Still stoppable: held, and its hour has not come round yet.
+ *
+ * Narrower than isHeld on purpose. A row whose send_after has passed is one the
+ * next flush will pick up, and offering a Cancel button against it is offering
+ * a race - it may win, and it may be a second behind a text already on
+ * somebody's phone. Before 8am the answer is certain, so that is the only
+ * window the button is offered in.
+ */
+export function isCancellable(m: QuoteMessage, now: Date = new Date()): boolean {
+  if (!isHeld(m)) return false;
+  const due = new Date(m.send_after as string).getTime();
+  return Number.isFinite(due) && due > now.getTime();
+}
+
 // Service-role: sends happen from the public quote endpoint and from cron, where
 // there is no session. Never throws - a logging failure must not take a send
 // down with it, which would be the tail wagging the dog.
@@ -604,8 +619,13 @@ export async function finishMessage(
 export async function cancelMessage(id: string, quoteId: string, nowIso: string): Promise<QuoteMessage | null> {
   try {
     const res = await pgAdmin(
+      // `send_after=gt.now` is the whole eligibility rule, enforced by the
+      // database rather than by the button: a text whose hour has arrived is
+      // one the flush may already be holding, and cancelling it is a race
+      // nobody can see the result of. Before then, nothing else is competing
+      // for the row and the answer is certain.
       `quote_messages?id=eq.${encodeURIComponent(id)}&quote_id=eq.${encodeURIComponent(quoteId)}` +
-        `&sent_at=is.null&cancelled_at=is.null&send_after=not.is.null`,
+        `&sent_at=is.null&cancelled_at=is.null&send_after=gt.${encodeURIComponent(nowIso)}`,
       {
         method: "PATCH",
         headers: { Prefer: "return=representation" },
@@ -619,6 +639,42 @@ export async function cancelMessage(id: string, quoteId: string, nowIso: string)
   } catch {
     return null;
   }
+}
+
+/**
+ * Cancel every text still queued for a job, in one write.
+ *
+ * Retracting a quote has to catch the text as well as the link: a quote raised
+ * at 9pm is sitting in the queue until 8am, and killing the link while leaving
+ * the text to go out sends the wrong customer a message about a quote that no
+ * longer opens. Returns how many it stopped, so the caller can say so.
+ */
+export async function cancelQueuedFor(quoteId: string, nowIso: string): Promise<number> {
+  try {
+    const res = await pgAdmin(
+      `quote_messages?quote_id=eq.${encodeURIComponent(quoteId)}` +
+        `&sent_at=is.null&cancelled_at=is.null&send_after=not.is.null`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ cancelled_at: nowIso, detail: "Cancelled: the quote was retracted." }),
+      },
+    );
+    if (!res.ok) return 0;
+    return ((await res.json()) as unknown[]).length;
+  } catch {
+    return 0;
+  }
+}
+
+// One message, scoped to the job it belongs to. Service-role like the rest of
+// the queue helpers, and the caller has already proved it can open that job.
+export async function getMessage(id: string, quoteId: string): Promise<QuoteMessage | null> {
+  const res = await pgAdmin(
+    `quote_messages?id=eq.${encodeURIComponent(id)}&quote_id=eq.${encodeURIComponent(quoteId)}&select=*&limit=1`,
+  );
+  if (!res.ok) return null;
+  return ((await res.json()) as QuoteMessage[])[0] ?? null;
 }
 
 export async function listMessages(session: Session, quoteId: string): Promise<QuoteMessage[]> {

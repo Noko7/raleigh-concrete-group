@@ -1567,6 +1567,15 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cq-btn-accept:hover { background: var(--amber-dark); }
 .cq-btn-accept:disabled { opacity: 0.55; cursor: not-allowed; }
 .cq-btn-decline { background: #fff; border: 2px solid #2b1a12; color: #2b1a12; cursor: pointer; }
+/* The sentence that answers "what am I agreeing to", against the button it is
+   about. Quiet: it removes a worry, it isn't a selling line. */
+.cq-reassure {
+  margin: -0.4rem 0 1.1rem; font-size: 0.82rem; line-height: 1.45; text-align: center;
+  color: rgba(43, 26, 18, 0.65);
+}
+/* Desktop keeps the one real button: the whole card is about 520px wide and
+   the decision is never far from the price. */
+.cq-sticky { display: none; }
 .cq-btn-decline:hover { background: #2b1a12; color: #fff; }
 .cq-offer, .cq-schedule, .cq-result { background: #fff; border: 1px solid #ececec; border-radius: 0.9rem; padding: 1.4rem; margin-bottom: 1.1rem; text-align: center; }
 .cq-offer { border: 2px solid var(--amber); }
@@ -1955,7 +1964,11 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .kb-quick { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
 .kb-quick-btn { flex: 1; text-align: center; text-decoration: none; font-size: 0.78rem; font-weight: 800; padding: 0.42rem; border-radius: 0.45rem; background: rgba(255, 255, 255, 0.09); border: 1px solid var(--crm-border); color: var(--crm-text); }
 .kb-quick-btn:hover { background: var(--amber); border-color: var(--amber); color: #fff; }
-.kb-card-actions { display: flex; gap: 0.5rem; margin-top: 0.55rem; }
+.kb-card-tools { margin-top: 0.55rem; }
+/* Both phone-only. On a desk the chips are replaced by the columns themselves
+   and the controls are always on show, so neither costs anything here. */
+.kb-stages, .kb-more-btn, .kb-narrow-only { display: none; }
+.kb-card-actions { display: flex; gap: 0.5rem; }
 .kb-move { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .kb-move > span { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--crm-muted); }
 .kb-move select { width: 100%; background: #1a1f24; color: var(--crm-text); border: 1px solid var(--crm-border); border-radius: 0.4rem; padding: 0.4rem; font-size: 0.8rem; color-scheme: dark; }
@@ -1964,17 +1977,55 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .kb-delete-btn:hover { background: #f87171; border-color: #f87171; color: #fff; }
 .kb-toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: #2b1416; border: 1px solid #f87171; color: #fecaca; padding: 0.7rem 1.1rem; border-radius: 0.6rem; z-index: 50; font-weight: 600; font-size: 0.85rem; }
 
-/* Mobile: stack the pipeline vertically, hide empty stages, fatten tap targets */
+/* ── Phone: one stage at a time ───────────────────────────────────────────
+   The board used to stack all seven columns down the page, which on twenty
+   jobs a stage is a scroll long enough that you lose the one you were looking
+   for on the way past. Below 700px it becomes a single list with a row of
+   stage chips over it: same cards, same actions, one stage on screen. */
 @media (max-width: 700px) {
+  .kb-stages {
+    display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 0.6rem; margin-bottom: 0.2rem;
+    scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+  }
+  .kb-stage {
+    flex: none; scroll-snap-align: start; cursor: pointer;
+    display: flex; align-items: center; gap: 0.4rem; min-height: 40px;
+    padding: 0.4rem 0.75rem; border-radius: 999px;
+    background: var(--crm-surface); border: 1px solid var(--crm-border); border-top-width: 3px;
+    color: var(--crm-muted); font-size: 0.78rem; font-weight: 800; white-space: nowrap;
+  }
+  /* Selected reads as selected without a new colour: the stage's own accent,
+     which the column heading already uses, moves onto the chip. */
+  .kb-stage-on { background: rgba(255, 255, 255, 0.1); color: var(--crm-text); }
+  .kb-stage-n { background: rgba(255, 255, 255, 0.12); border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 0.72rem; }
+  .kb-stage-on .kb-stage-n { background: var(--amber); color: #fff; }
+
   .kb-cols { flex-direction: column; overflow-x: visible; gap: 1rem; padding-bottom: 0; }
-  .kb-col { flex: none; width: 100%; max-height: none; }
-  .kb-col:has(.kb-empty) { display: none; }
-  .kb-col-body { max-height: none; }
+  /* One column, the chosen one. Its heading goes too: the selected chip above
+     is already saying the stage and the count. */
+  .kb-col { display: none; }
+  .kb-col-active { display: flex; flex: none; width: 100%; max-height: none; border: none; background: none; }
+  .kb-col-head { display: none; }
+  .kb-col-body { max-height: none; padding: 0; }
+
   .kb-card { padding: 1rem; }
   .kb-card-name { font-size: 1.3rem; }
   .kb-move select { padding: 0.6rem; font-size: 0.95rem; }
   .kb-quick-btn { padding: 0.6rem; font-size: 0.9rem; }
   .kb-delete-btn { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
+
+  /* Move / Crew / Delete fold away, so a card is name, price, one line of
+     detail and the two things you actually do in the field: call and text. */
+  .kb-more-btn {
+    display: inline-block; background: none; border: none; padding: 0.45rem 0; cursor: pointer;
+    color: var(--crm-muted); font-size: 0.78rem; font-weight: 800; text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .kb-card-actions { display: none; flex-wrap: wrap; }
+  .kb-card-actions[data-open="true"] { display: flex; }
+
+  .kb-narrow-only { display: inline; }
+  .kb-wide-only { display: none; }
 }
 
 /* Send-quote outcome banner: unmissable green or red */
@@ -2080,6 +2131,26 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .cq-actions .cq-btn { width: 100%; }
   .cq-date { min-height: 52px; font-size: 1rem; }
   .cq-meta > div { grid-template-columns: 80px 1fr; }
+
+  /* The price and the decision, carried to wherever they have read to. Only
+     while the real Approve button is off screen, so there is never a moment
+     with two of them on the page at once. */
+  .cq-sticky {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    display: flex; align-items: center; gap: 0.7rem;
+    padding: 0.7rem 0.9rem calc(0.7rem + env(safe-area-inset-bottom));
+    background: var(--ivory); border-top: 2px solid var(--amber);
+    box-shadow: 0 -8px 24px rgba(28, 32, 36, 0.35);
+  }
+  .cq-sticky-price { display: flex; flex-direction: column; line-height: 1.1; min-width: 0; }
+  .cq-sticky-price > span {
+    font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    color: rgba(43, 26, 18, 0.6);
+  }
+  .cq-sticky-price > strong { font-family: var(--font-headline), sans-serif; font-size: 1.5rem; color: #2b1a12; }
+  .cq-sticky .cq-btn { flex: 1; min-width: 0; min-height: 48px; }
+  /* Room for the bar, so the last line of the card is never sitting under it. */
+  .cq-card { padding-bottom: 5.5rem; }
 }
 
 /* ── SMS test panel (Settings) ── */
@@ -2090,6 +2161,84 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .sms-result-bad { border-color: rgba(220, 38, 38, 0.5); }
 .sms-result-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
 .sms-detail { margin: 0.6rem 0 0; padding: 0.6rem 0.7rem; background: #15181c; border-radius: 0.45rem; font-family: ui-monospace, monospace; font-size: 0.78rem; color: #fca5a5; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto; }
+
+/* ── Quotes sent: every price this customer has been given ────────────────
+   One component on two pages, so it takes the card off whichever page it is
+   on: the office's dark surface by default, the crew's white card under
+   .qs-light. No new colours in either, only the tokens each page already uses. */
+.qs {
+  background: var(--crm-surface); border: 1px solid var(--crm-border);
+  border-radius: 0.9rem; padding: 1.25rem; margin-bottom: 1.1rem;
+}
+.qs-title { font-family: var(--font-headline), sans-serif; font-size: 1.4rem; letter-spacing: 0.01em; margin-bottom: 0.35rem; }
+.qs-count, .qs-none { color: var(--crm-muted); font-size: 0.85rem; margin-bottom: 0.7rem; }
+.qs-none { margin-bottom: 0; }
+.qs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+/* A row is a line, not a card: the amount is the thing being compared down the
+   column, so it gets a fixed slot and the rest fills in around it. */
+.qs-row {
+  display: grid; grid-template-columns: 2.2rem minmax(5.5rem, auto) 1fr auto;
+  align-items: baseline; gap: 0.6rem;
+  padding: 0.55rem 0.7rem; border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid transparent;
+}
+/* The live one. Amber rather than a heavier weight: this is the number the
+   customer is holding, and it is the only row anybody acts on. */
+.qs-row-live { border-color: rgba(194, 104, 42, 0.55); background: rgba(194, 104, 42, 0.08); }
+.qs-n { font-size: 0.8rem; font-weight: 800; color: var(--crm-muted); }
+.qs-amount { font-size: 1.05rem; font-weight: 800; color: var(--crm-text); }
+.qs-when { font-size: 0.82rem; color: var(--crm-muted); }
+.qs-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; justify-content: flex-end; }
+.qs-tag {
+  font-style: normal; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 0.15rem 0.45rem; border-radius: 999px;
+  border: 1px solid var(--crm-border); color: var(--crm-muted); white-space: nowrap;
+}
+.qs-tag-live { border-color: var(--crm-accent); color: var(--crm-accent); }
+
+/* Retracting. Kept quiet until it is needed: it is the rarest thing on the
+   page and the only one that throws work away. */
+.qs-retract { margin-top: 0.9rem; }
+.qs-retract-open {
+  background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+  color: var(--crm-muted); font-size: 0.85rem; font-weight: 700; text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.qs-retract-open:hover { color: #f87171; }
+.qs-warn {
+  margin: 0 0 0.7rem; padding: 0.7rem 0.8rem; border-radius: 0.55rem;
+  background: rgba(220, 38, 38, 0.1); border: 1px solid rgba(220, 38, 38, 0.4);
+  font-size: 0.88rem; line-height: 1.45;
+}
+.qs-retract-acts { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.qs-btn-danger { background: #b91c1c; color: #fff; border-color: #b91c1c; }
+.qs-btn-danger:hover { background: #991b1b; }
+.qs-btn-danger:disabled { opacity: 0.6; cursor: default; }
+.qs-err, .qs-ok { margin: 0 0 0.6rem; font-size: 0.88rem; font-weight: 700; }
+.qs-err { color: #f87171; }
+.qs-ok { color: #4ade80; }
+
+/* The crew's page: white card, dark text, amber border, same as .js-card. */
+.qs-light { background: #fff; border: 2px solid #e2e5ea; margin-top: 1.5rem; margin-bottom: 0; padding: 1.1rem 1.15rem; }
+.qs-light .qs-title { font-family: inherit; font-weight: 800; font-size: 1rem; }
+.qs-light .qs-count, .qs-light .qs-none { color: #6b7280; }
+.qs-light .qs-row { background: #faf8f4; }
+.qs-light .qs-row-live { border-color: var(--amber); background: rgba(194, 104, 42, 0.07); }
+.qs-light .qs-n, .qs-light .qs-when { color: #6b7280; }
+.qs-light .qs-amount { color: #0f172a; }
+.qs-light .qs-tag { border-color: #d1d5db; color: #6b7280; }
+.qs-light .qs-tag-live { border-color: var(--amber); color: var(--amber-dark); }
+.qs-light .qs-retract-open { color: #6b7280; }
+.qs-light .qs-warn { background: #fef2f2; border-color: #fecaca; color: #7f1d1d; }
+.qs-light .qs-err { color: #b91c1c; }
+.qs-light .qs-ok { color: #15803d; }
+
+@media (max-width: 640px) {
+  /* The stamp drops under the amount rather than squeezing it: on a phone the
+     number has to stay readable at a glance. */
+  .qs-row { grid-template-columns: 1.9rem 1fr auto; row-gap: 0.15rem; }
+  .qs-when { grid-column: 2 / -1; }
+}
 
 /* ── Message log (job page): every text this job produced ── */
 .msg-log { list-style: none; margin: 0.9rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
@@ -2119,6 +2268,28 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
    relevant for the few minutes or few hours one text is waiting. */
 .msg-cancel { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.55rem; }
 .msg-cancel-btn { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+.msg-cancel-btn:disabled { opacity: 0.6; cursor: default; }
+/* Why there is no button, for the person who cannot press it. */
+.msg-cancel-note { margin: 0.55rem 0 0; font-size: 0.8rem; color: var(--crm-muted); }
+.msg-cancel-ok { margin: 0.55rem 0 0; font-size: 0.84rem; font-weight: 700; color: #4ade80; }
+.msg-cancel-err { margin: 0.55rem 0 0; font-size: 0.84rem; font-weight: 700; color: #f87171; }
+
+/* Cancelling the quote itself. Louder than stopping a reminder, because it is
+   a different act: the text is only the half of it you can see. */
+.msg-cancel-quote { margin-top: 0.55rem; }
+.msg-cancel-open {
+  background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+  color: var(--crm-muted); font-size: 0.82rem; font-weight: 800;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.msg-cancel-open:hover { color: #f87171; }
+.msg-cancel-warn {
+  margin: 0 0 0.6rem; padding: 0.65rem 0.75rem; border-radius: 0.5rem;
+  background: rgba(220, 38, 38, 0.1); border: 1px solid rgba(220, 38, 38, 0.4);
+  font-size: 0.85rem; line-height: 1.45;
+}
+.msg-cancel-acts { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.msg-cancel-acts .crm-btn { padding: 0.4rem 0.8rem; font-size: 0.82rem; }
 
 @media (max-width: 640px) {
   .msg-when { width: 100%; }

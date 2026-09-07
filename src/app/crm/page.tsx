@@ -55,7 +55,12 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
           <h1>{t.pipeline.title}</h1>
           <p className="crm-muted">
             {board.length} {board.length === 1 ? t.pipeline.quote : t.pipeline.quotes}
-            {isOwner ? "" : ` ${t.pipeline.assignedToYou}`} · {t.pipeline.dragHint}
+            {isOwner ? "" : ` ${t.pipeline.assignedToYou}`}{" · "}
+            {/* You cannot drag a card with a thumb, and the phone lays this out
+                as one stage at a time, so each device gets the hint that is
+                true on it. */}
+            <span className="kb-wide-only">{t.pipeline.dragHint}</span>
+            <span className="kb-narrow-only">{t.pipeline.tapHint}</span>
           </p>
         </div>
         {isOwner && (

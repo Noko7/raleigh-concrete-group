@@ -125,6 +125,16 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
   const [overCol, setOverCol] = useState<Status | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Phone only: which single stage the list is showing. A board is a good way
+  // to see the shape of the week on a desk and a bad way to read twenty jobs on
+  // a phone, where seven stacked columns is one very long scroll with the thing
+  // you wanted somewhere in the middle of it. Desktop ignores this entirely and
+  // still renders every column side by side.
+  const [stage, setStage] = useState<Status>("new");
+  // Which card has its Move / Crew / Delete row open. Phone only: on a desk
+  // those controls are always on show, and the CSS below is what decides which
+  // of the two you get, so this stays a single DOM either way.
+  const [openCard, setOpenCard] = useState<string | null>(null);
 
   // Adopt fresh server data (e.g. a customer just accepted) without clobbering
   // in-flight optimistic edits: only re-sync when the server snapshot changes.
@@ -194,6 +204,17 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
       .map(([id, n]) => ({ id, name: id ? (nameMap[id] ?? t.pipeline.crew) : t.pipeline.unassigned, n }))
       .sort((a, b) => b.n - a.n);
   }, [quotes, role, nameMap, t, today]);
+
+  // Land on something worth reading: the first stage with anything in it,
+  // starting from New. Only on first load, so picking an empty stage on purpose
+  // doesn't bounce you straight back out of it.
+  const [stagePicked, setStagePicked] = useState(false);
+  useEffect(() => {
+    if (stagePicked || quotes.length === 0) return;
+    const firstBusy = STATUSES.find((sx) => quotes.some((q) => q.status === sx));
+    if (firstBusy) setStage(firstBusy);
+    setStagePicked(true);
+  }, [quotes, stagePicked]);
 
   function flash(msg: string) {
     setToast(msg);
@@ -279,13 +300,36 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
         </div>
       )}
 
+      {/* Phone only. Counts on the chips because "how many are in Quoted" is
+          most of what the column headings were for, and a row of chips says it
+          without costing seven screenfuls. */}
+      <div className="kb-stages" role="group" aria-label={t.pipeline.stagePicker}>
+        {STATUSES.map((sx) => (
+          <button
+            key={sx}
+            type="button"
+            className={`kb-stage${stage === sx ? " kb-stage-on" : ""} kb-accent-${sx}`}
+            onClick={() => {
+              setStage(sx);
+              setStagePicked(true);
+            }}
+            aria-pressed={stage === sx}
+          >
+            {statusLabel(sx)}
+            <span className="kb-stage-n">{byStatus[sx].length}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="kb-cols">
         {STATUSES.map((status) => {
           const cards = byStatus[status];
           return (
             <section
               key={status}
-              className={`kb-col${overCol === status ? " kb-col-over" : ""}`}
+              className={`kb-col${overCol === status ? " kb-col-over" : ""}${
+                stage === status ? " kb-col-active" : ""
+              }`}
               onDragOver={(e) => {
                 e.preventDefault();
                 setOverCol(status);
@@ -304,7 +348,15 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
               </header>
 
               <div className="kb-col-body">
-                {cards.length === 0 && <p className="kb-empty">{t.pipeline.dropHere}</p>}
+                {cards.length === 0 && (
+                  <p className="kb-empty">
+                    {/* One line per device: you cannot drop a card with a
+                        thumb, and "drop here" on a phone is an instruction for
+                        something that isn't there. */}
+                    <span className="kb-wide-only">{t.pipeline.dropHere}</span>
+                    <span className="kb-narrow-only">{t.pipeline.noneInStage}</span>
+                  </p>
+                )}
                 {cards.map((q) => (
                   <article
                     key={q.id}
@@ -405,40 +457,55 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                       )}
                     </div>
 
-                    <div className="kb-card-actions" onClick={(e) => e.stopPropagation()}>
-                      <label className="kb-move">
-                        <span>{t.pipeline.move}</span>
-                        <select value={q.status} onChange={(e) => move(q.id, e.target.value as Status)}>
-                          {STATUSES.map((s) => (
-                            <option key={s} value={s}>
-                              {statusLabel(s)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {role === "owner" && (
+                    <div className="kb-card-tools" onClick={(e) => e.stopPropagation()}>
+                      {/* Phone only. Twenty jobs whose every card carries two
+                          dropdowns and a delete button is a page you scroll
+                          past rather than read, so the controls fold away and
+                          the list stays a list. */}
+                      <button
+                        type="button"
+                        className="kb-more-btn"
+                        aria-expanded={openCard === q.id}
+                        onClick={() => setOpenCard((c) => (c === q.id ? null : q.id))}
+                      >
+                        {t.pipeline.change}
+                      </button>
+
+                      <div className="kb-card-actions" data-open={openCard === q.id}>
                         <label className="kb-move">
-                          <span>{t.pipeline.crew}</span>
-                          <select value={q.assigned_to ?? ""} onChange={(e) => assign(q.id, e.target.value)}>
-                            <option value="">{t.pipeline.unassignedCard}</option>
-                            {contractors.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.label}
+                          <span>{t.pipeline.move}</span>
+                          <select value={q.status} onChange={(e) => move(q.id, e.target.value as Status)}>
+                            {STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {statusLabel(s)}
                               </option>
                             ))}
                           </select>
                         </label>
-                      )}
-                      {role === "owner" && (
-                        <button
-                          type="button"
-                          className="kb-delete-btn"
-                          aria-label={`${t.pipeline.deleteLead} ${q.name}`}
-                          onClick={() => remove(q.id, q.name)}
-                        >
-                          {t.pipeline.deleteLead}
-                        </button>
-                      )}
+                        {role === "owner" && (
+                          <label className="kb-move">
+                            <span>{t.pipeline.crew}</span>
+                            <select value={q.assigned_to ?? ""} onChange={(e) => assign(q.id, e.target.value)}>
+                              <option value="">{t.pipeline.unassignedCard}</option>
+                              {contractors.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        {role === "owner" && (
+                          <button
+                            type="button"
+                            className="kb-delete-btn"
+                            aria-label={`${t.pipeline.deleteLead} ${q.name}`}
+                            onClick={() => remove(q.id, q.name)}
+                          >
+                            {t.pipeline.deleteLead}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </article>
                 ))}

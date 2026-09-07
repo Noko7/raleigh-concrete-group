@@ -33,11 +33,13 @@ import {
 import {
   addEvent,
   cancelMessage,
+  cancelQueuedFor,
   clearAppointment,
   confirmSchedule,
   conflictMessage,
   findJobConflict,
   findVisitConflict,
+  getMessage,
   getQuote,
   getStaffById,
   lastMessageOf,
@@ -325,7 +327,9 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     events.push(
       revising
         ? { type: "quote_revised", meta: { from: current.quote_amount, to: effectiveAmount } }
-        : { type: "quote_sent" },
+        // The price is on the send, not just on the row, so the history of what
+        // this customer has been quoted survives the next correction.
+        : { type: "quote_sent", meta: { amount: effectiveAmount } },
     );
   }
 
@@ -818,36 +822,193 @@ export async function completeJob(_prev: FinishState, formData: FormData): Promi
 // answer, arrived at by adding up payments rather than by somebody asserting it.
 
 /**
- * Stop a text that hasn't gone out yet.
+ * Stop a text that hasn't gone out yet, and on a quote, take the quote with it.
  *
- * A customer text raised at 9pm sits in the queue until 8am, and a crew text
- * can sit for a few minutes while a run spaces itself out. That gap is the
- * whole point of this button: the customer rings back, or somebody spots the
- * wrong price in the quote they just sent, and the only thing worse than the
- * text being late is it arriving anyway in the morning.
+ * A customer text raised at 9pm sits in the queue until 8am. That gap is the
+ * whole point of this button: somebody spots the wrong price, or the wrong
+ * customer, and the only thing worse than the text being late is it arriving
+ * anyway in the morning.
  *
- * Void, and no confirmation state: the log re-renders straight underneath, and
- * the row itself is the answer - "Cancelled" if it worked, and if the queue
- * beat us to it by a second, the honest "Accepted" it now deserves.
+ * Cancelling the TEXT of a quote is cancelling the QUOTE. Stopping the message
+ * and leaving the price, the sections and the live link on the row was a half
+ * measure that read as a whole one: the job still said Quoted, the customer's
+ * link still opened, and the follow-up cron was still counting down to chase a
+ * quote nobody had received. So a quote text cancelled here runs the same wipe
+ * as a retraction, which is what it is - see wipeQuote above.
+ *
+ * That makes it owner-only on a quote text, for the same reason retracting is:
+ * it throws away written work and cannot be undone from the UI. Every other
+ * kind of held text is just a text, and anyone who can open the job can stop it.
+ *
+ * Only while it is genuinely still waiting. `cancelMessage` will not touch a
+ * row whose send_after has passed, so once the morning comes the button stops
+ * being offered and stops working, rather than racing a flush that may already
+ * have the message in its hand.
  */
-export async function cancelHeldMessage(formData: FormData): Promise<void> {
+export async function cancelHeldMessage(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
   const session = await getSession();
-  if (!session) return;
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
   const id = String(formData.get("id") ?? "");
   const messageId = String(formData.get("messageId") ?? "");
-  if (!id || !messageId) return;
+  if (!id || !messageId) return { ok: false, error: "Missing message." };
 
   // The message log has no policy of its own for writes, so access is checked
   // here the same way every other action on this page checks it: can this
   // person load the job? The quote id then scopes the update to that job, so a
   // guessed message id from somebody else's lead does nothing.
   const current = await getQuote(session, id);
-  if (!current) return;
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+
+  // Read before the write, so the permission check below is made against what
+  // the row actually is rather than against what the form said it was.
+  const held = await getMessage(messageId, id);
+  if (!held) return { ok: false, error: "That text is no longer in the queue." };
+
+  const isQuote = QUOTE_TEXT_KINDS.has(held.kind);
+  if (isQuote && session.staff.role !== "owner") {
+    return {
+      ok: false,
+      error: "Only the owner can cancel a quote. Ask them to retract it, or send a corrected quote instead.",
+    };
+  }
+  if (isQuote && current.scheduled_date) {
+    return { ok: false, error: "This job has a booked work day. Release the date first." };
+  }
 
   const cancelled = await cancelMessage(messageId, id, new Date().toISOString());
-  if (cancelled) await addEvent(session, id, "message_cancelled", { kind: cancelled.kind, role: cancelled.role });
+  if (!cancelled) {
+    return { ok: false, error: "Too late: that text has already gone out or is being sent right now." };
+  }
+  await addEvent(session, id, "message_cancelled", { kind: cancelled.kind, role: cancelled.role });
+
+  let wiped = false;
+  if (isQuote) {
+    wiped = await wipeQuote(session, id);
+    if (wiped) {
+      await addEvent(session, id, "quote_retracted", { amount: current.quote_amount, texts_cancelled: 1 });
+      await addEvent(session, id, "links_rotated");
+    }
+  }
 
   revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+  revalidatePath("/job/[token]", "page");
+  return {
+    ok: true,
+    message: wiped
+      ? "Quote cancelled. The text never went out, the price and wording are cleared, and the job is back in New."
+      : "That text has been stopped. It will not send.",
+  };
+}
+
+// The texts that carry the quote itself. Cancelling one of these is cancelling
+// the quote; cancelling a reminder or a receipt is just cancelling a text.
+const QUOTE_TEXT_KINDS = new Set(["quote_ready", "quote_updated"]);
+
+/**
+ * The wipe itself, shared by the two ways a quote gets taken back.
+ *
+ * Retracting one the customer already has and cancelling one that never left
+ * the building are the same act with different timing, and the day they stop
+ * clearing exactly the same fields is the day a job carries a price nobody
+ * meant to send. So it lives once, here, and both callers do their own
+ * permission and eligibility checks before reaching it.
+ *
+ * Order matters: the row goes first. A failure part way through then leaves
+ * line items on an unquoted job, which is visible and fixable, where the
+ * reverse would leave a live link on a job the UI already calls retracted.
+ */
+async function wipeQuote(
+  session: NonNullable<Awaited<ReturnType<typeof getSession>>>,
+  id: string,
+): Promise<boolean> {
+  const patch: Partial<Quote> = {
+    // The link the customer holds stops resolving on the next tap, including a
+    // copy they forwarded to somebody else.
+    public_token: crypto.randomUUID().replace(/-/g, ""),
+    quote_amount: null,
+    quote_summary: null,
+    quote_sent_at: null,
+    quote_expires_at: null,
+    quote_followup_sent_at: null,
+    // Whatever they said, they said it about a quote that no longer exists.
+    customer_response: null,
+    customer_responded_at: null,
+    status: "new",
+  };
+  for (const f of QUOTE_SECTION_FIELDS) patch[f] = null;
+
+  const updated = await updateQuote(session, id, patch);
+  if (!updated) return false;
+  await saveQuoteOptions(session, id, []).catch(() => ({ ok: false }));
+  return true;
+}
+
+/**
+ * Take a sent quote back: kill the link, wipe the pricing, start again.
+ *
+ * For the quote that went to the wrong customer, or went out before anybody
+ * meant it to. Four things have to happen together or it isn't a retraction:
+ *
+ *   1. The customer's link stops resolving. Rotating public_token is what makes
+ *      this immediate - a quote they already have open cannot be accepted on a
+ *      refresh, and a forwarded link is dead too.
+ *   2. Any text still sitting in the quiet-hours queue is cancelled, or the
+ *      link we just killed gets texted to them at 8am anyway.
+ *   3. The pricing is cleared: the amount, the five sections, the line items.
+ *      This is the "and wipe" half - what went out was wrong, and leaving it
+ *      on the row is how it goes out a second time.
+ *   4. The job goes back to New with its sent stamps cleared, so the pipeline,
+ *      the 48-hour follow-up and the "already texted this quote" guard all stop
+ *      believing this customer has a price.
+ *
+ * Owner only. It rotates a live link, throws away written work and moves a job
+ * backwards, and none of that is undoable from the UI.
+ *
+ * Refused on a job with a booked work day: releasing a date is its own decision
+ * with its own text to the customer, and burying it inside a quote retraction
+ * is how a crew finds out on the morning of the pour.
+ */
+export async function retractQuote(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+  if (session.staff.role !== "owner") {
+    return { ok: false, error: "Only the owner can retract a quote." };
+  }
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { ok: false, error: "Missing quote id." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this quote." };
+  if (!current.quote_sent_at) return { ok: false, error: "Nothing has been sent to this customer yet." };
+  if (current.scheduled_date) {
+    return {
+      ok: false,
+      error: "This job has a booked work day. Release the date first, then retract the quote.",
+    };
+  }
+
+  // Before the wipe, so the log can say what the customer was holding.
+  const was = current.quote_amount;
+
+  if (!(await wipeQuote(session, id))) {
+    return { ok: false, error: "Could not retract this quote. Please try again." };
+  }
+  const stopped = await cancelQueuedFor(id, new Date().toISOString());
+
+  await addEvent(session, id, "quote_retracted", { amount: was, texts_cancelled: stopped });
+  await addEvent(session, id, "links_rotated");
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+  revalidatePath("/job/[token]", "page");
+  return {
+    ok: true,
+    message:
+      `Quote retracted. The customer's link is dead${stopped > 0 ? ` and ${stopped} queued text(s) were stopped` : ""}. ` +
+      "The job is back in New with no price on it.",
+  };
 }
 
 // Regenerate the customer + contractor capability tokens. Use this if a link is

@@ -23,6 +23,47 @@ const heldWhen = (v: unknown) => {
 };
 
 /**
+ * Every version of the quote that has gone to the customer, oldest send first.
+ *
+ * There is no table of quote versions and there does not need to be: the
+ * activity log already records a row per send, and a correction records what it
+ * replaced. Reading the history back out of those two is what makes "how many
+ * times have we quoted this, and at what" answerable without a second copy of
+ * the truth that can disagree with the first.
+ *
+ * Sends before this function existed carry no amount of their own. The revision
+ * that replaced one wrote down what it was replacing, so it is read back from
+ * there, and the last send with nothing after it is by definition the price on
+ * the quote right now.
+ */
+export type QuoteSend = { id: string; at: string; amount: number | null; corrected: boolean };
+
+export function quoteSends(events: QuoteEvent[], currentAmount: number | null): QuoteSend[] {
+  const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
+  const rows = events
+    .filter((e) => e.type === "quote_sent" || e.type === "quote_revised")
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map((e) => {
+      const m = (e.meta ?? {}) as Record<string, unknown>;
+      return {
+        id: e.id,
+        at: e.created_at,
+        corrected: e.type === "quote_revised",
+        amount: e.type === "quote_revised" ? num(m.to) : num(m.amount),
+        replaced: e.type === "quote_revised" ? num(m.from) : null,
+      };
+    });
+
+  // Backwards, so each gap is filled by the send that came after it.
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].amount != null) continue;
+    rows[i].amount = i + 1 < rows.length ? rows[i + 1].replaced : currentAmount;
+  }
+  return rows.map(({ id, at, amount, corrected }) => ({ id, at, amount, corrected }));
+}
+
+/**
  * The same log, cut down to what a contractor needs, in their own language.
  *
  * eventText above is the office's audit trail: every note edit, every price
@@ -238,6 +279,12 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     // whether the customer is still waiting on their quote.
     case "message_cancelled":
       return `Queued text cancelled before it sent${m.kind ? ` (${messageLabel(String(m.kind))})` : ""}`;
+    // The quote went to the wrong person, or went out before it should have.
+    // The link is dead and the pricing is gone; this is the row that says so.
+    case "quote_retracted":
+      return `Quote retracted and wiped${m.amount != null ? ` (was $${Number(m.amount).toLocaleString("en-US")})` : ""}${
+        m.texts_cancelled ? `, ${Number(m.texts_cancelled)} queued text(s) stopped` : ""
+      }`;
     case "links_rotated":
       return "Customer/job links regenerated (old links disabled)";
     case "quote_created_manually":

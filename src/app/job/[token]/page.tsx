@@ -6,13 +6,14 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/crm/auth";
 import { STATUS_LABELS, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
-import { crewEventText } from "@/lib/crm/events";
+import { crewEventText, quoteSends } from "@/lib/crm/events";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, listEvents, listQuoteOptionsAdmin, signFiles } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
+import { QuoteSends } from "@/app/crm/quotes/[id]/quote-sends";
 import { preferredSlots } from "@/app/crm/quotes/[id]/types";
 import { JobFinish } from "./job-finish";
 import { JobPayments } from "./job-payments";
@@ -100,9 +101,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // rather than the service role: quote_events already has a policy that gives
   // a contractor their assigned jobs and nothing else, and leaning on it here
   // means the crew page cannot accidentally show a job somebody was taken off.
-  const activity = (await listEvents(session, quote.id))
+  const events = await listEvents(session, quote.id);
+  const activity = events
     .map((e) => ({ id: e.id, text: crewEventText(e, t), at: e.created_at }))
     .filter((r): r is { id: string; text: string; at: string } => r.text !== null);
+  // Every price this customer has been given, rebuilt from those same events.
+  const sends = quoteSends(events, quote.quote_amount);
   // Five is what fits before the section stops being a glance and starts being
   // a document. The rest is one tap away rather than gone.
   const recentActivity = activity.slice(0, 5);
@@ -488,6 +492,19 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             customerFirstName={quote.name.trim().split(/\s+/)[0] || quote.name}
           />
         )}
+
+        {/* What the customer has actually been quoted, above the history of
+            everything else. It answers the question that gets asked on the
+            phone - "which number are they looking at" - and the log below
+            answers the slower one about how it got there. */}
+        <QuoteSends
+          quoteId={quote.id}
+          customerName={quote.name}
+          sends={sends}
+          canRetract={session.staff.role === "owner"}
+          locale={locale}
+          tone="light"
+        />
 
         {/* Last on the page, because it is the only block nothing depends on.
             It answers the question the crew used to have to ring the office

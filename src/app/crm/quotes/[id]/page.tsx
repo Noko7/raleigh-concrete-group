@@ -7,7 +7,7 @@ import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
-import { eventActor, eventText } from "@/lib/crm/events";
+import { eventActor, eventText, quoteSends } from "@/lib/crm/events";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
 import {
   getQuote,
@@ -26,6 +26,7 @@ import { PhotoUpload } from "../../photo-upload";
 import { CompleteCard } from "./complete-card";
 import { MessageLog } from "./message-log";
 import { QuoteEditor } from "./quote-editor";
+import { QuoteSends } from "./quote-sends";
 import { CancelAppointment } from "./cancel-appointment";
 import { QuotePayments } from "./quote-payments";
 import { ScheduleCard } from "./schedule-card";
@@ -275,9 +276,20 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             )}
           </div>
 
+          {/* Three logs, narrowing as you go down: what the customer was
+              quoted, whether the texts about it left the building, then
+              everything that has ever happened to the job. */}
+          <QuoteSends
+            quoteId={quote.id}
+            customerName={quote.name}
+            sends={quoteSends(events, quote.quote_amount)}
+            canRetract={isOwner}
+            locale={locale}
+          />
+
           {/* Above the activity log on purpose: the activity log says what
               happened, this says whether anyone was told. */}
-          <MessageLog messages={messages} />
+          <MessageLog messages={messages} isOwner={isOwner} />
 
           {events.length > 0 && (
             <div className="crm-card">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ymdInDays } from "@/lib/crm/clock";
@@ -87,6 +87,22 @@ export function QuoteActions({
   // of it would be us deciding for them.
   const [answers, setAnswers] = useState<Record<string, "accepted" | "declined">>({});
 
+  // Whether the real Approve button is on screen. On a phone the decision sits
+  // below the price, the trust lines, what's included and, on an itemised
+  // quote, every option - which is a long way to scroll back up from if you
+  // decided somewhere in the middle. A bar carries the price and the same
+  // button until the real one comes into view, and gets out of the way the
+  // moment it does: one CTA visible at a time, never two.
+  const actionsRef = useRef<HTMLDivElement | null>(null);
+  const [ctaOnScreen, setCtaOnScreen] = useState(true);
+  useEffect(() => {
+    const el = actionsRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => setCtaOnScreen(entry.isIntersecting));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   const itemised = options.length > 0;
   const optional = options.filter((o) => !o.required);
   const answered = optional.filter((o) => answers[o.id]).length;
@@ -98,6 +114,18 @@ export function QuoteActions({
   // quote, the single price on an ordinary one.
   const total = itemised ? running : (amount ?? 0);
   const canApprove = itemised ? allAnswered && total > 0 : amount != null;
+
+  // What the bar shows, which has to be the number at the bottom of the option
+  // list rather than the raw total: a customer holding a credit should not see
+  // two different prices depending on where they are looking.
+  const discountedTotal = discount && total > 0 ? Math.max(0, total - DECLINE_CREDIT) : total;
+
+  // Both Approve buttons do exactly this, so there is one path into scheduling
+  // rather than two that can drift.
+  function approve() {
+    setDiscount(false);
+    setMode("schedule");
+  }
 
   // Counted in Raleigh days. The customer's phone may be in another zone, and
   // the server checks the same floor the same way.
@@ -493,15 +521,12 @@ export function QuoteActions({
         </div>
       )}
 
-      <div className="cq-actions">
+      <div className="cq-actions" ref={actionsRef}>
         <button
           type="button"
           className="cq-btn cq-btn-accept"
           disabled={!canApprove}
-          onClick={() => {
-            setDiscount(false);
-            setMode("schedule");
-          }}
+          onClick={approve}
         >
           Approve quote
         </button>
@@ -509,6 +534,29 @@ export function QuoteActions({
           Decline
         </button>
       </div>
+
+      {/* The hesitation this page actually meets is "am I committing to a date
+          I haven't checked yet". Approving does not book anything - the next
+          step asks which days suit them and the crew confirms one - so the
+          sentence that says so belongs against the button, not three sections
+          further up. */}
+      <p className="cq-reassure">
+        Approving doesn&apos;t book a date. You&apos;ll pick a few days that suit you, and we&apos;ll text you back to
+        confirm one.
+      </p>
+
+      {/* Phone only, and only while the real button is out of sight. */}
+      {!ctaOnScreen && (
+        <div className="cq-sticky">
+          <span className="cq-sticky-price">
+            <span>{itemised ? "Your total" : "Your price"}</span>
+            <strong>{usd(discountedTotal)}</strong>
+          </span>
+          <button type="button" className="cq-btn cq-btn-accept" disabled={!canApprove} onClick={approve}>
+            Approve
+          </button>
+        </div>
+      )}
     </>
   );
 }

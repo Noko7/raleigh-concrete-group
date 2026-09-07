@@ -1,8 +1,12 @@
 import { BUSINESS_TZ, clockLabel } from "@/lib/crm/clock";
 import { messageLabel, roleLabel } from "@/lib/crm/messages";
-import { isCancelled, isHeld, type QuoteMessage } from "@/lib/crm/queries";
+import { isCancellable, isCancelled, isHeld, type QuoteMessage } from "@/lib/crm/queries";
 
-import { cancelHeldMessage } from "./actions";
+import { CancelHeldText } from "./cancel-held-text";
+
+// The texts that carry the quote itself. Kept in step with QUOTE_TEXT_KINDS in
+// actions.ts, which is the copy that decides what actually happens.
+const QUOTE_KINDS = new Set(["quote_ready", "quote_updated"]);
 
 // Every text this job has produced, and whether it left the building.
 //
@@ -22,7 +26,7 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: BUSINESS_TZ });
 }
 
-export function MessageLog({ messages }: { messages: QuoteMessage[] }) {
+export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; isOwner: boolean }) {
   // A text waiting for 8am is neither sent nor failed, and counting it as
   // failed would put a red number on a night that went fine.
   //
@@ -97,20 +101,18 @@ export function MessageLog({ messages }: { messages: QuoteMessage[] }) {
                 {m.detail && !m.ok && !isHeld(m) && !isCancelled(m) && <pre className="msg-detail">{m.detail}</pre>}
 
                 {/* The window between "queued" and "sent" is the only chance
-                    anyone gets to take a text back, so the button lives on the
-                    row rather than behind a menu. A plain form, like the rest
-                    of this page: the log re-renders and the badge is the
-                    receipt. If the queue sent it in the meantime the row comes
-                    back "Accepted" and the button is gone, which is the truth. */}
-                {isHeld(m) && (
-                  <form action={cancelHeldMessage} className="msg-cancel">
-                    <input type="hidden" name="id" value={m.quote_id ?? ""} />
-                    <input type="hidden" name="messageId" value={m.id} />
-                    <button type="submit" className="crm-btn crm-btn-ghost msg-cancel-btn">
-                      Cancel this text
-                    </button>
-                    <span className="crm-muted crm-sm">It hasn&apos;t gone out yet - this stops it for good.</span>
-                  </form>
+                    anyone gets to take a text back, so the control lives on the
+                    row rather than behind a menu. isCancellable, not isHeld: a
+                    text whose hour has come is one the next flush may already
+                    be holding, and a button that might be racing a send is
+                    worse than no button. */}
+                {isCancellable(m) && m.quote_id && (
+                  <CancelHeldText
+                    quoteId={m.quote_id}
+                    messageId={m.id}
+                    isQuote={QUOTE_KINDS.has(m.kind)}
+                    isOwner={isOwner}
+                  />
                 )}
 
 

@@ -305,21 +305,6 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           </p>
         )}
 
-        <dl className="cq-meta">
-          {quote.service && (
-            <div>
-              <dt>Service</dt>
-              <dd>{quote.service}</dd>
-            </div>
-          )}
-          {quote.address && (
-            <div>
-              <dt>Address</dt>
-              <dd>{quote.address}</dd>
-            </div>
-          )}
-        </dl>
-
         {/* The five sections, in a fixed order, so every quote we send
             answers the same questions in the same places. Quotes written
             before the sections existed fall back to their old free text
@@ -362,6 +347,25 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             }))}
           />
         ) : null}
+
+        {/* Where the job is and what it is, under the decision rather than
+            over it. It is what somebody checks after they have decided they
+            like the number, and every line above the Approve button is another
+            screen of scrolling between reading the price and answering it. */}
+        <dl className="cq-meta">
+          {quote.service && (
+            <div>
+              <dt>Service</dt>
+              <dd>{quote.service}</dd>
+            </div>
+          )}
+          {quote.address && (
+            <div>
+              <dt>Address</dt>
+              <dd>{quote.address}</dd>
+            </div>
+          )}
+        </dl>
 
         {/* One real review from the site's testimonials, right below the
             decision point - the moment a nervous customer looks for a reason

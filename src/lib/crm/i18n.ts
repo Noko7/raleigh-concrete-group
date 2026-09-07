@@ -103,6 +103,13 @@ const en = {
     alsoWaiting: "{n} more waiting",
     sittingOnWork: "Unquoted leads:",
     errAssign: "Could not assign.",
+    // Phone only. The board becomes one stage at a time down there, so these
+    // are the chips that pick which one, and the card's own controls fold away
+    // behind Change so twenty jobs stay a list rather than a scroll.
+    stagePicker: "Pick a stage",
+    noneInStage: "Nothing in this stage.",
+    change: "Change",
+    tapHint: "tap a card to open it",
   },
   job: {
     backToAll: "← All quotes",
@@ -346,6 +353,25 @@ const en = {
     answerYes: "Approved",
     answerNo: "Turned down",
     answerNone: "No answer",
+  },
+  // Every version of the quote that has gone to this customer. Shown above the
+  // logs on both job pages, because "what have we actually told them" is asked
+  // before "who was told what and when".
+  quoteLog: {
+    title: "Quotes sent",
+    none: "No quote has gone to this customer yet.",
+    one: "1 quote sent",
+    many: "{n} quotes sent",
+    current: "Current",
+    corrected: "Correction",
+    first: "First quote",
+    noPrice: "No price recorded",
+    retract: "Sent to the wrong customer?",
+    retractWarn:
+      "This kills the link {name} is holding, clears the price, the wording and any line items, stops a text that hasn't sent yet, and puts the job back in New. It cannot be undone.",
+    retractGo: "Yes, retract it",
+    retractKeep: "Keep it",
+    retracting: "Retracting…",
   },
   contractorJob: {
     title: "Job Details",
@@ -667,6 +693,10 @@ const es: typeof en = {
     alsoWaiting: "{n} más esperando",
     sittingOnWork: "Prospectos sin cotizar:",
     errAssign: "No se pudo asignar.",
+    stagePicker: "Elige una etapa",
+    noneInStage: "No hay nada en esta etapa.",
+    change: "Cambiar",
+    tapHint: "toca una tarjeta para abrirla",
   },
   job: {
     backToAll: "← Todas las cotizaciones",
@@ -905,6 +935,22 @@ const es: typeof en = {
     answerYes: "Aprobada",
     answerNo: "Rechazada",
     answerNone: "Sin respuesta",
+  },
+  quoteLog: {
+    title: "Cotizaciones enviadas",
+    none: "Todavía no se le ha enviado ninguna cotización a este cliente.",
+    one: "1 cotización enviada",
+    many: "{n} cotizaciones enviadas",
+    current: "Actual",
+    corrected: "Corrección",
+    first: "Primera cotización",
+    noPrice: "Sin precio registrado",
+    retract: "¿Se envió al cliente equivocado?",
+    retractWarn:
+      "Esto anula el enlace que tiene {name}, borra el precio, el texto y las partidas, detiene cualquier mensaje que no haya salido, y regresa el trabajo a Nuevo. No se puede deshacer.",
+    retractGo: "Sí, retirarla",
+    retractKeep: "Dejarla así",
+    retracting: "Retirando…",
   },
   contractorJob: {
     title: "Detalles del trabajo",
