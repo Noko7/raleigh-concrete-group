@@ -2162,6 +2162,48 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .sms-result-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
 .sms-detail { margin: 0.6rem 0 0; padding: 0.6rem 0.7rem; background: #15181c; border-radius: 0.45rem; font-family: ui-monospace, monospace; font-size: 0.78rem; color: #fca5a5; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto; }
 
+/* ── Loading skeletons ─────────────────────────────────────────────────────
+   Every CRM route is force-dynamic, so a navigation waits on Supabase before
+   it can paint anything: the browser holds the page you are leaving, which
+   reads as the app locking up when you move around quickly. Next streams
+   these in that gap instead. Shaped like the page they stand in for, because
+   a skeleton that matches nothing is a different kind of blank screen. */
+.crm-sr {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.sk { display: block; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.09); }
+/* On the crew's white card the same shapes need the opposite tint. */
+.sk-light { background: rgba(15, 23, 42, 0.08); }
+.sk-title { height: 2rem; width: 12rem; margin-bottom: 0.6rem; border-radius: 0.4rem; }
+.sk-line { height: 0.85rem; margin-bottom: 0.5rem; border-radius: 0.35rem; }
+.sk-big { height: 2.4rem; width: 60%; border-radius: 0.4rem; }
+.sk-logo { height: 2.6rem; width: 11rem; margin-bottom: 1.1rem; }
+.sk-w-30 { width: 30%; }
+.sk-w-40 { width: 40%; }
+.sk-w-60 { width: 60%; }
+.sk-input { height: 2.6rem; flex: 1; min-width: 12rem; border-radius: 0.55rem; }
+.sk-btn { height: 2.6rem; width: 6rem; border-radius: 0.55rem; }
+.sk-pill { height: 1.1rem; width: 4.5rem; border-radius: 999px; }
+.sk-pills { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
+.sk-row { display: flex; gap: 0.6rem; margin-bottom: 1.1rem; flex-wrap: wrap; }
+.sk-stack { display: flex; flex-direction: column; gap: 0.8rem; }
+.sk-card {
+  background: var(--crm-surface); border: 1px solid var(--crm-border);
+  border-radius: 0.9rem; padding: 1rem;
+}
+.sk-card-light { background: #faf8f4; border-color: #e2e5ea; }
+.sk-key { border: 2px solid #e2e5ea; border-radius: 0.9rem; padding: 1rem; margin-bottom: 1.4rem; }
+.sk-key .sk { margin-bottom: 0.6rem; }
+.sk-key .sk:last-child { margin-bottom: 0; }
+/* A slow breath, not a shimmer sweeping across the page. It says "working",
+   and it is the kind of thing that gets irritating if it is loud. */
+@keyframes sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.sk { animation: sk-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .sk { animation: none; }
+}
+
 /* ── Quotes sent: every price this customer has been given ────────────────
    One component on two pages, so it takes the card off whichever page it is
    on: the office's dark surface by default, the crew's white card under

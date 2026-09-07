@@ -10,7 +10,7 @@ import { crewEventText, quoteSends } from "@/lib/crm/events";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
-import { getQuoteByToken, listEvents, listQuoteOptionsAdmin, signFiles } from "@/lib/crm/queries";
+import { getQuoteByToken, listEvents, listQuoteOptionsAdmin } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
 import { QuoteSends } from "@/app/crm/quotes/[id]/quote-sends";
@@ -77,31 +77,43 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // The 7-day floor applies to what a customer may request, not to what the
   // people doing the work are allowed to agree to.
   const minJobDate = todayYmd();
-  // Service role rather than the session: this page is already gated above by
-  // the job token plus "assigned to you", and reading the line items through
-  // RLS would be a second, weaker copy of that same check.
-  const options = await listQuoteOptionsAdmin(quote.id);
-  const chosen = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response !== "declined") : [];
-  const rejected = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response === "declined") : [];
+  // Four independent reads, in one wave rather than four.
+  //
+  // These used to be four awaits on consecutive lines, which reads fine and
+  // costs four sequential round-trips to Supabase before the page can render a
+  // single pixel. On a phone on a job site that is most of the delay between
+  // tapping a job and seeing it. Nothing here depends on anything else here.
+  //
+  // Service role on the line items rather than the session: this page is
+  // already gated above by the job token plus "assigned to you", and reading
+  // them through RLS would be a second, weaker copy of that same check. The
+  // events go the other way and use the session, because quote_events already
+  // has a policy that hands a contractor exactly their own jobs.
+  //
   // Money only exists once the customer has agreed to a number. Before that
   // there is nothing to collect and nothing to owe, and a card showing four
   // zeroes is a card the crew learns to scroll past.
-  const money = accepted ? await jobLedger(quote) : null;
-  const cardReady = accepted ? (await payeeState(quote)).ok : false;
-  const photos = quote.file_urls?.length ? await signFiles(quote.file_urls, 7200) : [];
+  const [options, money, payee, events] = await Promise.all([
+    listQuoteOptionsAdmin(quote.id),
+    accepted ? jobLedger(quote) : Promise.resolve(null),
+    accepted ? payeeState(quote) : Promise.resolve(null),
+    listEvents(session, quote.id),
+  ]);
+  const cardReady = payee?.ok ?? false;
+  const chosen = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response !== "declined") : [];
+  const rejected = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response === "declined") : [];
+
+  // Photos go through the CRM's authenticated proxy rather than being signed
+  // one by one. Two fewer storage round-trips on every load, no expiry to
+  // outlive, and - the point of the exercise - the proxy can hand back a
+  // thumbnail instead of the four-megabyte original the grid was decoding on
+  // the main thread as you scrolled past it.
+  const fileUrl = (path: string, w?: number) =>
+    `${base}/api/file?p=${encodeURIComponent(path)}${w ? `&w=${w}` : ""}`;
+  const photos = quote.file_urls ?? [];
   // What the crew has already put on this job, so the finish card can show
   // counts rather than asking them to remember.
-  const ourPhotos = await signFiles(
-    [...(quote.internal_urls ?? []), ...(quote.before_urls ?? []), ...(quote.after_urls ?? [])],
-    7200,
-  );
-
-  // What has actually happened on this job, in the crew's own language and cut
-  // to the moments that change what they do next. Read through the session
-  // rather than the service role: quote_events already has a policy that gives
-  // a contractor their assigned jobs and nothing else, and leaning on it here
-  // means the crew page cannot accidentally show a job somebody was taken off.
-  const events = await listEvents(session, quote.id);
+  const ourPhotos = [...(quote.internal_urls ?? []), ...(quote.before_urls ?? []), ...(quote.after_urls ?? [])];
   const activity = events
     .map((e) => ({ id: e.id, text: crewEventText(e, t), at: e.created_at }))
     .filter((r): r is { id: string; text: string; at: string } => r.text !== null);
@@ -431,14 +443,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           <p className="job-muted">{t.contractorJob.noFiles}</p>
         ) : (
           <div className="job-photos">
-            {photos.map((p) =>
-              p.url ? (
-                <a key={p.path} href={p.url} target="_blank" rel="noreferrer" className="job-photo">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.url} alt="Job upload" loading="lazy" />
-                </a>
-              ) : null,
-            )}
+            {photos.map((path) => (
+              <a key={path} href={fileUrl(path)} target="_blank" rel="noreferrer" className="job-photo">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={fileUrl(path, 640)} alt="Job upload" loading="lazy" decoding="async" width={640} height={640} />
+              </a>
+            ))}
           </div>
         )}
 
@@ -448,14 +458,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           <>
             <h2 className="job-photos-title">{t.contractorJob.ourPhotos} ({ourPhotos.length})</h2>
             <div className="job-photos">
-              {ourPhotos.map((p) =>
-                p.url ? (
-                  <a key={p.path} href={p.url} target="_blank" rel="noreferrer" className="job-photo">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.url} alt="Job photo" loading="lazy" />
-                  </a>
-                ) : null,
-              )}
+              {ourPhotos.map((path) => (
+                <a key={path} href={fileUrl(path)} target="_blank" rel="noreferrer" className="job-photo">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={fileUrl(path, 640)} alt="Job photo" loading="lazy" decoding="async" width={640} height={640} />
+                </a>
+              ))}
             </div>
           </>
         )}

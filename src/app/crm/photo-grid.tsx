@@ -8,6 +8,12 @@ export function PhotoGrid({ urls }: { urls: string[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const isVideo = (u: string) => /\.(mp4|mov|webm|quicktime)(\?|$)/i.test(u);
 
+  // The grid asks the proxy for a thumbnail; the lightbox asks for the file.
+  // 640 rather than the 150 it is drawn at, so a retina screen still gets a
+  // sharp square and a tap-to-zoom on the way to the lightbox has something to
+  // show while the original loads.
+  const thumb = (u: string) => (u.includes("?") ? `${u}&w=640` : `${u}?w=640`);
+
   return (
     <>
       <div className="pg-grid">
@@ -17,7 +23,17 @@ export function PhotoGrid({ urls }: { urls: string[] }) {
               <span className="pg-video-tag">Video</span>
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={u} alt={`Job upload ${i + 1}`} loading="lazy" />
+              <img
+                src={thumb(u)}
+                alt={`Job upload ${i + 1}`}
+                loading="lazy"
+                // Hands the decode to the browser to schedule off the main
+                // thread. With a full-size original this was the jank; with a
+                // thumbnail it is cheap either way, and free to ask for.
+                decoding="async"
+                width={640}
+                height={640}
+              />
             )}
           </button>
         ))}

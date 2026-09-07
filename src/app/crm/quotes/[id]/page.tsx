@@ -97,8 +97,14 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
 
   // Same gate for the money: there is nothing to collect against a price the
   // customer hasn't agreed to.
-  const money = showSchedule ? await jobLedger(quote) : null;
-  const cardReady = money ? (await payeeState(quote)).ok : false;
+  // One wave, not two: neither of these needs the other's answer, and on a
+  // page that already waits on a batch of five they were two more round-trips
+  // stacked end to end before anything could render.
+  const [money, payee] = await Promise.all([
+    showSchedule ? jobLedger(quote) : Promise.resolve(null),
+    showSchedule ? payeeState(quote) : Promise.resolve(null),
+  ]);
+  const cardReady = money ? (payee?.ok ?? false) : false;
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
   const jobLink = `${SITE_ORIGIN}/job/${quote.job_token}`;

@@ -149,11 +149,27 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
 
   // Auto-sync: pull the latest pipeline every 20s so booked/accepted quotes move
   // on their own. Pause while dragging or while a change is saving.
+  //
+  // And pause when nobody is looking. router.refresh() on a force-dynamic page
+  // is a full server render plus its Supabase reads, and this was firing three
+  // times a minute in every backgrounded tab and every phone with the screen
+  // off, all of it landing on the same connection as whatever the person is
+  // actually doing. A tab that was hidden refreshes once on the way back in,
+  // so it is never showing a stale board either.
   useEffect(() => {
-    const t = setInterval(() => {
-      if (!dragId && !isPending) router.refresh();
-    }, 20000);
-    return () => clearInterval(t);
+    const tick = () => {
+      if (document.hidden || dragId || isPending) return;
+      router.refresh();
+    };
+    const t = setInterval(tick, 20000);
+    const onShow = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onShow);
+    };
   }, [dragId, isPending, router]);
 
   const byStatus = useMemo(() => {
