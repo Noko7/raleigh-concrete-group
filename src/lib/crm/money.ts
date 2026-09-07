@@ -11,7 +11,7 @@
 // that. The office never holds a customer's money and never owes a contractor
 // anything, so every balance on this page is a number somebody owes the office
 // and never the other way round.
-import { readLedger, toCents, type Ledger } from "./fees";
+import { readLedger, toCents, usd, type Ledger } from "./fees";
 import { pgUser } from "./rest";
 import type { FeeSettlement, QuotePayment, Session, Staff } from "./types";
 
@@ -24,7 +24,13 @@ type JobRow = {
   assigned_to: string | null;
   quote_amount: number | string | null;
   fee_total_cents: number | null;
+  // The frozen rate. Read alongside the cents figure so the ledger can be
+  // re-derived from it rather than trusting a stamp that predates the last
+  // time somebody edited the price.
+  fee_rate: number | null;
   status: string;
+  paid_at: string | null;
+  completed_at: string | null;
   created_at: string;
 };
 
@@ -34,7 +40,58 @@ export type JobMoney = {
   staffId: string | null;
   staffName: string;
   status: string;
+  paidAt: string | null;
+  createdAt: string;
   ledger: Ledger;
+  /** Every payment on this job, newest first, for the row that expands. */
+  payments: QuotePayment[];
+};
+
+// ── The ledger itself ───────────────────────────────────────────────────────
+// One row per movement of money, whatever kind. Payments and refunds come from
+// the customer's side; a settlement is the contractor handing the office the
+// cut a cash job never took on its way past. They belong in one list because
+// they answer one question - what has actually moved - and keeping them in two
+// is how a month's takings and a month's fees end up reconciled by hand.
+export type LedgerEntryKind = "payment" | "refund" | "settlement";
+
+export type LedgerEntry = {
+  id: string;
+  kind: LedgerEntryKind;
+  at: string;
+  /** Null on a settlement, which is paid against a balance rather than a job. */
+  jobId: string | null;
+  customer: string;
+  staffId: string | null;
+  staffName: string;
+  method: string;
+  /** Money in, in cents. Negative on a refund, which is money going back out. */
+  amountCents: number;
+  /** The office's cut carried by this row. */
+  feeCents: number;
+  note: string | null;
+};
+
+// ── Rows the numbers cannot be trusted on ───────────────────────────────────
+// Every figure on this page is a sum over rows, so one wrong row is a wrong
+// total with nothing on screen to say so. These are the shapes that produce a
+// number the page cannot justify, listed by name so they can be opened and
+// fixed rather than guessed at.
+export type AttentionKind =
+  | "paid_no_payments"
+  | "accepted_no_price"
+  | "overpaid"
+  | "fee_unrated"
+  | "orphan_payment";
+
+export type AttentionRow = {
+  kind: AttentionKind;
+  jobId: string | null;
+  name: string;
+  staffName: string;
+  detail: string;
+  /** What it is doing to the totals, in cents. Zero when it only distorts a count. */
+  effectCents: number;
 };
 
 export type ContractorMoney = {
@@ -72,8 +129,12 @@ export type MoneyBoard = {
   contractors: ContractorMoney[];
   /** Jobs with money still to come in, biggest balance first. */
   owing: JobMoney[];
-  /** The last few payments, whoever recorded them. */
-  recent: { payment: QuotePayment; job: string; customer: string }[];
+  /** Every accepted job, newest first, each with its own payments attached. */
+  jobs: JobMoney[];
+  /** Every movement of money, newest first. */
+  entries: LedgerEntry[];
+  /** Rows whose shape makes a total above wrong. Empty is the healthy state. */
+  attention: AttentionRow[];
   /** True when supabase/payments.sql hasn't been run yet. */
   missingTables: boolean;
 };
@@ -94,7 +155,7 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
     readRows<JobRow>(
       session,
       "quote_requests?customer_response=eq.accepted&status=neq.lost" +
-        "&select=id,name,assigned_to,quote_amount,fee_total_cents,status,created_at" +
+        "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,status,paid_at,completed_at,created_at" +
         "&order=created_at.desc&limit=1000",
     ),
     readRows<QuotePayment>(session, "quote_payments?select=*&order=created_at.desc&limit=2000"),
@@ -115,10 +176,15 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
     staffId: j.assigned_to,
     staffName: j.assigned_to ? (names.get(j.assigned_to) ?? "Unassigned") : "Unassigned",
     status: j.status,
+    paidAt: j.paid_at,
+    createdAt: j.created_at,
+    payments: byJob.get(j.id) ?? [],
     // The same function the crew's page and the customer's page read through.
     // A second implementation here would drift, and the first anyone would know
-    // of it is a contractor disputing a figure.
-    ledger: readLedger(toCents(j.quote_amount), j.fee_total_cents, byJob.get(j.id) ?? []),
+    // of it is a contractor disputing a figure. The rate goes in with it, so
+    // the fee is a percentage of what the job is worth now rather than of
+    // whatever it was worth the day the rate was frozen.
+    ledger: readLedger(toCents(j.quote_amount), j.fee_total_cents, byJob.get(j.id) ?? [], j.fee_rate),
   }));
 
   // Fees the contractor has already sent over by hand.
@@ -178,6 +244,140 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
 
   const jobsById = new Map(jobs.map((j) => [j.id, j]));
 
+  // ── One list of everything that moved ───────────────────────────────────
+  // A refund is its own row rather than a smaller payment: the money went out
+  // on a different day, and a ledger that quietly rewrites the original entry
+  // cannot be reconciled against a bank statement.
+  const entries: LedgerEntry[] = [];
+  for (const p of payments) {
+    if (p.status !== "paid" && p.status !== "refunded") continue;
+    const job = jobsById.get(p.quote_id);
+    const common = {
+      jobId: p.quote_id,
+      customer: job?.name ?? "A customer",
+      staffId: job?.staffId ?? null,
+      staffName: job?.staffName ?? "Unassigned",
+      method: p.method,
+      note: p.note,
+    };
+    entries.push({
+      ...common,
+      id: p.id,
+      kind: "payment",
+      at: p.paid_at ?? p.created_at,
+      amountCents: p.amount_cents,
+      feeCents: p.fee_cents,
+    });
+    if (p.refunded_cents > 0) {
+      entries.push({
+        ...common,
+        id: `${p.id}:refund`,
+        kind: "refund",
+        at: p.refunded_at ?? p.paid_at ?? p.created_at,
+        amountCents: -p.refunded_cents,
+        feeCents: 0,
+      });
+    }
+  }
+  for (const st of settlementsRes.rows) {
+    entries.push({
+      id: st.id,
+      kind: "settlement",
+      at: st.created_at,
+      jobId: st.quote_id,
+      customer: st.quote_id ? (jobsById.get(st.quote_id)?.name ?? "A customer") : "-",
+      staffId: st.staff_id,
+      staffName: names.get(st.staff_id) ?? "A contractor",
+      method: st.method,
+      // Money reaching the office, not the crew. It is the fee arriving late,
+      // so it counts in the fee column and not in takings - putting it in both
+      // would count one dollar twice.
+      amountCents: 0,
+      feeCents: st.amount_cents,
+      note: st.note,
+    });
+  }
+  entries.sort((a, b) => b.at.localeCompare(a.at));
+
+  // ── Rows that make a total lie ──────────────────────────────────────────
+  const attention: AttentionRow[] = [];
+  for (const j of jobs) {
+    const total = j.ledger.totalCents;
+
+    // The big one, and the reason a healthy business reads as owing money it
+    // does not. Jobs closed out before the payments ledger existed carry a
+    // paid_at and a status of Paid, and no payment rows at all - so every
+    // penny of them counts as still outstanding, forever.
+    if ((j.status === "paid" || j.paidAt) && j.payments.length === 0 && total > 0) {
+      attention.push({
+        kind: "paid_no_payments",
+        jobId: j.id,
+        name: j.name,
+        staffName: j.staffName,
+        detail: "Marked paid, but no payment was ever recorded against it.",
+        effectCents: total,
+      });
+      continue;
+    }
+    // Accepted with no price: contributes nothing and cannot be chased,
+    // because there is no figure to chase.
+    if (total <= 0) {
+      attention.push({
+        kind: "accepted_no_price",
+        jobId: j.id,
+        name: j.name,
+        staffName: j.staffName,
+        detail: "Approved by the customer with no price on the job.",
+        effectCents: j.ledger.paidCents,
+      });
+      continue;
+    }
+    // More collected than the job is worth. Usually a payment recorded twice.
+    if (j.ledger.paidCents > total) {
+      attention.push({
+        kind: "overpaid",
+        jobId: j.id,
+        name: j.name,
+        staffName: j.staffName,
+        detail: `Collected ${usd(j.ledger.paidCents)} against a ${usd(total)} job.`,
+        effectCents: j.ledger.paidCents - total,
+      });
+      continue;
+    }
+    // Money came in and the office's rate was never frozen, so every fee
+    // figure on this job reads zero.
+    if (j.ledger.paidCents > 0 && j.ledger.feeTotalCents === 0) {
+      attention.push({
+        kind: "fee_unrated",
+        jobId: j.id,
+        name: j.name,
+        staffName: j.staffName,
+        detail: "Has taken money but carries no fee rate, so it earns the office nothing.",
+        effectCents: 0,
+      });
+    }
+  }
+  // Payments pointing at a job this page cannot see: deleted, archived, lost,
+  // or never accepted. Their money is in quote_payments and in no total here.
+  const seen = new Set(jobs.map((j) => j.id));
+  const orphans = new Map<string, number>();
+  for (const p of payments) {
+    if (seen.has(p.quote_id)) continue;
+    if (p.status !== "paid" && p.status !== "refunded") continue;
+    orphans.set(p.quote_id, (orphans.get(p.quote_id) ?? 0) + p.amount_cents - p.refunded_cents);
+  }
+  for (const [quoteId, cents] of orphans) {
+    attention.push({
+      kind: "orphan_payment",
+      jobId: quoteId,
+      name: "Unknown job",
+      staffName: "-",
+      detail: "Payments recorded against a job that is archived, lost, or no longer approved.",
+      effectCents: cents,
+    });
+  }
+  attention.sort((a, b) => b.effectCents - a.effectCents);
+
   return {
     collectedCents: jobs.reduce((sum, j) => sum + j.ledger.paidCents, 0),
     outstandingCents: jobs.reduce((sum, j) => sum + j.ledger.dueCents, 0),
@@ -191,14 +391,9 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
     recentCents,
     contractors,
     owing: jobs.filter((j) => j.ledger.dueCents > 0).sort((a, b) => b.ledger.dueCents - a.ledger.dueCents),
-    recent: payments
-      .filter((p) => p.status === "paid" || p.status === "refunded")
-      .slice(0, 25)
-      .map((p) => ({
-        payment: p,
-        job: p.quote_id,
-        customer: jobsById.get(p.quote_id)?.name ?? "A customer",
-      })),
+    jobs,
+    entries,
+    attention,
     missingTables: !paymentsRes.ok || !settlementsRes.ok,
   };
 }

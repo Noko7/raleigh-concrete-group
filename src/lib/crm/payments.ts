@@ -48,7 +48,7 @@ export async function listPaymentsAdmin(quoteId: string): Promise<QuotePayment[]
 
 /** The whole money picture for one job, from its rows. */
 export function ledgerOf(quote: Quote, rows: QuotePayment[]): Ledger {
-  return readLedger(toCents(quote.quote_amount), quote.fee_total_cents, rows);
+  return readLedger(toCents(quote.quote_amount), quote.fee_total_cents, rows, quote.fee_rate);
 }
 
 // ── Freezing the rate ───────────────────────────────────────────────────────

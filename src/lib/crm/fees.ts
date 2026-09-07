@@ -147,10 +147,21 @@ export type Ledger = {
   offStripeCents: number;
 };
 
+/**
+ * @param feeTotal  The cents figure stamped on the job when its rate was frozen.
+ * @param feeRate   The frozen rate. When present the fee is RE-DERIVED from it
+ *                  against the current job total, exactly as ensureFeeOnJob
+ *                  does before charging. Without this the two disagree the
+ *                  moment an owner edits a priced job: the next payment charges
+ *                  a percentage of the new total while every screen keeps
+ *                  reporting a percentage of the old one, and the difference
+ *                  shows up as a contractor balance nobody can account for.
+ */
 export function readLedger(
   jobTotalCents: number,
   feeTotal: number | null | undefined,
   rows: LedgerRow[],
+  feeRate?: number | null,
 ): Ledger {
   const paid = rows.filter((r) => r.status === "paid" || r.status === "refunded");
   const pending = rows.filter((r) => r.status === "pending");
@@ -161,10 +172,15 @@ export function readLedger(
     .filter((r) => r.method !== "card")
     .reduce((sum, r) => sum + r.amount_cents - r.refunded_cents, 0);
 
-  // The frozen figure if the job has one, otherwise what it would be at
-  // today's rate - so a job that hasn't been paid yet still shows the office
-  // what it stands to earn.
-  const total = feeTotal ?? 0;
+  // The rate is the promise; the total is a fact. So the fee is the rate
+  // applied to what the job is worth NOW, which is the same sum ensureFeeOnJob
+  // works out before it charges anything.
+  //
+  // Zero until a rate is frozen, and that is not a gap: a rate is frozen the
+  // first time money is about to move, and the office earns nothing on a job
+  // nobody has paid for. A number here before then would be a forecast, and
+  // this file is for facts.
+  const total = feeRate != null ? feeTotalCents(jobTotalCents, Number(feeRate)) : (feeTotal ?? 0);
   const feeOwedCents = Math.max(0, total - feeCollectedCents);
 
   // A checkout that has been opened and not yet paid is already carrying part

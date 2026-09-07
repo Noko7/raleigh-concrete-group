@@ -2162,6 +2162,96 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .sms-result-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
 .sms-detail { margin: 0.6rem 0 0; padding: 0.6rem 0.7rem; background: #15181c; border-radius: 0.45rem; font-family: ui-monospace, monospace; font-size: 0.78rem; color: #fca5a5; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto; }
 
+/* ── The ledger ────────────────────────────────────────────────────────────
+   Accounting conventions, not decoration. Money right-aligned so digits line
+   up by place value and two figures can be compared without reading them;
+   tabular figures so a 1 occupies the same width as an 8 and the columns stay
+   columns; hairline dividers rather than zebra stripes, which fight hover and
+   the open state on a table whose rows expand. */
+.led-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.led-table th.led-num { text-align: right; }
+.led-table td { vertical-align: top; }
+.led-table tfoot td {
+  border-top: 2px solid var(--crm-border); font-weight: 800; color: var(--crm-text);
+  background: rgba(255, 255, 255, 0.03);
+}
+/* The office's cut, in the accent, every time it appears. One colour, one
+   meaning, so the eye can pick the fee column out of any table on the page. */
+.led-fee { color: var(--crm-accent); }
+.led-when { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.led-sub { display: block; font-size: 0.72rem; color: var(--crm-muted); margin-top: 0.1rem; }
+.led-note { color: var(--crm-muted); font-size: 0.82rem; max-width: 18rem; }
+/* Money leaving again. Struck rather than coloured red: red on this page means
+   "somebody owes you", and a refund is not that. */
+.led-out .led-num { color: var(--crm-muted); }
+
+.led-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.led-head .crm-card-title { margin-bottom: 0; }
+.led-filters { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: flex-end; }
+.led-filter { display: flex; flex-direction: column; gap: 0.15rem; }
+.led-filter > span { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--crm-muted); font-weight: 800; }
+.led-filter select {
+  background: #1a1f24; color: var(--crm-text); border: 1px solid var(--crm-border);
+  border-radius: 0.4rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; color-scheme: dark;
+}
+.led-chip {
+  cursor: pointer; background: var(--crm-surface); border: 1px solid var(--crm-border);
+  color: var(--crm-muted); border-radius: 999px; padding: 0.35rem 0.8rem;
+  font-size: 0.78rem; font-weight: 800; min-height: 36px;
+}
+.led-chip-on { background: rgba(255, 255, 255, 0.1); color: var(--crm-text); border-color: var(--crm-accent); }
+
+/* Sticky header: the ledger is the one table here that runs past a screenful,
+   and a column of figures with no heading in sight is a column of guesses. */
+.led-wrap { max-height: 32rem; overflow-y: auto; }
+.led-table thead th { position: sticky; top: 0; z-index: 1; background: var(--crm-surface-solid); }
+
+.led-tag {
+  display: inline-block; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.04em; padding: 0.15rem 0.45rem; border-radius: 999px;
+  border: 1px solid var(--crm-border); color: var(--crm-muted); white-space: nowrap;
+}
+.led-tag-payment { border-color: rgba(74, 222, 128, 0.5); color: #86efac; }
+.led-tag-refund { border-color: rgba(148, 163, 184, 0.5); color: #cbd5e1; }
+.led-tag-settlement { border-color: rgba(194, 104, 42, 0.6); color: #f0b489; }
+
+.led-expand {
+  background: none; border: 1px solid var(--crm-border); border-radius: 0.4rem;
+  color: var(--crm-muted); font-size: 0.74rem; font-weight: 800; padding: 0.25rem 0.55rem;
+  cursor: pointer; white-space: nowrap;
+}
+.led-expand:hover { color: var(--crm-text); border-color: var(--crm-accent); }
+.led-row-open td { background: rgba(255, 255, 255, 0.04); }
+.led-detail-row > td { background: rgba(255, 255, 255, 0.04); padding: 0.6rem 0.8rem 0.9rem; }
+/* The payments inside one job. Deliberately lighter than the table holding it,
+   so the nesting is obvious without a second set of borders. */
+.led-inner { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.led-inner th {
+  text-align: left; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--crm-muted); font-weight: 800; padding: 0.25rem 0.5rem;
+}
+.led-inner th.led-num { text-align: right; }
+.led-inner td { padding: 0.35rem 0.5rem; border-top: 1px solid var(--crm-border); }
+
+/* Rows that make a total lie. Amber, not red: nothing is broken and nobody is
+   owed anything, there is just something here a person has to decide about. */
+.cash-attention { border-color: rgba(217, 119, 6, 0.55); }
+.cash-attention .crm-card-title { color: #fcd34d; }
+
+/* Phone: the ledger table becomes the ledger cards. */
+.led-cards { display: none; list-style: none; margin: 0; padding: 0; }
+@media (max-width: 760px) {
+  .led-wrap { display: none; }
+  .led-cards { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.7rem; }
+  .led-card { background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.6rem; padding: 0.7rem 0.8rem; }
+  .led-card-top { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+  .led-card-amount { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .led-card-who { margin-top: 0.35rem; font-weight: 700; }
+  .led-card-meta { margin-top: 0.15rem; font-size: 0.78rem; color: var(--crm-muted); }
+  .led-head { flex-direction: column; }
+  .led-filter select { min-height: 40px; }
+}
+
 /* ── Loading skeletons ─────────────────────────────────────────────────────
    Every CRM route is force-dynamic, so a navigation waits on Supabase before
    it can paint anything: the browser holds the page you are leaving, which
