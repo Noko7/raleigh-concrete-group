@@ -177,6 +177,12 @@ export async function moneyBoard(
 ): Promise<MoneyBoard> {
   const includeTests = opts.includeTests === true;
   const names = new Map(staff.map((s) => [s.id, s.full_name || s.email || "Unnamed"]));
+  // Practice accounts. A test contractor's settlement is a real row in
+  // fee_settlements, and it was counting as a fee received while the practice
+  // job that earned it was hidden - so the office looked to have been paid a
+  // cut it never earned. Their jobs are NOT swept up with them: a real
+  // customer's job assigned to a test account is still a real job.
+  const testStaff = new Set(staff.filter((p) => p.is_test).map((p) => p.id));
 
   const [jobsRes, paymentsRes, settlementsRes] = await Promise.all([
     readRows<JobRow>(
@@ -252,6 +258,7 @@ export async function moneyBoard(
   const settledByStaff = new Map<string, number>();
   for (const s of settlementsRes.rows) {
     if (!counts(s.quote_id)) continue;
+    if (!includeTests && testStaff.has(s.staff_id)) continue;
     settledByStaff.set(s.staff_id, (settledByStaff.get(s.staff_id) ?? 0) + s.amount_cents);
   }
 
@@ -285,6 +292,7 @@ export async function moneyBoard(
   }
 
   const contractors = [...perStaff.values()]
+    .filter((c) => includeTests || !c.staffId || !testStaff.has(c.staffId))
     .map((c) => ({
       ...c,
       balanceCents: Math.max(0, c.feeEarnedCents - c.feeCollectedCents - c.feeSettledCents),

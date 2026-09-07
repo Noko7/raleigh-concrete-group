@@ -3,6 +3,9 @@ import type { Status } from "./env";
 export type Role = "owner" | "contractor";
 
 export type Staff = {
+  // A practice account. Its fee settlements do not count and it stays out of
+  // the Money page's contractor table. See supabase/test-data.sql.
+  is_test?: boolean;
   id: string;
   email: string | null;
   full_name: string | null;

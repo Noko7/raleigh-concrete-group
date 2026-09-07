@@ -46,6 +46,7 @@ with needed(feature, migration, obj, col) as (
     ('Fee settlements',  'payments.sql',         'fee_settlements','amount_cents'),
     ('Fee rate on job',  'payments.sql',         'quote_requests', 'fee_rate'),
     ('Test leads',       'test-data.sql',        'quote_requests', 'is_test'),
+    ('Test accounts',    'test-data.sql',        'staff',          'is_test'),
     ('Agreements',       'agreements.sql',       'agreements',     'status'),
     ('Contractor invites','invites.sql',         'contractor_invites','token'),
     ('Invite tracking',  'invite-tracking.sql',  'contractor_invites','open_count'),
@@ -243,13 +244,21 @@ with checks(area, ref, check_name, kind, n) as (
   -- ── PEOPLE ───────────────────────────────────────────────────────────────
   union all select 'People', 'H1', 'Active crew with no phone number', 'problem',
     (select count(*) from public.staff s
-      where s.active and s.role = 'contractor' and coalesce(trim(s.phone), '') = '')
+      where s.active and s.role = 'contractor' and coalesce(s.is_test, false) = false
+        and coalesce(trim(s.phone), '') = '')
   union all select 'People', 'H2', 'Crew holding live jobs but unable to take a card', 'review',
     (select count(*) from public.staff s
-      where s.active and s.role = 'contractor' and not s.stripe_charges_enabled
+      where s.active and s.role = 'contractor' and coalesce(s.is_test, false) = false
+        and not s.stripe_charges_enabled
         and exists (select 1 from public.quote_requests q
                      where q.assigned_to = s.id and q.customer_response = 'accepted'
                        and q.status not in ('paid','lost') and not q.is_test))
+  union all select 'People', 'H4', 'Nobody on the team can take a card at all', 'problem',
+    (select case when exists (
+        select 1 from public.staff s
+         where s.active and s.role = 'contractor' and s.stripe_charges_enabled
+           and coalesce(s.is_test, false) = false)
+      then 0 else 1 end)
   union all select 'People', 'H3', 'Nobody is set up as an owner', 'problem',
     (select case when exists (select 1 from public.staff s where s.active and s.role = 'owner')
             then 0 else 1 end)
@@ -339,6 +348,7 @@ settled as (
   select coalesce(sum(s.amount_cents), 0)::bigint as cents
   from public.fee_settlements s
   where not exists (select 1 from public.quote_requests q where q.id = s.quote_id and q.is_test)
+    and not exists (select 1 from public.staff st where st.id = s.staff_id and coalesce(st.is_test, false))
 )
 select
   '$' || to_char(sum(j.paid_cents) / 100.0, 'FM999,999,990.00') as collected_from_customers,

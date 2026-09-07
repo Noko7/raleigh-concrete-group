@@ -22,6 +22,27 @@ alter table public.quote_requests add column if not exists is_test boolean not n
 -- and the only query that wants them is the one asking for exactly these.
 create index if not exists qr_is_test_idx on public.quote_requests(is_test) where is_test;
 
+-- ── Test people ─────────────────────────────────────────────────────────────
+-- The same problem one level up. A test contractor exists to be assigned work
+-- and to settle a fee against, and both of those are real rows: the fee they
+-- "sent over" was counting in "your fees, received" while the practice job
+-- that earned it was hidden, so the office appeared to have been paid a cut it
+-- never earned.
+--
+-- Their settlements stop counting and their row leaves the contractor table.
+-- Jobs keep their own flag: a real customer's job that happens to be assigned
+-- to a test account is still a real job, and should not disappear because of
+-- who is holding it.
+alter table public.staff add column if not exists is_test boolean not null default false;
+
+select id, full_name, email, role, active, is_test from public.staff order by full_name;
+
+-- Name the practice accounts here, check the list above, then run it.
+update public.staff
+set is_test = true
+where email ilike '%test%'
+  and is_test = false;
+
 -- ── Backfill ────────────────────────────────────────────────────────────────
 -- LOOK at this list before running the update under it. `%test%` is a weak
 -- filter - it matches "Noah test 2" and "James Test" as well as "Testv3",
