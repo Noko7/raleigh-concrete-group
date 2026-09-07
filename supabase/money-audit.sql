@@ -2,6 +2,12 @@
 -- Run in Supabase → SQL Editor. Sections 1 to 7 only READ. Nothing changes
 -- until you get to section 8, and section 8 is opt-in line by line.
 --
+-- REQUIRES supabase/test-data.sql to have been run first: every query below
+-- skips leads marked is_test, because the app does. A script that reports
+-- problems the Money page has already excluded is a script whose counts can
+-- never reach zero, and a number you learn to ignore is worse than no number.
+-- Section 0 says how many were skipped, so nothing is hidden, only separated.
+--
 -- Every figure on the Money page is a sum over rows, so one row in an odd
 -- state is a total nobody can justify. This file finds those rows and then,
 -- once you have decided what each one should have been, fixes them.
@@ -13,30 +19,36 @@
 -- One row, one number per problem. Anything above zero has a section below it.
 select
   (select count(*) from public.quote_requests q
-     where q.customer_response = 'accepted' and q.status <> 'lost'
+     where q.customer_response = 'accepted' and q.status <> 'lost' and not q.is_test
        and (q.status = 'paid' or q.paid_at is not null)
        and not exists (select 1 from public.quote_payments p
                         where p.quote_id = q.id and p.status in ('paid','refunded'))
   ) as paid_but_no_payment_rows,
   (select count(*) from public.quote_requests q
-     where q.customer_response = 'accepted' and q.status <> 'lost'
+     where q.customer_response = 'accepted' and q.status <> 'lost' and not q.is_test
        and coalesce(q.quote_amount, 0) <= 0
   ) as accepted_with_no_price,
   (select count(*) from public.quote_payments p
      where p.status in ('paid','refunded')
        and not exists (select 1 from public.quote_requests q
+                        where q.id = p.quote_id and q.is_test)
+       and not exists (select 1 from public.quote_requests q
                         where q.id = p.quote_id
                           and q.customer_response = 'accepted' and q.status <> 'lost')
   ) as payments_on_invisible_jobs,
   (select count(*) from public.quote_requests q
-     where q.fee_rate is null
+     where q.fee_rate is null and not q.is_test
        and exists (select 1 from public.quote_payments p
                     where p.quote_id = q.id and p.status = 'paid')
   ) as paid_jobs_with_no_fee_rate,
   (select count(*) from public.quote_requests q
-     where q.fee_rate is not null
+     where q.fee_rate is not null and not q.is_test
        and q.fee_total_cents is distinct from round(coalesce(q.quote_amount,0) * 100 * q.fee_rate)
-  ) as stale_fee_stamps;
+  ) as stale_fee_stamps,
+  -- Not a problem. Here so the four numbers to its left can be read as "these
+  -- are the rows that count", rather than leaving you to wonder what was
+  -- quietly dropped.
+  (select count(*) from public.quote_requests q where q.is_test) as test_leads_skipped;
 
 -- ── 1. Marked paid, never recorded ──────────────────────────────────────────
 -- The big one, and almost always the reason "customers still owe" is too high.
@@ -46,7 +58,7 @@ select
 select q.id, q.name, q.status, q.quote_amount, q.paid_at, q.completed_at, s.full_name as contractor
 from public.quote_requests q
 left join public.staff s on s.id = q.assigned_to
-where q.customer_response = 'accepted' and q.status <> 'lost'
+where q.customer_response = 'accepted' and q.status <> 'lost' and not q.is_test
   and (q.status = 'paid' or q.paid_at is not null)
   and not exists (select 1 from public.quote_payments p
                    where p.quote_id = q.id and p.status in ('paid','refunded'))
@@ -55,7 +67,7 @@ order by q.paid_at desc nulls last;
 -- How much of "customers still owe" is those rows.
 select coalesce(sum(q.quote_amount), 0) as ghost_outstanding_dollars
 from public.quote_requests q
-where q.customer_response = 'accepted' and q.status <> 'lost'
+where q.customer_response = 'accepted' and q.status <> 'lost' and not q.is_test
   and (q.status = 'paid' or q.paid_at is not null)
   and not exists (select 1 from public.quote_payments p
                    where p.quote_id = q.id and p.status in ('paid','refunded'));
@@ -66,7 +78,7 @@ where q.customer_response = 'accepted' and q.status <> 'lost'
 select q.id, q.name, q.status, q.quote_amount, q.created_at, s.full_name as contractor
 from public.quote_requests q
 left join public.staff s on s.id = q.assigned_to
-where q.customer_response = 'accepted' and q.status <> 'lost'
+where q.customer_response = 'accepted' and q.status <> 'lost' and not q.is_test
   and coalesce(q.quote_amount, 0) <= 0
 order by q.created_at desc;
 
@@ -78,6 +90,7 @@ select p.id, p.quote_id, q.name, q.status, q.customer_response, q.archived_at,
 from public.quote_payments p
 left join public.quote_requests q on q.id = p.quote_id
 where p.status in ('paid','refunded')
+  and coalesce(q.is_test, false) = false
   and (q.id is null or q.customer_response is distinct from 'accepted' or q.status = 'lost')
 order by p.paid_at desc nulls last;
 
@@ -96,7 +109,8 @@ select q.id, q.name, q.status, q.customer_response, q.quote_amount,
 from public.quote_requests q
 join public.quote_payments p on p.quote_id = q.id and p.status in ('paid','refunded')
 left join public.staff s on s.id = q.assigned_to
-where q.status = 'lost' or q.archived_at is not null or q.customer_response is distinct from 'accepted'
+where not q.is_test
+  and (q.status = 'lost' or q.archived_at is not null or q.customer_response is distinct from 'accepted')
 group by q.id, q.name, q.status, q.customer_response, q.quote_amount, s.full_name
 order by sum(p.amount_cents - p.refunded_cents) desc;
 
@@ -109,7 +123,7 @@ select q.id, q.name, q.quote_amount, q.fee_rate, q.fee_total_cents,
        s.full_name as contractor
 from public.quote_requests q
 left join public.staff s on s.id = q.assigned_to
-where q.fee_rate is null
+where q.fee_rate is null and not q.is_test
   and exists (select 1 from public.quote_payments p where p.quote_id = q.id and p.status = 'paid')
 order by q.created_at desc;
 
@@ -124,7 +138,7 @@ select q.id, q.name, q.quote_amount, q.fee_rate,
        round(coalesce(q.quote_amount,0) * 100 * q.fee_rate) as should_be_cents,
        round(coalesce(q.quote_amount,0) * 100 * q.fee_rate) - coalesce(q.fee_total_cents,0) as drift_cents
 from public.quote_requests q
-where q.fee_rate is not null
+where q.fee_rate is not null and not q.is_test
   and q.fee_total_cents is distinct from round(coalesce(q.quote_amount,0) * 100 * q.fee_rate)
 order by abs(round(coalesce(q.quote_amount,0) * 100 * q.fee_rate) - coalesce(q.fee_total_cents,0)) desc;
 
@@ -136,7 +150,7 @@ select q.id, q.name, q.quote_amount,
        count(*) as payment_rows
 from public.quote_requests q
 join public.quote_payments p on p.quote_id = q.id and p.status in ('paid','refunded')
-where q.customer_response = 'accepted' and q.status <> 'lost'
+where q.customer_response = 'accepted' and q.status <> 'lost' and not q.is_test
 group by q.id, q.name, q.quote_amount
 having sum(p.amount_cents - p.refunded_cents) > round(coalesce(q.quote_amount,0) * 100)
 order by sum(p.amount_cents - p.refunded_cents) - round(coalesce(q.quote_amount,0) * 100) desc;
@@ -155,6 +169,7 @@ join public.quote_payments p2
  and p2.created_at between p1.created_at - interval '10 minutes' and p1.created_at + interval '10 minutes'
 left join public.quote_requests q on q.id = p1.quote_id
 where p1.status in ('paid','refunded') and p2.status in ('paid','refunded')
+  and coalesce(q.is_test, false) = false
 order by p1.created_at desc;
 
 -- ════════════════════════════════════════════════════════════════════════════
@@ -182,6 +197,7 @@ select q.id, 'other', round(q.quote_amount * 100), 0, 'paid',
        coalesce(q.paid_at, q.completed_at, q.created_at)
 from public.quote_requests q
 where false  -- <= change to true to apply
+  and not q.is_test
   and q.customer_response = 'accepted' and q.status <> 'lost'
   and (q.status = 'paid' or q.paid_at is not null)
   and coalesce(q.quote_amount, 0) > 0
