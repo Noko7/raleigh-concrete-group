@@ -30,7 +30,7 @@ create index if not exists qr_is_test_idx on public.quote_requests(is_test) wher
 -- never earned.
 --
 -- Their settlements stop counting and their row leaves the contractor table.
--- Jobs keep their own flag: a real customer's job that happens to be assigned
+-- Jobs keep their own flag: a real customer job that happens to be assigned
 -- to a test account is still a real job, and should not disappear because of
 -- who is holding it.
 alter table public.staff add column if not exists is_test boolean not null default false;
@@ -68,7 +68,7 @@ where name ilike '%test%'
 -- Put their names in the list below, check the select, then run the update.
 -- After this initial tidy-up, use the Test lead card at the bottom of a job
 -- page instead: it is one button, it is owner-only, and it writes a line in
--- the job's activity log saying who decided and when.
+-- the job activity log saying who decided and when.
 select id, name, status, quote_amount, is_test, created_at,
        (select count(*) from public.quote_payments p where p.quote_id = q.id) as payment_rows
 from public.quote_requests q

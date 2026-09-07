@@ -20,7 +20,7 @@
 --
 -- Test leads are excluded everywhere, exactly as the app excludes them, and
 -- counted separately at the bottom of PART 1 so nothing is silently dropped.
--- Fixes live in money-audit.sql and test-data.sql; this file only ever looks.
+-- Fixes live in money-audit.sql and test-data.sql. this file only ever looks.
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -87,6 +87,23 @@ order by (case
 --   info     context. A number here is neither good nor bad.
 --
 -- The `ref` column matches a heading in PART 3.
+--
+-- RUN THIS BLOCK ON ITS OWN. It is one statement about a hundred and eighty
+-- lines long, and a selection that stops short of the final semicolon is a
+-- syntax error with nothing wrong in the file.
+--
+-- Note on punctuation: no comment anywhere in this file contains a semicolon
+-- or an apostrophe, and that is deliberate rather than fussy. The SQL editor
+-- splits a script into statements before sending it, and its splitter does not
+-- read comments the way the server does: a semicolon in a comment ends a
+-- statement early, and an apostrophe opens a string that swallows everything
+-- to the next one. Either produces a syntax error pointing at a line that is
+-- perfectly correct.
+--
+-- The People checks read staff.is_test through to_jsonb rather than by name,
+-- so this still runs on a database where test-data.sql has not been applied:
+-- a column that is not there reads as NULL instead of taking the whole query
+-- down with it. Everything else here needs the migrations PART 0 checks.
 with checks(area, ref, check_name, kind, n) as (
 
   -- ── MONEY ────────────────────────────────────────────────────────────────
@@ -244,11 +261,11 @@ with checks(area, ref, check_name, kind, n) as (
   -- ── PEOPLE ───────────────────────────────────────────────────────────────
   union all select 'People', 'H1', 'Active crew with no phone number', 'problem',
     (select count(*) from public.staff s
-      where s.active and s.role = 'contractor' and coalesce(s.is_test, false) = false
+      where s.active and s.role = 'contractor' and coalesce((to_jsonb(s) ->> 'is_test')::boolean, false) = false
         and coalesce(trim(s.phone), '') = '')
   union all select 'People', 'H2', 'Crew holding live jobs but unable to take a card', 'review',
     (select count(*) from public.staff s
-      where s.active and s.role = 'contractor' and coalesce(s.is_test, false) = false
+      where s.active and s.role = 'contractor' and coalesce((to_jsonb(s) ->> 'is_test')::boolean, false) = false
         and not s.stripe_charges_enabled
         and exists (select 1 from public.quote_requests q
                      where q.assigned_to = s.id and q.customer_response = 'accepted'
@@ -257,7 +274,7 @@ with checks(area, ref, check_name, kind, n) as (
     (select case when exists (
         select 1 from public.staff s
          where s.active and s.role = 'contractor' and s.stripe_charges_enabled
-           and coalesce(s.is_test, false) = false)
+           and coalesce((to_jsonb(s) ->> 'is_test')::boolean, false) = false)
       then 0 else 1 end)
   union all select 'People', 'H3', 'Nobody is set up as an owner', 'problem',
     (select case when exists (select 1 from public.staff s where s.active and s.role = 'owner')
@@ -313,22 +330,22 @@ order by
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- PART 2 - THE MONEY PAGE'S FOUR FIGURES, WORKED OUT INDEPENDENTLY
+-- PART 2 - THE MONEY PAGE FOUR FIGURES, WORKED OUT INDEPENDENTLY
 -- ═══════════════════════════════════════════════════════════════════════════
 -- The app computes these in TypeScript from the same rows. If these four do
 -- not match what /crm/money shows, one of the two is wrong and it is worth
 -- knowing which before anybody makes a decision on the number.
 --
--- Same rules the app follows: test leads out; money collected on a job that
--- later went to Lost still counts as collected; the balance of a job that is
--- over is nobody's to chase; the fee is the frozen RATE against today's price,
+-- Same rules the app follows: test leads out. money collected on a job that
+-- later went to Lost still counts as collected. the balance of a job that is
+-- over is nobody is to chase. the fee is the frozen RATE against the current price,
 -- and is earned only as far as the customer has actually paid.
 with job as (
   select
     q.id,
     q.status,
     q.assigned_to,
-    -- Exactly the app's rule, archiving included: moneyBoard asks for accepted
+    -- Exactly the app rule, archiving included: moneyBoard asks for accepted
     -- and not lost, and says nothing about archived_at. Adding a condition here
     -- that the app does not apply would make these four figures disagree with
     -- the page for a reason that has nothing to do with the data.
@@ -348,7 +365,7 @@ settled as (
   select coalesce(sum(s.amount_cents), 0)::bigint as cents
   from public.fee_settlements s
   where not exists (select 1 from public.quote_requests q where q.id = s.quote_id and q.is_test)
-    and not exists (select 1 from public.staff st where st.id = s.staff_id and coalesce(st.is_test, false))
+    and not exists (select 1 from public.staff st where st.id = s.staff_id and coalesce((to_jsonb(st) ->> 'is_test')::boolean, false))
 )
 select
   '$' || to_char(sum(j.paid_cents) / 100.0, 'FM999,999,990.00') as collected_from_customers,

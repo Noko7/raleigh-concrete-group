@@ -99,7 +99,7 @@ order by p.paid_at desc nulls last;
 -- the fix is different: the money is real and the status is the thing that is
 -- wrong, or the customer is owed a refund, or it is a test row.
 --
--- The app no longer drops these. Their takings count; their outstanding
+-- The app no longer drops these. Their takings count. their outstanding
 -- balance does not, because nobody is chasing the balance of a job that is
 -- over. They appear on the Money page marked "off the books".
 select q.id, q.name, q.status, q.customer_response, q.quote_amount,
@@ -184,7 +184,7 @@ order by p1.created_at desc;
 -- 8a. Give the legacy paid jobs a payment row, so history reconciles.
 --
 -- Records what was actually collected, dated to the day the job was marked
--- paid, method 'other', flagged in the note so it can never be mistaken for a
+-- paid, method other, flagged in the note so it can never be mistaken for a
 -- payment this app processed. No fee is charged on these: the office settled
 -- them however it settled them at the time, and inventing a cut now would
 -- create a debt that was never agreed.

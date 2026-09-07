@@ -5,12 +5,12 @@
 -- a few minutes. Both mean the same thing for the person who raised it: there
 -- is a window where the text has not gone anywhere yet. Until now that window
 -- was one-way - the queue would send it in the morning whatever happened in
--- between, including the customer ringing at 9pm to say they'd changed their
+-- between, including the customer ringing at 9pm to say theyd changed their
 -- mind, or the office realising the quote had the wrong number on it.
 --
 -- A queued row can now be cancelled. It is not deleted: the message log is the
 -- record of what this job told people, and a text somebody stopped is part of
--- that record - "why didn't they get the quote?" is answered by the row saying
+-- that record - "why didnt they get the quote?" is answered by the row saying
 -- Cancelled, not by its absence.
 --
 -- cancelled_at  when a member of staff called it back. Null on everything else,
@@ -29,7 +29,7 @@ create index if not exists qm_due_idx
   on public.quote_messages (send_after)
   where send_after is not null and sent_at is null and cancelled_at is null;
 
--- No new grant. Staff still only SELECT this table; the cancel is written by the
+-- No new grant. Staff still only SELECT this table. the cancel is written by the
 -- server action with the service-role key, which checks the person can reach the
 -- job first. That keeps every write to the message log in one place - the server
 -- - rather than opening the log up to UPDATE from the browser to support one button.
