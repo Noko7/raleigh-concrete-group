@@ -2534,6 +2534,43 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cal-filters { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.9rem; }
 .cal-filter { border: 1px solid var(--crm-border); background: var(--crm-bg2); color: var(--crm-muted); border-radius: 999px; padding: 0.35rem 0.8rem; font: inherit; font-size: 0.78rem; font-weight: 800; cursor: pointer; min-height: 38px; }
 .cal-filter-on { color: #fff; }
+
+/* ── Who is going ──────────────────────────────────────────────────────────
+   The calendar's own colours are taken by WHAT an appointment is, so the
+   person gets a second channel: initials in a tinted circle. The ring is what
+   keeps it readable sitting on a green or amber chip, and the initials are
+   what keep it readable when two people share a hue. */
+.crew-badge {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  border-radius: 999px; color: #fff; font-weight: 900; letter-spacing: -0.02em;
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.45); text-transform: uppercase;
+}
+.crew-badge-sm { width: 15px; height: 15px; font-size: 0.52rem; margin-right: 0.28rem; }
+.crew-badge-md { width: 26px; height: 26px; font-size: 0.75rem; }
+/* Nobody assigned: hollow rather than filled, so an unowned job reads as a gap
+   in the row instead of one more person you don't recognise. */
+.crew-badge-none { background: transparent !important; box-shadow: inset 0 0 0 1.5px #6b7280; color: #9ca3af; }
+
+.cal-crew { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: -0.45rem 0 0.9rem; }
+.cal-crew-chip {
+  display: inline-flex; align-items: center; gap: 0.1rem;
+  border: 1px solid var(--crm-border); background: var(--crm-bg2); color: var(--crm-muted);
+  border-radius: 999px; padding: 0.3rem 0.75rem; font: inherit; font-size: 0.78rem;
+  font-weight: 800; cursor: pointer; min-height: 38px;
+}
+.cal-crew-chip:hover { color: var(--crm-text); }
+.cal-crew-on { color: var(--crm-text); background: rgba(255, 255, 255, 0.08); }
+
+/* In a list row the name is spelled out, so the badge is only the colour cue. */
+.cal-row-crew { display: flex; align-items: center; font-size: 0.78rem; font-weight: 700; color: var(--crm-muted); }
+.cal-row-none { font-style: italic; opacity: 0.85; }
+.cal-panel-crew { display: flex; align-items: center; gap: 0.45rem; }
+
+/* A month chip is 0.72rem and already tight; the badge shrinks with it rather
+   than pushing the customer's name out of the cell. */
+.cal-chip-title { display: flex; align-items: center; min-width: 0; }
+.cal-chip-title > span:not(.crew-badge) { overflow: hidden; text-overflow: ellipsis; }
+
 .cal-filter-job.cal-filter-on { background: #16a34a; border-color: #16a34a; }
 .cal-filter-inperson.cal-filter-on { background: var(--crm-accent); border-color: var(--crm-accent); }
 .cal-filter-online.cal-filter-on { background: rgba(59, 130, 246, 0.3); border-color: #3b82f6; color: #dbeafe; }

@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { todayYmd } from "@/lib/crm/clock";
+import { UNASSIGNED_COLOR, crewColors, initials, shortName } from "@/lib/crm/crew-colors";
 import { DEFAULT_VISIT_SLOTS, to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { deleteEvent, moveEvent, type CalActionState } from "./actions";
@@ -34,7 +35,46 @@ export type CalEvent = {
   service: string | null;
   address: string | null;
   status: string;
+  // Whose appointment this is. Null is a real state and a loud one: a dated job
+  // nobody owns is the thing on this page most likely to go wrong.
+  assignedTo: string | null;
+  assignedName: string | null;
 };
+
+// The roster, so a colour can be looked up and the legend can list people who
+// have nothing booked this month.
+export type CrewMember = { id: string; name: string };
+
+/**
+ * Whose job this is, in the space of a full stop.
+ *
+ * Initials plus a colour, never a colour alone: the calendar's own colours
+ * already mean "work day" and "quote visit", so a bare dot here would be a
+ * fourth thing to decode. The ring is what keeps it legible sitting on top of
+ * a green or amber chip.
+ */
+function CrewBadge({
+  name,
+  color,
+  size = "sm",
+  title,
+}: {
+  name: string | null;
+  color: string;
+  size?: "sm" | "md";
+  title?: string;
+}) {
+  return (
+    <span
+      className={`crew-badge crew-badge-${size}${name ? "" : " crew-badge-none"}`}
+      style={{ background: color }}
+      title={title ?? (name ?? "Unassigned")}
+      aria-hidden="true"
+    >
+      {initials(name)}
+    </span>
+  );
+}
 
 const kindLabel = (t: Dict, k: CalKind) =>
   k === "job" ? t.calendar.kindJob : k === "online" ? t.calendar.kindOnline : t.calendar.kindInPerson;
@@ -127,7 +167,17 @@ function timeKey(t: string | null): number {
 const telHref = (p: string) => `tel:${p.replace(/[^0-9+]/g, "")}`;
 const mapHref = (a: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a)}`;
 
-export function CalendarView({ events, base, locale }: { events: CalEvent[]; base: string; locale: Locale }) {
+export function CalendarView({
+  events,
+  crew,
+  base,
+  locale,
+}: {
+  events: CalEvent[];
+  crew: CrewMember[];
+  base: string;
+  locale: Locale;
+}) {
   const router = useRouter();
   const t = dict(locale);
   const MONTHS = useMemo(() => monthNames(locale), [locale]);
@@ -144,6 +194,30 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
   const [view, setView] = useState<"list" | "month">("list");
   const [cursor, setCursor] = useState({ y: todayY, m: todayM - 1 });
   const [show, setShow] = useState<Record<CalKind, boolean>>({ job: true, inperson: true, online: true });
+  // Null means everybody. Clicking a name in the legend narrows the whole
+  // calendar to one person's week, which is the question straight after "whose
+  // is that?" - and clicking them again puts everyone back.
+  const [who, setWho] = useState<string | null>(null);
+
+  // One colour per person, derived from their staff id, so it is the same on
+  // every device without storing anything. Anyone on the calendar but off the
+  // roster (a deleted account) still gets a slot rather than no colour at all.
+  const colors = useMemo(
+    () => crewColors([...crew.map((c) => c.id), ...events.map((e) => e.assignedTo ?? "").filter(Boolean)]),
+    [crew, events],
+  );
+  const colorOf = (id: string | null) => (id ? (colors.get(id) ?? UNASSIGNED_COLOR) : UNASSIGNED_COLOR);
+
+  // The legend: the roster, plus an Unassigned entry only when something on
+  // this calendar actually has nobody on it. A permanent "Unassigned" filter
+  // for a state you never reach is a button that always comes back empty.
+  const legend = useMemo(() => {
+    const rows = crew.map((c) => ({ id: c.id, name: c.name, color: colorOf(c.id) }));
+    if (events.some((e) => !e.assignedTo)) {
+      rows.push({ id: "", name: t.calendar.unassigned, color: UNASSIGNED_COLOR });
+    }
+    return rows;
+  }, [crew, events, colors, t]);
 
   const [selected, setSelected] = useState<CalEvent | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
@@ -203,7 +277,10 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  const visible = useMemo(() => events.filter((e) => show[e.kind]), [events, show]);
+  const visible = useMemo(
+    () => events.filter((e) => show[e.kind] && (who === null || (e.assignedTo ?? "") === who)),
+    [events, show, who],
+  );
 
   const byDate = useMemo(() => {
     const map = new Map<string, CalEvent[]>();
@@ -337,12 +414,44 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
         ))}
       </div>
 
+      {/* Who is on the calendar. It is a legend first - a colour means nothing
+          until it has a name beside it - and a filter second, because "just
+          show me Ana's week" is the question straight after "whose is that?".
+          Hidden with one contractor: a legend of one explains nothing, and a
+          filter that can only ever say "everyone" or "the only person" is a
+          control that does nothing twice. */}
+      {legend.length > 1 && (
+        <div className="cal-crew" role="group" aria-label={t.calendar.crewLegend}>
+          <button
+            type="button"
+            className={`cal-crew-chip${who === null ? " cal-crew-on" : ""}`}
+            onClick={() => setWho(null)}
+            aria-pressed={who === null}
+          >
+            {t.calendar.everyone}
+          </button>
+          {legend.map((c) => (
+            <button
+              key={c.id || "unassigned"}
+              type="button"
+              className={`cal-crew-chip${who === c.id ? " cal-crew-on" : ""}`}
+              onClick={() => setWho((w) => (w === c.id ? null : c.id))}
+              aria-pressed={who === c.id}
+              style={who === c.id ? { borderColor: c.color } : undefined}
+            >
+              <CrewBadge name={c.id ? c.name : null} color={c.color} />
+              {shortName(c.name) || c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {view === "list" ? (
         <div className={`cal-agenda${busy ? " cal-busy" : ""}`}>
           {upcoming.length === 0 && earlier.length === 0 && <p className="cal-empty">{t.calendar.empty}</p>}
 
           {upcoming.map((g) => (
-            <DayGroup key={g.date} group={g} todayStr={todayStr} t={t} locale={locale} onPick={setSelected} />
+            <DayGroup key={g.date} group={g} todayStr={todayStr} t={t} locale={locale} colorOf={colorOf} onPick={setSelected} />
           ))}
 
           {earlier.length > 0 && (
@@ -352,7 +461,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
                 <span>{earlier.reduce((n, g) => n + g.items.length, 0)}</span>
               </h4>
               {earlier.map((g) => (
-                <DayGroup key={g.date} group={g} todayStr={todayStr} t={t} locale={locale} past onPick={setSelected} />
+                <DayGroup key={g.date} group={g} todayStr={todayStr} t={t} locale={locale} past colorOf={colorOf} onPick={setSelected} />
               ))}
             </>
           )}
@@ -423,12 +532,18 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
                         }}
                         onDragEnd={() => setDragId(null)}
                         onClick={() => setSelected(e)}
-                        title={`${kindLabel(t, e.kind)}: ${e.title}${e.time ? ` · ${e.time}` : ""}${
-                          isRequested(e.kind) ? ` · ${t.calendar.notBooked}` : ""
-                        }`}
+                        title={`${kindLabel(t, e.kind)}: ${e.title}${e.time ? ` · ${e.time}` : ""} · ${
+                          e.assignedName ?? t.calendar.unassigned
+                        }${isRequested(e.kind) ? ` · ${t.calendar.notBooked}` : ""}`}
                       >
                         {e.time && <span className="cal-chip-time">{e.time}</span>}
-                        <span className="cal-chip-title">{e.title}</span>
+                        {/* The badge rides on the name line rather than its own:
+                            a chip is two lines tall and a third would push the
+                            day cell past what a month grid has room for. */}
+                        <span className="cal-chip-title">
+                          <CrewBadge name={e.assignedName} color={colorOf(e.assignedTo)} />
+                          {e.title}
+                        </span>
                       </button>
                     ))}
                     {hidden > 0 && (
@@ -486,6 +601,12 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
                         {kindLabel(t, e.kind)}
                         {isRequested(e.kind) && <em className="cal-tentative">{t.calendar.notBooked}</em>}
                       </span>
+                      {/* Spelled out here, not just badged. A list row has the width for
+                          a name, and reading one beats decoding two letters. */}
+                      <span className="cal-row-crew">
+                        <CrewBadge name={e.assignedName} color={colorOf(e.assignedTo)} />
+                        <span className={e.assignedName ? "" : "cal-row-none"}>{e.assignedName ?? t.calendar.unassigned}</span>
+                      </span>
                     </span>
                   </button>
                 </article>
@@ -502,6 +623,7 @@ export function CalendarView({ events, base, locale }: { events: CalEvent[]; bas
           busy={busy}
           t={t}
           locale={locale}
+          crewColor={colorOf(selected.assignedTo)}
           error={moveState.error || delState.error}
           onClose={() => setSelected(null)}
           onOpen={() => router.push(`${base}/quotes/${selected.id}`)}
@@ -521,6 +643,7 @@ function DayGroup({
   t,
   locale,
   past = false,
+  colorOf,
   onPick,
 }: {
   group: { date: string; items: CalEvent[] };
@@ -528,6 +651,7 @@ function DayGroup({
   t: Dict;
   locale: Locale;
   past?: boolean;
+  colorOf: (id: string | null) => string;
   onPick: (e: CalEvent) => void;
 }) {
   const h = dayHeading(group.date, todayStr, t, locale);
@@ -547,6 +671,12 @@ function DayGroup({
               <span className="cal-row-kind">
                 {kindLabel(t, e.kind)}
                 {isRequested(e.kind) && <em className="cal-tentative">{t.calendar.notBooked}</em>}
+              </span>
+              {/* Spelled out here, not just badged. A list row has the width for
+                  a name, and reading one beats decoding two letters. */}
+              <span className="cal-row-crew">
+                <CrewBadge name={e.assignedName} color={colorOf(e.assignedTo)} />
+                <span className={e.assignedName ? "" : "cal-row-none"}>{e.assignedName ?? t.calendar.unassigned}</span>
               </span>
               {e.address && <span className="cal-row-addr">{e.address}</span>}
             </span>
@@ -576,6 +706,7 @@ function EventPanel({
   busy,
   t,
   locale,
+  crewColor,
   error,
   onClose,
   onOpen,
@@ -585,6 +716,7 @@ function EventPanel({
   event: CalEvent;
   base: string;
   busy: boolean;
+  crewColor: string;
   t: Dict;
   locale: Locale;
   error?: string;
@@ -634,6 +766,15 @@ function EventPanel({
             </div>
 
             <dl className="cal-panel-dl">
+              <div>
+                <dt>{t.calendar.crewLegend}</dt>
+                <dd className="cal-panel-crew">
+                  <CrewBadge name={event.assignedName} color={crewColor} size="md" />
+                  <span className={event.assignedName ? "" : "cal-row-none"}>
+                    {event.assignedName ?? t.calendar.unassigned}
+                  </span>
+                </dd>
+              </div>
               <div>
                 <dt>{t.calendar.stage}</dt>
                 <dd>{t.status[event.status as keyof typeof t.status] ?? event.status}</dd>

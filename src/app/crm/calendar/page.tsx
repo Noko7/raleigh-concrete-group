@@ -3,7 +3,7 @@ import { requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { googleConfigured, googleStatus } from "@/lib/crm/gcal";
 import { crmBase } from "@/lib/crm/nav";
-import { listScheduled } from "@/lib/crm/queries";
+import { listScheduled, listStaff, staffNameMap } from "@/lib/crm/queries";
 import { CalendarView, type CalEvent } from "./calendar-view";
 import { disconnectGoogle } from "./actions";
 
@@ -30,7 +30,12 @@ export default async function CalendarPage({
   const t = dict(locale);
   const { google } = await searchParams;
 
-  const quotes = await listScheduled(session);
+  const [quotes, staff] = await Promise.all([listScheduled(session), listStaff(session)]);
+  // Who each appointment belongs to. Read from the staff table rather than
+  // carried on the quote, so a contractor who changes their name changes it
+  // everywhere at once. A contractor's own RLS only shows them themselves,
+  // which is right: their calendar is all theirs anyway.
+  const names = staffNameMap(staff);
   const events: CalEvent[] = [];
   for (const q of quotes) {
     // Enough on each event to act without opening the job: the panel shows the
@@ -42,6 +47,8 @@ export default async function CalendarPage({
       service: q.service,
       address: q.address,
       status: q.status,
+      assignedTo: q.assigned_to ?? null,
+      assignedName: q.assigned_to ? (names.get(q.assigned_to) ?? null) : null,
     };
     // Booked work day = a job install (only ever set once a customer accepts).
     if (q.scheduled_date) {
@@ -72,6 +79,14 @@ export default async function CalendarPage({
       events.push({ ...common, date: requested, kind: "online", time: q.visit_time });
     }
   }
+
+  // Everyone who could be on this calendar, plus anyone actually on it - a
+  // deactivated contractor still has last month's jobs and still needs a name
+  // and a colour against them.
+  const crew = [
+    ...staff.filter((s) => s.role === "contractor" && s.active),
+    ...staff.filter((s) => !(s.role === "contractor" && s.active) && events.some((e) => e.assignedTo === s.id)),
+  ].map((s) => ({ id: s.id, name: names.get(s.id) ?? "Staff" }));
 
   const status = isOwner ? await googleStatus() : { connected: false };
   const configured = googleConfigured();
@@ -138,7 +153,10 @@ export default async function CalendarPage({
         </details>
       )}
 
-      <CalendarView events={events} base={base} locale={locale} />
+      {/* The roster, not just the people who happen to have something booked:
+          an empty week for somebody is worth being able to see, and the legend
+          is how a colour becomes a name. */}
+      <CalendarView events={events} crew={crew} base={base} locale={locale} />
     </main>
   );
 }
