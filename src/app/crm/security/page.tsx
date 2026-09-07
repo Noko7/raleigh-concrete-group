@@ -18,6 +18,7 @@ const REASON_LABELS: Record<string, string> = {
   invalid_format: "Malformed request",
   bad_credentials: "Wrong email or password",
   no_access: "Account not authorized for CRM",
+  locked_out: "Blocked - too many failed sign-ins",
   error: "Server error",
 };
 
