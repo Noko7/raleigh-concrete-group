@@ -2181,6 +2181,13 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .led-when { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .led-sub { display: block; font-size: 0.72rem; color: var(--crm-muted); margin-top: 0.1rem; }
 .led-note { color: var(--crm-muted); font-size: 0.82rem; max-width: 18rem; }
+/* A job that took money and then left the pipeline. Grey, not red: nothing is
+   owed and nothing is wrong, the row simply follows a different rule from the
+   ones around it and should say so. */
+.led-offbooks {
+  font-style: normal; margin-left: 0.4rem; padding: 0.02rem 0.35rem; border-radius: 999px;
+  border: 1px dashed var(--crm-border); color: var(--crm-muted); font-size: 0.66rem; font-weight: 800;
+}
 /* Money leaving again. Struck rather than coloured red: red on this page means
    "somebody owes you", and a refund is not that. */
 .led-out .led-num { color: var(--crm-muted); }

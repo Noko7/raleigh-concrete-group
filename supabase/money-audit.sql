@@ -81,6 +81,25 @@ where p.status in ('paid','refunded')
   and (q.id is null or q.customer_response is distinct from 'accepted' or q.status = 'lost')
 order by p.paid_at desc nulls last;
 
+-- ── 3b. Marked lost AFTER taking money ──────────────────────────────────────
+-- The specific shape section 3 keeps finding, called out on its own because
+-- the fix is different: the money is real and the status is the thing that is
+-- wrong, or the customer is owed a refund, or it is a test row.
+--
+-- The app no longer drops these. Their takings count; their outstanding
+-- balance does not, because nobody is chasing the balance of a job that is
+-- over. They appear on the Money page marked "off the books".
+select q.id, q.name, q.status, q.customer_response, q.quote_amount,
+       sum(p.amount_cents - p.refunded_cents) as collected_cents,
+       count(*) as payment_rows,
+       s.full_name as contractor
+from public.quote_requests q
+join public.quote_payments p on p.quote_id = q.id and p.status in ('paid','refunded')
+left join public.staff s on s.id = q.assigned_to
+where q.status = 'lost' or q.archived_at is not null or q.customer_response is distinct from 'accepted'
+group by q.id, q.name, q.status, q.customer_response, q.quote_amount, s.full_name
+order by sum(p.amount_cents - p.refunded_cents) desc;
+
 -- ── 4. Paid, but the office never set a rate ────────────────────────────────
 -- fee_rate is frozen the first time money is about to move. A job that took
 -- money without one earns the office nothing, on every screen, forever.
@@ -190,6 +209,34 @@ where false  -- <= change to true, and put the real id below
 update public.quote_requests
 set customer_response = null, customer_responded_at = null
 where false  -- <= change to true, and list the ids
+  and id in ('00000000-0000-0000-0000-000000000000');
+
+-- 8e. Test rows, gone for good.
+--
+-- Leads created while trying the app out, with payments recorded against them.
+-- They are the usual reason section 3 has anything in it. The payments go
+-- first: quote_payments has no cascade from the job, so deleting the lead
+-- alone would leave its money behind with nothing to point at.
+--
+-- LOOK at the select before running either delete. A name is a weak filter and
+-- a real customer called Test would be a bad day.
+select id, name, status, quote_amount, created_at
+from public.quote_requests
+where name ilike 'test%'
+order by created_at desc;
+
+delete from public.quote_payments
+where false  -- <= change to true to apply
+  and quote_id in (select id from public.quote_requests where name ilike 'test%');
+
+delete from public.quote_requests
+where false  -- <= change to true to apply
+  and name ilike 'test%';
+
+-- 8f. Keep the job, drop only the test payments on it.
+-- For when the lead is real and only the money was practice.
+delete from public.quote_payments
+where false  -- <= change to true, and put the real ids below
   and id in ('00000000-0000-0000-0000-000000000000');
 
 -- ── After any fix ───────────────────────────────────────────────────────────

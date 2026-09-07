@@ -31,7 +31,9 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
 
   const rows = useMemo(() => {
     const list = jobs.filter((j) => {
-      if (filter === "owing") return j.ledger.dueCents > 0;
+      // Same rule as the figure at the top of the page: a job that left the
+      // pipeline is not a customer anybody is chasing, whatever its balance.
+      if (filter === "owing") return j.onBooks && j.ledger.dueCents > 0;
       if (filter === "settled") return j.ledger.dueCents === 0 && j.ledger.paidCents > 0;
       return true;
     });
@@ -48,7 +50,7 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
         (acc, j) => ({
           total: acc.total + j.ledger.totalCents,
           paid: acc.paid + j.ledger.paidCents,
-          due: acc.due + j.ledger.dueCents,
+          due: acc.due + (j.onBooks ? j.ledger.dueCents : 0),
           fee: acc.fee + j.ledger.feeTotalCents,
         }),
         { total: 0, paid: 0, due: 0, fee: 0 },
@@ -100,13 +102,20 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
                   <tr key={j.id} className={isOpen ? "led-row-open" : ""}>
                     <td>
                       <Link href={`${base}/quotes/${j.id}`}>{j.name}</Link>
-                      <span className="led-sub">{j.status}</span>
+                      <span className="led-sub">
+                        {j.status}
+                        {/* It took money and then left the pipeline. Its cash
+                            is still in the takings; its balance is nobody's to
+                            chase. Worth saying on the row, because the numbers
+                            beside it follow a different rule from the rest. */}
+                        {!j.onBooks && <em className="led-offbooks">off the books</em>}
+                      </span>
                     </td>
                     <td>{j.staffName}</td>
                     <td className="led-num">{usd(j.ledger.totalCents)}</td>
                     <td className="led-num">{usd(j.ledger.paidCents)}</td>
-                    <td className={`led-num${j.ledger.dueCents > 0 ? " cash-owed" : ""}`}>
-                      {usd(j.ledger.dueCents)}
+                    <td className={`led-num${j.onBooks && j.ledger.dueCents > 0 ? " cash-owed" : ""}`}>
+                      {j.onBooks ? usd(j.ledger.dueCents) : "-"}
                     </td>
                     <td className="led-num led-fee">{usd(j.ledger.feeTotalCents)}</td>
                     <td className="led-num">

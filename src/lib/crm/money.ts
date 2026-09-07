@@ -45,6 +45,16 @@ export type JobMoney = {
   ledger: Ledger;
   /** Every payment on this job, newest first, for the row that expands. */
   payments: QuotePayment[];
+  /**
+   * Whether this job is still part of the pipeline.
+   *
+   * False for one that took money and then went to Lost, was archived, or had
+   * its quote retracted. Money it collected is still money: it counts in
+   * takings and in what the office earned, because the customer really did
+   * hand it over. What it does NOT do is count in "customers still owe" -
+   * nobody is chasing the balance of a job that is over.
+   */
+  onBooks: boolean;
 };
 
 // ── The ledger itself ───────────────────────────────────────────────────────
@@ -170,6 +180,23 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
     else byJob.set(p.quote_id, [p]);
   }
 
+  // Jobs with money on them that the filter above would have dropped: marked
+  // lost, archived, or no longer showing as accepted. Left out, their payments
+  // sat in quote_payments and in no total on this page - money that had
+  // genuinely been collected, invisible because somebody changed a status
+  // afterwards. A ledger that loses track of money when a row changes state is
+  // not a ledger, so they are fetched back in and marked.
+  const known = new Set(jobsRes.rows.map((j) => j.id));
+  const strays = [...new Set(payments.map((p) => p.quote_id))].filter((id) => id && !known.has(id));
+  if (strays.length > 0) {
+    const extra = await readRows<JobRow>(
+      session,
+      `quote_requests?id=in.(${strays.slice(0, 200).join(",")})` +
+        "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,status,paid_at,completed_at,created_at",
+    );
+    jobsRes.rows.push(...extra.rows);
+  }
+
   const jobs: JobMoney[] = jobsRes.rows.map((j) => ({
     id: j.id,
     name: j.name,
@@ -179,6 +206,7 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
     paidAt: j.paid_at,
     createdAt: j.created_at,
     payments: byJob.get(j.id) ?? [],
+    onBooks: known.has(j.id),
     // The same function the crew's page and the customer's page read through.
     // A second implementation here would drift, and the first anyone would know
     // of it is a contractor disputing a figure. The rate goes in with it, so
@@ -302,6 +330,10 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
   // ── Rows that make a total lie ──────────────────────────────────────────
   const attention: AttentionRow[] = [];
   for (const j of jobs) {
+    // Off-books jobs have their own row further down. Running them through the
+    // rules below would flag a lost job for being unpaid, which is the point
+    // of it being lost.
+    if (!j.onBooks) continue;
     const total = j.ledger.totalCents;
 
     // The big one, and the reason a healthy business reads as owing money it
@@ -357,30 +389,28 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
       });
     }
   }
-  // Payments pointing at a job this page cannot see: deleted, archived, lost,
-  // or never accepted. Their money is in quote_payments and in no total here.
-  const seen = new Set(jobs.map((j) => j.id));
-  const orphans = new Map<string, number>();
-  for (const p of payments) {
-    if (seen.has(p.quote_id)) continue;
-    if (p.status !== "paid" && p.status !== "refunded") continue;
-    orphans.set(p.quote_id, (orphans.get(p.quote_id) ?? 0) + p.amount_cents - p.refunded_cents);
-  }
-  for (const [quoteId, cents] of orphans) {
+  // Money on a job that left the pipeline. It is in the totals now rather than
+  // nowhere, but it is still worth a person's eye: either the customer is owed
+  // a refund, or the job was not really lost, or - most often - it is a test
+  // row somebody left behind.
+  for (const j of jobs) {
+    if (j.onBooks || j.ledger.paidCents === 0) continue;
     attention.push({
       kind: "orphan_payment",
-      jobId: quoteId,
-      name: "Unknown job",
-      staffName: "-",
-      detail: "Payments recorded against a job that is archived, lost, or no longer approved.",
-      effectCents: cents,
+      jobId: j.id,
+      name: j.name,
+      staffName: j.staffName,
+      detail: `Took ${usd(j.ledger.paidCents)} and is now ${j.status}. Counted in takings, not in what customers owe.`,
+      effectCents: j.ledger.paidCents,
     });
   }
   attention.sort((a, b) => b.effectCents - a.effectCents);
 
   return {
     collectedCents: jobs.reduce((sum, j) => sum + j.ledger.paidCents, 0),
-    outstandingCents: jobs.reduce((sum, j) => sum + j.ledger.dueCents, 0),
+    // Only what somebody is actually going to be asked for. A job that took a
+    // deposit and then went to Lost is not a customer who owes the balance.
+    outstandingCents: jobs.reduce((sum, j) => sum + (j.onBooks ? j.ledger.dueCents : 0), 0),
     feeEarnedCents: contractors.reduce((sum, c) => sum + c.feeEarnedCents, 0),
     feeCollectedCents: contractors.reduce((sum, c) => sum + c.feeCollectedCents, 0),
     feeSettledCents: contractors.reduce((sum, c) => sum + c.feeSettledCents, 0),
@@ -390,7 +420,9 @@ export async function moneyBoard(session: Session, staff: Staff[]): Promise<Mone
       .sort((a, b) => b.cents - a.cents),
     recentCents,
     contractors,
-    owing: jobs.filter((j) => j.ledger.dueCents > 0).sort((a, b) => b.ledger.dueCents - a.ledger.dueCents),
+    owing: jobs
+      .filter((j) => j.onBooks && j.ledger.dueCents > 0)
+      .sort((a, b) => b.ledger.dueCents - a.ledger.dueCents),
     jobs,
     entries,
     attention,
