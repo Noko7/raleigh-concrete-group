@@ -85,9 +85,9 @@ const kindLabel = (t: Dict, k: CalKind) =>
 const intlLocale = (l: Locale) => (l === "es" ? "es-US" : "en-US");
 
 function monthNames(locale: Locale): string[] {
-  const f = new Intl.DateTimeFormat(intlLocale(locale), { month: "long" });
+  const f = new Intl.DateTimeFormat(intlLocale(locale), { month: "long", timeZone: "UTC" });
   return Array.from({ length: 12 }, (_, m) => {
-    const name = f.format(new Date(2024, m, 1));
+    const name = f.format(new Date(Date.UTC(2024, m, 1)));
     return name.charAt(0).toUpperCase() + name.slice(1);
   });
 }
@@ -95,10 +95,12 @@ function monthNames(locale: Locale): string[] {
 // [full, initial] per weekday, starting Sunday. CSS picks which one shows: a
 // single letter is all that fits over a 45px column.
 function weekdayNames(locale: Locale): [string, string][] {
-  const long = new Intl.DateTimeFormat(intlLocale(locale), { weekday: "short" });
-  const narrow = new Intl.DateTimeFormat(intlLocale(locale), { weekday: "narrow" });
+  const long = new Intl.DateTimeFormat(intlLocale(locale), { weekday: "short", timeZone: "UTC" });
+  const narrow = new Intl.DateTimeFormat(intlLocale(locale), { weekday: "narrow", timeZone: "UTC" });
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(2024, 8, 1 + i); // 2024-09-01 was a Sunday
+    // 2024-09-01 was a Sunday. Read in UTC, so the header can never come back
+    // shifted by one against a grid that starts its rows on Sunday.
+    const d = new Date(Date.UTC(2024, 8, 1 + i));
     const full = long.format(d);
     return [full.charAt(0).toUpperCase() + full.slice(1), narrow.format(d).toUpperCase()];
   });
@@ -108,22 +110,34 @@ function weekdayNames(locale: Locale): [string, string][] {
 const MAX_CHIPS = 3;
 const VIEW_KEY = "rcg-cal-view";
 
+// UTC getters throughout this file, deliberately, and it has nothing to do with
+// UTC being a timezone anybody here lives in.
+//
+// A month grid is pure calendar arithmetic: which numbers go in which columns is
+// the same question in every timezone on earth. Doing that arithmetic with local
+// Date parts means asking the browser's clock a question that is not about the
+// browser's clock, and it drags in every place local midnight can shift, go
+// missing, or land on a different date than the one the CRM is working in - the
+// grid was being laid out in the viewer's zone while "today" came from Raleigh.
+// Pinning the arithmetic to UTC removes the clock from it entirely: the same
+// dates land in the same columns for everyone, forever.
 function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
 function longDate(s: string, locale: Locale): string {
-  return new Date(`${s}T00:00:00`).toLocaleDateString(intlLocale(locale), {
+  return new Date(`${s}T00:00:00Z`).toLocaleDateString(intlLocale(locale), {
     weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
 function daysBetween(from: string, to: string): number {
-  const a = new Date(`${from}T00:00:00`).getTime();
-  const b = new Date(`${to}T00:00:00`).getTime();
+  const a = new Date(`${from}T00:00:00Z`).getTime();
+  const b = new Date(`${to}T00:00:00Z`).getTime();
   return Math.round((b - a) / 86_400_000);
 }
 
@@ -131,12 +145,13 @@ function daysBetween(from: string, to: string): number {
 // questions are "is this now" and "is this next", so those get words.
 function dayHeading(date: string, todayStr: string, t: Dict, locale: Locale): { main: string; sub: string } {
   const diff = daysBetween(todayStr, date);
-  const d = new Date(`${date}T00:00:00`);
-  const sameYear = d.getFullYear() === new Date(`${todayStr}T00:00:00`).getFullYear();
+  const d = new Date(`${date}T00:00:00Z`);
+  const sameYear = d.getUTCFullYear() === new Date(`${todayStr}T00:00:00Z`).getUTCFullYear();
   const raw = d.toLocaleDateString(intlLocale(locale), {
     weekday: "long",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
     ...(sameYear ? {} : { year: "numeric" }),
   });
   const full = raw.charAt(0).toUpperCase() + raw.slice(1);
@@ -317,15 +332,13 @@ export function CalendarView({
     [byDate, todayStr],
   );
 
+  // Six weeks from the Sunday on or before the 1st. Built by adding whole days
+  // to a UTC instant, which is the one kind of date arithmetic that cannot be
+  // knocked sideways by a clock going forward, back, or missing an hour.
   const cells = useMemo(() => {
-    const first = new Date(cursor.y, cursor.m, 1);
-    const start = new Date(first);
-    start.setDate(1 - first.getDay());
-    return Array.from({ length: 42 }, (_, i) => {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      return d;
-    });
+    const first = Date.UTC(cursor.y, cursor.m, 1);
+    const start = first - new Date(first).getUTCDay() * 86_400_000;
+    return Array.from({ length: 42 }, (_, i) => new Date(start + i * 86_400_000));
   }, [cursor]);
 
   function shift(delta: number) {
@@ -480,8 +493,8 @@ export function CalendarView({
           <div className={`cal-grid${busy ? " cal-busy" : ""}`}>
             {cells.map((d) => {
               const key = ymd(d);
-              const inMonth = d.getMonth() === cursor.m;
-              const weekend = d.getDay() === 0 || d.getDay() === 6;
+              const inMonth = d.getUTCMonth() === cursor.m;
+              const weekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
               const dayEvents = dayEventsFor(key);
               const chips = dayEvents.slice(0, MAX_CHIPS);
               const hidden = dayEvents.length - chips.length;
@@ -508,7 +521,7 @@ export function CalendarView({
                     drop(key);
                   }}
                 >
-                  <span className="cal-daynum">{d.getDate()}</span>
+                  <span className="cal-daynum">{d.getUTCDate()}</span>
 
                   {/* Wide screens get readable chips. Narrow screens get dots
                       and open the whole day in a sheet, because a name never
