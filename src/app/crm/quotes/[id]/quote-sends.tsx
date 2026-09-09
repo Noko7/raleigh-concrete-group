@@ -77,8 +77,16 @@ export function QuoteSends({
                     {dollars(s.amount) ?? t.quoteLog.noPrice}
                   </span>
                   <span className="qs-when">{stamp(s.at, locale)}</span>
-                  <span className="qs-tags">
+                  {/* Two slots, not one list. "Current" and "Correction" are
+                      different questions - which one are they holding, and how
+                      did this one come about - and sharing a right-aligned box
+                      meant a row with one tag started somewhere a row with two
+                      didn't. A column each, and every tag begins where the one
+                      above it does. */}
+                  <span className="qs-flag">
                     {s.live && <em className="qs-tag qs-tag-live">{t.quoteLog.current}</em>}
+                  </span>
+                  <span className="qs-kind">
                     {s.corrected ? (
                       <em className="qs-tag">{t.quoteLog.corrected}</em>
                     ) : (

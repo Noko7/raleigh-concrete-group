@@ -2338,9 +2338,13 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
    widths are what actually makes a column a column here. */
 .qs-row {
   display: grid;
-  grid-template-columns: 2.4rem 7.5rem 1fr auto;
-  grid-template-areas: "n amount when tags";
-  align-items: baseline; gap: 0.6rem;
+  /* Sized to the widest thing each slot actually holds - CORRECTION is 95px,
+     CURRENT is 72px - rather than to a round number. The dark card sits in the
+     narrow CRM column, and every spare rem here came out of the date, which
+     wrapped to two lines and made the row taller than its neighbours. */
+  grid-template-columns: 2.4rem 6.6rem 1fr 4.7rem 6.2rem;
+  grid-template-areas: "n amount when flag kind";
+  align-items: baseline; gap: 0.5rem;
   /* Every row the same height whatever is in it. A send with no price uses a
      smaller type size, and without this the list develops a limp. */
   min-height: 2.8rem;
@@ -2360,8 +2364,17 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 /* A send with no price on it is a sentence, not a figure: it gets the smaller
    muted treatment so it never pretends to be a number in the column. */
 .qs-amount:not(.qs-has-amount) { font-size: 0.82rem; font-weight: 700; color: var(--crm-muted); }
-.qs-when { grid-area: when; font-size: 0.82rem; color: var(--crm-muted); min-width: 0; }
-.qs-tags { grid-area: tags; display: flex; gap: 0.3rem; flex-wrap: wrap; justify-content: flex-end; }
+/* Never wraps: a two-line date is what makes one row taller than the rest, and
+   a clipped date still reads. */
+.qs-when {
+  grid-area: when; font-size: 0.82rem; color: var(--crm-muted);
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* One tag each, left aligned in a fixed slot, so CORRECTION and FIRST QUOTE
+   start at the same x however wide they are. */
+.qs-flag { grid-area: flag; }
+.qs-kind { grid-area: kind; }
+.qs-flag, .qs-kind { display: flex; min-width: 0; }
 .qs-tag {
   font-style: normal; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
   letter-spacing: 0.05em; padding: 0.15rem 0.45rem; border-radius: 999px;
@@ -2374,16 +2387,21 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
    the number keeping its own column down the side so the rows still scan. */
 @media (max-width: 560px) {
   .qs-row {
-    grid-template-columns: 2.4rem 1fr;
+    /* The flag column is fixed, not auto: auto sizes itself per row, which is
+       the same trap the wide layout fell into - the one row with no CURRENT on
+       it started its tag a few pixels off from the rest. */
+    grid-template-columns: 2.4rem 5.4rem 1fr;
     grid-template-areas:
-      "n amount"
-      "n when"
-      "n tags";
+      "n amount amount"
+      "n when   when"
+      "n flag   kind";
     align-items: center; row-gap: 0.1rem;
   }
   .qs-n { align-self: start; padding-top: 0.15rem; }
   .qs-amount { text-align: left; }
-  .qs-tags { justify-content: flex-start; margin-top: 0.2rem; }
+  /* Stacked, the two tag slots share the last line instead of taking one each. */
+  .qs-flag { margin-top: 0.2rem; }
+  .qs-kind { margin-top: 0.2rem; }
 }
 
 /* Retracting. Kept quiet until it is needed: it is the rarest thing on the

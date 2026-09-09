@@ -500,6 +500,44 @@ export function isCancellable(m: QuoteMessage, now: Date = new Date()): boolean 
 }
 
 // Service-role: sends happen from the public quote endpoint and from cron, where
+/**
+ * Has this exact text already gone to this exact number, just now?
+ *
+ * The guard against sending the same thing twice. A server action that runs
+ * twice - a double submit, a retried request, a component that mounts its form
+ * twice - is invisible from inside the action: each run reads the same row,
+ * decides the same thing, and sends. Nothing in the action can tell it is the
+ * second one. The message log can, because the first run wrote to it.
+ *
+ * Matched on the number and the body rather than the kind, because that is what
+ * the customer actually receives twice; two different kinds that happen to say
+ * the same words are the same text as far as the phone is concerned.
+ *
+ * The window is short on purpose. Longer, and a deliberate second send - the
+ * office re-sending a quote an hour later because the customer lost it - starts
+ * silently doing nothing, which is a worse bug than the one this fixes.
+ *
+ * Counts a queued copy too: a held duplicate is a duplicate that hasn't
+ * happened yet. Cancelled rows don't count, since nothing will come of them.
+ */
+export async function recentlySent(toPhone: string, body: string, withinSeconds = 90): Promise<boolean> {
+  try {
+    const since = new Date(Date.now() - withinSeconds * 1000).toISOString();
+    const res = await pgAdmin(
+      `quote_messages?to_phone=eq.${encodeURIComponent(toPhone)}` +
+        `&created_at=gte.${encodeURIComponent(since)}&cancelled_at=is.null` +
+        `&select=body&order=created_at.desc&limit=20`,
+    );
+    if (!res.ok) return false;
+    const rows = (await res.json()) as { body: string | null }[];
+    return rows.some((r) => r.body === body);
+  } catch {
+    // Never block a send on the guard failing. A duplicate is a nuisance; a
+    // text that never went because the check errored is a missed appointment.
+    return false;
+  }
+}
+
 // there is no session. Never throws - a logging failure must not take a send
 // down with it, which would be the tail wagging the dog.
 export async function logMessage(row: {

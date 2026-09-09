@@ -25,6 +25,7 @@ import {
   getOwnerPhones,
   listDueMessages,
   logMessage,
+  recentlySent,
   type SmsLog,
 } from "./queries";
 
@@ -47,6 +48,10 @@ export type SendResult = {
   // hour. Both wait in the same queue; only quiet hours is a rule anybody needs
   // explaining to them.
   spaced?: boolean;
+  // Suppressed: the identical text went to this number seconds ago. `ok` is
+  // true because the customer has the message - which is what every caller is
+  // really asking - but nothing left the building on this call.
+  duplicate?: boolean;
   // When it will go out, ISO, and the same in words: "tomorrow at 8:00 AM".
   sendAfter?: string;
   sendAfterLabel?: string;
@@ -210,6 +215,24 @@ export async function sendSmsResult(
     const empty: SendResult = { ok: false, provider: SMS_PROVIDER, to, detail: "Empty message" };
     await record(log, empty, to, message);
     return empty;
+  }
+
+  // Already said, seconds ago? Then this is the second run of something that
+  // should only have run once, and the customer does not need telling twice.
+  //
+  // Only for sends that belong to a job. A send with no log - the Settings test
+  // text - is one somebody is deliberately firing, and firing twice to compare
+  // is a reasonable thing to want.
+  if (log && (await recentlySent(to, message))) {
+    const dupe: SendResult = {
+      ok: true,
+      duplicate: true,
+      provider: SMS_PROVIDER,
+      to,
+      detail: "Already sent this exact text to this number moments ago, so it was not sent again.",
+    };
+    console.warn("[sms] suppressed a duplicate", { to, kind: log.kind, quoteId: log.quoteId ?? null });
+    return dupe;
   }
 
   // Two reasons a text waits, and they use one queue: quiet hours (customers
