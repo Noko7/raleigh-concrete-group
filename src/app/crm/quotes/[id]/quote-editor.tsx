@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { dict } from "@/lib/crm/i18n";
-import { dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_HINTS, QUOTE_SECTION_LABELS, STATUS_LABELS, STATUSES, type QuoteSectionField } from "@/lib/crm/constants";
+import { dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_HINTS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, STATUS_LABELS, STATUSES, type QuoteSectionField } from "@/lib/crm/constants";
 import { saveQuote } from "./actions";
 import {
   OptionBuilder,
@@ -329,7 +329,7 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
               ? "They're holding the earlier version and haven't replied. This replaces it: they get a text saying the quote was updated, and the link they already have shows the new one."
               : awaitingReply
                 ? "They already have this quote and haven't replied. Sending again puts a second copy on their phone, so do it if they say the first never arrived."
-                : "We'll text them their quote link, good for 7 days. The price is never in the text."}
+                : `We'll text them their quote link, good for ${QUOTE_TTL_DAYS} days. The price is never in the text.`}
           </p>
           <div className="crm-confirm-row">
             <span>{itemised ? "Price, if they take everything" : "Price"}</span>
@@ -420,8 +420,8 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
             </div>
           )}
           <p className="crm-muted crm-sm crm-editor-hint">
-            Price and all five sections are required to send. Send Quote texts the customer their link, good for 7 days,
-            and marks this Sent. The price itself is never in the text.
+            Price and all five sections are required to send. Send Quote texts the customer their link, good for{" "}
+            {QUOTE_TTL_DAYS} days, and marks this Sent. The price itself is never in the text.
             {itemised
               ? " This quote has line items, so the customer answers each one and their total follows what they picked."
               : ""}

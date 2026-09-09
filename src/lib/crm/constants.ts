@@ -206,7 +206,7 @@ export const QUOTE_SECTION_HINTS: Record<QuoteSectionField, string> = {
 // A sent quote link is good for a week. Long enough for a customer to think
 // it over and talk to a partner, short enough that our price isn't held open
 // while material costs move.
-export const QUOTE_TTL_DAYS = 7;
+export const QUOTE_TTL_DAYS = 10;
 
 /**
  * A quote amount, written the way money is written.

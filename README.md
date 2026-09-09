@@ -330,10 +330,14 @@ Time itself is the host clock, not an NTP query: serverless functions get outbou
 **What a customer text never contains**
 The price. A figure in a text has no scope beside it, gets forwarded and shopped around on its own, and the customer already has a quote page built to explain it - so every customer-facing message carries the link instead. `usd()` in `src/lib/crm/notify.ts` is for `role: "owner"` and `role: "crew"` messages only; check the role on the send before using it. Em dashes are stripped from every outbound text by `noEmDash()` (`src/lib/crm/constants.ts`), applied centrally in `sendSmsResult` so copy assembled from owner-typed content is covered too.
 
-**Quotes: five sections, seven days**
+**Quotes: five sections, ten days**
 Every quote answers Scope, Permits, Demolition and prep, Pour and finish, and Clean up. All five must say something before it can be sent, but "Not applicable" is a valid answer and each field has a one-tap button for it. Quotes written before this change fall back to their old free-text summary.
 
-A sent quote link is good for `QUOTE_TTL_DAYS` (7) days from the last send. Re-sending re-stamps the clock, which is how an expired quote is revived. Expiry only applies while the customer still has a decision to make - once they've accepted, the page is their record of the job and the payment text links back to it.
+A sent quote link is good for `QUOTE_TTL_DAYS` (10) days from the last send. Re-sending re-stamps the clock, which is how an expired quote is revived. Expiry only applies while the customer still has a decision to make - once they've accepted, the page is their record of the job and the payment text links back to it.
+
+It was 7, and customers were going off to collect two or three other quotes and coming back to a dead link - the window was shorter than the shopping-around it was meant to survive. Every place the number appears reads `QUOTE_TTL_DAYS`, including the customer's quote page and both outbound texts, so changing that one constant is the whole change.
+
+**Changing it does not move the quotes already sent.** `quote_expires_at` is a real timestamp written once at send time, so a quote already in somebody's phone keeps the date it was stamped with. `supabase/quote-ttl-10-days.sql` re-stamps the unanswered ones as though the rule had always been 10 days - which also revives any that ran out in the last three days, so read its header before running it.
 
 **Quotes with options: one quote, several answers**
 A quote can be a single price, or a list of **line items** the customer answers one at a time. The

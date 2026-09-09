@@ -78,7 +78,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   // Shown instead of the price, never alongside it: a number on screen next
   // to "this has expired" is an invitation to argue about whether it still
   // stands. Recovering is one phone call, and re-sending the quote from the
-  // CRM puts a fresh seven days on this same link.
+  // CRM puts a fresh QUOTE_TTL_DAYS on this same link.
   if (isQuoteExpired(quote)) {
     return (
       <main className="cq-wrap">

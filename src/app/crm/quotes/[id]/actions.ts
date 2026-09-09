@@ -320,7 +320,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       patch.quote_sent_at = new Date().toISOString();
       patch.quote_followup_sent_at = null;
     }
-    // The link is good for seven days from THIS send. Re-stamped on every
+    // The link is good for QUOTE_TTL_DAYS from THIS send. Re-stamped on every
     // send, not just the first, so re-sending is what revives an expired
     // quote - which is the whole recovery path for one that ran out.
     patch.quote_expires_at = new Date(Date.now() + QUOTE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();

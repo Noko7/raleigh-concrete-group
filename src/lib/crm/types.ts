@@ -102,7 +102,7 @@ export type Quote = {
   quote_prep: string | null;
   quote_pour: string | null;
   quote_cleanup: string | null;
-  // Seven days from the moment the quote was last sent. Null on quotes that
+  // QUOTE_TTL_DAYS from the moment the quote was last sent. Null on quotes that
   // predate expiry, which stay valid.
   quote_expires_at: string | null;
   // Photos staff add: internal reference shots, and the before/after pair a
