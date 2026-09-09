@@ -241,7 +241,7 @@ Customer-facing text settings:
 **Daily reminders (Vercel Cron)**
 Two daily crons, both declared in `vercel.json` and both free on the Hobby plan (it allows up to two cron jobs, each once a day). Both share the same `CRON_SECRET` env var in Vercel - sent as a Bearer token, and the endpoints reject anything else.
 
-- `/api/cron/reminders` (14:00 UTC, ~10am ET) - flushes anything quiet hours held overnight, then four jobs: the 2-day customer confirmation text for a booked job; the crew countdown (3 days out, day before, morning of); one text to each assigned contractor listing **all** of their leads nobody has quoted 12+ hours after they came in (and one to the owner spanning everybody, including the unassigned pile); and a follow-up text to a customer who hasn't accepted or declined a sent quote within 48 hours. Confirming a job flips it to **Confirmed**; "need to reschedule" texts the owner + contractor.
+- `/api/cron/reminders` (13:00 UTC, 9am EDT / 8am EST) - flushes anything quiet hours held overnight, then four jobs: the 2-day customer confirmation text for a booked job; the crew countdown (3 days out, day before, morning of); one text to each assigned contractor listing **all** of their leads nobody has quoted 12+ hours after they came in (and one to the owner spanning everybody, including the unassigned pile); and a follow-up text to a customer who hasn't accepted or declined a sent quote within 48 hours. Confirming a job flips it to **Confirmed**; "need to reschedule" texts the owner + contractor.
 - `/api/cron/visit-reminders` (22:00 UTC, ~6pm ET) - kept separate because it needs an evening run time; also flushes the held queue on its way past: texts both the customer and the assigned contractor (with the address) about tomorrow's in-person quote visit.
 
 Since both crons only run once a day, a 12h or 48h threshold can be noticed up to ~24h late - an acceptable tradeoff for staying on the free plan.
@@ -304,7 +304,17 @@ Quiet hours are a courtesy to customers, not a shift pattern. A text to a custom
 
 **You and the crew get everything, any hour.** Lead alerts, crew reminders, assignment texts and contractor logins are never held - you are on the job and the news is the point. The gate keys off the send's `role`: `customer` waits, `owner` and `crew` don't, and a send with no message-log entry at all (a contractor's login text, the Settings test) is staff-facing by definition and goes straight out.
 
-The queue drains from three places, because a serverless app has nothing sitting around to wake up at 8am: both daily crons flush it first thing, and so does any text sent during business hours. In practice a held message goes out on the first activity after 8am, and the 10am cron is the floor if the morning is quiet. If you want it delivered at 8:00 exactly, that is a third cron (`/api/cron/reminders` at `0 12 * * *`) - Vercel's Hobby plan allows two, so it needs a plan that allows three.
+The queue drains from three places, because a serverless app has nothing sitting around to wake up at 8am: both daily crons flush it first thing, and so does any text sent during business hours. In practice a held message goes out on the first activity after 8am, and the morning cron is the floor if nobody touches the app.
+
+**If held texts are landing later than 8am, this is why - it is not a timezone bug.** The hold itself is correct (`send_after` is 8:00 Eastern, checked across both DST changes); what is late is whatever comes along to deliver it. The morning cron is the backstop and a cron schedule is UTC, so it cannot sit on 8am Eastern all year: `0 13 * * *` is 8am in winter and 9am in summer, and an hour earlier would be 7am in winter, inside quiet hours, where the flush rightly refuses to send and leaves them until evening.
+
+Landing on 8am year-round needs a drain that runs more than once a day, which is what `/api/cron/drain` is for. It is written and inert. On a plan that allows a third cron, add it to `vercel.json` and held texts leave within fifteen minutes of 8am whatever the season:
+
+```json
+{ "path": "/api/cron/drain", "schedule": "*/15 * * * *" }
+```
+
+Vercel's Hobby plan allows two cron jobs, each once a day (and fires them within the hour rather than on the minute), so on Hobby the 13:00 run is the best available and the opportunistic flush covers the rest - any text the office or crew sends after 8am takes the overnight queue out with it.
 
 One customer text ignores quiet hours: **the quote-request receipt**. They pressed the button seconds ago and are looking at a page that says we'll text them; holding that until 8am reads as the form having failed, which is how somebody at 10pm fills it in twice or calls the next contractor. Nothing that arrives out of the blue belongs in that category. The exception is `{ force: true }` on `sendSms`/`sendSmsResult`, so grepping for it shows the whole list - one call site.
 

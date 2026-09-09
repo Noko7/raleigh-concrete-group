@@ -27,7 +27,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Daily Vercel Cron (14:00 UTC, so 10am ET / 9am EST). Five jobs:
+// Daily Vercel Cron (13:00 UTC, so 9am EDT / 8am EST). Five jobs:
 //   0. Send anything quiet hours held overnight (see flushHeldMessages).
 //   1. Ask the customer to confirm a job that's ~2 days out.
 //   2. Remind the assigned crew 3 days out, the day before, and the morning of.
@@ -42,6 +42,18 @@ export const dynamic = "force-dynamic";
 // its threshold before this notices, which is an acceptable tradeoff for
 // staying on the free plan. See /api/cron/visit-reminders for the other daily
 // cron (night-before quote-visit reminders, which need an evening run time).
+//
+// WHY 13:00 AND NOT SOMETHING THAT LANDS ON 8AM. Quiet hours hold a customer
+// text until 8am Eastern, and it leaves when something drains the queue. This
+// run is the floor under that, so the earlier it is the closer a held text
+// lands to the 8am it was promised. It cannot be exact: a cron schedule is UTC
+// and Eastern moves an hour twice a year, so 13:00 is 8am in winter and 9am in
+// summer, and one hour earlier (12:00) would be 7am in winter - inside quiet
+// hours, where the flush would correctly refuse to send the customer texts and
+// leave them for the evening run.
+//
+// Landing on 8am all year needs a drain that runs more than once a day. That
+// is /api/cron/drain, which is written and inert; see the note in that file.
 // Protected by CRON_SECRET (Vercel sends it as a Bearer token).
 function authorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET || "";
