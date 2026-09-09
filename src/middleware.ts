@@ -235,5 +235,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|images|robots.txt|sitemap.xml).*)"],
+  // The site icons are excluded alongside the other static assets: Google reads
+  // them from the home page's <link rel="icon"> to draw the favicon in a search
+  // result, and there is nothing for auth or rate limiting to do on them.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|images|robots.txt|sitemap.xml).*)",
+  ],
 };
