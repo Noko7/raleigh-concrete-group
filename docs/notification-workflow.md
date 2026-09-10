@@ -93,7 +93,34 @@ job (see ⑥). Customers are not reminded more than once.
 │    preferred days + job link     │
 └──────────────────────────────────┘
                  │
-        ── crew checks their own schedule ──
+   ── or they never touch the link and say yes on the phone ──
+                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ ③c APPROVED ON A CALL                            status: approved   │
+│    "Approved over the phone?" on either job page. Staff record a    │
+│    yes that happened out loud, tick off which optional lines they   │
+│    took, and — usually — set the day agreed on the same call.       │
+│                                                                     │
+│    The customer's own picker will not offer a day inside a week     │
+│    (that floor stops a customer committing an unchecked crew). This │
+│    form has no floor: any day from today, because the person        │
+│    filling it in IS the crew, and they have just checked.           │
+├─────────────────────────────────────────────────────────────────────┤
+│ CUSTOMER  With a day agreed → the ④ confirmation below, which says  │
+│            the day and time. Without one → "thanks for approving    │
+│            over the phone", what they're down for, and that we'll   │
+│            text to confirm the date. Can be turned off on the form  │
+│            when they're still on the phone.                         │
+│ OWNER     "APPROVED BY PHONE" + amount + what they took + the day   │
+│            + "Recorded by <name>, not by the customer's own link."  │
+│ CREW      Same, unless they were the one who recorded it.           │
+│ CALENDAR  Booked in the same submit when a day was agreed.          │
+│                                                                     │
+│ The activity log never calls this a customer click: it reads        │
+│ "Approval recorded over the phone by <name>" for the office and     │
+│ "Approval recorded from a phone call" for the crew.                 │
+└─────────────────────────────────────────────────────────────────────┘
+                 │
                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │ ④ CREW CONFIRMS THE DAY + START TIME            status: Scheduled   │
@@ -356,8 +383,14 @@ into a ten-part text.
 
 ## Owner alerts
 
-**You are texted for:** new lead · customer approved · customer declined · date
-confirmed · date moved · customer couldn't confirm · job completed · paid.
+**You are texted for:** new lead · customer approved · **approval recorded from a
+phone call** · customer declined · date confirmed · date moved · customer
+couldn't confirm · job completed · paid.
+
+The phone-call one is its own alert rather than a copy of "customer approved",
+and it names whoever wrote it down. An approval nobody watched the customer give
+is the one the office may want to ask about, so it must never arrive looking
+like a click.
 
 **You are not texted for:** assigning a contractor · sending a quote · editing a
 price, summary or notes · dragging a card between early pipeline columns ·
@@ -377,6 +410,7 @@ minus whoever performed the action.
 | Password reset by owner | Same format, new temporary password |
 | Assigned a job | Full brief: customer, phone, service, address, timing, job link, "sign in to open" |
 | Customer approves | Same brief + the customer's preferred days + "confirm the day that works" |
+| Approval recorded on a call | APPROVED BY PHONE + amount + what they took + the day agreed, and who recorded it. Not sent to the person who recorded it |
 | Date confirmed / moved | JOB BOOKED or DATE CHANGED + brief |
 | **3 days / 1 day / morning of** | **JOB REMINDER + brief + "call Noah right away if you can't make it"** |
 | Customer declines | Declined |
@@ -394,8 +428,9 @@ back to the main business line.
 ## One job page for the crew
 
 A contractor has exactly one screen per job: **`/job/<token>`**, the same URL
-their texts link to. It carries everything they can do — quote it, confirm the
-day and time, mark it done — in their own language, built for a phone.
+their texts link to. It carries everything they can do — quote it, record an
+approval the customer gave on the phone, confirm the day and time, mark it done
+— in their own language, built for a phone.
 
 A contractor who lands on `/crm/quotes/<id>` is redirected there, and pipeline
 cards link there for them. `/crm/quotes/<id>` is the owner's view. Previously

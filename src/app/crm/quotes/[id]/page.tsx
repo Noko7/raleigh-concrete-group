@@ -23,6 +23,7 @@ import { AgreementList } from "../../agreements/agreement-list";
 import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
 import { PhotoUpload } from "../../photo-upload";
+import { AcceptOffline } from "./accept-offline";
 import { CompleteCard } from "./complete-card";
 import { MessageLog } from "./message-log";
 import { QuoteEditor } from "./quote-editor";
@@ -94,6 +95,17 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const minJobDate = todayYmd();
   // Scheduling only makes sense once the customer has actually said yes.
   const showSchedule = quote.customer_response === "accepted" && quote.status !== "lost";
+  // ...and until they have, the office needs the other way of saying yes: the
+  // customer who agreed on the phone and never touched their link. Offered only
+  // on a quote that has actually gone out and carries a price, so what is being
+  // approved is something the customer has in front of them.
+  const showOfflineAccept =
+    !quote.customer_response &&
+    quote.status !== "lost" &&
+    quote.status !== "completed" &&
+    quote.status !== "paid" &&
+    Boolean(quote.quote_sent_at) &&
+    quote.quote_amount != null;
 
   // Same gate for the money: there is nothing to collect against a price the
   // customer hasn't agreed to.
@@ -348,6 +360,23 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               quote_cleanup: quote.quote_cleanup,
             }}
           />
+
+          {showOfflineAccept && (
+            <AcceptOffline
+              id={quote.id}
+              customerName={quote.name}
+              amount={quote.quote_amount}
+              options={options.map((o) => ({
+                id: o.id,
+                title: o.title,
+                description: o.description,
+                amount: Number(o.amount),
+                required: o.required,
+              }))}
+              minDate={minJobDate}
+              locale={locale}
+            />
+          )}
 
           {showSchedule && (
             <ScheduleCard

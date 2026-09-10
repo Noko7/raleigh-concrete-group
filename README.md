@@ -79,7 +79,7 @@ All of it runs over Supabase's REST/Auth APIs (no extra packages).
 **What's included**
 - **Login + roles** (`/crm/login`): owners see everything; contractors see only jobs assigned to them (enforced by Postgres Row-Level Security).
 - **Quotes dashboard** (`/crm`): filter by status / assignee / search; pipeline `New → Quoted → Booked → Confirmed → Complete` (plus `Lost`).
-- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos via short-lived signed URLs**, status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, copyable share links, and a **Mark complete + paid** button.
+- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos via short-lived signed URLs**, status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, copyable share links, **record an approval the customer gave on the phone** (and book the day agreed on that call), and a **Mark complete + paid** button.
 - **Contractors** (`/crm/contractors`, owner only): **text an invite** and let them set up their own login, edit their details, reset a password, deactivate/reactivate, or delete.
 - **Settings** (`/crm/settings`): your name + alert number; owners also pick the **primary contractor** that new quotes auto-assign to.
 - **Customers** (`/crm/customers`): quotes auto-grouped by phone/email with won-value totals.
@@ -96,6 +96,7 @@ status drags - ever texts the customer.
 1. **New** - quote arrives, auto-assigned to your primary contractor. Owner + contractor get the full brief; the customer gets an acknowledgement (in-person includes their visit date/time).
 2. You set a price + description and hit **Send Quote** → customer gets their quote link (**Quoted**).
 3. Customer approves and picks **up to 3 days that suit them, each with a start time** → they're told we'll confirm shortly; owner + contractor are told it **needs a date**, with the hours they asked for (**Needs scheduling**). Declining notifies owner + contractor (**Lost**).
+   - **Or they say yes on the phone and never open the link.** "Approved over the phone?" on either job page records it: which optional lines they took, and the day agreed on that same call. Owner + crew get an **APPROVED BY PHONE** alert naming whoever wrote it down, and the customer gets the written version unless you turn that off. See "Approved on a call" below.
 4. The assigned contractor (or an owner) confirms one of those days on the job page → **this is what books it**: the customer is texted their date, the crew gets the brief, and it lands on Google Calendar (**Scheduled**).
 5. Changing that date later texts the customer that it moved, re-notifies the crew, and updates the calendar. The 2-day reminder resets so they still get one.
 6. Two days before, a daily cron texts the customer a confirm link. "Need to reschedule" pings owner + contractor.
@@ -104,6 +105,35 @@ status drags - ever texts the customer.
 Why the split at step 3/4: letting the customer book a day outright committed
 the crew to dates nobody had checked. They now propose, the crew disposes - so
 scheduling is settled in one text each way instead of a phone-tag loop.
+
+**Approved on a call**
+Most customers say yes out loud. Until this existed, the only hand that could
+mark a quote approved was the customer's own, through their link - so a verbal
+yes left the crew sending a *second* quote purely to get a button pressed, and
+that second quote puts the **customer's** date picker in front of them. That
+picker will not offer a day inside a week, so a customer who agreed to Thursday
+is shown a calendar starting the following Tuesday, and whatever comes back is
+not the day anyone agreed to.
+
+**CRM → job page → "Approved over the phone?"** (and the same card on the crew's
+own `/job/<token>`) is the other way in:
+- Tick off which optional line items they took. The agreed price follows the
+  answers, exactly as it does when they answer on their own page.
+- Set the day and start time you agreed on. **Any day from today** - the
+  seven-day floor governs what a *customer* may request unprompted, and the
+  person filling this in is the crew, who have just checked their own week.
+  It books the job in the same submit: customer text, crew brief, Google
+  Calendar, reminder countdown.
+- Leave the day off if it's still open, and the ordinary schedule card takes
+  over.
+- The customer is texted a written record of the call by default. Turn it off if
+  you're still on the phone to them.
+
+It is never dressed up as a customer click. The activity log reads "Approval
+recorded over the phone by <name>" in the office's audit trail and "Approval
+recorded from a phone call" on the crew's, the owner alert says who recorded it,
+and a quote that has already been answered - either way - is refused rather than
+overwritten.
 
 **Owner alerts** are limited to the moments worth interrupting you: new lead,
 approved, declined, date confirmed or moved, can't-confirm, completed, and paid.

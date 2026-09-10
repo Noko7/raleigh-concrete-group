@@ -1498,6 +1498,137 @@ export async function recordCustomerResponse(
   return { ok: true, accepted, declined };
 }
 
+// ── The customer said yes on the phone ──────────────────────────────────────
+// The other half of recordCustomerResponse above, and deliberately a different
+// function rather than a flag on it.
+//
+// That one is the customer's own hand: it runs behind the public token with the
+// service role, checks the quote hasn't expired, and refuses a second answer
+// because the person tapping might be tapping twice. This one is a member of
+// staff writing down something that happened out loud, so it runs as THEM -
+// pgUser, not pgAdmin - and RLS is what keeps a contractor to their own jobs.
+//
+// Everything else is kept identical on purpose, because the rest of the app
+// reads one pair of columns for "have they agreed": customer_response and
+// status. A verbal yes that wrote a third state would have to be taught to the
+// calendar, the money page, the reminders and both job pages one at a time.
+// It writes the same two values and the whole system turns on, exactly as it
+// does when they tap the link themselves. What is different is the audit trail:
+// the event carries who recorded it and that it came by phone, so nothing ever
+// claims the customer clicked something they didn't.
+export async function recordOfflineAcceptance(
+  session: Session,
+  id: string,
+  input: {
+    // One answer per optional line item, keyed by option id - the crew reading
+    // the list back down the phone. Same rule as the customer's own path: on an
+    // itemised quote every optional line needs a yes or a no, because silence
+    // is not consent to bill for a sidewalk.
+    options?: Record<string, OptionChoice>;
+    // The day and start time they agreed to, if they got that far in the same
+    // conversation. Recorded here as what the customer asked for; booking it is
+    // confirmSchedule's job, the same as on every other path.
+    agreedDate?: string | null;
+    agreedTime?: string | null;
+  },
+): Promise<{ ok: boolean; error?: string; accepted?: QuoteOption[]; declined?: QuoteOption[] }> {
+  const q = await getQuote(session, id);
+  if (!q) return { ok: false, error: "You don't have access to this quote." };
+
+  // Already answered. Not "duplicate: silently fine" like the customer's own
+  // double-tap: a person is typing this in, and if the answer on file
+  // disagrees with the call they have just had, somebody needs to look at it
+  // rather than have it overwritten.
+  if (q.customer_response === "accepted") {
+    return { ok: false, error: "This quote is already marked approved." };
+  }
+  if (q.customer_response === "declined" || q.status === "lost") {
+    return {
+      ok: false,
+      error: "This quote is marked declined. Ask the office to reopen it before recording an approval.",
+    };
+  }
+  // Writing "approved" onto a finished job would drag its status back to
+  // approved and lose the completion behind it. Whatever needs correcting there
+  // is not this form's to correct.
+  if (q.status === "completed" || q.status === "paid") {
+    return { ok: false, error: "This job is already closed out. Nothing left to approve." };
+  }
+  // There has to be a number for them to have agreed to.
+  if (q.quote_amount == null || Number(q.quote_amount) <= 0) {
+    return { ok: false, error: "Put a price on this quote before recording an approval." };
+  }
+  // Deliberately NOT checked: whether the quote has expired. The link the
+  // customer is holding may have run out, but they have just said yes on the
+  // phone to a price a member of staff has in front of them, and refusing that
+  // would be the app arguing with a conversation it wasn't part of.
+
+  const options = await listQuoteOptions(session, id);
+  const patch: Partial<Quote> = {
+    customer_response: "accepted",
+    customer_responded_at: new Date().toISOString(),
+    status: "approved",
+  };
+  let accepted: QuoteOption[] = [];
+  let declined: QuoteOption[] = [];
+
+  if (options.length > 0) {
+    const answers = input.options ?? {};
+    const unanswered = options.filter((o) => !o.required && !answers[o.id]);
+    if (unanswered.length > 0) {
+      return { ok: false, error: "Mark each optional line yes or no before recording the approval." };
+    }
+    accepted = options.filter((o) => o.required || answers[o.id] === "accepted");
+    declined = options.filter((o) => !o.required && answers[o.id] === "declined");
+    if (accepted.length === 0) {
+      return { ok: false, error: "They said no to every line. That's a declined quote, not an approved one." };
+    }
+    // The price follows the answers, same as the customer's own path.
+    patch.quote_amount = optionsTotal(accepted);
+  }
+
+  // A day agreed on the call is recorded as what the customer asked for, which
+  // is what it is. The seven-day floor is not applied and must not be: that
+  // rule exists to stop a customer committing a crew to a date nobody checked,
+  // and the person entering this IS the crew. They agreed to Thursday with the
+  // customer on the phone; the app's job is to write down Thursday.
+  if (input.agreedDate && ISO_DATE.test(input.agreedDate)) {
+    patch.preferred_dates = [input.agreedDate];
+    const time = (input.agreedTime ?? "").trim().toUpperCase().replace(/\s+/, " ");
+    patch.preferred_times = [time && TIME_RE.test(time) ? time : null];
+  }
+
+  const { quote: updated, error } = await updateQuoteResult(session, id, patch);
+  // preferred_times predates nothing here, but it is the one column in this
+  // patch that a database can be missing (supabase/appointments.sql), and the
+  // retry costs nothing next to losing a recorded approval over an hour.
+  if (!updated && patch.preferred_times !== undefined) {
+    const { preferred_times: _dropped, ...withoutTimes } = patch;
+    const retry = await updateQuoteResult(session, id, withoutTimes);
+    if (!retry.quote) return { ok: false, error: retry.error ?? error ?? "Could not record that approval." };
+  } else if (!updated) {
+    return { ok: false, error: error ?? "Could not record that approval." };
+  }
+
+  // Stamp the line items with their answers, after the quote row and
+  // best-effort for the same reason the customer's path does it in that order:
+  // the decision is recorded even if this second write fails.
+  const stamp = new Date().toISOString();
+  for (const [response, rows] of [
+    ["accepted", accepted],
+    ["declined", declined],
+  ] as const) {
+    if (rows.length === 0) continue;
+    await pgUser(`quote_options?id=in.(${rows.map((o) => o.id).join(",")})`, session.accessToken, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ customer_response: response, responded_at: stamp }),
+    }).catch(() => {});
+  }
+
+  return { ok: true, accepted, declined };
+}
+
 // Confirm (or move) the work day. Runs as the logged-in user so RLS keeps a
 // contractor to their own assigned jobs, which is what lets the crew - not just
 // the owner - lock in a date. Returns the previous date so the caller can tell a

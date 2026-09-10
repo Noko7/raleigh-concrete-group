@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
+import { todayYmd } from "@/lib/crm/clock";
 import {
   QUOTE_SECTION_FIELDS,
   QUOTE_SECTION_LABELS,
   QUOTE_TTL_DAYS,
   TIME_RE,
   noEmDash,
+  optionAmount,
   optionsTotal,
   visitDateOf,
 } from "@/lib/crm/constants";
@@ -16,12 +18,14 @@ import { STATUSES, type Status } from "@/lib/crm/env";
 import { removeQuoteFromCalendar, syncQuoteToCalendar } from "@/lib/crm/gcal";
 import {
   alertOwner,
+  notifyApprovalRecorded,
   notifyAssignment,
   notifyBooked,
   notifyBookingCancelled,
   notifyComplete,
   notifyCustomerRescheduled,
   notifyCustomerScheduled,
+  notifyOfflineApproval,
   notifyQuoteReady,
   notifyQuoteSent,
   notifyQuoteUpdated,
@@ -37,6 +41,7 @@ import {
   clearAppointment,
   confirmSchedule,
   conflictMessage,
+  countJobsOn,
   findJobConflict,
   findVisitConflict,
   getMessage,
@@ -44,12 +49,15 @@ import {
   getStaffById,
   lastMessageOf,
   listQuoteOptions,
+  MAX_JOBS_PER_DAY,
   optionsAsDrafts,
   parseQuoteOptions,
+  recordOfflineAcceptance,
   sameOptions,
   saveQuoteOptions,
   updateQuote,
   updateQuoteResult,
+  type OptionChoice,
 } from "@/lib/crm/queries";
 import { settleJobIfPaid } from "@/lib/crm/payments";
 import type { Quote } from "@/lib/crm/types";
@@ -511,6 +519,174 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
   // The contractor's own job page schedules through this action too.
   revalidatePath("/job/[token]", "page");
   return { ok: true, message: moved ? "Date changed and everyone notified." : "Date confirmed and customer texted." };
+}
+
+
+// The customer said yes on the phone, and often said when in the same breath.
+//
+// Everything downstream of an approval - the schedule card, the money, the
+// deposit, the calendar - waits on customer_response being "accepted", and
+// until now the only hand that could write it was the customer's own, through
+// the link. So a verbal yes left the crew with two bad options: chase the
+// customer to press a button they have already answered out loud, or send a
+// fresh quote for them to accept, which puts the customer's own date picker in
+// front of them - and that picker will not offer anything sooner than
+// LEAD_TIME_DAYS. A customer who agreed to Thursday is then shown a calendar
+// that starts a week on Tuesday, and the crew get a date that isn't the one
+// anybody agreed to.
+//
+// This is the other hand. It records the approval as staff, with who recorded
+// it and how, and takes the agreed day in the same submit - because "approve
+// it, then find the schedule card, then book it" is two screens for one
+// conversation, and the second half is the half that gets forgotten.
+//
+// The seven-day floor is not applied here, deliberately. That rule governs what
+// a CUSTOMER may request unprompted, so the business isn't committed to a date
+// nobody has checked against the crew's week. On this form the person typing IS
+// the crew, or the office, and they have just checked. Any day from today.
+export async function acceptOffline(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { ok: false, error: "Missing quote id." };
+  const date = String(formData.get("date") ?? "").slice(0, 10);
+  const time = String(formData.get("time") ?? "").slice(0, 10);
+  const booking = /^\d{4}-\d{2}-\d{2}$/.test(date);
+  // Off means they agreed verbally and are still on the phone, or asked us not
+  // to text. The approval and the booking are recorded either way; this only
+  // decides whether the customer gets the written version of the conversation.
+  const tellCustomer = String(formData.get("notify") ?? "yes") !== "no";
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this quote." };
+
+  // Which optional lines they took, read off the same JSON shape the option
+  // builder posts. Anything that isn't a uuid mapped to a real answer is
+  // dropped here rather than trusted through to the database.
+  const choices: Record<string, OptionChoice> = {};
+  try {
+    const raw = JSON.parse(String(formData.get("options") ?? "{}")) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(raw)) {
+      if (!/^[0-9a-f-]{36}$/i.test(key)) continue;
+      if (value === "accepted" || value === "declined") choices[key] = value;
+    }
+  } catch {
+    return { ok: false, error: "Could not read the line item answers. Reload the page and try again." };
+  }
+
+  // The day is checked BEFORE the approval is written, not after. Both halves
+  // of this form are one action to the person filling it in, and a clash found
+  // afterwards would leave the quote approved on a screen that has already
+  // navigated away from the message explaining why the date didn't take.
+  if (booking) {
+    if (!TIME_RE.test(time.trim())) return { ok: false, error: "Pick the start time you agreed on." };
+    if (date < todayYmd()) return { ok: false, error: "That day has already passed. Pick today or later." };
+    if ((await countJobsOn(date, id)) >= MAX_JOBS_PER_DAY) {
+      return { ok: false, error: "Another job is already booked that day. Record the approval without a date, or agree another day." };
+    }
+    const clash = await findJobConflict(current.assigned_to, date, id);
+    if (clash) return { ok: false, error: conflictMessage(clash) };
+  }
+
+  const recorded = await recordOfflineAcceptance(session, id, {
+    options: choices,
+    agreedDate: booking ? date : null,
+    agreedTime: booking ? time : null,
+  });
+  if (!recorded.ok) return { ok: false, error: recorded.error ?? "Could not record that approval." };
+
+  const chosen = {
+    accepted: (recorded.accepted ?? []).map((o) => ({ title: o.title, amount: optionAmount(o) })),
+    declined: (recorded.declined ?? []).map((o) => ({ title: o.title, amount: optionAmount(o) })),
+  };
+  // What the row says now: the options may have repriced it, and every message
+  // below quotes the figure the customer actually agreed to.
+  const amount = recorded.accepted && recorded.accepted.length > 0 ? optionsTotal(recorded.accepted) : current.quote_amount;
+
+  await addEvent(session, id, "customer_accepted", {
+    // The one thing this event has to carry that the customer's own never does:
+    // it was recorded by staff, from a conversation. Read back by the activity
+    // log on both job pages, so nothing on screen ever claims they clicked.
+    channel: "phone",
+    recorded_by: session.staff.full_name || session.staff.email || "Staff",
+    preferred_dates: booking ? [date] : null,
+    preferred_times: booking ? [time] : null,
+    accepted_options: (recorded.accepted ?? []).map((o) => o.title),
+    declined_options: (recorded.declined ?? []).map((o) => o.title),
+    total: amount ?? null,
+  });
+
+  const contractor = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
+  const info = {
+    id,
+    name: current.name,
+    phone: current.phone,
+    service: current.service,
+    address: current.address,
+    quote_amount: amount,
+    job_token: current.job_token,
+    public_token: current.public_token,
+    preferred_dates: booking ? [date] : null,
+    preferred_times: booking ? [time] : null,
+    chosen,
+  };
+
+  let booked = false;
+  // Why the day didn't take, when one was asked for. The conflicts were ruled
+  // out before anything was written, so anything left is the database refusing
+  // the write - and the crew need to be told that in the same breath as "the
+  // approval went in", or they leave the page believing the job is booked.
+  let bookingError: string | null = null;
+  const withDate = { ...info, scheduled_date: booking ? date : null, scheduled_time: booking ? time : null };
+  if (booking) {
+    // Same call the schedule card makes, so the booking is identical however it
+    // was reached: the customer's text, the crew brief, Google Calendar and the
+    // reminder countdown all come from here.
+    const result = await confirmSchedule(session, id, date, time);
+    if (result.ok && !result.unchanged) {
+      booked = true;
+      await addEvent(session, id, "date_confirmed", { from: null, from_time: null, to: date, to_time: time });
+      if (tellCustomer) await notifyCustomerScheduled(withDate).catch(() => {});
+      await notifyBooked(withDate, contractor?.phone, null, null, session.staff.phone).catch(() => {});
+      await syncQuoteToCalendar(id);
+    } else if (!result.ok) {
+      bookingError = result.error ?? "the date could not be saved";
+    }
+  }
+
+  // The office always hears, and always hears that it came by phone. Even on a
+  // job that booked in the same submit: JOB BOOKED alone reads exactly like a
+  // customer who tapped the link, and the difference is the whole point.
+  await notifyOfflineApproval(booked ? withDate : info, contractor?.phone, {
+    recordedBy: session.staff.full_name || session.staff.email || "a teammate",
+    actorPhone: session.staff.phone,
+    booked,
+  }).catch(() => {});
+
+  // The customer's own copy. Skipped when the day was booked in the same
+  // submit, because notifyCustomerScheduled has just confirmed both halves of
+  // the conversation in one text.
+  if (tellCustomer && !booked) await notifyApprovalRecorded(info).catch(() => {});
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+  revalidatePath("/crm/calendar");
+  revalidatePath("/job/[token]", "page");
+
+  // The approval is written either way, so this is never an error - but a form
+  // that asked for a day and didn't get one has to say so where the person who
+  // asked is looking.
+  if (bookingError) {
+    return { ok: true, message: `Approval recorded, but the day was NOT booked: ${bookingError} Set it on the schedule card below.` };
+  }
+  const texted = tellCustomer ? " The customer has been texted." : "";
+  return {
+    ok: true,
+    message: booked
+      ? `Approval recorded and the day is booked.${texted}`
+      : `Approval recorded and the job is ready to schedule.${texted}`,
+  };
 }
 
 // An online request arrives with a slot the customer offered in case their job

@@ -3083,3 +3083,111 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .qp-row { grid-template-columns: 1fr auto; row-gap: 0.2rem; }
   .qp-row-when { grid-column: 1; }
 }
+
+/* ── "They said yes on the phone" ────────────────────────────────────────────
+   One card on two pages of different colours: the office's dark CRM column and
+   the crew's white job card. The dark values are the base and `-light` flips
+   the handful that actually differ, rather than two stylesheets for one form.
+
+   It reads as a quieter card than the ones next to it on purpose. Approving a
+   quote in the customer's name is the rarer answer and the one with the most
+   behind it, so it should not sit there looking like the obvious next tap. */
+.ao {
+  background: var(--crm-surface); border: 1px solid var(--crm-border);
+  border-radius: 0.9rem; padding: 1.25rem; margin-bottom: 1.1rem;
+}
+.ao-light {
+  background: #fff; border: 2px solid #e2e5ea; border-radius: 0.9rem;
+  padding: 1.1rem 1.15rem; margin-bottom: 1.4rem;
+}
+.ao-title { font-family: var(--font-headline), sans-serif; font-size: 1.3rem; letter-spacing: 0.01em; margin-bottom: 0.35rem; }
+.ao-light .ao-title { font-family: inherit; font-weight: 800; font-size: 1.05rem; }
+.ao-lead { color: var(--crm-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 0.8rem; }
+.ao-light .ao-lead { color: #4b5563; }
+.ao-open {
+  background: none; border: 1px solid var(--crm-border); border-radius: 999px;
+  color: var(--crm-text); font: inherit; font-weight: 700; font-size: 0.88rem;
+  padding: 0.55rem 1.1rem; cursor: pointer; min-height: 44px;
+}
+.ao-open:hover { border-color: var(--crm-accent); color: var(--crm-accent); }
+.ao-light .ao-open { border-color: #d1d5db; color: #374151; }
+.ao-light .ao-open:hover { border-color: var(--amber); color: var(--amber-dark); }
+
+.ao-form { display: flex; flex-direction: column; gap: 0.85rem; }
+.ao-label { font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--crm-muted); margin-bottom: 0.45rem; }
+.ao-light .ao-label { color: #6b7280; }
+.ao-options { display: flex; flex-direction: column; gap: 0.4rem; }
+.ao-opt {
+  display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 0.7rem;
+  padding: 0.55rem 0.7rem; border-radius: 0.5rem; background: var(--crm-surface-solid); font-size: 0.9rem;
+}
+.ao-light .ao-opt { background: #faf8f4; }
+.ao-opt-title { font-weight: 700; min-width: 0; }
+.ao-opt-amount { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ao-opt-tag { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--crm-muted); white-space: nowrap; }
+.ao-light .ao-opt-tag { color: #6b7280; }
+.ao-opt-pick { display: flex; gap: 0.35rem; }
+/* Both answers are always visible and neither is preselected: an untouched row
+   has to look untouched, or "they didn't say" quietly becomes "they said no". */
+.ao-yes, .ao-no {
+  background: none; border: 1px solid var(--crm-border); border-radius: 999px;
+  color: var(--crm-text); font: inherit; font-weight: 700; font-size: 0.8rem;
+  padding: 0.4rem 0.75rem; cursor: pointer; min-height: 40px; white-space: nowrap;
+}
+.ao-light .ao-yes, .ao-light .ao-no { border-color: #d1d5db; color: #374151; }
+.ao-yes.ao-on { background: #16a34a; border-color: #16a34a; color: #fff; }
+.ao-no.ao-on { background: rgba(148, 163, 184, 0.35); border-color: var(--crm-border); }
+.ao-light .ao-no.ao-on { background: #e5e7eb; border-color: #9ca3af; color: #374151; }
+.ao-total { font-size: 0.9rem; color: var(--crm-muted); margin-top: 0.25rem; }
+.ao-light .ao-total { color: #4b5563; }
+.ao-total strong { font-variant-numeric: tabular-nums; }
+
+.ao-check { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.88rem; cursor: pointer; }
+.ao-check input { margin-top: 0.2rem; width: 18px; height: 18px; flex: none; }
+.ao-check em { display: block; font-style: normal; opacity: 0.72; font-size: 0.8rem; margin-top: 0.15rem; }
+
+.ao-when { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: flex-start; }
+.ao-time { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; font-weight: 700; color: var(--crm-muted); }
+.ao-light .ao-time { color: #374151; font-weight: 800; font-size: 0.85rem; }
+.ao-time input[type="time"] {
+  padding: 0.65rem 0.7rem; border: 1px solid var(--crm-border); border-radius: 0.6rem;
+  font: inherit; font-weight: 600; background: var(--crm-surface-solid); color: var(--crm-text); min-height: 48px;
+}
+.ao-light .ao-time input[type="time"] { border-color: #d1d5db; background: #fff; color: #1f2328; }
+.ao-date {
+  flex: 1; min-width: 150px; padding: 0.7rem; border: 1px solid var(--crm-border); border-radius: 0.6rem;
+  font: inherit; background: var(--crm-surface-solid); color: var(--crm-text); min-height: 48px;
+}
+.ao-light .ao-date { border-color: #d1d5db; background: #fff; color: #1f2328; }
+/* The day spelled back out under the picker (DateField) is styled for the white
+   card, so on the dark one it needs a colour that can be read off the surface. */
+.ao:not(.ao-light) .jd-echo { color: var(--crm-muted); }
+.ao .jd { flex-basis: 100%; }
+
+.ao-warn {
+  font-size: 0.82rem; line-height: 1.5; padding: 0.6rem 0.7rem; border-radius: 0.5rem;
+  border: 1px solid rgba(194, 104, 42, 0.45); background: rgba(194, 104, 42, 0.1); color: inherit;
+}
+.ao-light .ao-warn { background: rgba(194, 104, 42, 0.07); }
+.ao-acts { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.ao-go {
+  flex: 1; background: #16a34a; color: #fff; border: none; border-radius: 999px;
+  padding: 0.7rem 1.2rem; font: inherit; font-weight: 800; cursor: pointer; min-height: 48px;
+}
+.ao-go:hover { background: #15803d; }
+.ao-go:disabled { opacity: 0.5; cursor: default; }
+.ao-cancel { background: none; border: none; padding: 0.4rem 0.2rem; font: inherit; font-weight: 700; font-size: 0.88rem; color: var(--crm-muted); cursor: pointer; }
+.ao-light .ao-cancel { color: #6b7280; }
+.ao-hint { font-size: 0.82rem; color: var(--crm-muted); }
+.ao-light .ao-hint { color: #6b7280; }
+.ao-err, .ao-ok { margin-top: 0.6rem; font-weight: 700; font-size: 0.9rem; }
+.ao-err { color: #f87171; }
+.ao-ok { color: #4ade80; }
+.ao-light .ao-err { color: #b91c1c; }
+.ao-light .ao-ok { color: #15803d; }
+
+@media (max-width: 640px) {
+  .ao-opt { grid-template-columns: 1fr auto; row-gap: 0.35rem; }
+  .ao-opt-pick { grid-column: 1 / -1; }
+  .ao-time, .ao-time input[type="time"] { width: 100%; }
+}

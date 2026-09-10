@@ -20,6 +20,7 @@ export const MESSAGE_LABELS: Record<string, string> = {
   quote_updated: "Updated quote sent",
   quote_sent: "Quote-sent alert",
   approved: "Approval thank-you",
+  approved_offline: "Approved on the phone",
   needs_scheduling: "Approved - needs a date",
   scheduled: "Work day confirmed",
   rescheduled: "Work day moved",

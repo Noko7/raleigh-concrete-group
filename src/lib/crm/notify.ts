@@ -1183,6 +1183,90 @@ export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: stri
   }
 }
 
+
+// ── 6c. Approved on the phone: say who wrote it down ────────────────────────
+// The same news as notifyNeedsScheduling above, and a deliberately different
+// message, because the one fact the office needs here is the one that isn't in
+// the database: nobody watched the customer press a button. A member of staff
+// heard a yes and recorded it, and the alert names them.
+//
+// It goes out on every recorded approval, including one that books the day in
+// the same breath. That one also sends JOB BOOKED, which says when - but a
+// booking text that doesn't say the approval was taken over the phone reads
+// exactly like a customer who clicked, which is the thing this exists to stop.
+export async function notifyOfflineApproval(
+  q: QuoteInfo,
+  contractorPhone: string | null | undefined,
+  opts: {
+    // The staff member who recorded it, by name, for the alert - and by phone,
+    // so the usual rule holds and they aren't texted about their own typing.
+    recordedBy: string;
+    actorPhone?: string | null;
+    // The same form booked the day it agreed to. When true, q carries the
+    // booked date; when false, whatever day was mentioned on the call is still
+    // only a preference.
+    booked?: boolean;
+  },
+): Promise<void> {
+  const agreed = dayOrNull(q.preferred_dates?.[0]);
+  const time = q.preferred_times?.[0] ?? null;
+  const when = opts.booked
+    ? block("Booked for:", dayAndTime(q))
+    : agreed
+      ? block("Agreed on the call:", `${agreed}${time ? ` at ${time}` : ""}`, "Still needs confirming.")
+      : block("No day agreed yet:", "Needs a date and time.");
+
+  const msg = text([
+    "APPROVED BY PHONE",
+    "",
+    ...block("Customer:", q.name),
+    ...block("Amount:", usd(q.quote_amount)),
+    ...chosenBlockPriced(q),
+    ...when,
+    `Recorded by ${opts.recordedBy}, not by the customer's own link.`,
+    "",
+    q.job_token ? jobLink(q.job_token) : null,
+  ]);
+
+  await alertOwner(msg, opts.actorPhone, { quoteId: q.id, kind: "approved_offline" });
+  // The crew copy only goes to a contractor who wasn't the one recording it.
+  // When they took the call themselves, the screen in their hand is the receipt.
+  if (contractorPhone && !samePhone(contractorPhone, opts.actorPhone)) {
+    await sendSms(contractorPhone, msg, { quoteId: q.id, kind: "approved_offline", role: "crew" }).catch(() => {});
+  }
+}
+
+// ── 6d. Approved on the phone: the customer's written record ────────────────
+// Sent only when the call ended without a day. With one agreed, the confirmed
+// text below carries both the approval and the date, and a customer who just
+// hung up does not need two texts about the same conversation.
+export async function notifyApprovalRecorded(q: QuoteInfo): Promise<void> {
+  const agreed = dayOrNull(q.preferred_dates?.[0]);
+  const time = q.preferred_times?.[0] ?? null;
+
+  await sendSms(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      "thanks for approving your quote over the phone.",
+      "",
+      // Titles only, never prices - the same rule every customer text runs on.
+      q.chosen && q.chosen.accepted.length > 0
+        ? `We've got you down for: ${q.chosen.accepted.map((o) => o.title).join(", ")}.`
+        : null,
+      q.chosen && q.chosen.accepted.length > 0 ? "" : null,
+      agreed
+        ? `We have you pencilled in for ${agreed}${time ? ` at ${time}` : ""} and will text you shortly to confirm it.`
+        : "We're checking the crew's schedule and will text you shortly to confirm your project date and time.",
+      "",
+      "If any of that isn't what we agreed, just give us a call.",
+      "",
+      BUSINESS,
+    ]),
+    { quoteId: q.id, kind: "approved_offline", role: "customer" },
+  ).catch(() => {});
+}
+
 // The day plus the crew's start time, e.g. "Monday, August 17 at 9:00 AM".
 // Every customer-facing mention of the appointment goes through this so the
 // time can never silently drop out of one message but not another.

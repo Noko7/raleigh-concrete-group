@@ -12,6 +12,7 @@ import { crmBase } from "@/lib/crm/nav";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, listEvents, listQuoteOptionsAdmin } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
+import { AcceptOffline } from "@/app/crm/quotes/[id]/accept-offline";
 import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
 import { QuoteSends } from "@/app/crm/quotes/[id]/quote-sends";
 import { preferredSlots } from "@/app/crm/quotes/[id]/types";
@@ -53,6 +54,14 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   const showSchedule = accepted && !quote.scheduled_date;
   const showQuote = !accepted && quote.status !== "lost" && quote.status !== "completed" && quote.status !== "paid";
   const showFinish = quote.status === "scheduled";
+  // The customer said yes on the phone and never opened their link. Without a
+  // way to write that down, the crew's only route to a schedule card was to
+  // send a fresh quote and ask them to tap it - which shows the customer a date
+  // picker that starts a week out, on a job everyone has just agreed to do on
+  // Thursday. Offered on any quote that has gone out and is still waiting for
+  // an answer; see the acceptOffline action for why the floor doesn't apply
+  // when it is the crew filling the day in.
+  const showOfflineAccept = showQuote && Boolean(quote.quote_sent_at) && quote.quote_amount != null;
   const isDone = quote.status === "completed" || quote.status === "paid";
 
   // The same column read two ways: a booked appointment on an in-person request,
@@ -309,6 +318,24 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             requestedTime={quote.visit_time}
             minDate={minJobDate}
             locale={locale}
+          />
+        )}
+
+        {showOfflineAccept && (
+          <AcceptOffline
+            id={quote.id}
+            customerName={quote.name}
+            amount={quote.quote_amount}
+            options={options.map((o) => ({
+              id: o.id,
+              title: o.title,
+              description: o.description,
+              amount: Number(o.amount),
+              required: o.required,
+            }))}
+            minDate={minJobDate}
+            locale={locale}
+            tone="light"
           />
         )}
 
