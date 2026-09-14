@@ -277,6 +277,13 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     // A queued text somebody stopped before the morning flush reached it. The
     // kind is the point of the line: "a text was cancelled" tells nobody
     // whether the customer is still waiting on their quote.
+    // Somebody chose not to wait for the hour a text was queued for. Worth its
+    // own line: a customer text that arrives at 6:40am was a decision, and the
+    // log is where that decision is answerable.
+    case "message_sent_early":
+      return `Queued text sent early${m.kind ? ` (${messageLabel(String(m.kind))})` : ""}${
+        m.delivered === false ? ", and it failed" : ""
+      }`;
     case "message_cancelled":
       return `Queued text cancelled before it sent${m.kind ? ` (${messageLabel(String(m.kind))})` : ""}`;
     // The quote went to the wrong person, or went out before it should have.

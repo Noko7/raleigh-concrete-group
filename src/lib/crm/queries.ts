@@ -469,6 +469,10 @@ export type QuoteMessage = {
   // Set when somebody called the text back before the queue got to it. See
   // supabase/cancel-held-text.sql: the row stays, it just never sends.
   cancelled_at?: string | null;
+  // How many times the queue has handed this row to the provider. See
+  // supabase/queue-retry.sql - a failed send goes back on the queue until this
+  // reaches MAX_SEND_ATTEMPTS.
+  attempts?: number | null;
 };
 
 // Still waiting for the morning: due in the future, or due already and not yet
@@ -553,7 +557,11 @@ export async function logMessage(row: {
   // Set only by a quiet-hours hold: the row is the queue entry as well as the
   // log line, and this is when it comes due.
   send_after?: string | null;
-}): Promise<void> {
+  // Whether the row made it into the table. Ignored by the plain log-an-attempt
+  // path - a lost log line is a nuisance - but load-bearing for a HELD text,
+  // where the row IS the queue entry: if this comes back false, nothing is
+  // holding that message and nobody will ever send it.
+}): Promise<boolean> {
   try {
     const res = await pgAdmin("quote_messages", {
       method: "POST",
@@ -577,8 +585,10 @@ export async function logMessage(row: {
       // fine in the app while nothing is being recorded.
       console.error("[sms-log] could not record message", { status: res.status, kind: row.kind });
     }
+    return res.ok;
   } catch (e) {
     console.error("[sms-log] threw", e);
+    return false;
   }
 }
 
@@ -592,7 +602,17 @@ export async function listDueMessages(nowIso: string, limit = 25): Promise<Quote
     `quote_messages?sent_at=is.null&cancelled_at=is.null&send_after=lte.${encodeURIComponent(nowIso)}` +
       `&select=*&order=send_after.asc&limit=${limit}`,
   );
-  if (!res.ok) return [];
+  // THROWS rather than returning an empty list, and the difference is the whole
+  // point. "Nothing is due" and "the question could not be asked" used to be
+  // the same answer here, so a missing column, an expired service key or a
+  // database outage read to every caller as an empty queue: the crons returned
+  // ok with `due: 0`, the logs said nothing, and held texts stopped going out
+  // with no symptom anywhere except customers not hearing from us. A queue that
+  // cannot be read is broken, and it has to say so.
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => "")).slice(0, 300);
+    throw new Error(`Could not read the held-message queue (HTTP ${res.status}). ${detail}`.trim());
+  }
   return (await res.json()) as QuoteMessage[];
 }
 
@@ -624,23 +644,137 @@ export async function claimMessage(id: string, nowIso: string): Promise<boolean>
   }
 }
 
+/**
+ * How many times the queue will hand one row to the provider before giving up.
+ *
+ * A cap rather than forever: a number that is a landline, or a workspace that
+ * cannot message it, fails identically on every attempt, and retrying that
+ * until the heat death of the universe is just noise in the log. Three is
+ * enough to ride out a provider blip and few enough to stop quickly on
+ * something that is genuinely never going to send.
+ */
+export const MAX_SEND_ATTEMPTS = 3;
+
+// Far enough out that a retry is a fresh attempt rather than a hammering, near
+// enough that the next drain picks it up rather than tomorrow's.
+const RETRY_BACKOFF_MINUTES = 10;
+
+/**
+ * Record how a held message went - and, if it failed, put it back.
+ *
+ * The claim stamps `sent_at` BEFORE the send, so that a crash mid-send leaves a
+ * text unsent rather than sent twice. That is still the right trade, and it is
+ * preserved below - but it used to be applied to a FAILED send too, which took
+ * the row out of the due list permanently: one 500 from the provider at the
+ * moment the morning drain ran and that quote never went out, with nothing
+ * anywhere saying it was still owed.
+ *
+ * So the two cases are separated, on whether an HTTP status came back:
+ *
+ *   a status   the round trip finished and the provider REFUSED the message. It
+ *              definitely did not send, so the claim is released and the next
+ *              drain tries again, up to MAX_SEND_ATTEMPTS.
+ *
+ *   no status  the call threw - a timeout, a dropped connection. We cannot tell
+ *              whether it arrived, so the original choice stands and the row
+ *              stays claimed. A text nobody got is better than one sent twice
+ *              when the ambiguity is genuine.
+ *
+ * `attempts` comes off the row the caller already has in hand.
+ */
 export async function finishMessage(
   id: string,
   result: { ok: boolean; provider?: string | null; status?: number | null; detail?: string | null },
+  attempts = 0,
 ): Promise<void> {
-  try {
-    await pgAdmin(`quote_messages?id=eq.${encodeURIComponent(id)}`, {
+  const tried = attempts + 1;
+  const refused = typeof result.status === "number";
+  // The caller can declare a row terminal by handing over a spent count - used
+  // for a held row with no number or body in it, which has nothing to attempt
+  // and so should not be annotated as though something was tried.
+  const terminal = attempts >= MAX_SEND_ATTEMPTS;
+  const retrying = !result.ok && refused && tried < MAX_SEND_ATTEMPTS;
+  const note = result.ok || terminal
+    ? null
+    : retrying
+      ? `(Attempt ${tried} of ${MAX_SEND_ATTEMPTS}. Back on the queue for the next drain.)`
+      : refused
+        ? `(Attempt ${tried} of ${MAX_SEND_ATTEMPTS}. Not trying again.)`
+        : "(The send did not complete, so we cannot tell whether it arrived. Not trying again, in case it did.)";
+  const detail = [result.detail, note].filter(Boolean).join(" ") || null;
+  const outcome = {
+    ok: result.ok,
+    provider: result.provider ?? null,
+    status: result.status ?? null,
+    detail: detail ? detail.slice(0, 2000) : null,
+  };
+  const patch = (body: Record<string, unknown>) =>
+    pgAdmin(`quote_messages?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({
-        ok: result.ok,
-        provider: result.provider ?? null,
-        status: result.status ?? null,
-        detail: result.detail ? result.detail.slice(0, 2000) : null,
-      }),
+      body: JSON.stringify(body),
     });
+
+  try {
+    const res = await patch({
+      ...outcome,
+      attempts: Math.min(tried, MAX_SEND_ATTEMPTS),
+      // Releasing the claim is what makes the next drain see it again.
+      ...(retrying
+        ? { sent_at: null, send_after: new Date(Date.now() + RETRY_BACKOFF_MINUTES * 60_000).toISOString() }
+        : {}),
+    });
+    // queue-retry.sql may not have been run yet, and then the whole write is
+    // rejected for one unknown column - which would lose the outcome as well as
+    // the retry. Recording WHAT HAPPENED matters more than retrying, so on a
+    // rejection write the outcome on its own: exactly the old behaviour, plus a
+    // log line naming the migration to run.
+    if (!res.ok) {
+      console.error("[sms-queue] could not record attempts; is supabase/queue-retry.sql run?", { status: res.status });
+      await patch(outcome);
+    }
   } catch (e) {
     console.error("[sms-queue] could not record the result of a held message", e);
+  }
+}
+
+/**
+ * What the held-message queue looks like right now, for the Settings diagnostic.
+ *
+ * `overdue` is the number that matters: a text whose hour came and went and is
+ * still sitting here means the thing that drains the queue is not running. That
+ * was invisible until now - the rows were in the table, correctly marked
+ * waiting, and nothing put the two facts together and called it a fault.
+ */
+export type QueueHealth = { waiting: number; overdue: number; oldestDueIso: string | null; error?: string };
+
+export async function queueHealth(at: Date = new Date()): Promise<QueueHealth> {
+  const empty: QueueHealth = { waiting: 0, overdue: 0, oldestDueIso: null };
+  try {
+    const res = await pgAdmin(
+      `quote_messages?sent_at=is.null&cancelled_at=is.null&send_after=not.is.null` +
+        `&select=send_after&order=send_after.asc&limit=200`,
+    );
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => "")).slice(0, 200);
+      return { ...empty, error: `HTTP ${res.status}. ${detail}`.trim() };
+    }
+    const rows = (await res.json()) as { send_after: string | null }[];
+    // Parsed, not string-compared. Postgres hands these back as
+    // "...T12:00:00+00:00" while toISOString() writes "...T12:00:00.000Z", and
+    // those two sort against each other on punctuation rather than on time.
+    const cutoff = at.getTime();
+    const due = rows.filter((r) => {
+      const t = r.send_after ? new Date(r.send_after).getTime() : NaN;
+      return Number.isFinite(t) && t <= cutoff;
+    });
+    return {
+      waiting: rows.length,
+      overdue: due.length,
+      oldestDueIso: due[0]?.send_after ?? null,
+    };
+  } catch (e) {
+    return { ...empty, error: String(e) };
   }
 }
 
