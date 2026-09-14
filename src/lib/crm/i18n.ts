@@ -562,6 +562,20 @@ const en = {
     doneTitle: "Work completed",
     doneNote: "Thanks. The office takes it from here.",
   },
+  // The queued-text override. Quiet hours hold a customer's text until 8am,
+  // which is right for a reminder and wrong for a corrected price, so there is
+  // a way over the rule that names what it is doing rather than hiding it.
+  heldText: {
+    title: "Waiting to send",
+    lead: "These texts are written and queued. They go out on their own, or you can send one now.",
+    send: "Send now",
+    sending: "Sending…",
+    sent: "Sent. It has gone out now rather than waiting.",
+    hint: "Sends it straight away instead of waiting its turn.",
+    quietWarning: "It is outside our texting hours, so this reaches the customer now, whatever time it is for them.",
+    waitingUntil: "Waiting until {when}",
+    queuedFor: "Queued for {when}",
+  },
   // Money on a job, as the crew sees it. Two facts and two actions: what the
   // customer still owes, what the crew owes the office, text a card link, or
   // record what was handed over.
@@ -1154,6 +1168,17 @@ const es: typeof en = {
     finishYes: "Sí, el trabajo está terminado",
     doneTitle: "Trabajo terminado",
     doneNote: "Gracias. La oficina se encarga de aquí en adelante.",
+  },
+  heldText: {
+    title: "Pendientes de enviar",
+    lead: "Estos mensajes ya están escritos y en cola. Salen solos, o puede enviar uno ahora.",
+    send: "Enviar ahora",
+    sending: "Enviando…",
+    sent: "Enviado. Salió ahora en vez de esperar.",
+    hint: "Lo envía de inmediato en vez de esperar su turno.",
+    quietWarning: "Estamos fuera del horario de mensajes, así que le llegará al cliente ahora, sea la hora que sea para él.",
+    waitingUntil: "Esperando hasta las {when}",
+    queuedFor: "En cola para las {when}",
   },
   payments: {
     title: "Dinero de este trabajo",

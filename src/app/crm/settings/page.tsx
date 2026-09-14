@@ -3,7 +3,7 @@ import { readWorkHours } from "@/lib/crm/constants";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { ownerRecipientDetails, smsDiagnostics } from "@/lib/crm/notify";
 import { checkClockDrift } from "@/lib/crm/time-check";
-import { getPrimaryContractorId, listContractors } from "@/lib/crm/queries";
+import { getPrimaryContractorId, listContractors, queueHealth } from "@/lib/crm/queries";
 import { ClockCard } from "./clock-card";
 import { SettingsForm } from "./settings-form";
 import { PrimaryContractorForm } from "./primary-contractor-form";
@@ -24,6 +24,8 @@ export default async function SettingsPage() {
   // One HEAD request to a public host, only when an owner opens this page.
   // Nothing else in the app waits on it.
   const clock = isOwner ? await checkClockDrift() : null;
+  // Cheap, and only for an owner: one indexed read of whatever is still queued.
+  const queue = isOwner ? await queueHealth() : null;
   const t = dict(staff.locale);
 
   return (
@@ -54,7 +56,7 @@ export default async function SettingsPage() {
           current={primaryId}
         />
       )}
-      {isOwner && clock && <ClockCard check={clock} />}
+      {isOwner && clock && queue && <ClockCard check={clock} queue={queue} />}
       {isOwner && sms && (
         <TestSms
           provider={sms.provider}

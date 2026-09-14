@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { MAX_JOBS_PER_DAY, countJobsOn, resolveAssignee, visitAvailability } from "@/lib/crm/queries";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 // Public, token-free availability check used by the customer scheduling UIs.
 //
@@ -24,6 +25,14 @@ export async function GET(request: Request) {
   const date = (searchParams.get("date") || "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ ok: false, error: "Invalid date." }, { status: 400 });
+  }
+
+  // Every call here is a database read, and the middleware's limiter only
+  // covers the CRM. Sized for somebody clicking around a month of dates
+  // looking for one that suits them, which is a lot of calls and exactly the
+  // behaviour the picker is for.
+  if (await rateLimit(`avail:${clientIp(request)}`, 90, 5 * 60 * 1000)) {
+    return NextResponse.json({ ok: false, error: "Too many requests." }, { status: 429 });
   }
 
   if (type === "job") {

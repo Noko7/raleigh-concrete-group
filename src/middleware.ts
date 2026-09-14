@@ -96,6 +96,12 @@ async function getStaffAccess(userId: string) {
       email: row.email ?? null,
       ts: Date.now(),
     };
+    // Bounded the same way authCache is. This one is keyed by staff id so it
+    // is naturally small - a handful of people - but "naturally small" is a
+    // property of today's data, not of the code, and an unbounded module-level
+    // Map in a long-lived edge instance is a leak waiting for the day that
+    // stops being true.
+    if (accessCache.size > 8000) accessCache.clear();
     accessCache.set(userId, value);
     return value;
   } catch {

@@ -25,7 +25,9 @@ import {
   getOwnerPhones,
   listDueMessages,
   logMessage,
+  MAX_SEND_ATTEMPTS,
   recentlySent,
+  type QuoteMessage,
   type SmsLog,
 } from "./queries";
 
@@ -250,7 +252,7 @@ export async function sendSmsResult(
     const detail = quietDue
       ? `Quiet hours (${hourLabel(QUIET_FROM_HOUR)} to ${hourLabel(QUIET_UNTIL_HOUR)}). Held, and goes out ${label}.`
       : `Spaced out so this run doesn't send several at once. Goes out ${label}.`;
-    await logMessage({
+    const queued = await logMessage({
       quote_id: log?.quoteId ?? null,
       kind: log?.kind ?? "spaced",
       role: log?.role ?? "crew",
@@ -261,6 +263,22 @@ export async function sendSmsResult(
       detail,
       send_after: due.toISOString(),
     });
+    // The row IS the queue entry, so a failed insert is not a missing log line -
+    // it is a text that no longer exists anywhere. Reported as a failure rather
+    // than as "held", because "held" tells the person who pressed Send that it
+    // is coming, and it is not.
+    if (!queued) {
+      const lost: SendResult = {
+        ok: false,
+        provider: SMS_PROVIDER,
+        to,
+        detail:
+          "Could not put this text on the queue, so it has NOT been sent and is not waiting to be. " +
+          "Check the message log migrations in Supabase, then send it again.",
+      };
+      console.error("[sms-queue] could not queue a held message", { to, kind: log?.kind ?? "spaced" });
+      return lost;
+    }
     return {
       ok: false,
       held: true,
@@ -353,7 +371,17 @@ export function spacer(minutes = REMINDER_SPACING_MINUTES): (phone?: string | nu
 
 // ── The morning flush ───────────────────────────────────────────────────────
 
-export type FlushResult = { due: number; sent: number; failed: number; skipped?: string };
+export type FlushResult = {
+  due: number;
+  sent: number;
+  failed: number;
+  skipped?: string;
+  // The drain could not read the queue at all. Distinct from `due: 0`, which
+  // means it looked and there was nothing there - the two used to be reported
+  // identically, which is how a queue that had stopped draining kept answering
+  // "all clear" to everybody who asked.
+  error?: string;
+};
 
 /**
  * Deliver everything the night held back.
@@ -376,7 +404,18 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
   const quiet = inQuietHours();
 
   const startedAt = now().getTime();
-  const due = await listDueMessages(now().toISOString(), limit);
+  let due: QuoteMessage[];
+  try {
+    due = await listDueMessages(now().toISOString(), limit);
+  } catch (e) {
+    // Loud, and returned rather than thrown: the crons report this in their
+    // response body, so hitting the cron URL by hand says what is wrong instead
+    // of cheerfully reporting an empty queue. A send that flushes on its way
+    // past still must not fail because of it, which is why this is not a throw.
+    const error = String(e);
+    console.error("[sms-queue] could not read the queue", error);
+    return { due: 0, sent: 0, failed: 0, error };
+  }
   let sent = 0;
   let failed = 0;
 
@@ -388,7 +427,13 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
       continue;
     }
     if (!m.to_phone || !m.body) {
-      await finishMessage(m.id, { ok: false, provider: SMS_PROVIDER, detail: "Held with no number or body to send." });
+      // Terminal by nature, so it is spent straight to the cap: retrying a row
+      // with nothing in it to send would only fail the same way twice more.
+      await finishMessage(
+        m.id,
+        { ok: false, provider: SMS_PROVIDER, detail: "Held with no number or body to send." },
+        MAX_SEND_ATTEMPTS,
+      );
       continue;
     }
     if (!(await claimMessage(m.id, now().toISOString()))) continue;
@@ -396,12 +441,19 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
     const r = await deliver(m.to_phone, m.body).catch(
       (e) => ({ ok: false, provider: SMS_PROVIDER, detail: String(e) }) as SendResult,
     );
-    await finishMessage(m.id, {
-      ok: r.ok,
-      provider: r.provider,
-      status: r.status ?? null,
-      detail: r.ok ? null : (r.detail ?? "Send failed."),
-    });
+    await finishMessage(
+      m.id,
+      {
+        ok: r.ok,
+        provider: r.provider,
+        status: r.status ?? null,
+        detail: r.ok ? null : (r.detail ?? "Send failed."),
+      },
+      // A failure releases the claim so the next drain retries it, until this
+      // reaches the cap. Without the count the row would either be retried for
+      // ever or, as before, never.
+      m.attempts ?? 0,
+    );
     if (r.ok) sent += 1;
     else failed += 1;
   }
@@ -415,12 +467,62 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
   };
 }
 
+/**
+ * Send one queued text right now, ahead of the hour it was promised for.
+ *
+ * Quiet hours are a courtesy, and a courtesy has to be overridable by the
+ * person whose money is on the other end of it. A contractor who corrects a
+ * price at 6:30am is not sending a marketing blast - they are stopping a
+ * customer approving a wrong number, and "it goes out at 8" is the wrong answer
+ * to that. So the rule still holds by default and a person can step over it,
+ * deliberately, one text at a time.
+ *
+ * Deliberately built from the same three pieces the drain uses - claim,
+ * deliver, finish - rather than a second send path of its own. The claim is
+ * what makes pressing this at the same moment a cron arrives safe: one of them
+ * gets the row and the other finds it taken, so the customer gets one text.
+ */
+export async function sendHeldMessageNow(m: QuoteMessage): Promise<SendResult> {
+  if (!m.to_phone || !m.body) {
+    return { ok: false, provider: SMS_PROVIDER, detail: "There is no number or message on this row to send." };
+  }
+  if (!(await claimMessage(m.id, now().toISOString()))) {
+    return {
+      ok: false,
+      provider: SMS_PROVIDER,
+      to: m.to_phone,
+      detail:
+        "Could not take this text off the queue, so nothing was sent. " +
+        "It has either just gone out, been cancelled, or the queue cannot be written to at all.",
+    };
+  }
+
+  const r = await deliver(m.to_phone, m.body).catch(
+    (e) => ({ ok: false, provider: SMS_PROVIDER, detail: String(e) }) as SendResult,
+  );
+  // Same bookkeeping as the drain, so a hand-sent text is recorded exactly like
+  // one the queue sent - including going back on the queue if the provider
+  // refused it, which is what stops a failed tap losing the message.
+  await finishMessage(
+    m.id,
+    {
+      ok: r.ok,
+      provider: r.provider,
+      status: r.status ?? null,
+      detail: r.ok ? null : (r.detail ?? "Send failed."),
+    },
+    m.attempts ?? 0,
+  );
+  if (!r.ok) console.error("[sms-queue] a hand-sent held message failed", { id: m.id, detail: r.detail });
+  return r;
+}
+
 // Drain the queue without making the caller wait for it. `after` runs the work
 // once the response is out but before the function is torn down, which is the
 // only way a serverless request can leave something running. Outside a request
 // (a script, a test) it throws, and then a short awaited flush is the fallback -
 // bounded, because it's on somebody's critical path at that point.
-async function flushInBackground(): Promise<void> {
+export async function flushInBackground(): Promise<void> {
   try {
     const { after } = await import("next/server");
     after(() => flushHeldMessages().catch(() => {}));
