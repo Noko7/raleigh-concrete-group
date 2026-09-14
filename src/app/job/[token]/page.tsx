@@ -5,18 +5,19 @@ import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
 import { dollars, requestedVisitOf, STATUS_LABELS, visitDateOf } from "@/lib/crm/constants";
-import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
+import { BUSINESS_TZ, inQuietHours, todayYmd } from "@/lib/crm/clock";
 import { crewEventText, quoteSends } from "@/lib/crm/events";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
-import { getQuoteByToken, listEvents, listQuoteOptionsAdmin } from "@/lib/crm/queries";
+import { getQuoteByToken, listEvents, listMessages, listQuoteOptionsAdmin } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
 import { QuoteSends } from "@/app/crm/quotes/[id]/quote-sends";
 import { preferredSlots } from "@/app/crm/quotes/[id]/types";
 import { JobFinish } from "./job-finish";
+import { JobHeldTexts } from "./job-held-texts";
 import { JobPayments } from "./job-payments";
 import { JobQuote } from "./job-quote";
 import { JobReschedule } from "./job-reschedule";
@@ -38,6 +39,9 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // Contractors only see jobs assigned to them; owners can see any job.
   if (session.staff.role !== "owner" && quote.assigned_to !== session.staff.id) notFound();
 
+  // Anything this job has written but not yet sent. RLS-scoped to the reader,
+  // so a contractor only ever gets the rows for their own jobs.
+  const messages = await listMessages(session, quote.id);
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
   const t = dict(locale);
   const base = await crmBase();
@@ -294,6 +298,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             </>
           )}
         </div>
+
+        {/* Above the stage cards, and above the appointment ones, because it
+            outranks every decision below it: a text that has not gone out is
+            the customer not knowing something we think they know. It renders
+            nothing at all when the queue is empty, which is nearly always. */}
+        <JobHeldTexts quoteId={quote.id} messages={messages} quiet={inQuietHours()} locale={locale} />
 
         {/* Appointments go at the top: they're the time-critical decisions and
             they need nothing from further down the page. Pricing is the one

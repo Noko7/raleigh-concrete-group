@@ -8,6 +8,7 @@ import {
   nextSendableAt,
   now,
 } from "@/lib/crm/clock";
+import type { QueueHealth } from "@/lib/crm/queries";
 import { DRIFT_TOLERANCE_SECONDS, type ClockCheck } from "@/lib/crm/time-check";
 
 // What time the app thinks it is, and whether that can be trusted.
@@ -16,9 +17,14 @@ import { DRIFT_TOLERANCE_SECONDS, type ClockCheck } from "@/lib/crm/time-check";
 // every screen is rendered in Raleigh time rather than the server's UTC, and
 // texts are held between 7pm and 8am. Both are silently wrong if the clock is
 // wrong, and a clock is the one component that never announces its own failure.
-export function ClockCard({ check }: { check: ClockCheck }) {
+export function ClockCard({ check, queue }: { check: ClockCheck; queue: QueueHealth }) {
   const at = now();
   const quiet = inQuietHours(at);
+  // A text whose hour came and went and is still sitting in the queue is the
+  // one symptom that says the drain itself has stopped. Everything else about a
+  // stuck queue looks completely normal: the rows are there, correctly marked
+  // as waiting, and every screen agrees they are waiting.
+  const stuck = queue.overdue > 0;
   const drift = check.driftSeconds ?? 0;
   const accurate = check.ok && Math.abs(drift) <= DRIFT_TOLERANCE_SECONDS;
 
@@ -67,6 +73,40 @@ export function ClockCard({ check }: { check: ClockCheck }) {
           <dd>
             <span className="crm-badge crm-badge-success">Any time</span> Quiet hours never apply to you or the crew.
             Lead alerts, crew reminders and logins send the moment they happen, at any hour.
+          </dd>
+        </div>
+        <div>
+          <dt>Held texts</dt>
+          <dd>
+            {queue.error ? (
+              <>
+                <span className="crm-badge crm-badge-danger">Can&apos;t read the queue</span> The held-text queue could
+                not be read, so nothing is going out of it and there is no way to say how much is
+                stuck. Usually a migration that has not been run - open <code>supabase/audit.sql</code> in Supabase and
+                look for anything marked MISSING. ({queue.error})
+              </>
+            ) : stuck ? (
+              <>
+                <span className="crm-badge crm-badge-danger">
+                  {queue.overdue} overdue
+                </span>{" "}
+                {queue.overdue === 1 ? "A text was" : `${queue.overdue} texts were`} due to go out at{" "}
+                {clockLabel(new Date(queue.oldestDueIso as string), at)} and {queue.overdue === 1 ? "has" : "have"} not
+                left yet. Held texts leave when something drains the queue - the two daily crons, opening the CRM, or
+                any text going out - so if this number does not clear within a few minutes of loading this page, the
+                sending itself is failing. The job&apos;s message log has the provider&apos;s own reason.
+              </>
+            ) : queue.waiting > 0 ? (
+              <>
+                <span className="crm-badge crm-badge-warning">{queue.waiting} waiting</span>{" "}
+                {queue.waiting === 1 ? "One text is" : `${queue.waiting} texts are`} queued and not due yet. Nothing is
+                wrong: they go out at the hour each was promised.
+              </>
+            ) : (
+              <>
+                <span className="crm-badge crm-badge-success">Empty</span> Nothing is waiting to go out.
+              </>
+            )}
           </dd>
         </div>
         <div>
