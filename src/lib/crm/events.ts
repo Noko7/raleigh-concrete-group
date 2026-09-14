@@ -91,8 +91,11 @@ export function crewEventText(e: QuoteEvent, t: Dict): string | null {
       return l.quoteRevised;
     case "customer_viewed":
       return l.customerViewed;
+    // Both spellings of the same fact, told apart so neither is a lie: the
+    // customer tapped their link, or somebody wrote down a call. See the
+    // `channel` meta written by the acceptOffline action.
     case "customer_accepted":
-      return l.customerAccepted;
+      return m.channel === "phone" ? l.customerAcceptedPhone : l.customerAccepted;
     case "customer_declined":
       return l.customerDeclined;
     case "visit_confirmed":
@@ -178,6 +181,14 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       const yes = Array.isArray(m.accepted_options) ? (m.accepted_options as string[]) : [];
       const no = Array.isArray(m.declined_options) ? (m.declined_options as string[]) : [];
       const chose = yes.length ? `: took ${yes.join(", ")}${no.length ? `, left ${no.join(", ")}` : ""}` : "";
+      // An approval taken over the phone says so, and says who wrote it down.
+      // The row is otherwise identical to one the customer produced themselves,
+      // and on an audit trail those two must never read the same.
+      if (m.channel === "phone") {
+        const by = m.recorded_by ? String(m.recorded_by) : "staff";
+        const agreed = picks.length ? `, agreed ${asked.join(", ")}` : "";
+        return `Approval recorded over the phone by ${by}${chose}${agreed}`;
+      }
       return `Customer approved the quote${chose}${wanted}${m.discount ? " ($150 credit)" : ""}`;
     }
     case "date_confirmed":
