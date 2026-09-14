@@ -221,7 +221,14 @@ itself drains, and why the queue is now reported rather than assumed.
    database is rejecting the query, which is almost always a migration.
 2. **The job page's message log** has the provider's own error on the row.
 3. **`supabase/audit.sql`** lists any migration that has not been run. A missing
-   column on `quote_messages` stops the queue outright.
+   column on `quote_messages` stops the queue outright. Its X1 section lists
+   texts that are due and still sitting there.
+
+A stalled queue does not lose texts, it **accumulates** them - so before fixing
+the cause, run `supabase/queue-backlog.sql` and see what is about to go out.
+This morning's quote should fly; last Tuesday's should not, and the ordinary
+Cancel button will not touch it because that only offers itself on a text whose
+hour has not come yet. Part 2 of that file retires the stale ones.
 
 A failed send is put back on the queue and retried up to three times, but only
 when the provider actually refused it. If the call never completed we cannot
