@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { cronAuthorized } from "@/lib/crm/cron-auth";
 import { REMINDER_SPACING_MINUTES, flushHeldMessages } from "@/lib/crm/notify";
 
 export const dynamic = "force-dynamic";
@@ -30,14 +31,9 @@ export const dynamic = "force-dynamic";
 //
 // Cheap when there is nothing to do: one indexed SELECT that returns no rows.
 // Racing another drain is safe - claimMessage means each text is sent once.
-function authorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET || "";
-  if (!secret) return false;
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
 
 export async function GET(request: Request) {
-  if (!authorized(request)) {
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 

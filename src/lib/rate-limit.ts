@@ -22,14 +22,35 @@ export function clientIp(request: Request): string {
   return "unknown";
 }
 
+const MEM_MAX_KEYS = 8000;
 const mem = new Map<string, number[]>();
 
 function memLimited(key: string, max: number, windowMs: number): boolean {
   const now = Date.now();
   const recent = (mem.get(key) ?? []).filter((t) => now - t < windowMs);
   recent.push(now);
+  // Re-set rather than mutate in place, so the key moves to the end of the
+  // Map's insertion order. That ordering is what makes the eviction below
+  // oldest-first.
+  mem.delete(key);
   mem.set(key, recent);
-  if (mem.size > 8000) mem.clear();
+
+  if (mem.size > MEM_MAX_KEYS) {
+    // Evict the least recently touched, NOT the whole table.
+    //
+    // This used to be mem.clear(), which handed anybody being limited a way
+    // out: fill the map with 8000 junk keys and every real counter - including
+    // the one currently refusing your login attempts - is wiped along with
+    // them. Dropping the oldest tenth costs an attacker nothing they didn't
+    // already have and leaves live counters standing.
+    const evict = Math.ceil(MEM_MAX_KEYS / 10);
+    let n = 0;
+    for (const k of mem.keys()) {
+      if (n++ >= evict) break;
+      if (k !== key) mem.delete(k);
+    }
+  }
+
   return recent.length > max;
 }
 

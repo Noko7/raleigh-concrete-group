@@ -33,8 +33,15 @@ export async function beginPayment(_prev: PayState, formData: FormData): Promise
   const amountCents = Math.round(dollars * 100);
   if (amountCents < MIN_PAYMENT_CENTS) return { error: "Enter an amount of at least $1." };
 
-  // Read once more with the fee frozen, so the ceiling below is the same figure
-  // startJobCheckout will charge against.
+  // Read WITHOUT freezing. The comment here used to claim the opposite, and the
+  // distinction matters enough to be worth stating properly: freezing writes
+  // today's rate onto the job, and merely validating an amount the customer
+  // typed must not commit their contractor to a rate. startJobCheckout freezes,
+  // at the point money actually moves.
+  //
+  // The two agree on the ceiling regardless - previewFee and ensureFeeOnJob
+  // derive the same rate from the same inputs - so this is the same figure
+  // startJobCheckout will charge against, arrived at without the write.
   const { ledger, rows } = await jobLedger(quote);
   if (ledger.dueCents <= 0) return { error: "This job is already paid in full - nothing is owed." };
   if (amountCents > ledger.dueCents) {
