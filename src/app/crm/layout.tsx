@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getSession } from "@/lib/crm/auth";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
+import { flushInBackground } from "@/lib/crm/notify";
 import { LogoutButton } from "./logout-button";
 import { ForceReset } from "./force-reset";
 
@@ -16,6 +17,21 @@ export const metadata: Metadata = {
 export default async function CrmLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   const base = await crmBase();
+
+  // Somebody opening the CRM drains the held-message queue, the same way every
+  // outbound text already does on its way past.
+  //
+  // The queue had exactly two timers - the 13:00 and 22:00 UTC crons - and no
+  // way of noticing it had stopped. If the morning run does not happen (a
+  // rotated CRON_SECRET answers it with a 401, and a 401 looks like nothing at
+  // all), a text held until 8am sits there until the evening run, and a text
+  // that fails there sits until tomorrow. Meanwhile the office is in the app
+  // all morning, which is the one thing we know is happening.
+  //
+  // Free when there is nothing to do: one indexed SELECT that returns no rows,
+  // after() so it is off the response's critical path, and claimMessage means
+  // racing a cron or another tab still sends each text once.
+  if (session) await flushInBackground();
   const isOwner = session?.staff.role === "owner";
   // Read into a local first: narrowing `session?.staff.locale` doesn't tell
   // TypeScript anything about `session` itself, which may be null here.

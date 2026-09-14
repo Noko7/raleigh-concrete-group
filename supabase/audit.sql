@@ -42,6 +42,7 @@ with needed(feature, migration, obj, col) as (
     ('Message log',      'message-log.sql',      'quote_messages', 'kind'),
     ('Quiet hours',      'quiet-hours.sql',      'quote_messages', 'send_after'),
     ('Cancel a text',    'cancel-held-text.sql', 'quote_messages', 'cancelled_at'),
+    ('Queue retries',    'queue-retry.sql',      'quote_messages', 'attempts'),
     ('Payments',         'payments.sql',         'quote_payments', 'fee_cents'),
     ('Fee settlements',  'payments.sql',         'fee_settlements','amount_cents'),
     ('Fee rate on job',  'payments.sql',         'quote_requests', 'fee_rate'),

@@ -191,6 +191,42 @@ notification means passing that object to `sendSms` and adding a label to
 `MESSAGE_LABELS` in `src/lib/crm/messages.ts`. A kind with no label falls back
 to its raw key rather than rendering blank.
 
+### What drains the held-text queue
+
+A text held by quiet hours (a customer, 7pm-8am) or by spacing (anyone, a few
+minutes) is a row in `quote_messages` with a `send_after` on it. Nothing in a
+serverless app sits around waiting for 8am, so the row leaves on the next thing
+that happens to drain the queue:
+
+| Drain | When |
+|-------|------|
+| `/api/cron/reminders` | 13:00 UTC - 8am EST, **9am EDT** |
+| `/api/cron/visit-reminders` | 22:00 UTC - 5pm EST, **6pm EDT** |
+| Any outbound text, on its way past | Whenever one is sent |
+| Opening the CRM | Whenever staff use the app |
+| `/api/cron/drain` | Only if wired up in `vercel.json` - see that file |
+
+Two consequences worth knowing. First, **8am is a floor, not a promise**: in
+summer the earliest scheduled drain is 9am, so a text raised at 6:30am says "goes
+out at 8:00 AM" and actually leaves when something drains next. Second, the crons
+are not a safety net on their own - a wrong or missing `CRON_SECRET` answers them
+with a 401, which looks exactly like nothing happening. That is why the CRM
+itself drains, and why the queue is now reported rather than assumed.
+
+**When a held text does not arrive**, in order:
+
+1. **CRM → Settings → Time & quiet hours → Held texts.** `Empty` means the queue
+   is doing its job and the problem is elsewhere. `N overdue` means the drain is
+   not running or the sending is failing. `Can't read the queue` means the
+   database is rejecting the query, which is almost always a migration.
+2. **The job page's message log** has the provider's own error on the row.
+3. **`supabase/audit.sql`** lists any migration that has not been run. A missing
+   column on `quote_messages` stops the queue outright.
+
+A failed send is put back on the queue and retried up to three times, but only
+when the provider actually refused it. If the call never completed we cannot
+tell whether it arrived, so it is left alone rather than risking a second copy.
+
 ### Lead times, and who they apply to
 
 | Date | Earliest | Who it binds |
@@ -416,6 +452,8 @@ which is what made the job link and the pipeline feel like separate systems.
 | Scheduling UI (crew) | `src/app/job/[token]/job-schedule.tsx` |
 | Crew quotes a job | `src/app/job/[token]/job-quote.tsx` → the same `saveQuote` action |
 | Customer + crew reminders | `src/app/api/cron/reminders/route.ts` |
+| The held-text queue | `flushHeldMessages` in `src/lib/crm/notify.ts` |
+| Queue health readout | `queueHealth` in `src/lib/crm/queries.ts` |
 | Address rule (form + API) | `src/lib/address.ts` |
 | Owner recipient list | `ownerRecipients` in `notify.ts` |
 | Test a real send | CRM → Settings → Text notifications |
