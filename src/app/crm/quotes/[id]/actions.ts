@@ -29,6 +29,7 @@ import {
   notifyVisitConfirmed,
   notifyVisitMoved,
   type SendResult,
+  sendHeldMessageNow,
 } from "@/lib/crm/notify";
 import {
   addEvent,
@@ -40,6 +41,7 @@ import {
   findJobConflict,
   findVisitConflict,
   getMessage,
+  isHeld,
   getQuote,
   getStaffById,
   lastMessageOf,
@@ -845,6 +847,68 @@ export async function completeJob(_prev: FinishState, formData: FormData): Promi
  * being offered and stops working, rather than racing a flush that may already
  * have the message in its hand.
  */
+/**
+ * Send a queued text now, instead of waiting for its hour.
+ *
+ * Open to the crew as well as the owner, on purpose. The person who wants this
+ * is the contractor who has just corrected a price at 6:30am and does not want
+ * the wrong number sitting on a customer's phone for another ninety minutes,
+ * and routing that through the office is how the quote gets accepted at the old
+ * price while everybody waits.
+ *
+ * Not gated the way cancelling is, because the two are not comparable acts:
+ * cancelling a quote text destroys the quote, while this only changes WHEN a
+ * text somebody already wrote and already approved goes out. The worst case is
+ * a customer hearing from us earlier than our own courtesy rule intended.
+ *
+ * Access is the same check every other action on this page makes - can this
+ * person load the job - and the quote id scopes the lookup, so a message id
+ * guessed from somebody else's lead finds nothing.
+ */
+export async function sendHeldTextNow(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+  const id = String(formData.get("id") ?? "");
+  const messageId = String(formData.get("messageId") ?? "");
+  if (!id || !messageId) return { ok: false, error: "Missing message." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+
+  // Read the row before acting on it: the form says what the page believed a
+  // moment ago, and in this particular window that belief goes stale fast.
+  const held = await getMessage(messageId, id);
+  if (!held) return { ok: false, error: "That text is no longer in the queue." };
+  if (!isHeld(held)) {
+    return {
+      ok: false,
+      error: held.cancelled_at
+        ? "That text was cancelled, so there is nothing to send."
+        : "That text has already gone out.",
+    };
+  }
+
+  const r = await sendHeldMessageNow(held);
+  await addEvent(session, id, "message_sent_early", {
+    kind: held.kind,
+    role: held.role,
+    was_due: held.send_after ?? null,
+    delivered: r.ok,
+  });
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+  revalidatePath("/job/[token]", "page");
+
+  if (!r.ok) {
+    // The provider's own words, not a generic failure: the whole reason this
+    // button exists is that somebody is chasing money, and "couldn't send" sends
+    // them back to the office with nothing to act on.
+    return { ok: false, error: [r.detail, r.status ? `(HTTP ${r.status})` : ""].filter(Boolean).join(" ").slice(0, 500) };
+  }
+  return { ok: true, message: "Sent. It has gone out now rather than waiting." };
+}
+
 export async function cancelHeldMessage(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Your session expired. Please sign in again." };

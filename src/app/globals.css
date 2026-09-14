@@ -2505,6 +2505,36 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .msg-cancel-btn { min-height: 40px; }
 }
 
+/* Sending a queued text now, instead of at the hour it was promised. Sits on
+   the row like the Cancel control beside it, and reads the same way: quiet,
+   because most of the time the right answer is to let the queue do its job. */
+.msg-now { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.55rem; }
+.msg-now-btn { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+.msg-now-btn:disabled { opacity: 0.6; cursor: default; }
+.msg-now-ok { margin: 0.55rem 0 0; font-size: 0.84rem; font-weight: 700; color: #4ade80; }
+.msg-now-err { margin: 0.55rem 0 0; font-size: 0.84rem; font-weight: 700; color: #f87171; }
+
+/* The crew's copy of the same thing. On the job page the card is on white, so
+   the two result colours from the dark CRM would be unreadable here. */
+.jh-card .msg-now-ok { color: #15803d; }
+.jh-card .msg-now-err { color: #b91c1c; }
+.jh-card .msg-now .crm-muted { color: #6b7280; }
+.jh-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1rem; }
+.jh-list > li { border-top: 1px solid #e5e7eb; padding-top: 0.9rem; }
+.jh-list > li:first-child { border-top: none; padding-top: 0; }
+/* The text itself, as it will arrive. Whether to send it early is a judgement
+   about what it SAYS, so the words have to be on screen to make it. */
+.jh-body {
+  margin: 0.5rem 0 0.15rem; padding: 0.6rem 0.7rem; border-radius: 0.5rem;
+  background: #f7f7f8; border: 1px solid #e5e7eb;
+  font-size: 0.86rem; line-height: 1.45; color: #374151; white-space: pre-wrap;
+}
+
+@media (max-width: 640px) {
+  /* Thumb-sized, like every other control the crew press outdoors. */
+  .msg-now-btn { min-height: 44px; }
+}
+
 /* ── Security dashboard ── */
 .sec-inline-badge { margin-left: 0.45rem; }
 .sec-failed { color: #f87171; font-weight: 700; }

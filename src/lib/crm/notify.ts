@@ -467,6 +467,56 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
   };
 }
 
+/**
+ * Send one queued text right now, ahead of the hour it was promised for.
+ *
+ * Quiet hours are a courtesy, and a courtesy has to be overridable by the
+ * person whose money is on the other end of it. A contractor who corrects a
+ * price at 6:30am is not sending a marketing blast - they are stopping a
+ * customer approving a wrong number, and "it goes out at 8" is the wrong answer
+ * to that. So the rule still holds by default and a person can step over it,
+ * deliberately, one text at a time.
+ *
+ * Deliberately built from the same three pieces the drain uses - claim,
+ * deliver, finish - rather than a second send path of its own. The claim is
+ * what makes pressing this at the same moment a cron arrives safe: one of them
+ * gets the row and the other finds it taken, so the customer gets one text.
+ */
+export async function sendHeldMessageNow(m: QuoteMessage): Promise<SendResult> {
+  if (!m.to_phone || !m.body) {
+    return { ok: false, provider: SMS_PROVIDER, detail: "There is no number or message on this row to send." };
+  }
+  if (!(await claimMessage(m.id, now().toISOString()))) {
+    return {
+      ok: false,
+      provider: SMS_PROVIDER,
+      to: m.to_phone,
+      detail:
+        "Could not take this text off the queue, so nothing was sent. " +
+        "It has either just gone out, been cancelled, or the queue cannot be written to at all.",
+    };
+  }
+
+  const r = await deliver(m.to_phone, m.body).catch(
+    (e) => ({ ok: false, provider: SMS_PROVIDER, detail: String(e) }) as SendResult,
+  );
+  // Same bookkeeping as the drain, so a hand-sent text is recorded exactly like
+  // one the queue sent - including going back on the queue if the provider
+  // refused it, which is what stops a failed tap losing the message.
+  await finishMessage(
+    m.id,
+    {
+      ok: r.ok,
+      provider: r.provider,
+      status: r.status ?? null,
+      detail: r.ok ? null : (r.detail ?? "Send failed."),
+    },
+    m.attempts ?? 0,
+  );
+  if (!r.ok) console.error("[sms-queue] a hand-sent held message failed", { id: m.id, detail: r.detail });
+  return r;
+}
+
 // Drain the queue without making the caller wait for it. `after` runs the work
 // once the response is out but before the function is torn down, which is the
 // only way a serverless request can leave something running. Outside a request

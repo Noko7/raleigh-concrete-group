@@ -234,6 +234,26 @@ A failed send is put back on the queue and retried up to three times, but only
 when the provider actually refused it. If the call never completed we cannot
 tell whether it arrived, so it is left alone rather than risking a second copy.
 
+### Send now
+
+Any queued text can be sent immediately, by the owner from the job page's
+**Texts sent** log or by the assigned contractor from **Waiting to send** on
+their own `/job/<token>` page. It overrides quiet hours, deliberately.
+
+The rule is a courtesy and the person whose money is on the other end of it has
+to be able to step over it: a contractor correcting a price at 6:30am is racing
+the customer's decision, not their bedtime, and ninety minutes of a wrong figure
+sitting in a thread is how a job gets accepted at the old number. Inside quiet
+hours the button says what it is about to do rather than hiding it, and the job's
+activity log records that somebody chose not to wait.
+
+It is offered on **any** held text, including one already past its hour - unlike
+Cancel, which hides itself at that point. The asymmetry is about what losing a
+race to the drain costs: a late cancel marks a text cancelled that is already on
+somebody's phone, so the log ends up lying, while a late send just finds the row
+already claimed and says so. Both go through the same claim the drain uses, so
+the customer gets exactly one text either way.
+
 ### Lead times, and who they apply to
 
 | Date | Earliest | Who it binds |
@@ -461,6 +481,7 @@ which is what made the job link and the pipeline feel like separate systems.
 | Customer + crew reminders | `src/app/api/cron/reminders/route.ts` |
 | The held-text queue | `flushHeldMessages` in `src/lib/crm/notify.ts` |
 | Queue health readout | `queueHealth` in `src/lib/crm/queries.ts` |
+| Send a queued text now | `sendHeldMessageNow` in `notify.ts`, `sendHeldTextNow` in `crm/quotes/[id]/actions.ts` |
 | Address rule (form + API) | `src/lib/address.ts` |
 | Owner recipient list | `ownerRecipients` in `notify.ts` |
 | Test a real send | CRM → Settings → Text notifications |

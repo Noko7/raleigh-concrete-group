@@ -1,8 +1,9 @@
-import { BUSINESS_TZ, clockLabel } from "@/lib/crm/clock";
+import { BUSINESS_TZ, clockLabel, inQuietHours } from "@/lib/crm/clock";
 import { messageLabel, roleLabel } from "@/lib/crm/messages";
 import { isCancellable, isCancelled, isHeld, type QuoteMessage } from "@/lib/crm/queries";
 
 import { CancelHeldText } from "./cancel-held-text";
+import { SendHeldNow } from "./send-held-now";
 
 // The texts that carry the quote itself. Kept in step with QUOTE_TEXT_KINDS in
 // actions.ts, which is the copy that decides what actually happens.
@@ -27,6 +28,9 @@ function fmt(iso: string) {
 }
 
 export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; isOwner: boolean }) {
+  // Whether sending one by hand right now means texting somebody at 6am. Read
+  // once for the whole list rather than per row: they all share a clock.
+  const quiet = inQuietHours();
   // A text waiting for 8am is neither sent nor failed, and counting it as
   // failed would put a red number on a night that went fine.
   //
@@ -100,12 +104,21 @@ export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; is
                     real failure. */}
                 {m.detail && !m.ok && !isHeld(m) && !isCancelled(m) && <pre className="msg-detail">{m.detail}</pre>}
 
-                {/* The window between "queued" and "sent" is the only chance
-                    anyone gets to take a text back, so the control lives on the
-                    row rather than behind a menu. isCancellable, not isHeld: a
-                    text whose hour has come is one the next flush may already
-                    be holding, and a button that might be racing a send is
-                    worse than no button. */}
+                {/* Both controls live on the row rather than behind a menu:
+                    the window between "queued" and "sent" is the only one
+                    anybody gets.
+
+                    They differ on which rows they appear for, and the reason is
+                    what losing a race to the drain costs. Sending is offered on
+                    ANY held row, past its hour included - which, when the queue
+                    has stalled, is the only kind of row there is - because the
+                    worst case is finding it already claimed and saying so.
+                    Cancelling hides itself once the hour has come, because a
+                    cancel that lands a second behind a send marks a text
+                    cancelled that is already on somebody's phone, and then the
+                    log is lying. */}
+                {isHeld(m) && m.quote_id && <SendHeldNow quoteId={m.quote_id} messageId={m.id} quiet={quiet} />}
+
                 {isCancellable(m) && m.quote_id && (
                   <CancelHeldText
                     quoteId={m.quote_id}
@@ -114,7 +127,6 @@ export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; is
                     isOwner={isOwner}
                   />
                 )}
-
 
                 {m.body && (
                   <details className="msg-body">
