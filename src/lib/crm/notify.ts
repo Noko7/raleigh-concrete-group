@@ -50,6 +50,12 @@ export type SendResult = {
   // hour. Both wait in the same queue; only quiet hours is a rule anybody needs
   // explaining to them.
   spaced?: boolean;
+  // We never made the request at all - a missing API key, an unset from-number.
+  // Distinct from a call that threw, where the message may well have arrived:
+  // here nothing was sent, we know it, and the queue can retry without any risk
+  // of a second copy. Set only where the provider function returns BEFORE its
+  // fetch.
+  unsent?: boolean;
   // Suppressed: the identical text went to this number seconds ago. `ok` is
   // true because the customer has the message - which is what every caller is
   // really asking - but nothing left the building on this call.
@@ -86,8 +92,8 @@ async function sendQuo(to: string, message: string): Promise<SendResult> {
   const key = process.env.QUO_API_KEY || "";
   const from = toE164(process.env.QUO_FROM || "") || (process.env.QUO_FROM || "").trim();
   const userId = process.env.QUO_USER_ID || "";
-  if (!key) return { ok: false, provider: "quo", detail: "QUO_API_KEY is not set" };
-  if (!from) return { ok: false, provider: "quo", detail: "QUO_FROM is not set" };
+  if (!key) return { ok: false, provider: "quo", unsent: true, detail: "QUO_API_KEY is not set" };
+  if (!from) return { ok: false, provider: "quo", unsent: true, detail: "QUO_FROM is not set" };
   // Quo can't text a number from itself; it fails as an opaque 500 rather than a
   // validation error, so catch it here where we can say what's actually wrong.
   if (to === from) {
@@ -116,7 +122,8 @@ async function sendTwilio(to: string, message: string): Promise<SendResult> {
   const sid = process.env.TWILIO_ACCOUNT_SID || "";
   const auth = process.env.TWILIO_AUTH_TOKEN || "";
   const from = process.env.TWILIO_FROM || "";
-  if (!sid || !auth || !from) return { ok: false, provider: "twilio", detail: "Twilio env vars missing" };
+  if (!sid || !auth || !from)
+    return { ok: false, provider: "twilio", unsent: true, detail: "Twilio env vars missing" };
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
     method: "POST",
     headers: {
@@ -133,7 +140,7 @@ async function sendCustom(to: string, message: string): Promise<SendResult> {
   const url = process.env.SMS_API_URL || "";
   const key = process.env.SMS_API_KEY || "";
   const from = process.env.SMS_FROM || "";
-  if (!url) return { ok: false, provider: "custom", detail: "SMS_API_URL is not set" };
+  if (!url) return { ok: false, provider: "custom", unsent: true, detail: "SMS_API_URL is not set" };
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) },
@@ -448,6 +455,7 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
         provider: r.provider,
         status: r.status ?? null,
         detail: r.ok ? null : (r.detail ?? "Send failed."),
+        unsent: r.unsent,
       },
       // A failure releases the claim so the next drain retries it, until this
       // reaches the cap. Without the count the row would either be retried for
@@ -510,6 +518,7 @@ export async function sendHeldMessageNow(m: QuoteMessage): Promise<SendResult> {
       provider: r.provider,
       status: r.status ?? null,
       detail: r.ok ? null : (r.detail ?? "Send failed."),
+      unsent: r.unsent,
     },
     m.attempts ?? 0,
   );

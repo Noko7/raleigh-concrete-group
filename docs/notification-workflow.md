@@ -257,9 +257,19 @@ This morning's quote should fly; last Tuesday's should not, and the ordinary
 Cancel button will not touch it because that only offers itself on a text whose
 hour has not come yet. Part 2 of that file retires the stale ones.
 
-A failed send is put back on the queue and retried up to three times, but only
-when the provider actually refused it. If the call never completed we cannot
-tell whether it arrived, so it is left alone rather than risking a second copy.
+What happens to a failed send depends on what we actually know about it:
+
+| What happened | What the queue does |
+|---------------|---------------------|
+| The provider **refused** it (an HTTP status came back) | Retried, up to three attempts |
+| We **never made the request** (a missing API key, an unset from-number) | Always retried, and it costs no attempt - the text waits until the setting is fixed, then sends |
+| The call **threw** (timeout, dropped connection) | Left alone. We cannot tell whether it arrived, and a text nobody got beats one sent twice |
+
+The middle row is the one that matters most. A misconfigured deploy must never
+eat the queue: nothing was sent, we know nothing was sent, and the fix is an
+environment variable rather than anything about that message. Those rows sit
+visibly in Settings until somebody fixes it. The decision lives in
+`planRetry` (`src/lib/crm/send-retry.ts`), which is pure and has tests.
 
 ### Send now
 
@@ -516,6 +526,7 @@ which is what made the job link and the pipeline feel like separate systems.
 | Customer + crew reminders | `src/app/api/cron/reminders/route.ts` |
 | The held-text queue | `flushHeldMessages` in `src/lib/crm/notify.ts` |
 | Queue health readout | `queueHealth` in `src/lib/crm/queries.ts` |
+| Retry decision (+ tests) | `planRetry` in `src/lib/crm/send-retry.ts` |
 | Send a queued text now | `sendHeldMessageNow` in `notify.ts`, `sendHeldTextNow` in `crm/quotes/[id]/actions.ts` |
 | Address rule (form + API) | `src/lib/address.ts` |
 | Owner recipient list | `ownerRecipients` in `notify.ts` |

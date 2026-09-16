@@ -24,6 +24,10 @@ import {
 } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
 import { pgUser, pgAdmin } from "./rest";
+import { MAX_SEND_ATTEMPTS, RETRY_BACKOFF_MINUTES, planRetry } from "./send-retry";
+
+// Re-exported so every queue caller reads the cap from one place.
+export { MAX_SEND_ATTEMPTS };
 import type {
   Agreement,
   ContractorInvite,
@@ -644,64 +648,19 @@ export async function claimMessage(id: string, nowIso: string): Promise<boolean>
   }
 }
 
-/**
- * How many times the queue will hand one row to the provider before giving up.
- *
- * A cap rather than forever: a number that is a landline, or a workspace that
- * cannot message it, fails identically on every attempt, and retrying that
- * until the heat death of the universe is just noise in the log. Three is
- * enough to ride out a provider blip and few enough to stop quickly on
- * something that is genuinely never going to send.
- */
-export const MAX_SEND_ATTEMPTS = 3;
-
-// Far enough out that a retry is a fresh attempt rather than a hammering, near
-// enough that the next drain picks it up rather than tomorrow's.
-const RETRY_BACKOFF_MINUTES = 10;
-
-/**
- * Record how a held message went - and, if it failed, put it back.
- *
- * The claim stamps `sent_at` BEFORE the send, so that a crash mid-send leaves a
- * text unsent rather than sent twice. That is still the right trade, and it is
- * preserved below - but it used to be applied to a FAILED send too, which took
- * the row out of the due list permanently: one 500 from the provider at the
- * moment the morning drain ran and that quote never went out, with nothing
- * anywhere saying it was still owed.
- *
- * So the two cases are separated, on whether an HTTP status came back:
- *
- *   a status   the round trip finished and the provider REFUSED the message. It
- *              definitely did not send, so the claim is released and the next
- *              drain tries again, up to MAX_SEND_ATTEMPTS.
- *
- *   no status  the call threw - a timeout, a dropped connection. We cannot tell
- *              whether it arrived, so the original choice stands and the row
- *              stays claimed. A text nobody got is better than one sent twice
- *              when the ambiguity is genuine.
- *
- * `attempts` comes off the row the caller already has in hand.
- */
 export async function finishMessage(
   id: string,
-  result: { ok: boolean; provider?: string | null; status?: number | null; detail?: string | null },
+  result: {
+    ok: boolean;
+    provider?: string | null;
+    status?: number | null;
+    detail?: string | null;
+    unsent?: boolean;
+  },
   attempts = 0,
 ): Promise<void> {
-  const tried = attempts + 1;
-  const refused = typeof result.status === "number";
-  // The caller can declare a row terminal by handing over a spent count - used
-  // for a held row with no number or body in it, which has nothing to attempt
-  // and so should not be annotated as though something was tried.
-  const terminal = attempts >= MAX_SEND_ATTEMPTS;
-  const retrying = !result.ok && refused && tried < MAX_SEND_ATTEMPTS;
-  const note = result.ok || terminal
-    ? null
-    : retrying
-      ? `(Attempt ${tried} of ${MAX_SEND_ATTEMPTS}. Back on the queue for the next drain.)`
-      : refused
-        ? `(Attempt ${tried} of ${MAX_SEND_ATTEMPTS}. Not trying again.)`
-        : "(The send did not complete, so we cannot tell whether it arrived. Not trying again, in case it did.)";
-  const detail = [result.detail, note].filter(Boolean).join(" ") || null;
+  const plan = planRetry(result, attempts);
+  const detail = [result.detail, plan.note].filter(Boolean).join(" ") || null;
   const outcome = {
     ok: result.ok,
     provider: result.provider ?? null,
@@ -718,9 +677,9 @@ export async function finishMessage(
   try {
     const res = await patch({
       ...outcome,
-      attempts: Math.min(tried, MAX_SEND_ATTEMPTS),
+      attempts: plan.attempts,
       // Releasing the claim is what makes the next drain see it again.
-      ...(retrying
+      ...(plan.retrying
         ? { sent_at: null, send_after: new Date(Date.now() + RETRY_BACKOFF_MINUTES * 60_000).toISOString() }
         : {}),
     });
