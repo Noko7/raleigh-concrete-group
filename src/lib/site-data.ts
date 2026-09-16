@@ -103,7 +103,8 @@ export const services: Service[] = [
       "Built on a solid, settle-proof base",
       "Free design and quote",
     ],
-    image: "/images/back_patio_finished.png",
+    image: "/images/pavers_patio_cobble_finished.jpeg",
+    showcaseImage: "/images/pavers_patio_white_inlay_porch.jpeg",
     beforeAfter: {
       before: "/images/back_patio_before.png",
       after: "/images/back_patio_after.png",
@@ -230,17 +231,17 @@ export const services: Service[] = [
     navLabel: "Pool Decks",
     group: "concrete",
     blurb:
-      "Stamped or finished concrete pool decking in Raleigh that stays cool, safe and slip-aware.",
+      "Concrete and paver pool decking in Raleigh that stays cool, safe and slip-aware.",
     intro:
-      "Your pool deserves a deck that looks great and stays safe underfoot. We pour stamped and finished concrete pool decks across Raleigh, with textures that hold up to sun, water and bare feet.",
+      "Your pool deserves a deck that looks great and stays safe underfoot. We build pool decks across Raleigh two ways - poured concrete, stamped or broom-finished, and pavers laid on a compacted base - both finished to hold up to sun, water and bare feet.",
     bullets: [
+      "Poured concrete or pavers",
       "Stamped and textured finishes",
-      "Slip-aware surfaces",
-      "Cool-deck color options",
+      "Slip-aware surfaces and cool-deck colors",
       "Free quote",
     ],
-    image: "/images/stamped_patio.png",
-    showcaseImage: "/images/decorative_stamped_back_porch.png",
+    image: "/images/pool_deck_pavers_gray.jpeg",
+    showcaseImage: "/images/pool_deck_pavers_wide.jpeg",
   },
   {
     slug: "commercial-flatwork",
@@ -367,7 +368,7 @@ export const services: Service[] = [
       "Flat, even, settle-proof",
       "Free quote",
     ],
-    image: "/images/patio_pavers.png",
+    image: "/images/pavers_walkway_curved_side_yard.jpeg",
     showcaseImage: "/images/pavers_backyard_porchsetup.png",
   },
   {
@@ -385,8 +386,8 @@ export const services: Service[] = [
       "Premium materials",
       "Free design and quote",
     ],
-    image: "/images/patio_pavers.png",
-    showcaseImage: "/images/pavers_driveway.png",
+    image: "/images/pavers_patio_base_prep_crew.jpeg",
+    showcaseImage: "/images/pavers_patio_cobble_border_detail.jpeg",
   },
   {
     slug: "steps-stoops-landings",
@@ -403,7 +404,7 @@ export const services: Service[] = [
       "Safe, even risers",
       "Free quote",
     ],
-    image: "/images/retaining_wall.png",
+    image: "/images/pavers_steps_lighting.jpeg",
     showcaseImage: "/images/pavers_front_porch-stairs.png",
   },
   {
@@ -421,7 +422,7 @@ export const services: Service[] = [
       "Matched to your patio",
       "Free quote",
     ],
-    image: "/images/back_patio_finished.png",
+    image: "/images/pavers_patio_firepit.jpeg",
     showcaseImage: "/images/pavers_backyard_porchsetup.png",
   },
   {
@@ -548,7 +549,7 @@ const serviceFaqMap: Record<string, FaqItem[]> = {
   "pool-decks": [
     {
       q: "What's the best surface for a pool deck?",
-      a: "Stamped or broom-finished concrete is popular because it's durable and customizable, and we can add a non-slip additive to the sealer for safer footing around the water.",
+      a: "Both work well, and it usually comes down to look and budget. Stamped or broom-finished concrete is durable and customizable, and we can add a non-slip additive to the sealer for safer footing around the water. Pavers cost more up front but stay cooler underfoot, and an individual paver can be lifted and reset later instead of patching a slab. We'll walk you through both when we quote it.",
     },
   ],
   "steps-stoops-landings": [
@@ -1262,6 +1263,16 @@ export const galleryImages: GalleryImage[] = [
   { src: "/images/loadnig_dock_commercial.png", alt: "Commercial loading dock concrete project" },
   { src: "/images/driveway_close_up_detailed_8k.png", alt: "Broom-finished concrete driveway close-up" },
   { src: "/images/workers_pouring_driveway_live_action.png", alt: "Our crew pouring a new concrete driveway" },
+  // Paver work, 2026. One or two frames per job rather than every angle: four
+  // shots of the same patio read as a thin portfolio, not a deep one.
+  { src: "/images/pavers_patio_cobble_finished.jpeg", alt: "Tumbled cobble paver patio with charcoal border" },
+  { src: "/images/pavers_patio_base_prep_crew.jpeg", alt: "Our crew screeding the base for a paver patio" },
+  { src: "/images/pool_deck_pavers_wide.jpeg", alt: "Paver pool deck surrounding a backyard pool" },
+  { src: "/images/pavers_patio_firepit.jpeg", alt: "Paver patio with a built-in fire pit" },
+  { src: "/images/pavers_patio_white_inlay_overhead.jpeg", alt: "Light paver patio with dark inlay banding" },
+  { src: "/images/pavers_patio_white_inlay_border.jpeg", alt: "Paver patio with contrasting border detail" },
+  { src: "/images/pavers_steps_lighting.jpeg", alt: "Paver steps with built-in riser lighting" },
+  { src: "/images/pavers_walkway_curved_side_yard.jpeg", alt: "Curved paver walkway along the side of a home" },
 ];
 
 export const links = {
