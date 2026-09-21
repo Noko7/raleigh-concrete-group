@@ -243,7 +243,7 @@ with checks(area, ref, check_name, kind, n) as (
     (select count(*) from public.quote_requests q
       where q.quote_sent_at is not null and not q.is_test and q.archived_at is null
         and not exists (select 1 from public.quote_messages m
-                         where m.quote_id = q.id and m.kind in ('quote_ready','quote_updated')))
+                         where m.quote_id = q.id and m.kind in ('quote_ready','quote_updated','quote_option_added')))
 
   -- ── LINE ITEMS ───────────────────────────────────────────────────────────
   -- The price of an approved job is the option they picked (nothing, on a quote

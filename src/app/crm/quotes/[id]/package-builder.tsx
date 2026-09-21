@@ -9,6 +9,7 @@ import {
   packageLetter,
 } from "@/lib/crm/constants";
 import type { dict } from "@/lib/crm/i18n";
+import { AutoTextarea } from "@/components/auto-textarea";
 
 // The "or instead" builder, shared by the CRM editor and the crew's job page so
 // a quote written from a truck can offer the same choice as one written at a
@@ -248,7 +249,7 @@ export function PackageBuilder({
 
           <label className="qo-field">
             <span>{t.itemDesc}</span>
-            <textarea
+            <AutoTextarea
               rows={2}
               value={r.description}
               onChange={(e) => set(r.key, { description: e.target.value })}

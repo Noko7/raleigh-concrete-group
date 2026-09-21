@@ -28,6 +28,7 @@ import {
   type StoredPackage,
 } from "./package-builder";
 import type { SaveState } from "./types";
+import { AutoTextarea } from "@/components/auto-textarea";
 
 type ContractorOption = { id: string; label: string };
 
@@ -363,7 +364,7 @@ export function QuoteEditor({ id, isOwner, options, packages, customerName, awai
                 </button>
               )}
             </span>
-            <textarea
+            <AutoTextarea
               name={field}
               rows={2}
               value={sections[field]}
@@ -380,7 +381,7 @@ export function QuoteEditor({ id, isOwner, options, packages, customerName, awai
       {hasLegacySummary && (
         <label className="crm-field">
           <span>Older quote summary (shown only while the sections above are blank)</span>
-          <textarea
+          <AutoTextarea
             name="quote_summary"
             rows={3}
             value={summary}
@@ -392,7 +393,7 @@ export function QuoteEditor({ id, isOwner, options, packages, customerName, awai
 
       <label className="crm-field">
         <span>Internal notes (never shown to the customer)</span>
-        <textarea
+        <AutoTextarea
           name="internal_notes"
           rows={3}
           value={notes}

@@ -18,6 +18,7 @@ export const MESSAGE_LABELS: Record<string, string> = {
   quote_followup: "48h quote follow-up",
   quote_ready: "Quote sent",
   quote_updated: "Updated quote sent",
+  quote_option_added: "Another option sent",
   quote_sent: "Quote-sent alert",
   approved: "Approval thank-you",
   approved_offline: "Approved on the phone",

@@ -1121,6 +1121,35 @@ export async function notifyQuoteUpdated(q: QuoteInfo): Promise<SendResult> {
   );
 }
 
+// ── 5a-ii. Another way of doing the job was added ───────────────────────────
+// Its own message rather than the correction above, because it is its own
+// event. "We've updated the quote" is what you say when the number they were
+// shown was wrong. This is the opposite: the number was right, they told us it
+// was more than they wanted to spend, and there is now a second way to do the
+// job sitting next to it. Saying "updated" there would read as a correction of
+// something they never complained about, and it buries the one thing they
+// actually asked for.
+//
+// Same link as always, and still no price: the two figures only mean anything
+// beside each other, which is the whole reason the page shows them that way.
+export async function notifyQuoteOptionAdded(q: QuoteInfo): Promise<SendResult> {
+  return sendSmsResult(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      "we've added another option to your quote so you can compare both and pick the one you'd like.",
+      "",
+      "See both options here:",
+      quoteLink(q.public_token ?? ""),
+      "",
+      `It's the same link we sent before. This quote is good for ${QUOTE_TTL_DAYS} days.`,
+      "",
+      BUSINESS,
+    ]),
+    { quoteId: q.id, kind: "quote_option_added", role: "customer" },
+  );
+}
+
 // ── 5b. Quote is out: tell the office ──────────────────────────────────────
 // A quote leaving is a money moment nobody was being told about. The owner gets
 // it because it's the point the job starts waiting on someone outside the

@@ -587,6 +587,10 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           customerName={quote.name}
           sends={sends}
           canRetract={session.staff.role === "owner"}
+          canAddOption={showQuote && Boolean(quote.quote_sent_at)}
+          currentAmount={quote.quote_amount}
+          service={quote.service}
+          options={packages.map((p) => ({ id: p.id, title: p.title, amount: Number(p.amount), recommended: p.recommended }))}
           locale={locale}
           tone="light"
         />

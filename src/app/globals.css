@@ -2519,6 +2519,97 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qs-err { color: #f87171; }
 .qs-ok { color: #4ade80; }
 
+/* "Send them another option", and the modal behind it.
+   Lives in the Quotes sent card because that is the card already answering
+   "what have we put in front of this person". Same dual-tone rule as .ao: dark
+   defaults for the office, .ao-light overrides for the crew's white card. */
+.qs-add { margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--crm-border, #e2e5ea); }
+.qs-light .qs-add { border-top-color: #e2e5ea; }
+.qs-add-open {
+  width: 100%; min-height: 44px; padding: 0.6rem 0.9rem; border-radius: 0.6rem; cursor: pointer;
+  background: var(--amber); border: 1px solid var(--amber); color: #fff; font: inherit; font-weight: 800;
+}
+.qs-add-open:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
+.qs-add-hint { margin: 0.45rem 0 0; font-size: 0.8rem; color: inherit; opacity: 0.72; }
+.qs-held { margin: 0.6rem 0 0; font-size: 0.88rem; font-weight: 700; color: var(--amber); }
+.qs-tag-added { color: var(--amber); max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The modal. A sheet on a phone (it is filled in one-handed, mid-call) and a
+   centred panel from tablet up. */
+.qsm {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); padding: 0;
+}
+.qsm-panel {
+  width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto;
+  margin: 0; border-radius: 1rem 1rem 0 0;
+  /* Clear of the home indicator, and of an on-screen keyboard's shadow. */
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+}
+.qsm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.qsm-x {
+  flex: 0 0 auto; width: 2rem; height: 2rem; border-radius: 999px; cursor: pointer;
+  background: rgba(127, 127, 127, 0.18); border: none; color: inherit; font-size: 1.3rem; line-height: 1;
+}
+.qsm-x:disabled { opacity: 0.4; cursor: not-allowed; }
+.qsm-step { border: 1px solid var(--crm-border, #e2e5ea); border-radius: 0.6rem; padding: 0.8rem 0.85rem; margin: 0; }
+.ao-light .qsm-step { border: 1px solid #e2e5ea; }
+.qsm-step-new { border-left: 3px solid var(--amber); }
+.qsm-step legend { display: flex; align-items: center; gap: 0.45rem; font-size: 0.8rem; font-weight: 800; padding: 0 0.35rem; }
+.qsm-letter {
+  flex: 0 0 auto; width: 1.4rem; height: 1.4rem; border-radius: 999px; display: grid; place-items: center;
+  font-size: 0.72rem; font-weight: 900; background: rgba(194, 104, 42, 0.18); color: var(--amber);
+}
+.ao-light .qsm-letter { color: var(--amber-dark); }
+.qsm-row { display: flex; gap: 0.6rem; }
+.qsm-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.78rem; font-weight: 800; margin-top: 0.6rem; }
+.qsm-field-wide { flex: 1 1 auto; min-width: 0; }
+.qsm-field-price { flex: 0 0 7.5rem; }
+.qsm-field input, .qsm-field textarea {
+  width: 100%; padding: 0.6rem 0.7rem; border-radius: 0.5rem; font: inherit; font-weight: 500; min-height: 44px;
+  border: 1px solid var(--crm-border, #d1d5db); background: var(--crm-surface-solid, #fff); color: var(--crm-text, #1f2328);
+}
+.ao-light .qsm-field input, .ao-light .qsm-field textarea {
+  border: 1px solid #d1d5db; background: #fff; color: #1f2328;
+}
+.qsm-field input:focus, .qsm-field textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+.qsm-have { margin-top: 0.2rem; }
+.qsm-have-row {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.65rem; margin-bottom: 0.35rem;
+  border-radius: 0.5rem; background: var(--crm-surface-solid, #faf8f4); font-size: 0.9rem;
+}
+.ao-light .qsm-have-row { background: #faf8f4; }
+.qsm-have-row .ao-opt-title, .qsm-preview-list .ao-opt-title { flex: 1 1 auto; min-width: 0; }
+.qsm-rec { margin-top: 0.2rem; }
+.qsm-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.qsm-chip {
+  padding: 0.45rem 0.7rem; border-radius: 999px; cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 700;
+  border: 1px solid var(--crm-border, #d1d5db); background: transparent; color: inherit; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ao-light .qsm-chip { border: 1px solid #d1d5db; }
+.qsm-chip-on { background: var(--amber); border-color: var(--amber); color: #fff; }
+.qsm-preview { border-radius: 0.6rem; padding: 0.75rem 0.8rem; background: rgba(194, 104, 42, 0.1); }
+.qsm-preview-list { list-style: none; margin: 0 0 0.5rem; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.qsm-preview-list li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.92rem; }
+.qsm-preview-rec .ao-opt-title { font-weight: 800; }
+.qsm-preview-rec .ao-opt-title::after { content: " *"; color: var(--amber); }
+
+/* Sending, not approving: .ao-go is green because it confirms a customer's
+   yes, and this button texts them a second price. Amber is what every other
+   send in this app is. */
+.qsm .ao-go { background: var(--amber); border-color: var(--amber); color: #fff; }
+.qsm .ao-go:hover:not(:disabled) { background: var(--amber-dark); border-color: var(--amber-dark); }
+
+@media (min-width: 640px) {
+  .qsm { align-items: center; padding: 1.5rem; }
+  .qsm-panel { border-radius: 1rem; padding-bottom: 1.25rem; }
+}
+@media (max-width: 420px) {
+  .qsm-row { flex-direction: column; gap: 0; }
+  .qsm-field-price { flex: 1 1 auto; }
+}
+
 /* The crew's page: white card, dark text, amber border, same as .js-card. */
 .qs-light { background: #fff; border: 2px solid #e2e5ea; margin-top: 1.5rem; margin-bottom: 0; padding: 1.1rem 1.15rem; }
 .qs-light .qs-title { font-family: inherit; font-weight: 800; font-size: 1rem; }

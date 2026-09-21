@@ -3,7 +3,7 @@
 import { clockLabel } from "./clock";
 import { dollars, STATUS_LABELS } from "./constants";
 import { usd } from "./fees";
-import type { Dict } from "./i18n";
+import { fill, type Dict } from "./i18n";
 import { messageLabel } from "./messages";
 import type { QuoteEvent } from "./types";
 
@@ -36,7 +36,17 @@ const heldWhen = (v: unknown) => {
  * there, and the last send with nothing after it is by definition the price on
  * the quote right now.
  */
-export type QuoteSend = { id: string; at: string; amount: number | null; corrected: boolean };
+// `added` is the option this send put in front of the customer, on the rows
+// that came from "send them another option" rather than from a correction. It
+// is what lets the list say "Asphalt driveway added" where it would otherwise
+// only be able to say "Correction", which is not what happened.
+export type QuoteSend = {
+  id: string;
+  at: string;
+  amount: number | null;
+  corrected: boolean;
+  added: string | null;
+};
 
 export function quoteSends(events: QuoteEvent[], currentAmount: number | null): QuoteSend[] {
   const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
@@ -50,6 +60,7 @@ export function quoteSends(events: QuoteEvent[], currentAmount: number | null): 
         id: e.id,
         at: e.created_at,
         corrected: e.type === "quote_revised",
+        added: typeof m.added === "string" && m.added ? m.added : null,
         amount: e.type === "quote_revised" ? num(m.to) : num(m.amount),
         replaced: e.type === "quote_revised" ? num(m.from) : null,
       };
@@ -60,7 +71,7 @@ export function quoteSends(events: QuoteEvent[], currentAmount: number | null): 
     if (rows[i].amount != null) continue;
     rows[i].amount = i + 1 < rows.length ? rows[i + 1].replaced : currentAmount;
   }
-  return rows.map(({ id, at, amount, corrected }) => ({ id, at, amount, corrected }));
+  return rows.map(({ id, at, amount, corrected, added }) => ({ id, at, amount, corrected, added }));
 }
 
 /**
@@ -88,7 +99,7 @@ export function crewEventText(e: QuoteEvent, t: Dict): string | null {
     case "quote_sent":
       return l.quoteSent;
     case "quote_revised":
-      return l.quoteRevised;
+      return m.added ? fill(l.quoteOptionAdded, { title: String(m.added) }) : l.quoteRevised;
     case "customer_viewed":
       return l.customerViewed;
     // Both spellings of the same fact, told apart so neither is a lie: the
@@ -149,6 +160,10 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     // much" is the only question anyone opens this row to answer.
     case "quote_revised": {
       const money = (v: unknown) => dollars(v as number) ?? "no price";
+      // An added option is not a correction, and the log must not call it one:
+      // nothing the customer was shown was wrong, they now have a second way to
+      // do the job beside the first.
+      if (m.added) return `Another option sent to the customer: ${String(m.added)} (now ${money(m.to)})`;
       return m.from !== m.to
         ? `Corrected quote sent to the customer (was ${money(m.from)}, now ${money(m.to)})`
         : "Corrected quote sent to the customer (wording changed)";

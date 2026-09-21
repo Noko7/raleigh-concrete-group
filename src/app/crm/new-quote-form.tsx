@@ -5,6 +5,7 @@ import { useActionState, useEffect, useState } from "react";
 import { todayYmd } from "@/lib/crm/clock";
 import { quoteServiceOptions } from "@/lib/site-data";
 import { createQuote, type NewQuoteState } from "./new-quote-actions";
+import { AutoTextarea } from "@/components/auto-textarea";
 
 type ContractorOption = { id: string; label: string };
 
@@ -129,7 +130,7 @@ export function NewQuoteForm({ contractors }: { contractors: ContractorOption[] 
 
       <label className="crm-field">
         <span>Notes (optional)</span>
-        <textarea name="details" className="crm-input" rows={2} placeholder="Whatever they told you on the phone" />
+        <AutoTextarea name="details" className="crm-input" rows={2} placeholder="Whatever they told you on the phone" />
       </label>
 
       {/* Off by default. A call-in lead normally needs no text at all - you
@@ -144,7 +145,7 @@ export function NewQuoteForm({ contractors }: { contractors: ContractorOption[] 
         </legend>
         {sendText && (
           <>
-            <textarea
+            <AutoTextarea
               name="custom_message"
               className="crm-input"
               rows={4}

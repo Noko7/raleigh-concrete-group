@@ -7,7 +7,10 @@ import { todayYmd } from "@/lib/crm/clock";
 import {
   QUOTE_SECTION_FIELDS,
   QUOTE_SECTION_LABELS,
+  PACKAGE_DESC_MAX,
+  PACKAGE_TITLE_MAX,
   QUOTE_TTL_DAYS,
+  MAX_QUOTE_PACKAGES,
   TIME_RE,
   allInTotal,
   isChoice,
@@ -28,6 +31,7 @@ import {
   notifyCustomerRescheduled,
   notifyCustomerScheduled,
   notifyOfflineApproval,
+  notifyQuoteOptionAdded,
   notifyQuoteReady,
   notifyQuoteSent,
   notifyQuoteUpdated,
@@ -1392,4 +1396,165 @@ export async function rotateTokens(formData: FormData): Promise<void> {
 
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
+}
+
+/**
+ * Add another way of doing the job to a quote the customer is already holding.
+ *
+ * The call this exists for: we quoted concrete, they rang back and said it is
+ * more than they want to spend, and the crew want to put an asphalt price next
+ * to it. Before this, the only route was the full quote editor - open it, find
+ * the choice builder, convert the flat price into Option A by hand, add Option
+ * B, then press Send and hope it went out as a correction rather than bouncing
+ * off the duplicate guard. That is a desk job, and this conversation happens
+ * on a phone in a driveway.
+ *
+ * So this is the same machinery behind a much smaller door. It is deliberately
+ * NOT saveQuote with a flag: this action touches the options and nothing else,
+ * which is what makes it safe to hand to somebody holding a phone in one hand.
+ *
+ * What it does, in one submit:
+ *   1. Turns the flat price into Option A, the first time. A quote that already
+ *      offers a choice skips this and simply gains another card.
+ *   2. Adds the new option.
+ *   3. Re-prices the row off the lead option, exactly as saveQuote does.
+ *   4. Re-sends, restamping the expiry and clearing the follow-up so the
+ *      customer's clock starts again on the quote they are actually holding.
+ *   5. Logs a quote_revised carrying the added title, which is the new line in
+ *      Quotes sent.
+ *
+ * The customer gets notifyQuoteOptionAdded rather than the correction text: the
+ * price they were shown was never wrong, and telling them it was corrected
+ * would answer a complaint they did not make.
+ */
+export async function addQuoteOption(_prev: SaveState, formData: FormData): Promise<SaveState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { ok: false, error: "Missing quote id." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this quote." };
+
+  // Only ever a second answer to a live question. Each of these is a different
+  // conversation, and none of them is "here is another price".
+  if (!current.quote_sent_at) {
+    return { ok: false, error: "This quote hasn't gone out yet. Write both options into the quote itself and send it once." };
+  }
+  if (current.customer_response === "accepted") {
+    return { ok: false, error: "They've already approved this quote. Adding an option now would change a job they've agreed to, so this needs a fresh quote." };
+  }
+  if (current.customer_response === "declined" || current.status === "lost") {
+    return { ok: false, error: "This quote is marked declined. Ask the office to reopen it before sending another option." };
+  }
+  if (current.status === "completed" || current.status === "paid") {
+    return { ok: false, error: "This job is already closed out." };
+  }
+
+  const money = (raw: string): number | null => {
+    const n = Number(String(raw).trim());
+    if (!Number.isFinite(n) || n <= 0 || n > 99_999_999) return null;
+    return Math.round(n * 100) / 100;
+  };
+  const words = (raw: string, cap: number) => noEmDash(String(raw ?? "").trim()).slice(0, cap);
+
+  const [existingPackages, existingOptions] = await Promise.all([
+    listQuotePackages(session, id),
+    listQuoteOptions(session, id),
+  ]);
+
+  const drafts: QuotePackageDraft[] = packagesAsDrafts(existingPackages);
+
+  // First time: the flat price the customer is holding becomes Option A, named
+  // and priced by whoever is filling this in. It is pre-filled on screen from
+  // the row, but read back off the form - they are allowed to correct a guess
+  // we made from the service name, and a silent auto-name is how a customer
+  // ends up looking at an option called "null".
+  if (drafts.length === 0) {
+    const title = words(String(formData.get("keep_title") ?? ""), PACKAGE_TITLE_MAX);
+    const amount = money(String(formData.get("keep_amount") ?? ""));
+    if (!title) return { ok: false, error: "Give the quote they already have a name, so they can tell the two apart." };
+    if (amount == null) return { ok: false, error: "Check the price on the option they already have." };
+    drafts.push({
+      title,
+      description: words(String(formData.get("keep_desc") ?? ""), PACKAGE_DESC_MAX),
+      amount,
+      recommended: false,
+    });
+  }
+
+  const title = words(String(formData.get("add_title") ?? ""), PACKAGE_TITLE_MAX);
+  const amount = money(String(formData.get("add_amount") ?? ""));
+  if (!title) return { ok: false, error: "Give the new option a name, e.g. \"Asphalt driveway\"." };
+  if (amount == null) return { ok: false, error: "Put a price on the new option." };
+
+  if (drafts.length >= MAX_QUOTE_PACKAGES) {
+    return { ok: false, error: `A quote can offer ${MAX_QUOTE_PACKAGES} options at most. Remove one in the quote editor first.` };
+  }
+
+  drafts.push({
+    title,
+    description: words(String(formData.get("add_desc") ?? ""), PACKAGE_DESC_MAX),
+    amount,
+    recommended: false,
+  });
+
+  // At most one recommendation, and only if they asked for one. "recommend"
+  // carries the index so the same control can point at either card.
+  const recommend = Number(String(formData.get("recommend") ?? "-1"));
+  for (const [i, d] of drafts.entries()) d.recommended = i === recommend;
+
+  const saved = await saveQuotePackages(session, id, drafts);
+  if (!saved.ok) return { ok: false, error: saved.error ?? "Could not save the new option." };
+
+  // Priced off the lead option plus everything else, exactly as saveQuote does,
+  // so the two paths can never disagree about what this row is worth.
+  const was = current.quote_amount;
+  const total = allInTotal(drafts, optionsAsDrafts(existingOptions));
+  const patch: Partial<Quote> = {
+    quote_amount: total,
+    // A new option restarts the customer's clock: the quote they hold is this
+    // one, so the expiry and the 48-hour nudge both count from this text.
+    quote_sent_at: new Date().toISOString(),
+    quote_expires_at: new Date(Date.now() + QUOTE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+    quote_followup_sent_at: null,
+  };
+  if (current.status !== "quoted") patch.status = "quoted";
+
+  const updated = await updateQuote(session, id, patch);
+  if (!updated) return { ok: false, error: "The option was saved, but the quote could not be re-sent. Open the quote editor and send it." };
+
+  // The new line in Quotes sent. quote_revised is what that list is built from,
+  // and `added` is what lets the row say which option turned up rather than
+  // just calling it a correction.
+  await addEvent(session, id, "quote_revised", { from: was, to: total, added: title });
+
+  const r = await notifyQuoteOptionAdded({
+    id,
+    name: current.name,
+    phone: current.phone,
+    public_token: current.public_token,
+  }).catch((e) => ({ ok: false, provider: "unknown", detail: String(e) }) as SendResult);
+
+  await addEvent(session, id, "quote_delivery", {
+    delivered: r.ok,
+    held_until: r.sendAfter ?? null,
+    to: r.to ?? current.phone,
+    error: r.ok ? null : (r.detail ?? null),
+    option_added: title,
+  }).catch(() => {});
+
+  revalidatePath(`/crm/quotes/${id}`);
+  if (current.job_token) revalidatePath(`/job/${current.job_token}`);
+
+  return {
+    ok: true,
+    sent: true,
+    revised: true,
+    smsDelivered: r.ok,
+    smsTo: r.to ?? current.phone,
+    smsHeldUntil: r.held ? r.sendAfterLabel : undefined,
+    smsError: r.ok || r.held ? undefined : [r.detail, r.status ? `(HTTP ${r.status})` : ""].filter(Boolean).join(" ").slice(0, 500),
+  };
 }

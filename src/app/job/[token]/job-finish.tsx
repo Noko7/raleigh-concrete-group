@@ -6,6 +6,7 @@ import { dict, type Locale } from "@/lib/crm/i18n";
 import { completeJob } from "@/app/crm/quotes/[id]/actions";
 import type { FinishState } from "@/app/crm/quotes/[id]/types";
 import { PhotoUpload } from "@/app/crm/photo-upload";
+import { AutoTextarea } from "@/components/auto-textarea";
 
 // The three things that cause a callback when they're skipped, in the order a
 // crew actually does them. Names match the values the server records.
@@ -110,7 +111,7 @@ export function JobFinish({
 
         <label className="jf-note">
           <span>{t.contractorJob.finishNote}</span>
-          <textarea name="note" rows={3} maxLength={1000} placeholder={t.contractorJob.finishNotePlaceholder} />
+          <AutoTextarea name="note" rows={3} maxLength={1000} placeholder={t.contractorJob.finishNotePlaceholder} />
         </label>
 
         <p className="js-hint jf-warn">{t.contractorJob.finishConfirm}</p>

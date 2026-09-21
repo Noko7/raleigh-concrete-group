@@ -29,6 +29,7 @@ import {
   type StoredPackage,
 } from "@/app/crm/quotes/[id]/package-builder";
 import type { SaveState } from "@/app/crm/quotes/[id]/types";
+import { AutoTextarea } from "@/components/auto-textarea";
 
 type Sections = Record<QuoteSectionField, string>;
 const emptySections = (): Sections =>
@@ -284,7 +285,7 @@ export function JobQuote({
                 </button>
               )}
             </span>
-            <textarea
+            <AutoTextarea
               name={field}
               rows={2}
               value={sections[field]}
@@ -298,7 +299,7 @@ export function JobQuote({
         {hasLegacySummary && (
           <label className="jq-field">
             <span>{t.contractorJob.quoteSummary}</span>
-            <textarea name="quote_summary" rows={3} value={what} onChange={(e) => setWhat(e.target.value)} />
+            <AutoTextarea name="quote_summary" rows={3} value={what} onChange={(e) => setWhat(e.target.value)} />
           </label>
         )}
 

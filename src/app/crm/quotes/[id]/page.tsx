@@ -85,6 +85,16 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   // see this job - getQuote ran as them, through RLS - and the signature is
   // that decision travelling with the URL, so the proxy can honour it without
   // asking the database again per thumbnail.
+  // Another option can go out while the quote is live and unanswered. Approved,
+  // declined or closed out are all different conversations, and each one has
+  // its own door elsewhere on this page.
+  const canAddOption =
+    Boolean(quote.quote_sent_at) &&
+    !quote.customer_response &&
+    quote.status !== "lost" &&
+    quote.status !== "completed" &&
+    quote.status !== "paid";
+
   const viaProxy = (paths: string[] | null) =>
     (paths ?? []).map((p) => `${base}/api/file?${signMediaPath(p, session.staff.id)}`);
   const photoUrls = viaProxy(quote.file_urls);
@@ -310,6 +320,10 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             customerName={quote.name}
             sends={quoteSends(events, quote.quote_amount)}
             canRetract={isOwner}
+            canAddOption={canAddOption}
+            currentAmount={quote.quote_amount}
+            service={quote.service}
+            options={packages.map((p) => ({ id: p.id, title: p.title, amount: Number(p.amount), recommended: p.recommended }))}
             locale={locale}
           />
 

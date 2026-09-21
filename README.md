@@ -454,6 +454,37 @@ Run `supabase/quote-packages.sql` for this (the `quote_packages` table, its RLS 
 exactly as before - a missing table reads as "this quote offers no choice" - and the builder says
 which file to run if a save is attempted.
 
+**"They said it's too much. Send them the asphalt price too."**
+The choice above is written before the quote goes out. This is the same thing an hour later, when
+the customer has rung back about a price they already have, and it needs to take about thirty
+seconds on a phone in a driveway.
+
+**Quotes sent → "Send them another option"** opens one modal that does the whole job:
+- **The flat price becomes Option A**, pre-filled from the row with a name guessed off the job's
+  service. It is guessed into an editable box, never written on the customer's behalf, because
+  "Concrete Driveways" straight off a database column is not what anybody should be reading.
+- **The new option** takes a name, its own price and a line on why they'd pick it. Its own price,
+  not a discount off the first.
+- **A preview of exactly what lands on their phone**, priced and lettered, which is the last moment
+  anybody can notice that Option B has last week's number on it.
+- **Sends it**, restamps the expiry and clears the 48-hour nudge so the customer's clock runs from
+  the quote they are actually holding, and drops a new line in **Quotes sent** tagged with the
+  option that was added rather than as a *Correction*. It was not a correction: nothing they were
+  shown was wrong.
+- The customer gets **its own text** - "we've added another option to your quote" - and not the
+  correction wording, which would answer a complaint they never made. No price in it, same as every
+  other customer message.
+
+It is on the crew's `/job/<token>` and the office's CRM page, in both languages, and only while the
+quote is live and unanswered. Approved, declined or closed out are different conversations and the
+button stays off the card rather than failing when it is pressed. A quote that already offers a
+choice skips the Option A step and simply gains another card, up to the same cap of 4.
+
+**Every multi-line box on both job pages grows as you type.** The five quote sections, what an
+option covers, internal notes, the finish note. `rows` is a minimum now rather than a fixed height,
+so nothing is typed into a two-line slot that scrolls away from you on a phone - which was the
+single most-used control in the app behaving like the least-used one.
+
 **Quote visits: back to back, an hour apart, per contractor**
 A visit used to be one of **five fixed slots** two hours apart, capped at **five
 a day for the whole business**, and the cap was checked against whoever happened
