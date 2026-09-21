@@ -2957,11 +2957,16 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qo-total strong { font-size: 1.15rem; }
 /* Answered: the record of what was bought, not a form any more. */
 .qo-locked { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
-.qo-locked li { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; border: 1px solid #e2e5ea; border-radius: 0.45rem; font-size: 0.86rem; }
+/* Same rule as the choice builder below: these rows sit on the box's own
+   background, which is the dark CRM on one screen and a white card on the
+   other, so the text inherits rather than picking a grey that is only grey on
+   one of them. #4b5563 here was black on black in the CRM. */
+.qo-locked li { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; border: 1px solid rgba(127, 127, 127, 0.35); border-radius: 0.45rem; font-size: 0.86rem; }
 .qo-locked-title { flex: 1 1 auto; font-weight: 700; }
+.qo-locked-amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .qo-locked-no { opacity: 0.55; text-decoration: line-through; }
-.qo-tag { font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: #4b5563; }
-.qo-locked-yes .qo-tag { color: var(--amber-dark); }
+.qo-tag { font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: inherit; opacity: 0.6; }
+.qo-locked-yes .qo-tag { color: var(--amber); opacity: 1; }
 .crm-confirm-options { list-style: none; margin: 0.5rem 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
 .crm-confirm-options li { display: flex; align-items: baseline; gap: 0.5rem; }
 .crm-confirm-options li span { flex: 1 1 auto; }
@@ -3010,10 +3015,22 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
    a second visual language in the same fieldset would read as a second app. */
 
 /* Builder. Closed, it is one sentence and a button - which is the state almost
-   every quote stays in, so it must not look like a section somebody skipped. */
+   every quote stays in, so it must not look like a section somebody skipped.
+
+   This box renders on two surfaces with opposite palettes: the CRM is a DARK
+   shell (--crm-text is near-white) and the crew's /job/<token> card is white
+   with near-black text. So the box's own chrome - legend, hint, warning, the
+   note under the cards - never sets a colour: it inherits, and is dimmed with
+   opacity rather than with a grey that is only grey on one of the two. Any
+   surface tint is translucent for the same reason, so it darkens white and
+   lightens dark instead of being a white panel with white text on it.
+
+   The card interiors below are the exception, and are deliberately forced
+   light on both - exactly as .qo-row is - because they are full of form
+   fields. Everything inside them therefore states its own colour. */
 .qc-box { border: 1px solid #e2e5ea; border-radius: 0.6rem; padding: 0.9rem 1rem 1rem; margin-bottom: 1rem; }
 .qc-box legend { font-size: 0.8rem; font-weight: 800; padding: 0 0.35rem; }
-.qc-box-empty { background: #fbfbfc; border-style: dashed; }
+.qc-box-empty { background: rgba(127, 127, 127, 0.07); border-style: dashed; }
 .qc-start { margin-top: 0.6rem; background: #fff; border: 1px dashed #9ca3af; border-radius: 0.45rem; padding: 0.5rem 0.8rem; font: inherit; font-size: 0.85rem; font-weight: 800; color: #374151; cursor: pointer; }
 .qc-start:hover { border-color: var(--amber); color: var(--amber-dark); }
 .qc-card { border: 1px solid #e2e5ea; border-radius: 0.55rem; padding: 0.75rem; margin: 0.75rem 0; background: #fff; border-left: 3px solid #d1d5db; }
@@ -3027,14 +3044,22 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qc-remove { color: #b91c1c !important; }
 .qc-card-main { display: flex; gap: 0.6rem; }
 .qc-rec { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; font-weight: 700; color: #374151; cursor: pointer; }
-.qc-warn { margin: 0.7rem 0 0; font-size: 0.8rem; font-weight: 700; color: var(--amber-dark); }
-.qc-lead-note { margin: 0.7rem 0 0; font-size: 0.8rem; color: #4b5563; }
+/* Amber as a tint behind inherited text, not as the text colour: #a8551f is
+   legible on the crew's white card and muddy on the CRM's dark one, and this
+   line has to carry on both. */
+.qc-warn {
+  margin: 0.7rem 0 0; font-size: 0.8rem; font-weight: 700; color: inherit;
+  background: rgba(194, 104, 42, 0.16); border-left: 3px solid var(--amber);
+  border-radius: 0.35rem; padding: 0.5rem 0.65rem;
+}
+.qc-lead-note { margin: 0.7rem 0 0; font-size: 0.8rem; color: inherit; opacity: 0.75; }
 .qc-locked { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
-.qc-locked li { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; border: 1px solid #e2e5ea; border-radius: 0.45rem; font-size: 0.86rem; }
+.qc-locked li { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; border: 1px solid rgba(127, 127, 127, 0.35); border-radius: 0.45rem; font-size: 0.86rem; }
 .qc-locked-title { flex: 1 1 auto; font-weight: 700; }
+.qc-locked-amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .qc-locked-no { opacity: 0.55; text-decoration: line-through; }
-.qc-tag { font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: #4b5563; }
-.qc-locked-yes .qc-tag { color: var(--amber-dark); }
+.qc-tag { font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: inherit; opacity: 0.6; }
+.qc-locked-yes .qc-tag { color: var(--amber); opacity: 1; }
 
 /* Customer: the cards they pick between. The whole card is the control - a
    radio dot beside a price is a pea-sized target on the phone this is read on -
@@ -3069,11 +3094,12 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .ao-picks { gap: 0.4rem; margin-bottom: 0.9rem; }
 .ao-pick {
   display: flex; align-items: center; gap: 0.6rem; width: 100%; text-align: left;
-  padding: 0.55rem 0.7rem; border: 1px solid var(--crm-line, #e2e5ea); border-radius: 0.5rem;
-  background: transparent; color: inherit; font: inherit; cursor: pointer;
+  padding: 0.55rem 0.7rem; border: 1px solid var(--crm-border); border-radius: 0.5rem;
+  background: var(--crm-surface-solid); color: inherit; font: inherit; cursor: pointer;
 }
+.ao-light .ao-pick { border-color: #d1d5db; background: #faf8f4; }
 .ao-pick .ao-opt-title { flex: 1 1 auto; }
-.ao-pick-letter { flex: 0 0 auto; width: 1.4rem; height: 1.4rem; border-radius: 999px; display: grid; place-items: center; font-size: 0.72rem; font-weight: 900; background: rgba(127, 127, 127, 0.18); }
+.ao-pick-letter { flex: 0 0 auto; width: 1.4rem; height: 1.4rem; border-radius: 999px; display: grid; place-items: center; font-size: 0.72rem; font-weight: 900; background: rgba(127, 127, 127, 0.28); }
 .ao-pick.ao-on { border-color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); }
 .ao-pick.ao-on .ao-pick-letter { background: var(--amber); color: #fff; }
 
