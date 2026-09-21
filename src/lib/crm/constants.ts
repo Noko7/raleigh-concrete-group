@@ -349,3 +349,69 @@ export function selectedTotal(
 ): number {
   return optionsTotal(rows.filter((o) => o.required || answers[o.id] === "accepted"));
 }
+
+// ── A choice of ways to do the job ──────────────────────────────────────────
+// Line items above answer "and also": a patio, and maybe the sidewalk too.
+// Packages answer the other question, which is "or instead" - a concrete
+// driveway OR an asphalt one, on the same patch of ground. The customer picks
+// exactly one, and the line items apply on top of whichever they picked.
+//
+// Modelled as its own thing rather than as more line items because the two
+// behave in opposite ways: two line items both selected is a bigger job, and
+// two packages both selected is a contradiction.
+//
+// A quote with no packages is the quote this app has always sent.
+export const MAX_QUOTE_PACKAGES = 4;
+// One way of doing the job is not a choice. A single card is a quote somebody
+// is halfway through writing: it is kept, so a save mid-thought doesn't throw
+// the work away, but it prices nothing, shows nobody anything, and the send is
+// refused until there is something to choose between.
+export const MIN_QUOTE_PACKAGES = 2;
+export const isChoice = (packages: { length: number }): boolean => packages.length >= MIN_QUOTE_PACKAGES;
+export const PACKAGE_TITLE_MAX = 120;
+export const PACKAGE_DESC_MAX = 2000;
+
+// How the customer is told them apart on their own page: "Option A", "Option
+// B". Letters rather than numbers so nothing reads as a ranking - the only
+// thing that marks one out is the contractor's own recommendation.
+export const packageLetter = (i: number): string => String.fromCharCode(65 + (i % 26));
+
+// The shape both editors post and the server validates. Ids are absent on a
+// package that has not been saved yet.
+export type QuotePackageDraft = {
+  id?: string;
+  title: string;
+  description: string;
+  amount: number;
+  recommended: boolean;
+};
+
+// The one the contractor marked, else the first on the page. Used for the
+// headline figure a quote carries while it is out: there is no single price on
+// a quote that offers a choice, and the lead option is the most honest stand-in
+// for one.
+export function leadPackage<T extends { recommended: boolean }>(rows: T[]): T | null {
+  if (!isChoice(rows)) return null;
+  return rows.find((p) => p.recommended) ?? rows[0] ?? null;
+}
+
+// What the job is worth given a chosen package: that package, plus every
+// required line item, plus the optional ones with a yes against them. `chosen`
+// is null on a quote that offers no choice, and the figure is then exactly what
+// selectedTotal has always returned.
+export function quoteTotal(
+  chosen: Priced | null,
+  rows: (Priced & { id: string; required: boolean })[],
+  answers: Record<string, "accepted" | "declined" | undefined>,
+): number {
+  const base = chosen ? optionAmount(chosen) : 0;
+  return Math.round((base + selectedTotal(rows, answers)) * 100) / 100;
+}
+
+// The headline figure for a quote that is still out: the lead option, plus
+// everything else on the quote. It is what the pipeline, the board and the
+// contractor's own screens show before anybody has chosen.
+export function allInTotal(packages: (Priced & { recommended: boolean })[], rows: Priced[]): number {
+  const lead = leadPackage(packages);
+  return Math.round(((lead ? optionAmount(lead) : 0) + optionsTotal(rows)) * 100) / 100;
+}

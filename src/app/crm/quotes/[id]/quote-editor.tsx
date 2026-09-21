@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { dict } from "@/lib/crm/i18n";
-import { dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_HINTS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, STATUS_LABELS, STATUSES, type QuoteSectionField } from "@/lib/crm/constants";
+import { dollars, packageLetter, QUOTE_SECTION_FIELDS, QUOTE_SECTION_HINTS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, STATUS_LABELS, STATUSES, type QuoteSectionField } from "@/lib/crm/constants";
 import { saveQuote } from "./actions";
 import {
   OptionBuilder,
@@ -15,6 +15,18 @@ import {
   type OptionRow,
   type StoredOption,
 } from "./option-builder";
+import {
+  PackageBuilder,
+  filledPackages,
+  leadPackageAmount,
+  offersChoice,
+  packagesMatch,
+  packagesToJson,
+  packageAmountOf,
+  rowsFromPackages,
+  type PackageRow,
+  type StoredPackage,
+} from "./package-builder";
 import type { SaveState } from "./types";
 
 type ContractorOption = { id: string; label: string };
@@ -30,6 +42,9 @@ type Props = {
   // Line items, if this quote was written as a list of choices rather than one
   // price. Empty is the normal case and changes nothing.
   options: StoredOption[];
+  // The ways of doing the job the customer may pick between. Empty on all but
+  // the quote that was asked for two ways at once.
+  packages: StoredPackage[];
   customerName: string;
   // Already texted and no answer yet. The owner can still send it again - a
   // customer saying "I never got it" is real and somebody has to be able to
@@ -48,11 +63,13 @@ type Props = {
   } & Partial<Record<QuoteSectionField, string | null>>;
 };
 
-export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply, contractors, initial }: Props) {
+export function QuoteEditor({ id, isOwner, options, packages, customerName, awaitingReply, contractors, initial }: Props) {
   const router = useRouter();
-  // Owner-facing screen, so English. The builder takes its words as a prop
-  // because the crew's copy of it renders in whichever language they chose.
-  const optionLabels = dict("en").quoteOptions;
+  // Owner-facing screen, so English. The builders take their words as a prop
+  // because the crew's copy of them renders in whichever language they chose.
+  const owner = dict("en");
+  const optionLabels = owner.quoteOptions;
+  const packageLabels = owner.quotePackages;
   const [state, formAction, pending] = useActionState<SaveState, FormData>(saveQuote, { ok: false });
 
   // Everything is controlled so the form always shows the saved truth. When the
@@ -69,6 +86,7 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
   }));
   const [notes, setNotes] = useState(initial.internal_notes ?? "");
   const [rows, setRows] = useState<OptionRow[]>(() => rowsFromOptions(options));
+  const [pkgRows, setPkgRows] = useState<PackageRow[]>(() => rowsFromPackages(packages));
   const [confirming, setConfirming] = useState(false);
   const [localErr, setLocalErr] = useState("");
 
@@ -90,6 +108,24 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
     setRows(rowsFromOptions(options));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [optionsSig]);
+
+  // Same resync for the choice of options, and for the same reason: until the
+  // saved ids are back in state, the next save would insert a second copy of
+  // every card instead of updating the ones just written.
+  const packagesSig = useMemo(
+    () => packages.map((p) => `${p.id}|${p.title}|${p.description ?? ""}|${p.amount}|${p.recommended}`).join("~"),
+    [packages],
+  );
+  const storedPkgRows = useMemo(() => rowsFromPackages(packages), [packagesSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  const packageAnswers = useMemo(() => {
+    const out: Record<string, "accepted" | "declined" | null> = {};
+    for (const p of packages) out[p.id] = p.customer_response;
+    return out;
+  }, [packages]);
+  useEffect(() => {
+    setPkgRows(rowsFromPackages(packages));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [packagesSig]);
 
   const initialSig = useMemo(
     () =>
@@ -133,10 +169,21 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
   // showing (and editing) that figure.
   const locked = Boolean(initial.customer_response);
   const itemised = rows.length > 0 && !locked;
+  // A choice of ways to do the job. There is no single price on such a quote -
+  // the customer settles it when they pick - so the row carries the lead option
+  // plus everything else, which is exactly what the server stores.
+  const choice = offersChoice(pkgRows) && !locked;
+  const pkgs = filledPackages(pkgRows);
   const itemTotal = rowsTotal(rows);
-  const amountNum = itemised ? itemTotal : Number(amount);
-  const amountValid = itemised ? itemTotal > 0 : amount.trim() !== "" && Number.isFinite(amountNum) && amountNum > 0;
+  const derived = itemised || choice;
+  const derivedTotal = Math.round(((choice ? leadPackageAmount(pkgRows) : 0) + itemTotal) * 100) / 100;
+  const amountNum = derived ? derivedTotal : Number(amount);
+  const amountValid = derived ? derivedTotal > 0 : amount.trim() !== "" && Number.isFinite(amountNum) && amountNum > 0;
   const previewPrice = amountValid ? (dollars(amountNum) ?? "N/A") : "N/A";
+  // Every option needs its own price. A $0 card next to a priced one does not
+  // read as free, it reads as a quote somebody didn't finish - and it is the
+  // cheapest thing on the page. The server refuses it too.
+  const unpricedPackage = choice ? pkgs.find((r) => packageAmountOf(r) <= 0) : undefined;
 
   // Which of the five are still blank. A quote written before the sections
   // existed is allowed out on its old summary instead, matching the server.
@@ -153,15 +200,28 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
   // it's the same quote again and only worth sending if it never arrived. The
   // server draws the same line - this is only what the panel says about it.
   const quoteEdited =
-    (itemised ? itemTotal !== Number(initial.quote_amount ?? 0) : amount.trim() !== (initial.quote_amount != null ? String(initial.quote_amount) : "")) ||
+    (derived ? derivedTotal !== Number(initial.quote_amount ?? 0) : amount.trim() !== (initial.quote_amount != null ? String(initial.quote_amount) : "")) ||
     !rowsMatch(storedRows, rows) ||
+    !packagesMatch(storedPkgRows, pkgRows) ||
     summary.trim() !== (initial.quote_summary ?? "").trim() ||
     QUOTE_SECTION_FIELDS.some((f) => sections[f].trim() !== (initial[f] ?? "").trim());
   const correcting = awaitingReply && quoteEdited;
 
   function openConfirm() {
-    if (!amountValid) {
-      setLocalErr(itemised ? "Put a price on at least one line item before sending." : "Add a quote price before sending.");
+    if (!choice && pkgs.length > 0) {
+      setLocalErr(
+        "This quote has one option on it, which is not a choice. Add a second option, or remove the one you have.",
+      );
+    } else if (unpricedPackage) {
+      setLocalErr(`Put a price on every option before sending. "${unpricedPackage.title.trim()}" has none.`);
+    } else if (!amountValid) {
+      setLocalErr(
+        choice
+          ? "Put a price on every option before sending."
+          : itemised
+            ? "Put a price on at least one line item before sending."
+            : "Add a quote price before sending.",
+      );
     } else if (!sectionsValid) {
       const names = blankSections.map((f) => QUOTE_SECTION_LABELS[f]).join(", ");
       setLocalErr(`Fill in every section first. Still blank: ${names}. Use "Not applicable" where a section doesn't apply.`);
@@ -190,6 +250,7 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
           to un-invent. Not sent once the customer has answered: the rows are
           their receipt by then, and the action refuses to rewrite them anyway. */}
       {!locked && <input type="hidden" name="options_json" value={rowsToJson(rows)} />}
+      {!locked && <input type="hidden" name="packages_json" value={packagesToJson(pkgRows)} />}
 
       {/* The name every later text opens with. Arrives from a web form or a
           phone call, so it is wrong often enough to need fixing here. */}
@@ -231,18 +292,30 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
         )}
 
         <label className="crm-field">
-          <span>{itemised ? "Quote amount ($) - from the line items" : "Quote amount ($) *"}</span>
+          <span>
+            {choice
+              ? "Quote amount ($) - the option you'd recommend"
+              : itemised
+                ? "Quote amount ($) - from the line items"
+                : "Quote amount ($) *"}
+          </span>
           <input
             type="number"
             name="quote_amount"
             min={0}
             step="0.01"
-            value={itemised ? String(itemTotal) : amount}
+            value={derived ? String(derivedTotal) : amount}
             onChange={(e) => setAmount(e.target.value)}
             className="crm-input"
             placeholder="e.g. 6500"
-            readOnly={itemised}
-            title={itemised ? "Edit the line items below to change this." : undefined}
+            readOnly={derived}
+            title={
+              choice
+                ? "A quote with options has no single price. This is the one you'd recommend, so the board has a figure to show."
+                : itemised
+                  ? "Edit the line items below to change this."
+                  : undefined
+            }
           />
         </label>
       </div>
@@ -255,6 +328,17 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
         labels={optionLabels}
         locked={locked}
         answers={answers}
+      />
+
+      {/* Under the line items, because that is the order it gets thought
+          about: what the job is, then - occasionally - the second way of doing
+          it. Almost every quote leaves this closed. */}
+      <PackageBuilder
+        rows={pkgRows}
+        onChange={setPkgRows}
+        labels={packageLabels}
+        locked={locked}
+        answers={packageAnswers}
       />
 
       {/* The five sections the customer reads, in the order they read them.
@@ -332,9 +416,23 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
                 : `We'll text them their quote link, good for ${QUOTE_TTL_DAYS} days. The price is never in the text.`}
           </p>
           <div className="crm-confirm-row">
-            <span>{itemised ? "Price, if they take everything" : "Price"}</span>
+            <span>{choice ? "Price, on the option you'd recommend" : itemised ? "Price, if they take everything" : "Price"}</span>
             <strong>{previewPrice}</strong>
           </div>
+          {/* Exactly the choice the customer is about to be asked to make, at
+              the last moment somebody can still spot that Option B is the one
+              with last week's price on it. */}
+          {choice && (
+            <ul className="crm-confirm-options">
+              {pkgs.map((r, i) => (
+                <li key={r.key}>
+                  <span>{`${packageLabels.optionWord} ${packageLetter(i)}: ${r.title}`}</span>
+                  <strong>{dollars(packageAmountOf(r))}</strong>
+                  <em>{r.recommended ? "recommended" : "they choose"}</em>
+                </li>
+              ))}
+            </ul>
+          )}
           {/* Exactly the choice the customer is about to be given, so nobody
               sends a quote whose optional extra was meant to be part of the job. */}
           {itemised && (
@@ -424,6 +522,9 @@ export function QuoteEditor({ id, isOwner, options, customerName, awaitingReply,
             {QUOTE_TTL_DAYS} days, and marks this Sent. The price itself is never in the text.
             {itemised
               ? " This quote has line items, so the customer answers each one and their total follows what they picked."
+              : ""}
+            {choice
+              ? " This quote offers a choice of options, so the customer picks one and their price is settled when they do."
               : ""}
           </p>
         </>

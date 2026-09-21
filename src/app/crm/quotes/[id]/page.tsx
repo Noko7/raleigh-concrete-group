@@ -17,6 +17,7 @@ import {
   listEvents,
   listMessages,
   listQuoteOptions,
+  listQuotePackages,
   listStaff,
 } from "@/lib/crm/queries";
 import { AddAgreement } from "../../agreements/add-agreement";
@@ -65,12 +66,13 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   // Four independent queries that used to run one after another, so opening a
   // job cost four sequential round-trips to Supabase before anything rendered.
   // None of them depends on another's result.
-  const [allStaff, events, messages, agreements, options] = await Promise.all([
+  const [allStaff, events, messages, agreements, options, packages] = await Promise.all([
     listStaff(session),
     listEvents(session, id),
     listMessages(session, id),
     listAgreementsForQuote(session, id),
     listQuoteOptions(session, id),
+    listQuotePackages(session, id),
   ]);
   // Only reachable by a contractor on a job with no crew link (the redirect
   // above catches every other case), so it stays out of the batch.
@@ -348,6 +350,14 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               required: o.required,
               customer_response: o.customer_response,
             }))}
+            packages={packages.map((p) => ({
+              id: p.id,
+              title: p.title,
+              description: p.description,
+              amount: Number(p.amount),
+              recommended: p.recommended,
+              customer_response: p.customer_response,
+            }))}
             customerName={quote.name}
             awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
             contractors={contractors.map((c) => ({ id: c.id, label: c.full_name || c.email || "Contractor" }))}
@@ -378,6 +388,12 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 description: o.description,
                 amount: Number(o.amount),
                 required: o.required,
+              }))}
+              packages={packages.map((p) => ({
+                id: p.id,
+                title: p.title,
+                amount: Number(p.amount),
+                recommended: p.recommended,
               }))}
               minDate={minJobDate}
               locale={locale}

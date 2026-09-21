@@ -169,6 +169,15 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       const total = m.total != null ? ` (${dollars(m.total as number)} all in)` : "";
       return n === 0 ? "Line items removed - back to a single price" : `Line items updated: ${n} item(s)${total}`;
     }
+    // A choice of ways to do the job was added, repriced or taken away. The
+    // count is the whole story here: two is a quote that now asks a question,
+    // and zero is one that has stopped asking it.
+    case "packages_changed": {
+      const n = Number(m.count ?? 0);
+      return n === 0
+        ? "Choice of options removed - back to a single quote"
+        : `Customer will be asked to pick between ${n} options`;
+    }
     case "customer_accepted": {
       const picks = Array.isArray(m.preferred_dates) ? (m.preferred_dates as string[]) : [];
       // The hour they asked for on each day, where the log has one. Older
@@ -180,7 +189,12 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       // total alone doesn't say whether the sidewalk is in it.
       const yes = Array.isArray(m.accepted_options) ? (m.accepted_options as string[]) : [];
       const no = Array.isArray(m.declined_options) ? (m.declined_options as string[]) : [];
-      const chose = yes.length ? `: took ${yes.join(", ")}${no.length ? `, left ${no.join(", ")}` : ""}` : "";
+      // The way of doing the job they picked leads it, on a quote that offered
+      // a choice: on a driveway quoted two ways it is the difference between a
+      // concrete pour and an asphalt one.
+      const pick = m.chosen_package ? String(m.chosen_package) : "";
+      const took = [pick, ...yes].filter(Boolean);
+      const chose = took.length ? `: took ${took.join(", ")}${no.length ? `, left ${no.join(", ")}` : ""}` : "";
       // An approval taken over the phone says so, and says who wrote it down.
       // The row is otherwise identical to one the customer produced themselves,
       // and on an audit trail those two must never read the same.

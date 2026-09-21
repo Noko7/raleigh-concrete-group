@@ -8,18 +8,24 @@ import {
   LEAD_TIME_DAYS,
   MAX_PREFERRED_DATES,
   MAX_QUOTE_OPTIONS,
+  MAX_QUOTE_PACKAGES,
   OPTION_DESC_MAX,
   OPTION_TITLE_MAX,
+  PACKAGE_DESC_MAX,
+  PACKAGE_TITLE_MAX,
   TIME_RE,
   VISIT_GAP_MINUTES,
+  isChoice,
   minutesOfTime,
   noEmDash,
+  optionAmount,
   optionsTotal,
   readWorkHours,
   slotsFor,
   visitDateOf,
   worksOn,
   type QuoteOptionDraft,
+  type QuotePackageDraft,
   type WorkHours,
 } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
@@ -35,6 +41,7 @@ import type {
   Quote,
   QuoteEvent,
   QuoteOption,
+  QuotePackage,
   Session,
   Staff,
 } from "./types";
@@ -287,6 +294,181 @@ async function optionError(res: Response, verb: string): Promise<string> {
     return "Line items need one more migration: run supabase/quote-options.sql in Supabase, then try again.";
   }
   return `Could not ${verb} the line items (error ${res.status}). Please try again.`;
+}
+
+// ── A choice of ways to do the job ──────────────────────────────────────────
+// Packages are the "or instead" to line items' "and also": a concrete driveway
+// or an asphalt one, and the customer picks exactly one. Everything here
+// mirrors the line-item block above on purpose - same scoping, same missing-
+// migration handling, same "empty list is the right answer" default - because
+// the two are read side by side on every screen that shows a quote.
+
+export async function listQuotePackages(session: Session, quoteId: string): Promise<QuotePackage[]> {
+  const res = await pgUser(
+    `quote_packages?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
+    session.accessToken,
+  );
+  // An empty list is also what a database without the table yet returns, and
+  // that is the right answer for every caller: this quote offers no choice.
+  if (!res.ok) return [];
+  return (await res.json()) as QuotePackage[];
+}
+
+// Same list with the service-role key, for the two surfaces that have no user
+// session: the customer's own quote page and the endpoint behind its buttons.
+export async function listQuotePackagesAdmin(quoteId: string): Promise<QuotePackage[]> {
+  const res = await pgAdmin(
+    `quote_packages?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as QuotePackage[];
+}
+
+// Clean, capped values straight off the wire, same as parseQuoteOptions.
+//
+// One extra rule: at most one package may be marked recommended. The database
+// enforces it too (a partial unique index), but a browser that posts two would
+// otherwise get a constraint violation instead of a sentence, so the later one
+// simply loses the flag.
+export function parseQuotePackages(raw: unknown): { rows: QuotePackageDraft[]; error?: string } {
+  if (!Array.isArray(raw)) return { rows: [] };
+  const rows: QuotePackageDraft[] = [];
+  let recommended = false;
+  for (const item of raw.slice(0, MAX_QUOTE_PACKAGES)) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const title = noEmDash(String(o.title ?? "").trim()).slice(0, PACKAGE_TITLE_MAX);
+    // A blank card is what an editor leaves behind when somebody adds one and
+    // changes their mind, so it is dropped rather than refused.
+    if (!title) continue;
+    const amount = Number(o.amount);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 99_999_999) {
+      return { rows: [], error: `Enter a price for "${title}".` };
+    }
+    const id = typeof o.id === "string" && /^[0-9a-f-]{36}$/i.test(o.id) ? o.id : undefined;
+    const isRec = o.recommended === true && !recommended;
+    if (isRec) recommended = true;
+    rows.push({
+      id,
+      title,
+      description: noEmDash(String(o.description ?? "").trim()).slice(0, PACKAGE_DESC_MAX),
+      amount: Math.round(amount * 100) / 100,
+      recommended: isRec,
+    });
+  }
+  // A lone card is kept rather than dropped: somebody has typed the first
+  // option and not yet the second, and throwing that away on a save is how an
+  // editor loses work for a rule it never explained. It is inert until there is
+  // a second one - isChoice() gates the pricing, the customer's page and the
+  // send - so nothing goes out asking a customer to pick from a list of one.
+  return { rows };
+}
+
+// Two drafts describe the same choice to the customer. Used to decide whether a
+// save changed anything they would read, which is what separates a corrected
+// quote from a second copy of the same one.
+export function samePackages(a: QuotePackageDraft[], b: QuotePackageDraft[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((x, i) => {
+    const y = b[i];
+    return (
+      x.title === y.title &&
+      x.description === y.description &&
+      Number(x.amount) === Number(y.amount) &&
+      x.recommended === y.recommended
+    );
+  });
+}
+
+// The stored rows in the shape parseQuotePackages produces, so the two can be
+// compared directly.
+export function packagesAsDrafts(rows: QuotePackage[]): QuotePackageDraft[] {
+  return rows.map((p) => ({
+    id: p.id,
+    title: p.title,
+    description: p.description ?? "",
+    amount: Number(p.amount),
+    recommended: p.recommended,
+  }));
+}
+
+// Make the stored packages match what was just submitted. Rows keep their id -
+// and with it the customer's answer, once there is one - so this is an update
+// rather than a delete-and-recreate. Runs as the logged-in user, so RLS is what
+// stops a contractor editing somebody else's job.
+export async function saveQuotePackages(
+  session: Session,
+  quoteId: string,
+  rows: QuotePackageDraft[],
+): Promise<{ ok: boolean; error?: string }> {
+  const existing = await listQuotePackages(session, quoteId);
+  const byId = new Map(existing.map((p) => [p.id, p]));
+  const keep = new Set(rows.map((r) => r.id).filter((id): id is string => Boolean(id && byId.has(id))));
+
+  const gone = existing.filter((p) => !keep.has(p.id)).map((p) => p.id);
+  if (gone.length > 0) {
+    const res = await pgUser(`quote_packages?id=in.(${gone.join(",")})`, session.accessToken, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    });
+    if (!res.ok) return { ok: false, error: await packageError(res, "remove") };
+  }
+
+  // Recommendations are cleared before any are set. One quote may only have one
+  // (a partial unique index says so), and moving the flag from the first card
+  // to the second would otherwise collide with the row still holding it.
+  const stillRecommended = existing.filter((p) => p.recommended && keep.has(p.id)).map((p) => p.id);
+  if (stillRecommended.length > 0) {
+    await pgUser(`quote_packages?id=in.(${stillRecommended.join(",")})`, session.accessToken, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ recommended: false }),
+    });
+  }
+
+  const inserts: Record<string, unknown>[] = [];
+  for (const [i, r] of rows.entries()) {
+    const current = r.id ? byId.get(r.id) : undefined;
+    const body = {
+      title: r.title,
+      description: r.description || null,
+      amount: r.amount,
+      recommended: r.recommended,
+      sort_order: i,
+    };
+    if (!current) {
+      inserts.push({ quote_id: quoteId, ...body });
+      continue;
+    }
+    const res = await pgUser(`quote_packages?id=eq.${current.id}`, session.accessToken, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return { ok: false, error: await packageError(res, "save") };
+  }
+
+  if (inserts.length > 0) {
+    const res = await pgUser("quote_packages", session.accessToken, {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(inserts),
+    });
+    if (!res.ok) return { ok: false, error: await packageError(res, "save") };
+  }
+
+  return { ok: true };
+}
+
+// The one failure worth naming: the migration hasn't been run, which no amount
+// of trying again will fix.
+async function packageError(res: Response, verb: string): Promise<string> {
+  const body = await res.text().catch(() => "");
+  console.error("[quotePackages] failed", { status: res.status, body });
+  if (res.status === 404 || (/quote_packages/.test(body) && /does not exist|schema cache/i.test(body))) {
+    return "Offering a choice needs one more migration: run supabase/quote-packages.sql in Supabase, then try again.";
+  }
+  return `Could not ${verb} the options (error ${res.status}). Please try again.`;
 }
 
 // A lead a staff member logs themselves - a customer who called in - rather
@@ -1392,6 +1574,11 @@ export type CustomerResponseResult = {
   // to the owner and crew use these - the customer already knows.
   accepted?: QuoteOption[];
   declined?: QuoteOption[];
+  // Which way of doing the job they picked, on a quote that offered a choice.
+  // Null on every other quote. The crew needs this before anything else: on a
+  // driveway quoted both ways, "approved" does not say what to load the truck
+  // with.
+  package?: QuotePackage | null;
 };
 
 export async function recordCustomerResponse(
@@ -1407,6 +1594,10 @@ export async function recordCustomerResponse(
     // One answer per optional line item, keyed by option id. Ignored on a quote
     // that has no line items, required on one that does.
     options?: Record<string, OptionChoice>;
+    // Which way of doing the job they picked, by package id. Ignored on a quote
+    // that offers no choice, required on one that does - there is no sensible
+    // default, and picking one for them would be picking a price for them.
+    packageId?: string;
   },
 ): Promise<CustomerResponseResult> {
   if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
@@ -1453,10 +1644,16 @@ export async function recordCustomerResponse(
     };
   }
 
-  const options = await listQuoteOptionsAdmin(q.id);
+  const [options, packages] = await Promise.all([
+    listQuoteOptionsAdmin(q.id),
+    listQuotePackagesAdmin(q.id),
+  ]);
   const patch: Partial<Quote> = { customer_responded_at: new Date().toISOString() };
   let accepted: QuoteOption[] = [];
   let declined: QuoteOption[] = [];
+  // The way of doing the job they picked. Null on a quote that offered no
+  // choice, which is most of them.
+  let chosenPackage: QuotePackage | null = null;
   let eventType: string;
 
   if (input.action === "decline") {
@@ -1493,6 +1690,16 @@ export async function recordCustomerResponse(
       return { ok: false, error: `Please pick at least one date ${LEAD_TIME_DAYS} days from now or later.` };
     }
 
+    // Which way of doing the job, if this quote offered a choice. Exactly one,
+    // and it has to be one of the packages actually on this quote - an id from
+    // somebody else's quote would otherwise set the price of this one.
+    if (isChoice(packages)) {
+      chosenPackage = packages.find((p) => p.id === input.packageId) ?? null;
+      if (!chosenPackage) {
+        return { ok: false, error: "Please choose one of the options before approving." };
+      }
+    }
+
     // Line items, if this quote has any. Every optional one needs an answer:
     // a blank is not a no, it is a customer who scrolled past it, and billing
     // either way from silence is how a dispute starts.
@@ -1504,16 +1711,23 @@ export async function recordCustomerResponse(
       }
       accepted = options.filter((o) => o.required || answers[o.id] === "accepted");
       declined = options.filter((o) => !o.required && answers[o.id] === "declined");
-      if (accepted.length === 0) {
+      // Only a quote with nothing else on it. Where a package carries the job,
+      // saying no to every add-on is a perfectly ordinary answer - they want
+      // the driveway and none of the extras.
+      if (accepted.length === 0 && !chosenPackage) {
         return {
           ok: false,
           error: "You've said no to everything. Use Decline below if you don't want any of it.",
         };
       }
-      // The price follows the answers: the quote is now worth what they said
-      // yes to, and every downstream reader (the owner's text, the payment
-      // request, the calendar) goes on reading quote_amount as it always has.
-      patch.quote_amount = optionsTotal(accepted);
+    }
+
+    // The price follows the answers: the option they picked plus what they said
+    // yes to, and every downstream reader (the owner's text, the payment
+    // request, the calendar) goes on reading quote_amount as it always has.
+    if (options.length > 0 || chosenPackage) {
+      patch.quote_amount =
+        Math.round((optionAmount(chosenPackage ?? { amount: 0 }) + optionsTotal(accepted)) * 100) / 100;
     }
 
     patch.customer_response = "accepted";
@@ -1572,6 +1786,24 @@ export async function recordCustomerResponse(
     }).catch(() => {});
   }
 
+  // And the same for the choice of approach: the one they picked is stamped
+  // accepted, every other one on the quote declined. Recording the ones they
+  // turned down is what lets anybody later see that a choice was offered at
+  // all, rather than a quote that only ever had one price on it.
+  if (isChoice(packages)) {
+    for (const [response, rows] of [
+      ["accepted", chosenPackage ? [chosenPackage] : []],
+      ["declined", packages.filter((p) => p.id !== chosenPackage?.id)],
+    ] as const) {
+      if (rows.length === 0) continue;
+      await pgAdmin(`quote_packages?id=in.(${rows.map((p) => p.id).join(",")})`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ customer_response: response, responded_at: stamp }),
+      }).catch(() => {});
+    }
+  }
+
   await pgAdmin("quote_events", {
     method: "POST",
     headers: { Prefer: "return=minimal" },
@@ -1582,13 +1814,14 @@ export async function recordCustomerResponse(
         discount: Boolean(input.discount),
         preferred_dates: patch.preferred_dates ?? null,
         preferred_times: patch.preferred_times ?? null,
+        chosen_package: chosenPackage?.title ?? null,
         accepted_options: accepted.map((o) => o.title),
         declined_options: declined.map((o) => o.title),
         total: patch.quote_amount ?? null,
       },
     }),
   });
-  return { ok: true, accepted, declined };
+  return { ok: true, accepted, declined, package: chosenPackage };
 }
 
 // ── The customer said yes on the phone ──────────────────────────────────────
@@ -1618,13 +1851,23 @@ export async function recordOfflineAcceptance(
     // itemised quote every optional line needs a yes or a no, because silence
     // is not consent to bill for a sidewalk.
     options?: Record<string, OptionChoice>;
+    // Which way of doing the job they agreed to, on a quote that offered a
+    // choice. Same rule as the customer's own path: one of the packages on this
+    // quote, and no default - "they said yes" does not say yes to what.
+    packageId?: string;
     // The day and start time they agreed to, if they got that far in the same
     // conversation. Recorded here as what the customer asked for; booking it is
     // confirmSchedule's job, the same as on every other path.
     agreedDate?: string | null;
     agreedTime?: string | null;
   },
-): Promise<{ ok: boolean; error?: string; accepted?: QuoteOption[]; declined?: QuoteOption[] }> {
+): Promise<{
+  ok: boolean;
+  error?: string;
+  accepted?: QuoteOption[];
+  declined?: QuoteOption[];
+  package?: QuotePackage | null;
+}> {
   const q = await getQuote(session, id);
   if (!q) return { ok: false, error: "You don't have access to this quote." };
 
@@ -1656,7 +1899,10 @@ export async function recordOfflineAcceptance(
   // phone to a price a member of staff has in front of them, and refusing that
   // would be the app arguing with a conversation it wasn't part of.
 
-  const options = await listQuoteOptions(session, id);
+  const [options, packages] = await Promise.all([
+    listQuoteOptions(session, id),
+    listQuotePackages(session, id),
+  ]);
   const patch: Partial<Quote> = {
     customer_response: "accepted",
     customer_responded_at: new Date().toISOString(),
@@ -1664,6 +1910,14 @@ export async function recordOfflineAcceptance(
   };
   let accepted: QuoteOption[] = [];
   let declined: QuoteOption[] = [];
+  let chosenPackage: QuotePackage | null = null;
+
+  if (isChoice(packages)) {
+    chosenPackage = packages.find((p) => p.id === input.packageId) ?? null;
+    if (!chosenPackage) {
+      return { ok: false, error: "Say which option they went with before recording the approval." };
+    }
+  }
 
   if (options.length > 0) {
     const answers = input.options ?? {};
@@ -1673,11 +1927,17 @@ export async function recordOfflineAcceptance(
     }
     accepted = options.filter((o) => o.required || answers[o.id] === "accepted");
     declined = options.filter((o) => !o.required && answers[o.id] === "declined");
-    if (accepted.length === 0) {
+    // Only where nothing else carries the job. With a package chosen, no to
+    // every add-on is an ordinary answer rather than a declined quote.
+    if (accepted.length === 0 && !chosenPackage) {
       return { ok: false, error: "They said no to every line. That's a declined quote, not an approved one." };
     }
-    // The price follows the answers, same as the customer's own path.
-    patch.quote_amount = optionsTotal(accepted);
+  }
+
+  // The price follows the answers, same as the customer's own path.
+  if (options.length > 0 || chosenPackage) {
+    patch.quote_amount =
+      Math.round((optionAmount(chosenPackage ?? { amount: 0 }) + optionsTotal(accepted)) * 100) / 100;
   }
 
   // A day agreed on the call is recorded as what the customer asked for, which
@@ -1718,8 +1978,21 @@ export async function recordOfflineAcceptance(
       body: JSON.stringify({ customer_response: response, responded_at: stamp }),
     }).catch(() => {});
   }
+  if (isChoice(packages)) {
+    for (const [response, rows] of [
+      ["accepted", chosenPackage ? [chosenPackage] : []],
+      ["declined", packages.filter((p) => p.id !== chosenPackage?.id)],
+    ] as const) {
+      if (rows.length === 0) continue;
+      await pgUser(`quote_packages?id=in.(${rows.map((p) => p.id).join(",")})`, session.accessToken, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ customer_response: response, responded_at: stamp }),
+      }).catch(() => {});
+    }
+  }
 
-  return { ok: true, accepted, declined };
+  return { ok: true, accepted, declined, package: chosenPackage };
 }
 
 // Confirm (or move) the work day. Runs as the logged-in user so RLS keeps a

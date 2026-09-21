@@ -35,6 +35,7 @@ with needed(feature, migration, obj, col) as (
     ('Activity log',     'crm.sql',              'quote_events',   'type'),
     ('Quote sections',   'quote-detail.sql',     'quote_requests', 'quote_scope'),
     ('Line items',       'quote-options.sql',    'quote_options',  'required'),
+    ('Choice of options','quote-packages.sql',   'quote_packages', 'recommended'),
     ('Scheduling',       'scheduling.sql',       'quote_requests', 'preferred_dates'),
     ('Start times',      'scheduled-time.sql',   'quote_requests', 'preferred_times'),
     ('Appointments',     'appointments.sql',     'quote_requests', 'visit_date'),
@@ -245,19 +246,46 @@ with checks(area, ref, check_name, kind, n) as (
                          where m.quote_id = q.id and m.kind in ('quote_ready','quote_updated')))
 
   -- ── LINE ITEMS ───────────────────────────────────────────────────────────
+  -- The price of an approved job is the option they picked (nothing, on a quote
+  -- that offered no choice) plus every line item they kept. The package half is
+  -- read through a scalar subquery rather than a second join: joining both
+  -- would multiply the line items by the packages and the sum would be wrong
+  -- in a way that looks exactly like the bug this check is for.
   union all select 'Line items', 'L1', 'Line items do not add up to the job price', 'problem',
     (select count(*) from (
         select q.id from public.quote_requests q
           join public.quote_options o on o.quote_id = q.id
          where q.customer_response = 'accepted' and not q.is_test and q.archived_at is null
          group by q.id, q.quote_amount
-        having round(sum(case when o.required or o.customer_response = 'accepted' then o.amount else 0 end) * 100)
+        having round((sum(case when o.required or o.customer_response = 'accepted' then o.amount else 0 end)
+                      + coalesce((select sum(p.amount) from public.quote_packages p
+                                   where p.quote_id = q.id and p.customer_response = 'accepted'), 0)) * 100)
              <> round(coalesce(q.quote_amount,0) * 100)) x)
   union all select 'Line items', 'L2', 'Customer approved without answering every option', 'review',
     (select count(*) from public.quote_options o
       join public.quote_requests q on q.id = o.quote_id
      where q.customer_response = 'accepted' and not o.required and o.customer_response is null
        and not q.is_test and q.archived_at is null)
+
+  -- ── CHOICE OF OPTIONS ────────────────────────────────────────────────────
+  union all select 'Choice of options', 'P1', 'Approved a quote that offered a choice, with no option picked', 'problem',
+    (select count(*) from public.quote_requests q
+      where q.customer_response = 'accepted' and not q.is_test and q.archived_at is null
+        and exists (select 1 from public.quote_packages p where p.quote_id = q.id)
+        and not exists (select 1 from public.quote_packages p
+                         where p.quote_id = q.id and p.customer_response = 'accepted'))
+  union all select 'Choice of options', 'P2', 'More than one option marked as taken on the same quote', 'problem',
+    (select count(*) from (
+        select p.quote_id from public.quote_packages p
+          join public.quote_requests q on q.id = p.quote_id
+         where p.customer_response = 'accepted' and not q.is_test and q.archived_at is null
+         group by p.quote_id having count(*) > 1) x)
+  union all select 'Choice of options', 'P3', 'Quote offering a choice of one - the customer has nothing to pick', 'review',
+    (select count(*) from (
+        select p.quote_id from public.quote_packages p
+          join public.quote_requests q on q.id = p.quote_id
+         where not q.is_test and q.archived_at is null
+         group by p.quote_id having count(*) < 2) x)
 
   -- ── PEOPLE ───────────────────────────────────────────────────────────────
   union all select 'People', 'H1', 'Active crew with no phone number', 'problem',
@@ -450,12 +478,30 @@ order by m.send_after;
 -- L1 - line items that do not add up to the price
 select q.id, q.name, q.quote_amount,
        sum(case when o.required or o.customer_response = 'accepted' then o.amount else 0 end) as items_total,
+       coalesce((select sum(p.amount) from public.quote_packages p
+                  where p.quote_id = q.id and p.customer_response = 'accepted'), 0) as picked_option,
        count(*) as items
 from public.quote_requests q join public.quote_options o on o.quote_id = q.id
 where q.customer_response = 'accepted' and not q.is_test and q.archived_at is null
 group by q.id, q.name, q.quote_amount
-having round(sum(case when o.required or o.customer_response = 'accepted' then o.amount else 0 end) * 100)
+having round((sum(case when o.required or o.customer_response = 'accepted' then o.amount else 0 end)
+              + coalesce((select sum(p.amount) from public.quote_packages p
+                           where p.quote_id = q.id and p.customer_response = 'accepted'), 0)) * 100)
      <> round(coalesce(q.quote_amount,0) * 100)
+order by q.created_at desc;
+
+-- P1 / P2 / P3 - the choice the customer was offered, and what came back
+select q.id, q.name, q.quote_amount, q.customer_response,
+       count(*) as options_offered,
+       count(*) filter (where p.customer_response = 'accepted') as options_taken,
+       string_agg(p.title || ' ' || p.amount::text || coalesce(' [' || p.customer_response || ']', ''), ' | '
+                  order by p.sort_order) as options
+from public.quote_requests q join public.quote_packages p on p.quote_id = q.id
+where not q.is_test and q.archived_at is null
+group by q.id, q.name, q.quote_amount, q.customer_response, q.created_at
+having count(*) < 2
+    or count(*) filter (where p.customer_response = 'accepted') > 1
+    or (q.customer_response = 'accepted' and count(*) filter (where p.customer_response = 'accepted') = 0)
 order by q.created_at desc;
 
 -- H1 / H2 - crew who cannot be reached, or cannot be paid

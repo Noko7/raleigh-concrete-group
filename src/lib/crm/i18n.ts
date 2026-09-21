@@ -357,6 +357,35 @@ const en = {
     answerNo: "Turned down",
     answerNone: "No answer",
   },
+  // The other question customers ask, which line items cannot answer: not "and
+  // also the sidewalk" but "or instead, in asphalt". Two complete ways of doing
+  // the same job, and the customer picks exactly one.
+  quotePackages: {
+    title: "Give them a choice (optional)",
+    emptyHint:
+      "Most quotes need nothing here. Use it when the customer asked for the same job two ways - a concrete driveway or an asphalt one - so they can compare both prices on one page and pick one.",
+    start: "+ Offer two ways to do this job",
+    hint: "The customer picks one of these. Any line items above are added on top of whichever they pick.",
+    optionWord: "Option",
+    itemTitle: "What to call it",
+    itemTitlePlaceholderA: "e.g. Concrete driveway",
+    itemTitlePlaceholderB: "e.g. Asphalt driveway",
+    itemPrice: "Price ($)",
+    itemDesc: "Why they might pick this one",
+    itemDescPlaceholder: "What they get, and what makes it different from the other option.",
+    recommend: "This is the one I'd recommend",
+    addAnother: "+ Add another option",
+    remove: "Remove",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    needTwo:
+      "Not a choice yet. This is saved, but the customer sees nothing and the quote can't be sent until there's a second option - or remove this card and it goes out as a single price.",
+    leadNote: "Shown on the job here as:",
+    lockedNote:
+      "The customer has chosen, so this is the record of what they were offered and what they took. It cannot be changed.",
+    answerPicked: "They picked this",
+    answerNotPicked: "Not picked",
+  },
   // Every version of the quote that has gone to this customer. Shown above the
   // logs on both job pages, because "what have we actually told them" is asked
   // before "who was told what and when".
@@ -373,7 +402,7 @@ const en = {
     noPrice: "No price",
     retract: "Sent to the wrong customer?",
     retractWarn:
-      "This kills the link {name} is holding, clears the price, the wording and any line items, stops a text that hasn't sent yet, and puts the job back in New. It cannot be undone.",
+      "This kills the link {name} is holding, clears the price, the wording, any line items and any choice of options, stops a text that hasn't sent yet, and puts the job back in New. It cannot be undone.",
     retractGo: "Yes, retract it",
     retractKeep: "Keep it",
     retracting: "Retracting…",
@@ -384,6 +413,12 @@ const en = {
     title: "Approved over the phone?",
     lead: "If {name} said yes on a call, record it here instead of sending another quote for them to tap. You can set the day you agreed to at the same time - any day from today.",
     open: "Record their approval",
+    // On a quote that offered a choice of ways to do the job, the first thing
+    // to get out of the caller: which one. Nothing else on this form can be
+    // filled in honestly until it is answered.
+    whichOption: "Which option did they go with?",
+    whichOptionHint: "They were offered a choice. Pick the one they agreed to on the call.",
+    pickOption: "Say which option they took before recording the approval.",
     whatTheyTook: "What they agreed to",
     included: "In the job",
     yes: "Took it",
@@ -987,6 +1022,32 @@ const es: typeof en = {
     answerNo: "Rechazada",
     answerNone: "Sin respuesta",
   },
+  quotePackages: {
+    title: "Darle a elegir (opcional)",
+    emptyHint:
+      "La mayoría de las cotizaciones no necesitan esto. Úsalo cuando el cliente pidió el mismo trabajo de dos formas: una entrada de concreto o una de asfalto, para que compare ambos precios en una sola página y elija uno.",
+    start: "+ Ofrecer dos formas de hacer el trabajo",
+    hint: "El cliente elige una de estas. Las partidas de arriba se suman a la que elija.",
+    optionWord: "Opción",
+    itemTitle: "Cómo se llama",
+    itemTitlePlaceholderA: "ej. Entrada de concreto",
+    itemTitlePlaceholderB: "ej. Entrada de asfalto",
+    itemPrice: "Precio ($)",
+    itemDesc: "Por qué elegiría esta",
+    itemDescPlaceholder: "Qué recibe y en qué se diferencia de la otra opción.",
+    recommend: "Esta es la que yo recomendaría",
+    addAnother: "+ Agregar otra opción",
+    remove: "Quitar",
+    moveUp: "Subir",
+    moveDown: "Bajar",
+    needTwo:
+      "Todavía no es una elección. Esto se guarda, pero el cliente no ve nada y la cotización no se puede enviar hasta que haya una segunda opción - o quita esta tarjeta y sale con un solo precio.",
+    leadNote: "Aquí se muestra como:",
+    lockedNote:
+      "El cliente ya eligió, así que esto es el registro de lo que se le ofreció y lo que tomó. No se puede cambiar.",
+    answerPicked: "Eligió esta",
+    answerNotPicked: "No elegida",
+  },
   quoteLog: {
     title: "Cotizaciones enviadas",
     none: "Todavía no se le ha enviado ninguna cotización a este cliente.",
@@ -998,7 +1059,7 @@ const es: typeof en = {
     noPrice: "Sin precio",
     retract: "¿Se envió al cliente equivocado?",
     retractWarn:
-      "Esto anula el enlace que tiene {name}, borra el precio, el texto y las partidas, detiene cualquier mensaje que no haya salido, y regresa el trabajo a Nuevo. No se puede deshacer.",
+      "Esto anula el enlace que tiene {name}, borra el precio, el texto, las partidas y cualquier elección de opciones, detiene cualquier mensaje que no haya salido, y regresa el trabajo a Nuevo. No se puede deshacer.",
     retractGo: "Sí, retirarla",
     retractKeep: "Dejarla así",
     retracting: "Retirando…",
@@ -1007,6 +1068,9 @@ const es: typeof en = {
     title: "¿Aprobó por teléfono?",
     lead: "Si {name} dijo que sí en una llamada, regístralo aquí en lugar de mandar otra cotización para que la toque. Puedes poner el día que acordaron al mismo tiempo - cualquier día desde hoy.",
     open: "Registrar su aprobación",
+    whichOption: "¿Con cuál opción se quedó?",
+    whichOptionHint: "Se le ofreció una elección. Marca la que aceptó en la llamada.",
+    pickOption: "Indica qué opción tomó antes de registrar la aprobación.",
     whatTheyTook: "Lo que aceptó",
     included: "Incluido",
     yes: "La tomó",

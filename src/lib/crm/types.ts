@@ -181,6 +181,28 @@ export type QuoteOption = {
   updated_at: string;
 };
 
+// One complete way of doing the job, on a quote that offers a choice of them.
+// The customer picks exactly one; line items above are added to whichever they
+// pick. A quote with no packages is the ordinary quote it has always been.
+export type QuotePackage = {
+  id: string;
+  quote_id: string;
+  title: string;
+  description: string | null;
+  // numeric(10,2) comes back from PostgREST as a string, so read it through
+  // optionAmount() rather than assuming a number.
+  amount: number | string;
+  // The one the contractor would pick. At most one per quote.
+  recommended: boolean;
+  sort_order: number;
+  // 'accepted' on the one they chose, 'declined' on every other package on the
+  // same quote - the record is of the choice, not just of the winner.
+  customer_response: "accepted" | "declined" | null;
+  responded_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type QuoteEvent = {
   id: string;
   quote_id: string;

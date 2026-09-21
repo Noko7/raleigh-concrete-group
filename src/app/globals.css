@@ -3001,9 +3001,86 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .jo-scope-list li em { grid-column: 1 / -1; font-style: normal; font-size: 0.85rem; color: #4b5563; white-space: pre-wrap; }
 .jo-scope-no { margin-top: 0.6rem; }
 
+/* ── A choice of ways to do the job ───────────────────────────────────────
+   The "or instead" to the line items above. Same three surfaces:
+     .qp-*      the builder, on both quote forms
+     .cq-alt-*  the cards the customer picks between
+     .ao-pick*  the crew reading them back down the phone
+   Sibling of the line-item builder on purpose: it sits directly under it, and
+   a second visual language in the same fieldset would read as a second app. */
+
+/* Builder. Closed, it is one sentence and a button - which is the state almost
+   every quote stays in, so it must not look like a section somebody skipped. */
+.qc-box { border: 1px solid #e2e5ea; border-radius: 0.6rem; padding: 0.9rem 1rem 1rem; margin-bottom: 1rem; }
+.qc-box legend { font-size: 0.8rem; font-weight: 800; padding: 0 0.35rem; }
+.qc-box-empty { background: #fbfbfc; border-style: dashed; }
+.qc-start { margin-top: 0.6rem; background: #fff; border: 1px dashed #9ca3af; border-radius: 0.45rem; padding: 0.5rem 0.8rem; font: inherit; font-size: 0.85rem; font-weight: 800; color: #374151; cursor: pointer; }
+.qc-start:hover { border-color: var(--amber); color: var(--amber-dark); }
+.qc-card { border: 1px solid #e2e5ea; border-radius: 0.55rem; padding: 0.75rem; margin: 0.75rem 0; background: #fff; border-left: 3px solid #d1d5db; }
+.qc-card-rec { border-left-color: var(--amber); }
+.qc-card-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; }
+.qc-letter { font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; border-radius: 999px; padding: 0.15rem 0.55rem; background: #eef2f7; color: #4b5563; }
+.qc-card-rec .qc-letter { background: rgba(194, 104, 42, 0.14); color: var(--amber-dark); }
+.qc-card-tools { display: flex; align-items: center; gap: 0.3rem; }
+.qc-card-tools button { background: #fff; border: 1px solid #d1d5db; border-radius: 0.35rem; padding: 0.1rem 0.4rem; font: inherit; font-size: 0.8rem; cursor: pointer; color: #4b5563; }
+.qc-card-tools button:disabled { opacity: 0.4; cursor: not-allowed; }
+.qc-remove { color: #b91c1c !important; }
+.qc-card-main { display: flex; gap: 0.6rem; }
+.qc-rec { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; font-weight: 700; color: #374151; cursor: pointer; }
+.qc-warn { margin: 0.7rem 0 0; font-size: 0.8rem; font-weight: 700; color: var(--amber-dark); }
+.qc-lead-note { margin: 0.7rem 0 0; font-size: 0.8rem; color: #4b5563; }
+.qc-locked { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.qc-locked li { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; border: 1px solid #e2e5ea; border-radius: 0.45rem; font-size: 0.86rem; }
+.qc-locked-title { flex: 1 1 auto; font-weight: 700; }
+.qc-locked-no { opacity: 0.55; text-decoration: line-through; }
+.qc-tag { font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: #4b5563; }
+.qc-locked-yes .qc-tag { color: var(--amber-dark); }
+
+/* Customer: the cards they pick between. The whole card is the control - a
+   radio dot beside a price is a pea-sized target on the phone this is read on -
+   so it is a real <button> and the selected state is unmistakable at arm's
+   length rather than a two-pixel ring. */
+.cq-alts { margin-bottom: 1.4rem; }
+.cq-alts-lead { margin: 0 0 0.75rem; }
+.cq-alt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+.cq-alt {
+  display: flex; flex-direction: column; gap: 0.35rem; width: 100%; text-align: left;
+  border: 2px solid rgba(43, 26, 18, 0.14); border-radius: 0.8rem; background: #fff;
+  padding: 0.95rem 1rem; font: inherit; color: #2b1a12; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.cq-alt:hover { border-color: rgba(43, 26, 18, 0.4); }
+.cq-alt-on { border-color: var(--amber); background: rgba(194, 104, 42, 0.07); box-shadow: 0 2px 14px rgba(194, 104, 42, 0.14); }
+.cq-alt-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.cq-alt-letter { font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(43, 26, 18, 0.55); }
+.cq-alt-flag { font-size: 0.66rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: #fff; background: var(--amber); border-radius: 999px; padding: 0.18rem 0.55rem; }
+.cq-alt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; }
+.cq-alt-title { font-weight: 800; font-size: 1.05rem; }
+.cq-alt-price { font-family: var(--font-headline), sans-serif; font-size: 1.5rem; white-space: nowrap; }
+.cq-alt-desc { font-size: 0.88rem; color: rgba(43, 26, 18, 0.75); white-space: pre-wrap; }
+.cq-alt-mark { margin-top: 0.35rem; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(43, 26, 18, 0.45); }
+.cq-alt-on .cq-alt-mark { color: var(--amber-dark); }
+.cq-confirm-item-pick { font-weight: 800; }
+
+/* Crew: the option they picked, leading what goes on the truck. */
+.jo-scope-pick { background: rgba(194, 104, 42, 0.07); }
+
+/* Crew, on the phone: which option the customer said yes to. */
+.ao-picks { gap: 0.4rem; margin-bottom: 0.9rem; }
+.ao-pick {
+  display: flex; align-items: center; gap: 0.6rem; width: 100%; text-align: left;
+  padding: 0.55rem 0.7rem; border: 1px solid var(--crm-line, #e2e5ea); border-radius: 0.5rem;
+  background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.ao-pick .ao-opt-title { flex: 1 1 auto; }
+.ao-pick-letter { flex: 0 0 auto; width: 1.4rem; height: 1.4rem; border-radius: 999px; display: grid; place-items: center; font-size: 0.72rem; font-weight: 900; background: rgba(127, 127, 127, 0.18); }
+.ao-pick.ao-on { border-color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); }
+.ao-pick.ao-on .ao-pick-letter { background: var(--amber); color: #fff; }
+
 @media (max-width: 560px) {
   .qo-row-main { flex-direction: column; }
   .qo-field-price { flex: 1 1 auto; }
+  .qc-card-main { flex-direction: column; }
   .cq-opt-choice { flex-direction: column; }
 }
 

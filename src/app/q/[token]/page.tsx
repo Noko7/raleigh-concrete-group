@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 import { DECLINE_CREDIT, dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, slotsFor } from "@/lib/crm/constants";
 import { usd } from "@/lib/crm/fees";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
-import { getQuoteByToken, getWorkHours, isQuoteExpired, listQuoteOptionsAdmin } from "@/lib/crm/queries";
+import { getQuoteByToken, getWorkHours, isQuoteExpired, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
 import { QuoteActions } from "./quote-actions";
 import { ViewBeacon } from "./view-beacon";
@@ -51,7 +51,11 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
 
   // Line items, if this quote was written as a list of choices. Fetched before
   // the expired/responded branches below use them.
-  const options = (await listQuoteOptionsAdmin(quote.id)).map((o) => ({
+  const [storedOptions, storedPackages] = await Promise.all([
+    listQuoteOptionsAdmin(quote.id),
+    listQuotePackagesAdmin(quote.id),
+  ]);
+  const options = storedOptions.map((o) => ({
     id: o.id,
     title: o.title,
     description: o.description,
@@ -59,7 +63,22 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
     required: o.required,
     customer_response: o.customer_response,
   }));
+  // The ways of doing the job they were asked to pick between, on the quote
+  // that was written two ways. Empty on every ordinary quote, and every branch
+  // below then behaves exactly as it always has.
+  const packages = storedPackages.map((p) => ({
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    amount: Number(p.amount),
+    recommended: p.recommended,
+    customer_response: p.customer_response,
+  }));
   const itemised = options.length > 0;
+  const offersChoice = packages.length > 0;
+  // The one they went with, once they have answered. What the confirmation page
+  // leads with: "approved" on a driveway quoted two ways does not say which.
+  const chosenPackage = packages.find((p) => p.customer_response === "accepted") ?? null;
 
   const hasPrice = quote.quote_amount != null;
   const amount = hasPrice ? dollars(quote.quote_amount) : null;
@@ -151,8 +170,14 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           {/* What they approved, item by item. This page is their record of the
               job from here on, and on a quote with options "approved" on its
               own doesn't say which ones. */}
-          {itemised && (
+          {(itemised || chosenPackage) && (
             <ul className="cq-confirm-items">
+              {chosenPackage && (
+                <li className="cq-confirm-item-pick">
+                  <span>{chosenPackage.title}</span>
+                  <strong>{dollars(chosenPackage.amount)}</strong>
+                </li>
+              )}
               {options
                 .filter((o) => o.customer_response !== "declined")
                 .map((o) => (
@@ -259,14 +284,16 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
         {hasPrice ? (
           <>
             <p className="cq-lead">
-              {itemised
-                ? "Here's your quote. Some of it is up to you - say yes or no to each option below and your total updates as you go."
-                : `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We'd love to do the work for you.`}
+              {offersChoice
+                ? "Here's your quote, priced both ways. Pick the one you'd like below and your total is worked out for you."
+                : itemised
+                  ? "Here's your quote. Some of it is up to you - say yes or no to each option below and your total updates as you go."
+                  : `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We'd love to do the work for you.`}
             </p>
             {/* On an itemised quote there is no single price to print here: the
                 number depends on what they pick, so it lives with the options
                 and moves as they answer. One price on the page, never two. */}
-            {!itemised && (
+            {!itemised && !offersChoice && (
               <div className="cq-price">
                 <span className="cq-price-label">Your price, all in</span>
                 <span className="cq-price-value">{amount}</span>
@@ -279,7 +306,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
                 )}
               </div>
             )}
-            {itemised && quote.quote_expires_at && (
+            {(itemised || offersChoice) && quote.quote_expires_at && (
               <p className="cq-expiry cq-expiry-line">
                 Good through {prettyDate(quote.quote_expires_at.slice(0, 10))}
               </p>
@@ -338,6 +365,13 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               description: o.description,
               amount: o.amount,
               required: o.required,
+            }))}
+            packages={packages.map((p) => ({
+              id: p.id,
+              title: p.title,
+              description: p.description,
+              amount: p.amount,
+              recommended: p.recommended,
             }))}
           />
         ) : null}

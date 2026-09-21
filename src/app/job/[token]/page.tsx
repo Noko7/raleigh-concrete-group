@@ -11,7 +11,7 @@ import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
-import { getQuoteByToken, listEvents, listMessages, listQuoteOptionsAdmin } from "@/lib/crm/queries";
+import { getQuoteByToken, listEvents, listMessages, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { AcceptOffline } from "@/app/crm/quotes/[id]/accept-offline";
 import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
@@ -107,8 +107,9 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // Money only exists once the customer has agreed to a number. Before that
   // there is nothing to collect and nothing to owe, and a card showing four
   // zeroes is a card the crew learns to scroll past.
-  const [options, money, payee, events] = await Promise.all([
+  const [options, packages, money, payee, events] = await Promise.all([
     listQuoteOptionsAdmin(quote.id),
+    listQuotePackagesAdmin(quote.id),
     accepted ? jobLedger(quote) : Promise.resolve(null),
     accepted ? payeeState(quote) : Promise.resolve(null),
     listEvents(session, quote.id),
@@ -116,6 +117,13 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   const cardReady = payee?.ok ?? false;
   const chosen = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response !== "declined") : [];
   const rejected = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response === "declined") : [];
+  // The way of doing the job they picked, on a quote that offered a choice.
+  // First line of what the crew load the truck with, so it leads the scope card
+  // below rather than sitting under the extras.
+  const chosenPackage =
+    quote.customer_response === "accepted"
+      ? (packages.find((p) => p.customer_response === "accepted") ?? null)
+      : null;
 
   // Photos go through the CRM's authenticated proxy rather than being signed
   // one by one. Two fewer storage round-trips on every load, no expiry to
@@ -351,6 +359,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               amount: Number(o.amount),
               required: o.required,
             }))}
+            packages={packages.map((p) => ({
+              id: p.id,
+              title: p.title,
+              amount: Number(p.amount),
+              recommended: p.recommended,
+            }))}
             minDate={minJobDate}
             locale={locale}
             tone="light"
@@ -401,11 +415,21 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         {/* What they actually bought, above the customer details, because on a
             quote with options it is the thing that decides what goes on the
             truck. Only ever shown once they have answered. */}
-        {chosen.length > 0 && (
+        {(chosen.length > 0 || chosenPackage) && (
           <section className="js-card jo-scope">
             <h2 className="js-title">{t.contractorJob.approvedScope}</h2>
             <p className="js-hint">{t.contractorJob.approvedScopeHint}</p>
             <ul className="jo-scope-list">
+              {/* The option they picked first and marked as such: on a driveway
+                  quoted two ways it decides what turns up on the truck, and
+                  reading it as one more line item is how the wrong one does. */}
+              {chosenPackage && (
+                <li className="jo-scope-pick">
+                  <strong>{chosenPackage.title}</strong>
+                  <span>{dollars(Number(chosenPackage.amount))}</span>
+                  {chosenPackage.description && <em>{chosenPackage.description}</em>}
+                </li>
+              )}
               {chosen.map((o) => (
                 <li key={o.id}>
                   <strong>{o.title}</strong>
@@ -529,6 +553,14 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               amount: Number(o.amount),
               required: o.required,
               customer_response: o.customer_response,
+            }))}
+            packages={packages.map((p) => ({
+              id: p.id,
+              title: p.title,
+              description: p.description,
+              amount: Number(p.amount),
+              recommended: p.recommended,
+              customer_response: p.customer_response,
             }))}
             initialSections={{
               quote_scope: quote.quote_scope,

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ymdInDays } from "@/lib/crm/clock";
-import { DECLINE_CREDIT, DEFAULT_VISIT_SLOTS, dollars, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, selectedTotal } from "@/lib/crm/constants";
+import { DECLINE_CREDIT, DEFAULT_VISIT_SLOTS, dollars, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, packageLetter, quoteTotal } from "@/lib/crm/constants";
 import { DEFAULT_DEPOSIT_PERCENT, depositCents, usd as money } from "@/lib/crm/fees";
 
 // One day the customer says works, and the time they'd like the crew to start.
@@ -36,6 +36,19 @@ export type PublicOption = {
   required: boolean;
 };
 
+// One complete way of doing the job, on a quote that offers a choice of them.
+// Unlike the line items above these are mutually exclusive: the customer picks
+// exactly one, and the extras are added to whichever they picked.
+export type PublicPackage = {
+  id: string;
+  title: string;
+  description: string | null;
+  amount: number;
+  // The contractor's own answer to "which would you pick". At most one card
+  // carries it.
+  recommended: boolean;
+};
+
 function pretty(s: string): string {
   const d = new Date(`${s}T00:00:00`);
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
@@ -47,6 +60,7 @@ export function QuoteActions({
   token,
   amount,
   options = [],
+  packages = [],
   // The start times the assigned crew offers, from their own working hours.
   // Falls back to the default window on a quote with nobody assigned yet.
   slots = DEFAULT_VISIT_SLOTS,
@@ -58,6 +72,7 @@ export function QuoteActions({
   token: string;
   amount: number | null;
   options?: PublicOption[];
+  packages?: PublicPackage[];
   slots?: string[];
   cardReady?: boolean;
 }) {
@@ -80,6 +95,10 @@ export function QuoteActions({
   // box is a customer who scrolled past it, not a decision, and either reading
   // of it would be us deciding for them.
   const [answers, setAnswers] = useState<Record<string, "accepted" | "declined">>({});
+  // Which way of doing the job they picked, on a quote that offers a choice.
+  // Nothing is pre-selected, not even the recommended one: a default here is us
+  // choosing a price for them and hoping they don't notice.
+  const [picked, setPicked] = useState<string | null>(null);
 
   // Whether the real Approve button is on screen. On a phone the decision sits
   // below the price, the trust lines, what's included and, on an itemised
@@ -98,16 +117,23 @@ export function QuoteActions({
   }, []);
 
   const itemised = options.length > 0;
+  const choice = packages.length > 0;
   const optional = options.filter((o) => !o.required);
   const answered = optional.filter((o) => answers[o.id]).length;
   const allAnswered = answered === optional.length;
-  // What they are buying right now. Required items always count; optional ones
-  // only once they have said yes.
-  const running = useMemo(() => selectedTotal(options, answers), [options, answers]);
-  // The figure every price below is worked from: their selection on an itemised
-  // quote, the single price on an ordinary one.
-  const total = itemised ? running : (amount ?? 0);
-  const canApprove = itemised ? allAnswered && total > 0 : amount != null;
+  const chosen = useMemo(() => packages.find((p) => p.id === picked) ?? null, [packages, picked]);
+  // What they are buying right now: the way of doing it they picked, plus every
+  // required item, plus the optional ones they've said yes to.
+  const running = useMemo(() => quoteTotal(chosen, options, answers), [chosen, options, answers]);
+  // Whether the price on this page is built rather than fixed. On a quote that
+  // is neither itemised nor a choice there is one number and it never moves.
+  const built = itemised || choice;
+  // The figure every price below is worked from.
+  const total = built ? running : (amount ?? 0);
+  const canApprove = built ? (!choice || Boolean(chosen)) && allAnswered && total > 0 : amount != null;
+  // What still stands between them and the button, in the order they'd hit it.
+  // Said out loud rather than left as a greyed-out button with no explanation.
+  const todo = !choice || chosen ? optional.length - answered : -1;
 
   // What the bar shows, which has to be the number at the bottom of the option
   // list rather than the raw total: a customer holding a credit should not see
@@ -165,7 +191,7 @@ export function QuoteActions({
   // What the save offer is quoted against. On an itemised quote somebody can
   // reach it having answered nothing, and striking through $0 is not an offer -
   // so it falls back to the all-in figure until they have picked something.
-  const offerBase = itemised && running === 0 ? (amount ?? 0) : total;
+  const offerBase = built && running === 0 ? (amount ?? 0) : total;
   const discounted = Math.max(0, Math.round((offerBase - DECLINE_CREDIT) * 100) / 100);
 
   async function submit(action: "accept" | "decline", pay?: PayChoice) {
@@ -191,6 +217,9 @@ export function QuoteActions({
           // Every item, including the required ones, so the server records a
           // decision against each rather than inferring one.
           options: action === "accept" && itemised ? answersWithRequired(options, answers) : undefined,
+          // Which way of doing the job they went with. The server checks it is
+          // one of the packages on THIS quote before it prices anything.
+          package: action === "accept" && choice ? (picked ?? undefined) : undefined,
         }),
       });
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
@@ -232,14 +261,15 @@ export function QuoteActions({
 
   if (mode === "accepted") {
     const finalPrice = discount ? discounted : total;
-    const bought = options.filter((o) => o.required || answers[o.id] === "accepted");
+    const bought = [
+      ...(chosen ? [chosen.title] : []),
+      ...options.filter((o) => o.required || answers[o.id] === "accepted").map((o) => o.title),
+    ];
     return (
       <div className="cq-result cq-result-ok">
         <p className="cq-result-eyebrow">Quote approved</p>
         <h3>Thanks! We&apos;ll confirm your date shortly</h3>
-        {bought.length > 0 && (
-          <p className="cq-result-note">You approved: {bought.map((o) => o.title).join(", ")}.</p>
-        )}
+        {bought.length > 0 && <p className="cq-result-note">You approved: {bought.join(", ")}.</p>}
         <p className="cq-result-price">
           {discount && <span className="cq-result-save">${DECLINE_CREDIT} credit applied</span>}
           <strong>{usd(finalPrice)}</strong>
@@ -283,7 +313,7 @@ export function QuoteActions({
             // itemised quote with questions still open, this goes back to them
             // rather than to the calendar - otherwise they land on the date
             // picker and the server refuses the approval they thought they gave.
-            setMode(itemised && !allAnswered ? "choose" : "schedule");
+            setMode(canApprove ? "schedule" : "choose");
           }}
         >
           Take ${DECLINE_CREDIT} off &amp; approve
@@ -308,13 +338,17 @@ export function QuoteActions({
         {/* What they are approving, carried into this step: the decision they
             just made is two taps behind them and worth restating before they
             commit to it. */}
-        {itemised && (
+        {built && (
           <p className="cq-fine cq-sched-scope">
-            Approving: {options.filter((o) => o.required || answers[o.id] === "accepted").map((o) => o.title).join(", ")}{" "}
+            Approving:{" "}
+            {[
+              ...(chosen ? [chosen.title] : []),
+              ...options.filter((o) => o.required || answers[o.id] === "accepted").map((o) => o.title),
+            ].join(", ")}{" "}
             &middot; <strong>{usd(discount ? discounted : total)}</strong>
           </p>
         )}
-        {discount && !itemised && (
+        {discount && !built && (
           <p className="cq-offer-price">
             With ${DECLINE_CREDIT} credit: <strong>{usd(discounted)}</strong>
           </p>
@@ -447,70 +481,136 @@ export function QuoteActions({
   // choose
   return (
     <>
-      {/* The whole point of an itemised quote: each extra is its own yes or no,
-          and the total underneath moves as they answer. Nothing is ticked for
-          them, so the number they end up approving is one they built. */}
-      {itemised && (
+      {/* One panel holds the whole decision: which way of doing it, then what
+          to add to it, then the number those two answers make. Split across two
+          boxes they read as two quotes, and the total belongs under both. */}
+      {built && (
         <div className="cq-opts">
-          <h2 className="cq-opts-title">Choose what you&apos;d like</h2>
-          {discount && (
-            <p className="cq-fine cq-opt-todo">
-              Your ${DECLINE_CREDIT} credit is held. Answer each option and it comes off the total below.
-            </p>
+          {/* The choice of approach comes first and is answered first. Nothing
+              below it means anything until it has been: the extras are priced
+              the same either way, but the total isn't a total until there is a
+              driveway under it. */}
+          {choice && (
+            <div className="cq-alts">
+              <h2 className="cq-opts-title">
+                {packages.length === 2 ? "Two ways to do this - pick one" : "Pick the one you'd like"}
+              </h2>
+              <p className="cq-fine cq-alts-lead">
+                Same job, done differently. Tap the one you want and your total is worked out below. Not sure? Call or
+                text us and we&apos;ll talk it through.
+              </p>
+              <ul className="cq-alt-list">
+                {packages.map((pkg, i) => {
+                  const on = picked === pkg.id;
+                  return (
+                    <li key={pkg.id}>
+                      {/* The whole card is the control. A radio dot beside a
+                          price is a target the size of a pea on the phone most
+                          of these are read on. */}
+                      <button
+                        type="button"
+                        className={`cq-alt${on ? " cq-alt-on" : ""}${pkg.recommended ? " cq-alt-rec" : ""}`}
+                        aria-pressed={on}
+                        onClick={() => setPicked(pkg.id)}
+                      >
+                        <span className="cq-alt-top">
+                          <span className="cq-alt-letter">{`Option ${packageLetter(i)}`}</span>
+                          {pkg.recommended && <span className="cq-alt-flag">What we&apos;d pick</span>}
+                        </span>
+                        <span className="cq-alt-head">
+                          <span className="cq-alt-title">{pkg.title}</span>
+                          <span className="cq-alt-price">{usd(pkg.amount)}</span>
+                        </span>
+                        {pkg.description && <span className="cq-alt-desc">{pkg.description}</span>}
+                        <span className="cq-alt-mark">{on ? "Selected" : "Choose this one"}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           )}
-          <ul className="cq-opt-list">
-            {options.map((o) => {
-              const answer = answers[o.id];
-              const on = o.required || answer === "accepted";
-              return (
-                <li key={o.id} className={`cq-opt${on ? " cq-opt-on" : ""}${answer === "declined" ? " cq-opt-off" : ""}`}>
-                  <div className="cq-opt-head">
-                    <span className="cq-opt-title">{o.title}</span>
-                    <span className="cq-opt-price">{usd(o.amount)}</span>
-                  </div>
-                  {o.description && <p className="cq-opt-desc">{o.description}</p>}
-                  {o.required ? (
-                    <span className="cq-opt-included">Included in your project</span>
-                  ) : (
-                    <div className="cq-opt-choice" role="group" aria-label={`${o.title}: add it or not`}>
-                      <button
-                        type="button"
-                        className={`cq-opt-btn${answer === "accepted" ? " cq-opt-btn-yes" : ""}`}
-                        aria-pressed={answer === "accepted"}
-                        onClick={() => setAnswers((a) => ({ ...a, [o.id]: "accepted" }))}
-                      >
-                        Yes, add it
-                      </button>
-                      <button
-                        type="button"
-                        className={`cq-opt-btn${answer === "declined" ? " cq-opt-btn-no" : ""}`}
-                        aria-pressed={answer === "declined"}
-                        onClick={() => setAnswers((a) => ({ ...a, [o.id]: "declined" }))}
-                      >
-                        No thanks
-                      </button>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+
+          {/* The whole point of an itemised quote: each extra is its own yes or
+              no, and the total underneath moves as they answer. Nothing is
+              ticked for them, so the number they end up approving is one they
+              built. */}
+          {itemised && (
+            <>
+              <h2 className="cq-opts-title">{choice ? "Anything to add?" : "Choose what you'd like"}</h2>
+              {choice && (
+                <p className="cq-fine cq-alts-lead">These are priced the same whichever option you picked above.</p>
+              )}
+              {discount && (
+                <p className="cq-fine cq-opt-todo">
+                  Your ${DECLINE_CREDIT} credit is held. Answer each option and it comes off the total below.
+                </p>
+              )}
+              <ul className="cq-opt-list">
+                {options.map((o) => {
+                  const answer = answers[o.id];
+                  const on = o.required || answer === "accepted";
+                  return (
+                    <li key={o.id} className={`cq-opt${on ? " cq-opt-on" : ""}${answer === "declined" ? " cq-opt-off" : ""}`}>
+                      <div className="cq-opt-head">
+                        <span className="cq-opt-title">{o.title}</span>
+                        <span className="cq-opt-price">{usd(o.amount)}</span>
+                      </div>
+                      {o.description && <p className="cq-opt-desc">{o.description}</p>}
+                      {o.required ? (
+                        <span className="cq-opt-included">Included in your project</span>
+                      ) : (
+                        <div className="cq-opt-choice" role="group" aria-label={`${o.title}: add it or not`}>
+                          <button
+                            type="button"
+                            className={`cq-opt-btn${answer === "accepted" ? " cq-opt-btn-yes" : ""}`}
+                            aria-pressed={answer === "accepted"}
+                            onClick={() => setAnswers((a) => ({ ...a, [o.id]: "accepted" }))}
+                          >
+                            Yes, add it
+                          </button>
+                          <button
+                            type="button"
+                            className={`cq-opt-btn${answer === "declined" ? " cq-opt-btn-no" : ""}`}
+                            aria-pressed={answer === "declined"}
+                            onClick={() => setAnswers((a) => ({ ...a, [o.id]: "declined" }))}
+                          >
+                            No thanks
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
 
           <div className="cq-opt-total">
             <span>Your total</span>
-            <strong>{usd(discount && running > 0 ? Math.max(0, running - DECLINE_CREDIT) : running)}</strong>
+            {/* A dash, not $0, until they have picked. Zero is a real answer on
+                an itemised quote - they said no to everything - and printing it
+                at somebody who simply hasn't chosen yet is the page telling
+                them their driveway is free. */}
+            <strong>
+              {choice && !chosen ? "-" : usd(discount && running > 0 ? Math.max(0, running - DECLINE_CREDIT) : running)}
+            </strong>
           </div>
-          {!allAnswered && (
+          {/* One outstanding thing at a time, in the order they meet them.
+              Listing both at once reads as a form with errors rather than a
+              decision half made. */}
+          {todo < 0 ? (
+            <p className="cq-fine cq-opt-todo">Pick the option you&apos;d like to go ahead with.</p>
+          ) : todo > 0 ? (
             <p className="cq-fine cq-opt-todo">
-              {optional.length - answered === 1
-                ? "One option still needs a yes or no."
-                : `${optional.length - answered} options still need a yes or no.`}
+              {todo === 1 ? "One extra still needs a yes or no." : `${todo} extras still need a yes or no.`}
             </p>
-          )}
-          {allAnswered && total === 0 && (
-            <p className="cq-fine cq-opt-todo">
-              You&apos;ve said no to everything. Use Decline below if none of it is for you.
-            </p>
+          ) : (
+            total === 0 && (
+              <p className="cq-fine cq-opt-todo">
+                You&apos;ve said no to everything. Use Decline below if none of it is for you.
+              </p>
+            )
           )}
         </div>
       )}
@@ -543,8 +643,8 @@ export function QuoteActions({
       {!ctaOnScreen && (
         <div className="cq-sticky">
           <span className="cq-sticky-price">
-            <span>{itemised ? "Your total" : "Your price"}</span>
-            <strong>{usd(discountedTotal)}</strong>
+            <span>{built ? "Your total" : "Your price"}</span>
+            <strong>{choice && !chosen ? "-" : usd(discountedTotal)}</strong>
           </span>
           <button type="button" className="cq-btn cq-btn-accept" disabled={!canApprove} onClick={approve}>
             Approve

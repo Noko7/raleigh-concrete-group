@@ -37,6 +37,7 @@ export async function POST(request: Request) {
     preferred_dates?: unknown;
     preferred_times?: unknown;
     options?: unknown;
+    package?: unknown;
     pay?: unknown;
   };
   try {
@@ -79,6 +80,11 @@ export async function POST(request: Request) {
       ? body.preferred_times.map((t) => (typeof t === "string" ? t : null))
       : undefined,
     options: readChoices(body.options),
+    // Which way of doing the job they picked. Shape-checked here and matched
+    // against this quote's own packages downstream - an id from somebody else's
+    // quote would otherwise set the price of this one.
+    packageId:
+      typeof body.package === "string" && /^[0-9a-f-]{36}$/i.test(body.package) ? body.package : undefined,
   });
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
 
@@ -95,9 +101,15 @@ export async function POST(request: Request) {
       const contractorPhone = q.assigned_to ? await getStaffPhoneById(q.assigned_to) : null;
       // What they actually bought. The crew and the office need this before
       // anything else: "approved" on a quote with options doesn't say whether
-      // there's a sidewalk to pour.
+      // there's a sidewalk to pour - and on one quoted two ways it doesn't say
+      // whether to bring concrete or asphalt, which is why the option they
+      // picked leads the list.
+      const pick = result.package;
       const chosen = {
-        accepted: (result.accepted ?? []).map((o) => ({ title: o.title, amount: Number(o.amount) })),
+        accepted: [
+          ...(pick ? [{ title: pick.title, amount: Number(pick.amount) }] : []),
+          ...(result.accepted ?? []).map((o) => ({ title: o.title, amount: Number(o.amount) })),
+        ],
         declined: (result.declined ?? []).map((o) => ({ title: o.title, amount: Number(o.amount) })),
       };
       const withChoices = { ...q, chosen };

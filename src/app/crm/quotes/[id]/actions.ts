@@ -9,6 +9,8 @@ import {
   QUOTE_SECTION_LABELS,
   QUOTE_TTL_DAYS,
   TIME_RE,
+  allInTotal,
+  isChoice,
   noEmDash,
   optionAmount,
   optionsTotal,
@@ -51,19 +53,24 @@ import {
   getStaffById,
   lastMessageOf,
   listQuoteOptions,
+  listQuotePackages,
   MAX_JOBS_PER_DAY,
   optionsAsDrafts,
+  packagesAsDrafts,
   parseQuoteOptions,
+  parseQuotePackages,
   recordOfflineAcceptance,
   sameOptions,
+  samePackages,
   saveQuoteOptions,
+  saveQuotePackages,
   updateQuote,
   updateQuoteResult,
   type OptionChoice,
 } from "@/lib/crm/queries";
 import { settleJobIfPaid } from "@/lib/crm/payments";
 import type { Quote } from "@/lib/crm/types";
-import type { QuoteOptionDraft } from "@/lib/crm/constants";
+import type { QuoteOptionDraft, QuotePackageDraft } from "@/lib/crm/constants";
 import type { FinishState, SaveState, ScheduleState } from "./types";
 
 export async function saveQuote(_prev: SaveState, formData: FormData): Promise<SaveState> {
@@ -156,6 +163,33 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
+  // A choice of ways to do the job. Same arrival as the line items above and
+  // locked for the same reason: once the customer has picked one, the rows are
+  // the record of what they chose between.
+  //
+  // parseQuotePackages drops a lone card - one way of doing it is not a choice -
+  // so a quote can never go out asking the customer to pick from a list of one.
+  const existingPackages = await listQuotePackages(session, id);
+  let packageRows: QuotePackageDraft[] | null = null;
+  if (formData.has("packages_json") && !current.customer_response) {
+    let raw: unknown = [];
+    try {
+      raw = JSON.parse(String(formData.get("packages_json") ?? "[]"));
+    } catch {
+      return { ok: false, error: "Could not read the options. Please try again." };
+    }
+    const parsed = parseQuotePackages(raw);
+    if (parsed.error) return { ok: false, error: parsed.error };
+
+    if (samePackages(packagesAsDrafts(existingPackages), parsed.rows)) {
+      packageRows = null;
+    } else {
+      packageRows = parsed.rows;
+      contentChanged = true;
+      events.push({ type: "packages_changed", meta: { count: packageRows.length } });
+    }
+  }
+
   // What this quote is worth, and where that number comes from.
   //
   // With line items the price is the sum of them, full stop. The editors show
@@ -163,15 +197,24 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   // figure the browser posted is never what gets saved - a stale form would
   // otherwise undo a line item somebody had just added.
   //
+  // With a choice of ways to do it there is no single price at all, so the row
+  // carries the lead option - the one the contractor marked, else the first -
+  // plus everything else on the quote. It is a headline for the pipeline and
+  // the board, never something the customer is shown: their page prices each
+  // option beside the others and the real figure is settled when they pick one.
+  //
   // Only while the offer is still open. Once the customer has answered, the
-  // price is what THEY picked - required items plus the extras they said yes
-  // to - and re-deriving it from every row on the quote would quietly bill
+  // price is what THEY picked - the option they chose plus the extras they said
+  // yes to - and re-deriving it from every row on the quote would quietly bill
   // them for the sidewalk they turned down.
   const effectiveOptions = optionRows ?? optionsAsDrafts(existingOptions);
-  const itemised = effectiveOptions.length > 0 && !current.customer_response;
+  const effectivePackages = packageRows ?? packagesAsDrafts(existingPackages);
+  const answered = Boolean(current.customer_response);
+  const itemised = effectiveOptions.length > 0 && !answered;
+  const offersChoice = isChoice(effectivePackages) && !answered;
 
-  if (itemised) {
-    const total = optionsTotal(effectiveOptions);
+  if (itemised || offersChoice) {
+    const total = allInTotal(effectivePackages, effectiveOptions);
     if (total !== Number(current.quote_amount)) {
       patch.quote_amount = total;
       contentChanged = true;
@@ -246,16 +289,32 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   // them, the stored ones otherwise. Declared out here because the texts sent
   // further down report the same figure the customer was quoted.
   const effectiveAmount =
-    itemised
-      ? optionsTotal(effectiveOptions)
+    itemised || offersChoice
+      ? allInTotal(effectivePackages, effectiveOptions)
       : patch.quote_amount !== undefined
         ? patch.quote_amount
         : current.quote_amount;
   const effectiveSummary = patch.quote_summary !== undefined ? patch.quote_summary : current.quote_summary;
 
   if (sending) {
-    if (itemised && optionsTotal(effectiveOptions) <= 0) {
+    if (itemised && !offersChoice && optionsTotal(effectiveOptions) <= 0) {
       return { ok: false, error: "Put a price on at least one line item before sending." };
+    }
+    // A quote carrying one lone option is one somebody is halfway through
+    // writing. It saves - the work is kept - but it cannot go out: a customer
+    // asked to pick from a list of one is being asked nothing.
+    if (!answered && effectivePackages.length > 0 && !isChoice(effectivePackages)) {
+      return {
+        ok: false,
+        error:
+          "This quote has one option on it, which is not a choice. Add a second option, or remove the one you have and it goes out as a single price.",
+      };
+    }
+    // Every option needs a price of its own. A $0 card sitting beside a priced
+    // one does not read as "free", it reads as a quote somebody didn't finish,
+    // and it is the cheapest thing on the page.
+    if (offersChoice && effectivePackages.some((p) => p.amount <= 0)) {
+      return { ok: false, error: "Put a price on every option before sending." };
     }
     if (effectiveAmount == null) return { ok: false, error: "Set a quote amount before sending." };
 
@@ -343,7 +402,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     );
   }
 
-  if (!sending && Object.keys(patch).length === 0 && !optionRows) return { ok: true };
+  if (!sending && Object.keys(patch).length === 0 && !optionRows && !packageRows) return { ok: true };
 
   try {
     // Line items first: the price on the row below is derived from them, so a
@@ -352,6 +411,10 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     if (optionRows) {
       const saved = await saveQuoteOptions(session, id, optionRows);
       if (!saved.ok) return { ok: false, error: saved.error ?? "Could not save the line items." };
+    }
+    if (packageRows) {
+      const saved = await saveQuotePackages(session, id, packageRows);
+      if (!saved.ok) return { ok: false, error: saved.error ?? "Could not save the options." };
     }
 
     if (Object.keys(patch).length > 0) {
@@ -591,20 +654,38 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
     if (clash) return { ok: false, error: conflictMessage(clash) };
   }
 
+  // Which way of doing the job they went with, on a quote that offered a
+  // choice. Empty on every other quote, and refused downstream if this one
+  // needed it - there is no default that isn't a guess about money.
+  const packageId = String(formData.get("package") ?? "").trim();
+
   const recorded = await recordOfflineAcceptance(session, id, {
     options: choices,
+    packageId: /^[0-9a-f-]{36}$/i.test(packageId) ? packageId : undefined,
     agreedDate: booking ? date : null,
     agreedTime: booking ? time : null,
   });
   if (!recorded.ok) return { ok: false, error: recorded.error ?? "Could not record that approval." };
 
+  // The option they picked leads the list the crew and the office read. On a
+  // driveway quoted two ways, "approved - $8,500" does not say what to load the
+  // truck with, and it is the first thing either of them needs to know.
+  const pick = recorded.package;
   const chosen = {
-    accepted: (recorded.accepted ?? []).map((o) => ({ title: o.title, amount: optionAmount(o) })),
+    accepted: [
+      ...(pick ? [{ title: pick.title, amount: optionAmount(pick) }] : []),
+      ...(recorded.accepted ?? []).map((o) => ({ title: o.title, amount: optionAmount(o) })),
+    ],
     declined: (recorded.declined ?? []).map((o) => ({ title: o.title, amount: optionAmount(o) })),
   };
-  // What the row says now: the options may have repriced it, and every message
-  // below quotes the figure the customer actually agreed to.
-  const amount = recorded.accepted && recorded.accepted.length > 0 ? optionsTotal(recorded.accepted) : current.quote_amount;
+  // What the row says now: the choice and the options may have repriced it, and
+  // every message below quotes the figure the customer actually agreed to.
+  const amount =
+    pick || (recorded.accepted && recorded.accepted.length > 0)
+      ? Math.round(
+          ((pick ? optionAmount(pick) : 0) + optionsTotal(recorded.accepted ?? [])) * 100,
+        ) / 100
+      : current.quote_amount;
 
   await addEvent(session, id, "customer_accepted", {
     // The one thing this event has to carry that the customer's own never does:
@@ -614,6 +695,7 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
     recorded_by: session.staff.full_name || session.staff.email || "Staff",
     preferred_dates: booking ? [date] : null,
     preferred_times: booking ? [time] : null,
+    chosen_package: pick?.title ?? null,
     accepted_options: (recorded.accepted ?? []).map((o) => o.title),
     declined_options: (recorded.declined ?? []).map((o) => o.title),
     total: amount ?? null,
@@ -1181,6 +1263,9 @@ async function wipeQuote(
   const updated = await updateQuote(session, id, patch);
   if (!updated) return false;
   await saveQuoteOptions(session, id, []).catch(() => ({ ok: false }));
+  // And the choice of ways to do it, for the same reason: what went out was
+  // wrong, and a package left on the row is a price that goes out again.
+  await saveQuotePackages(session, id, []).catch(() => ({ ok: false }));
   return true;
 }
 
@@ -1195,7 +1280,8 @@ async function wipeQuote(
  *      refresh, and a forwarded link is dead too.
  *   2. Any text still sitting in the quiet-hours queue is cancelled, or the
  *      link we just killed gets texted to them at 8am anyway.
- *   3. The pricing is cleared: the amount, the five sections, the line items.
+ *   3. The pricing is cleared: the amount, the five sections, the line items
+ *      and any choice of options the customer was offered.
  *      This is the "and wipe" half - what went out was wrong, and leaving it
  *      on the row is how it goes out a second time.
  *   4. The job goes back to New with its sent stamps cleared, so the pipeline,

@@ -117,8 +117,9 @@ not the day anyone agreed to.
 
 **CRM → job page → "Approved over the phone?"** (and the same card on the crew's
 own `/job/<token>`) is the other way in:
-- Tick off which optional line items they took. The agreed price follows the
-  answers, exactly as it does when they answer on their own page.
+- Say which option they went with, on a quote that offered a choice of ways to
+  do the job, and tick off which optional line items they took. The agreed price
+  follows the answers, exactly as it does when they answer on their own page.
 - Set the day and start time you agreed on. **Any day from today** - the
   seven-day floor governs what a *customer* may request unprompted, and the
   person filling this in is the crew, who have just checked their own week.
@@ -165,7 +166,7 @@ there. So:
   clicking, which used to mean the office texting itself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql` and `supabase/appointments.sql` in the SQL Editor. Once
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/quote-packages.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql` and `supabase/appointments.sql` in the SQL Editor. Once
    `supabase/payments.sql` is in (see **Getting paid** below), run
    `supabase/least-privilege.sql` last - it is what stops a contractor rewriting
    the money columns on their own jobs.
@@ -405,6 +406,53 @@ Run `supabase/quote-options.sql` for this (the `quote_options` table plus its RL
 the job itself: owners see everything, a contractor sees the jobs assigned to them). Safe to re-run.
 Until it is run, quoting still works - the app treats a missing table as "this quote has no line
 items" - and the builder says which file to run if a save is attempted.
+
+**Two ways to do the same job: a choice of options**
+Line items answer *"and also"* - a patio, and maybe the sidewalk too. They cannot answer the other
+question customers ask, which is *"or instead"*:
+
+> "What would it cost in concrete, and what would it cost in asphalt?"
+
+Those are not two line items. Put both on one list and the customer buys a concrete driveway **and**
+an asphalt one on the same patch of ground, for the sum of two jobs only one of which is happening.
+So a quote can now carry **options**: complete, mutually exclusive ways of doing the job. The
+customer picks exactly one.
+
+- **Two clicks to offer one.** The quote editor's *Give them a choice* box is one sentence and a
+  button until somebody uses it. Pressing it lays out **two** cards at once, because a choice needs
+  two sides and starting with one is starting with half the thing you came to write. Each card takes
+  a name, a price and a line on why they'd pick it.
+- **They compose, they don't compete.** Line items still work and apply to **whichever option the
+  customer picks** - the tear-out, the extra sidewalk. The customer's total is *the option they
+  chose + every required item + the extras they said yes to*.
+- **One recommendation, or none.** Tick *This is the one I'd recommend* on a card and the customer
+  sees **What we'd pick** on it. Only one card can carry it - two recommendations is no
+  recommendation - and the database enforces that with a partial unique index, not just the UI.
+- **Nothing is preselected.** Not even the recommended one. **Approve** stays disabled until they
+  have picked, and the page says which answer is still outstanding rather than greying out a button
+  for reasons it keeps to itself.
+- **The headline figure is the lead option.** A quote offering a choice has no single price, so
+  `quote_amount` carries the recommended option (else the first) plus everything else while the
+  quote is out - a figure for the board, never shown to the customer as *the* price. The moment they
+  pick, it becomes what they actually bought, exactly as it does with line items.
+- **A choice of one is refused.** A lone card is *saved* - it's somebody halfway through writing the
+  second one, and losing that work to a rule nobody explained is worse than the rule - but it prices
+  nothing, the customer is never shown it, and **Send** is refused until there's a second option.
+  So is a card with no price: a $0 option beside a priced one reads as an unfinished quote, and it's
+  the cheapest thing on the page.
+- **Every card keeps its own answer.** The one they took is stamped `accepted` and every other one
+  `declined`, so the record shows the *choice* and not just the winner. The crew's job page leads
+  with it under **What they approved** - on a driveway quoted two ways, "approved, $8,500" doesn't
+  say whether to bring concrete or asphalt - and so do the owner and crew texts.
+- **Both places, both languages, and the phone.** The builder is on the CRM editor and the crew's
+  `/job/<token>` page in English and Spanish, and *Approved over the phone?* asks **which option
+  they went with** before it will record anything.
+- Up to **4** options per quote. Locked to a read-only record once the customer has answered.
+
+Run `supabase/quote-packages.sql` for this (the `quote_packages` table, its RLS scoped exactly like
+`quote_options`, and the one-recommendation index). Safe to re-run. Until it is run, quoting works
+exactly as before - a missing table reads as "this quote offers no choice" - and the builder says
+which file to run if a save is attempted.
 
 **Quote visits: back to back, an hour apart, per contractor**
 A visit used to be one of **five fixed slots** two hours apart, capped at **five

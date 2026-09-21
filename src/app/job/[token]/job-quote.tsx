@@ -16,6 +16,18 @@ import {
   type OptionRow,
   type StoredOption,
 } from "@/app/crm/quotes/[id]/option-builder";
+import {
+  PackageBuilder,
+  filledPackages,
+  leadPackageAmount,
+  offersChoice,
+  packageAmountOf,
+  packagesMatch,
+  packagesToJson,
+  rowsFromPackages,
+  type PackageRow,
+  type StoredPackage,
+} from "@/app/crm/quotes/[id]/package-builder";
 import type { SaveState } from "@/app/crm/quotes/[id]/types";
 
 type Sections = Record<QuoteSectionField, string>;
@@ -34,6 +46,7 @@ export function JobQuote({
   amount,
   summary,
   options,
+  packages,
   initialSections,
   alreadySent,
   awaitingReply,
@@ -47,6 +60,9 @@ export function JobQuote({
   // The line items on this quote, if it was written as a list of choices. An
   // empty list is the ordinary one-price quote and nothing here changes.
   options: StoredOption[];
+  // The ways of doing the job on offer, if the customer asked for the same job
+  // two ways. Empty on every ordinary quote.
+  packages: StoredPackage[];
   initialSections?: Partial<Record<QuoteSectionField, string | null>>;
   alreadySent: boolean;
   awaitingReply: boolean;
@@ -65,6 +81,7 @@ export function JobQuote({
     ...Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, initialSections?.[f] ?? ""])),
   }));
   const [rows, setRows] = useState<OptionRow[]>(() => rowsFromOptions(options));
+  const [pkgRows, setPkgRows] = useState<PackageRow[]>(() => rowsFromPackages(packages));
   // Resync to the server once a save lands. Without this the rows in state
   // still have no ids after the first save, and the next one would insert a
   // second copy of every line item instead of updating the ones just written.
@@ -77,14 +94,32 @@ export function JobQuote({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [optionsSig]);
 
+  const packagesSig = packages
+    .map((p) => `${p.id}|${p.title}|${p.description ?? ""}|${p.amount}|${p.recommended}`)
+    .join("~");
+  const storedPkgRows = useMemo(() => rowsFromPackages(packages), [packagesSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setPkgRows(rowsFromPackages(packages));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [packagesSig]);
+
   const setSection = (field: QuoteSectionField, value: string) =>
     setSections((s) => ({ ...s, [field]: value }));
 
   // Line items own the price when there are any: the box above just reports
   // their sum, so the crew can't send a total that matches nothing on the quote.
   const itemised = rows.length > 0;
-  const itemTotal = rowsTotal(rows);
-  const priceNum = itemised ? itemTotal : Number(price);
+  // A choice of ways to do the job. No single price on such a quote: the row
+  // carries the lead option plus everything else, same as the CRM.
+  const choice = offersChoice(pkgRows);
+  const derived = itemised || choice;
+  const derivedTotal = Math.round(((choice ? leadPackageAmount(pkgRows) : 0) + rowsTotal(rows)) * 100) / 100;
+  const priceNum = derived ? derivedTotal : Number(price);
+  // Every option priced, and there is more than one of them - the server
+  // refuses both otherwise, and a greyed-out button beats a refusal.
+  const packagesReady =
+    filledPackages(pkgRows).length === 0 ||
+    (choice && filledPackages(pkgRows).every((r) => packageAmountOf(r) > 0));
   const hasLegacySummary = (summary ?? "").trim().length > 0;
   // Every section filled, or an older quote that still has its free text.
   const sectionsReady = QUOTE_SECTION_FIELDS.every((f) => sections[f].trim()) || hasLegacySummary;
@@ -94,15 +129,17 @@ export function JobQuote({
   // actually changed, so the button waits for that instead of letting them
   // press Send and get the server's refusal back.
   const changed =
-    (itemised ? itemTotal !== Number(amount ?? 0) : price.trim() !== (amount != null ? String(amount) : "")) ||
+    (derived ? derivedTotal !== Number(amount ?? 0) : price.trim() !== (amount != null ? String(amount) : "")) ||
     !rowsMatch(storedRows, rows) ||
+    !packagesMatch(storedPkgRows, pkgRows) ||
     what.trim() !== (summary ?? "").trim() ||
     QUOTE_SECTION_FIELDS.some((f) => sections[f].trim() !== (initialSections?.[f] ?? "").trim());
 
   const ready =
-    (itemised || price.trim() !== "") &&
+    (derived || price.trim() !== "") &&
     Number.isFinite(priceNum) &&
     priceNum > 0 &&
+    packagesReady &&
     sectionsReady &&
     (!awaitingReply || changed);
 
@@ -207,6 +244,7 @@ export function JobQuote({
             named form fields without an indexing scheme the server would then
             have to undo. */}
         <input type="hidden" name="options_json" value={rowsToJson(rows)} />
+        <input type="hidden" name="packages_json" value={packagesToJson(pkgRows)} />
 
         <label className="jq-field">
           <span>{t.contractorJob.quoteAmount}</span>
@@ -216,10 +254,10 @@ export function JobQuote({
             inputMode="decimal"
             min={0}
             step="0.01"
-            value={itemised ? String(itemTotal) : price}
+            value={derived ? String(derivedTotal) : price}
             onChange={(e) => setPrice(e.target.value)}
             placeholder="6500"
-            readOnly={itemised}
+            readOnly={derived}
           />
         </label>
 
@@ -227,6 +265,11 @@ export function JobQuote({
             yard being asked "and what about the sidewalk?" can answer it here
             instead of over the phone a day later. */}
         <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} />
+
+        {/* And the other question the same back yard produces: "what would it
+            cost in asphalt instead?" Two prices on one quote, answered here
+            rather than as a second quote on a second link. */}
+        <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={t.quotePackages} />
 
         {/* The same five sections the CRM asks for, so a quote written from a
             truck covers exactly what one written at a desk does. */}
