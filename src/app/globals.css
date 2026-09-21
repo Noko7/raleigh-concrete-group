@@ -1271,90 +1271,119 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   color: var(--crm-muted);
 }
 
-/* ── Primary nav ───────────────────────────────────────────────────────────
-   Nine links that used to be indistinguishable from one another. What changed
-   is not how they look so much as how much they say: which one you are on,
-   and which four of them only an owner has. */
-/* Scrolls at EVERY width, not just on a phone.
-   An owner has nine of these and the widest is "Contractors", so on a laptop at
-   1180px the row runs past the end of its box - and a flex item that overflows
-   does not push, it paints over. Settings landed on top of the user's own name.
-   Letting the strip scroll is what keeps the two apart at any width; the mask
-   below is what says it is scrolling. */
-.crm-nav {
-  flex: 1 1 auto; min-width: 0;
-  overflow-x: auto; overscroll-behavior-x: contain;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 1.1rem, #000 calc(100% - 1.1rem), transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 1.1rem, #000 calc(100% - 1.1rem), transparent);
-  scrollbar-width: none;
+/* ── Primary nav: one button, top left ─────────────────────────────────────
+   These nine links used to live on the bar. They never fitted - an owner has
+   nine destinations and the widest is "Contractors", so the row ran past its
+   box even on a laptop - and the fix for that was to let it scroll sideways,
+   which made "where is Settings" a question you answered by swiping. A nav
+   that hides destinations is doing the opposite of its job.
+
+   Behind a button, every one of them is fully readable and one tap away, and
+   the bar stops having a moving part in the middle of it.
+
+   Nothing here is expensive: the panel is mounted only while open, and the
+   whole motion budget is 90ms of opacity on a list that is already laid out. */
+.crm-menu { position: relative; flex: none; }
+.crm-menu-btn {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  /* 44px, because the crew tap this with gloves on. */
+  min-height: 2.75rem; padding: 0 0.6rem 0 0.55rem;
+  background: transparent; border: 1px solid transparent; border-radius: 0.5rem;
+  font: inherit; font-weight: 700; font-size: 0.92rem; color: #fff; cursor: pointer;
+  transition: background-color 90ms ease, border-color 90ms ease;
 }
-.crm-nav::-webkit-scrollbar { display: none; }
-.crm-nav-list {
-  list-style: none; margin: 0; padding: 0 1.1rem;
-  display: flex; align-items: stretch; gap: 0.1rem;
-  width: max-content;
+.crm-menu-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.crm-menu-btn-on { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.16); }
+.crm-menu-btn:focus-visible { outline: 2px solid var(--crm-accent); outline-offset: 1px; }
+
+/* Three bars that become a cross, on the same two elements. transform only, so
+   it never lays anything out mid-press. */
+.crm-menu-bars { position: relative; width: 1.05rem; height: 0.7rem; flex: none; }
+.crm-menu-bars span {
+  position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px; background: currentColor;
+  transition: transform 110ms ease, opacity 90ms ease;
 }
-.crm-nav-li { display: flex; }
+.crm-menu-bars span:nth-child(1) { top: 0; }
+.crm-menu-bars span:nth-child(2) { top: calc(50% - 1px); }
+.crm-menu-bars span:nth-child(3) { bottom: 0; }
+.crm-menu-btn-on .crm-menu-bars span:nth-child(1) { transform: translateY(calc(0.35rem - 1px)) rotate(45deg); }
+.crm-menu-btn-on .crm-menu-bars span:nth-child(2) { opacity: 0; }
+.crm-menu-btn-on .crm-menu-bars span:nth-child(3) { transform: translateY(calc(-0.35rem + 1px)) rotate(-45deg); }
+
+/* Where you are, on the button. The one thing a row of links gave you for free
+   was which of them you were on, so the button carries it and the bar loses
+   nothing by collapsing. */
+.crm-menu-here { white-space: nowrap; max-width: 9rem; overflow: hidden; text-overflow: ellipsis; }
+
+.crm-menu-panel {
+  position: absolute; top: calc(100% + 0.45rem); left: 0; z-index: 40;
+  min-width: 13.5rem; max-height: calc(100vh - 5rem); overflow-y: auto;
+  padding: 0.35rem;
+  background: var(--crm-surface-solid); border: 1px solid var(--crm-border);
+  border-radius: 0.7rem; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  animation: crm-menu-in 90ms ease-out;
+}
+@keyframes crm-menu-in {
+  from { opacity: 0; transform: translateY(-0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+.crm-menu-list { list-style: none; margin: 0; padding: 0; }
+.crm-menu-li { display: block; }
 
 /* The divider between "everybody" and "owner only". A hairline rather than a
    heading, because this is a fact about the items and not a section anybody
    needs to read. */
-.crm-nav-rule { margin-left: 0.55rem; padding-left: 0.7rem; border-left: 1px solid rgba(255, 255, 255, 0.14); }
+.crm-menu-rule { margin-top: 0.35rem; padding-top: 0.35rem; border-top: 1px solid var(--crm-border); }
 
-.crm-nav-link {
-  display: inline-flex; align-items: center;
-  /* 44px of height on a phone. The crew tap this with gloves on. */
-  min-height: 2.75rem;
-  padding: 0 0.5rem;
-  text-decoration: none;
-  font-weight: 600; font-size: 0.92rem; white-space: nowrap;
+.crm-menu-link {
+  display: flex; align-items: center; min-height: 2.6rem;
+  padding: 0 0.7rem; border-radius: 0.45rem;
+  text-decoration: none; font-weight: 600; font-size: 0.95rem; white-space: nowrap;
   color: var(--crm-muted);
-  border-radius: 0.35rem;
-  position: relative;
-  transition: color 120ms ease, background-color 120ms ease;
+  transition: background-color 90ms ease, color 90ms ease;
 }
-.crm-nav-link:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+.crm-menu-link:hover { color: #fff; background: rgba(255, 255, 255, 0.07); }
 
 /* You are here. Two signals, not one: the text comes up to full strength and a
-   rail lights under it. Colour alone would leave this invisible to anybody who
-   cannot separate amber from grey, and it is the only state on the bar that
-   actually has to be read. */
-.crm-nav-link-on { color: #fff; }
-.crm-nav-link-on::after {
+   rail lights beside it. Colour alone would leave this invisible to anybody
+   who cannot separate amber from grey. */
+.crm-menu-link-on { color: #fff; background: rgba(255, 255, 255, 0.06); position: relative; }
+.crm-menu-link-on::before {
   content: "";
-  position: absolute; left: 0.5rem; right: 0.5rem; bottom: 0.32rem;
-  height: 2px; border-radius: 2px;
-  background: var(--crm-accent);
+  position: absolute; left: 0; top: 0.5rem; bottom: 0.5rem;
+  width: 2px; border-radius: 2px; background: var(--crm-accent);
 }
-.crm-nav-link:focus-visible {
-  outline: 2px solid var(--crm-accent);
-  outline-offset: -2px;
-  color: #fff;
-}
+.crm-menu-link:focus-visible { outline: 2px solid var(--crm-accent); outline-offset: -2px; color: #fff; }
 
-.crm-topbar-right { display: flex; align-items: center; gap: 0.9rem; flex: none; }
+.crm-topbar-right { display: flex; align-items: center; gap: 0.9rem; flex: none; margin-left: auto; }
 .crm-who { font-size: 0.8rem; color: var(--crm-muted); text-align: right; line-height: 1.25; }
 .crm-who-name { display: block; color: #fff; font-weight: 600; }
 .crm-who em {
   display: block; font-style: normal; text-transform: uppercase;
   font-size: 0.65rem; letter-spacing: 0.08em; color: var(--crm-muted);
 }
+/* One row at every width now, so there is nothing here to re-flow - only
+   things to drop when the screen stops being able to afford them. */
 @media (max-width: 760px) {
-  .crm-topbar-inner { flex-wrap: wrap; gap: 0.55rem 1rem; padding: 0.6rem 1rem; }
-  /* The strip drops to its own full-width row under the logo and the user,
-     where it has the whole screen to scroll in rather than the sliver left
-     between them. The fade at each edge is doing the talking: the last three
-     destinations used to exist only if you happened to swipe. */
-  .crm-nav { order: 3; width: 100%; flex: none; -webkit-overflow-scrolling: touch; }
-  .crm-nav-list { padding: 0 1.1rem 0.15rem; }
-  .crm-topbar-right { margin-left: auto; }
-  .crm-who { text-align: right; }
+  .crm-topbar-inner { gap: 0.5rem; padding: 0.55rem 0.9rem; }
+  /* The wordmark goes before the user does: the logo says which app this is,
+     and anyone this deep into it already knows. */
+  .crm-logo-tag { display: none; }
+  .crm-topbar-right { gap: 0.6rem; }
+}
+@media (max-width: 520px) {
+  /* Who is signed in matters less, on the smallest screens, than the page
+     fitting. The role stays: it is the one that changes what you can do. */
+  .crm-who-name { display: none; }
+  .crm-menu-here { max-width: 6.5rem; }
+  .crm-logo-badge img { height: 18px; }
 }
 
-/* A colour change and a rail appearing are the whole motion budget here. Even
-   so: somebody who has asked for less gets none of it. */
+/* Opacity on open and a colour change on hover is the whole motion budget.
+   Even so: somebody who has asked for less gets none of it. */
 @media (prefers-reduced-motion: reduce) {
-  .crm-nav-link { transition: none; }
+  .crm-menu-panel { animation: none; }
+  .crm-menu-btn, .crm-menu-link, .crm-menu-bars span { transition: none; }
 }
 
 .crm-main { max-width: 1100px; margin: 0 auto; }

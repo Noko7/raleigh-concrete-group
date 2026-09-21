@@ -45,16 +45,12 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
       {session && (
         <header className="crm-topbar">
           <div className="crm-topbar-inner">
-            <Link href={`${base}/`} className="crm-logo" aria-label="Raleigh Concrete Group CRM">
-              <span className="crm-logo-badge">
-                <Image src="/images/logo_horizontal.png" alt="Raleigh Concrete Group" width={967} height={243} priority />
-              </span>
-              <span className="crm-logo-tag">CRM</span>
-            </Link>
-            {/* Same nine destinations, same labels, same order - this is
-                muscle memory for the two people who live in it. The list is
-                built here rather than in the client component so the owner-only
-                items never reach a contractor's browser at all. */}
+            {/* Menu first, hard against the left edge. Same nine
+                destinations, same labels, same order - this is muscle memory
+                for the two people who live in it - but behind one button now
+                rather than strung across the bar. The list is built here
+                rather than in the client component so the owner-only items
+                never reach a contractor's browser at all. */}
             <CrmNav
               base={base}
               items={[
@@ -75,6 +71,12 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
                 { href: "/settings", label: t.nav.settings },
               ]}
             />
+            <Link href={`${base}/`} className="crm-logo" aria-label="Raleigh Concrete Group CRM">
+              <span className="crm-logo-badge">
+                <Image src="/images/logo_horizontal.png" alt="Raleigh Concrete Group" width={967} height={243} priority />
+              </span>
+              <span className="crm-logo-tag">CRM</span>
+            </Link>
             <div className="crm-topbar-right">
               <span className="crm-who">
                 <span className="crm-who-name">{session.staff.full_name || session.user.email}</span>

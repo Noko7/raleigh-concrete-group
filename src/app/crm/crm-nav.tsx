@@ -2,18 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // The CRM's primary navigation.
 //
-// It was nine identical links in a row with a hover colour, and the one thing
-// a nav has to do beyond linking - say where you are - it did not do at all.
-// On a phone that row became a horizontal scroll strip with no edge, so half
-// the destinations existed only if you happened to swipe.
+// It used to be the nine links themselves, laid out in a row on the bar. That
+// row never fitted: an owner has nine destinations and the widest is
+// "Contractors", so even on a laptop it ran past the end of its box, and the
+// fix for that was to let the strip scroll sideways. Which meant the answer to
+// "where is Settings" was "swipe and find out" - a nav that hides destinations
+// is doing the opposite of its job, and a bar with a moving part in the middle
+// of it never looks still.
+//
+// So the links come off the bar entirely and live behind one button at the top
+// left. The bar is then a fixed, quiet thing at every width, and every
+// destination is one tap away and fully readable instead of nine of them being
+// half-visible.
+//
+// Snappy means no machinery: no portal, no focus trap, no animation library,
+// no scroll lock. A button, a list, and 90ms of opacity. It opens on the frame
+// you press it.
 //
 // Labels and routes are untouched. This is muscle memory for two people who
-// use it every day, and the fix here is about which of these nine things you
-// are looking at, not what they are called.
+// use it every day.
 export type NavItem = {
   href: string;
   label: string;
@@ -44,60 +55,102 @@ function isActive(pathname: string, base: string, item: NavItem): boolean {
 
 export function CrmNav({ base, items }: { base: string; items: NavItem[] }) {
   const pathname = usePathname();
-  const activeRef = useRef<HTMLAnchorElement | null>(null);
-  const scrollerRef = useRef<HTMLElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
 
-  // On a phone the nav scrolls sideways, and the page you are on can easily sit
-  // off the right edge - so the one item you most need to see is the one you
-  // cannot. Pull it into view on load.
-  //
-  // Scrolls the strip itself rather than calling scrollIntoView, which would
-  // also scroll the PAGE and drop you below the header you just tapped.
+  const here = items.find((item) => isActive(pathname, base, item));
+
+  // Navigating closes it. The click that opened a link already did the work,
+  // and a menu still hanging open over the page you just asked for is the
+  // thing that makes a nav feel slow even when it isn't.
   useEffect(() => {
-    const link = activeRef.current;
-    const scroller = scrollerRef.current;
-    if (!link || !scroller) return;
-    if (scroller.scrollWidth <= scroller.clientWidth) return;
-
-    const target = link.offsetLeft - (scroller.clientWidth - link.offsetWidth) / 2;
-    scroller.scrollTo({
-      left: Math.max(0, target),
-      // Jumping is right here: this runs on load, and an animated slide on
-      // arrival reads as the page still settling.
-      behavior: "auto",
-    });
+    setOpen(false);
   }, [pathname]);
 
-  // Two hairlines, in the order the items are already in: the four everybody
-  // has, the four only an owner has, then Settings. The rule is the divider
-  // marks a change in WHO an item is for - it is the only thing about these
-  // nine links that is not obvious from reading them.
+  // Escape, and any press outside. pointerdown rather than click so it closes
+  // on the way down, at the same moment the finger lands, instead of waiting
+  // for the release.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      // Back to the button, or the next Tab starts from the top of the page.
+      btnRef.current?.focus();
+    };
+    const onDown = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onDown);
+    };
+  }, [open]);
+
+  // Two groups, in the order the items are already in: the ones everybody has,
+  // then the owner-only ones. The rule marks a change in WHO an item is for,
+  // which is the only thing about these nine links that is not obvious from
+  // reading them.
   const withRules = items.map((item, i) => ({
     item,
     rule: i > 0 && items[i - 1].owner !== item.owner,
   }));
 
   return (
-    <nav className="crm-nav" ref={scrollerRef} aria-label="CRM sections">
-      <ul className="crm-nav-list">
-        {withRules.map(({ item, rule }) => {
-          const active = isActive(pathname, base, item);
-          return (
-            <li key={item.href} className={rule ? "crm-nav-li crm-nav-rule" : "crm-nav-li"}>
-              <Link
-                href={`${base}${item.href}`}
-                ref={active ? activeRef : undefined}
-                className={`crm-nav-link${active ? " crm-nav-link-on" : ""}`}
-                // The styling says where you are to anyone who can see it;
-                // this is the same fact for anyone who cannot.
-                aria-current={active ? "page" : undefined}
-              >
-                {item.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+    <div className="crm-menu" ref={wrapRef}>
+      <button
+        type="button"
+        ref={btnRef}
+        className={`crm-menu-btn${open ? " crm-menu-btn-on" : ""}`}
+        aria-expanded={open}
+        aria-controls="crm-menu-panel"
+        aria-haspopup="true"
+        aria-label="Menu"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {/* Three bars that become a cross. Drawn with spans rather than two
+            swapped icons so there is nothing to load and nothing to reflow. */}
+        <span className="crm-menu-bars" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+        {/* Where you are, on the button itself. The whole objection to a menu
+            is that it hides the thing a row of links was telling you for free,
+            so the button says it instead and the bar loses nothing. */}
+        <span className="crm-menu-here">{here?.label ?? "Menu"}</span>
+      </button>
+
+      {/* Mounted only while open: nothing to paint, nothing to hit-test, and no
+          hidden list sitting in the accessibility tree on every page. */}
+      {open && (
+        <nav className="crm-menu-panel" id="crm-menu-panel" aria-label="CRM sections">
+          <ul className="crm-menu-list">
+            {withRules.map(({ item, rule }) => {
+              const active = isActive(pathname, base, item);
+              return (
+                <li key={item.href} className={rule ? "crm-menu-li crm-menu-rule" : "crm-menu-li"}>
+                  <Link
+                    href={`${base}${item.href}`}
+                    className={`crm-menu-link${active ? " crm-menu-link-on" : ""}`}
+                    // The styling says where you are to anyone who can see it;
+                    // this is the same fact for anyone who cannot.
+                    aria-current={active ? "page" : undefined}
+                    // Focus the page you are on when the menu opens, so a
+                    // keyboard lands where a mouse would already be looking.
+                    autoFocus={active}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
+    </div>
   );
 }
