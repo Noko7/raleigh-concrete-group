@@ -659,6 +659,21 @@ What a contractor owes *today* is bounded by what the customer has actually
 handed them (`feeDueNowCents`): a $500 cash deposit on a $10,000 job makes $500
 due, not $1,500. The rest becomes due as the balance comes in.
 
+**Quotes sent, all time.** The one figure on the cash board that is a count
+rather than a sum, and the only one immune to the row ceilings the page warns
+about: it is a `count=exact` in the database, so "all time" means all time
+rather than "as much of it as this page loads".
+
+It counts **one per customer, not one per text**. A correction and an added
+option both re-send the same row rather than making a second one, so a customer
+who was quoted three times counts once. That is deliberately not what the job
+pages' own **Quotes sent** list shows, which counts versions - two numbers with
+the same name that disagree is how somebody stops trusting both, so the card
+says which it is underneath. A retracted quote drops back out, because
+`wipeQuote` clears `quote_sent_at` and the customer is no longer holding a
+price. Test leads are excluded, and follow the page's own show/hide switch like
+every other figure on it. A failed read shows a dash, never a zero.
+
 **Where each person meets it**
 
 | Who | Where | What they can do |

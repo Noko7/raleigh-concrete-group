@@ -1467,6 +1467,9 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .crm-stat { flex: 1; min-width: 140px; background: var(--crm-surface); border: 1px solid var(--crm-border); border-radius: 0.8rem; padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.2rem; }
 .crm-stat strong { font-family: var(--font-headline), sans-serif; font-size: 1.8rem; line-height: 1; color: var(--crm-text); }
 .crm-stat span { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--crm-muted); }
+/* The line under the stats row that says what "Quotes sent" counts. Sits
+   tight to the figures it qualifies rather than floating between sections. */
+.money-quote-note { margin: -0.5rem 0 1.1rem; }
 .crm-alert { background: rgba(220, 38, 38, 0.12); border: 1px solid rgba(220, 38, 38, 0.5); color: #fecaca; border-radius: 0.7rem; padding: 0.75rem 1rem; margin-bottom: 1.1rem; font-size: 0.88rem; }
 
 .crm-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.1rem; align-items: start; }

@@ -168,6 +168,16 @@ export type MoneyBoard = {
    * screen rather than quietly reporting a smaller business than there is.
    */
   truncated: string[];
+  /**
+   * How many quotes have ever gone to a customer. Counted, not summed: it is
+   * the one figure on this page that is not a total over the rows loaded
+   * above, so the row ceilings cannot make it too small.
+   *
+   * Null means the read failed. The card shows a dash for that rather than a
+   * zero, because "we have never quoted anybody" and "the query broke" look
+   * identical as a 0 and only one of them is worth acting on.
+   */
+  quotesSentAllTime: number | null;
   /** How many practice leads were left out. Zero hides the switch entirely. */
   testCount: number;
   /** Whether this board was built with them in. */
@@ -181,6 +191,26 @@ async function readRows<T>(session: Session, path: string): Promise<{ rows: T[];
   // "you haven't run the SQL file" look identical and only one is a problem.
   if (!res.ok) return { rows: [], ok: false };
   return { rows: (await res.json()) as T[], ok: true };
+}
+
+/**
+ * How many rows match, without loading any of them.
+ *
+ * PostgREST answers `Prefer: count=exact` with the total in Content-Range
+ * (`0-0/123`) whatever the limit is, so this is one indexed count rather than
+ * a read that has to be capped and then apologised for. That matters here
+ * because the figure it backs says "all time", and every other total on this
+ * page is a sum over at most a thousand rows.
+ */
+async function countRows(session: Session, path: string): Promise<number | null> {
+  const res = await pgUser(`${path}&select=id&limit=1`, session.accessToken, {
+    headers: { Prefer: "count=exact" },
+  });
+  if (!res.ok) return null;
+  // "0-0/123", or "*/0" when nothing matched at all.
+  const total = res.headers.get("content-range")?.split("/")[1];
+  const n = Number(total);
+  return Number.isFinite(n) ? n : null;
 }
 
 export async function moneyBoard(
@@ -202,7 +232,14 @@ export async function moneyBoard(
   // customer's job assigned to a test account is still a real job.
   const testStaff = new Set(staff.filter((p) => p.is_test).map((p) => p.id));
 
-  const [jobsRes, paymentsRes, settlementsRes] = await Promise.all([
+  // A quote that was retracted has its quote_sent_at cleared by wipeQuote, so
+  // it correctly drops back out of this count: the customer is no longer
+  // holding a price from us and the link they had is dead.
+  //
+  // One per customer, not one per send. A corrected quote and an added option
+  // both re-send the same row rather than making a second one, which is the
+  // reading an owner means by "how many quotes have we sent".
+  const [jobsRes, paymentsRes, settlementsRes, quotesSentAllTime] = await Promise.all([
     readRows<JobRow>(
       session,
       "quote_requests?customer_response=eq.accepted&status=neq.lost" +
@@ -211,6 +248,13 @@ export async function moneyBoard(
     ),
     readRows<QuotePayment>(session, `quote_payments?select=*&order=created_at.desc&limit=${PAYMENT_LIMIT}`),
     readRows<FeeSettlement>(session, `fee_settlements?select=*&order=created_at.desc&limit=${SETTLEMENT_LIMIT}`),
+    // `not.is.true` rather than `is.false`: is_test arrived with test-data.sql
+    // and is null on every row written before it, and `is.false` would drop
+    // every one of them - which is most of the history this figure is about.
+    countRows(
+      session,
+      `quote_requests?quote_sent_at=not.is.null${includeTests ? "" : "&is_test=not.is.true"}`,
+    ),
   ]);
 
   // A read that came back exactly full is a read that was probably cut short.
@@ -500,6 +544,7 @@ export async function moneyBoard(
     attention,
     missingTables: !paymentsRes.ok || !settlementsRes.ok,
     truncated,
+    quotesSentAllTime,
     testCount: allJobs.filter((j) => j.isTest).length,
     includingTests: includeTests,
   };
