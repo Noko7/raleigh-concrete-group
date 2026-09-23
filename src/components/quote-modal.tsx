@@ -220,7 +220,7 @@ function AddressAutocomplete({
 
   return (
     <div className="qm-autocomplete" ref={boxRef}>
-      <input
+      <input data-clarity-mask="true"
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
@@ -252,7 +252,7 @@ function AddressAutocomplete({
         )}
       </span>
       {showList && suggestions.length > 0 && (
-        <ul className="qm-suggestions">
+        <ul className="qm-suggestions" data-clarity-mask="true">
           {suggestions.map((s) => (
             <li key={s}>
               <button
@@ -542,12 +542,11 @@ function Modal({ onClose }: { onClose: () => void }) {
   }
 
   async function submit() {
-    // Bot trap: a real user can't fill the hidden honeypot. Silently "succeed".
-    if (honeypot.trim() !== "") {
-      finished.current = true;
-      setStatus("success");
-      return;
-    }
+    // The trap is judged by the server, not here. This used to "succeed"
+    // without sending anything, so a trapped request left no trace anywhere -
+    // no lead, no log, nothing to recover it from. Now it is sent, the server
+    // drops it and logs it, and the funnel records that it happened.
+    if (honeypot.trim() !== "") track({ event: "error", step: current, mode, detail: "honeypot" });
     setErrorMsg("");
     try {
       let fileUrls: string[] = [];
@@ -586,7 +585,20 @@ function Modal({ onClose }: { onClose: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string; fields?: string[] };
+      const json = (await res.json().catch(() => ({ ok: false }))) as {
+        ok?: boolean;
+        demo?: boolean;
+        error?: string;
+        fields?: string[];
+      };
+      if (res.ok && json.ok && json.demo) {
+        // Accepted but not saved: the server has no database keys. Never show
+        // a customer "you're all set" for a request nobody will ever see.
+        track({ event: "error", step: "schedule", mode, detail: "server_demo" });
+        setErrorMsg(`We couldn't save your request just now. Please call us at ${phoneDisplay}.`);
+        setStatus("error");
+        return;
+      }
       if (res.ok && json.ok) {
         finished.current = true;
         track({ event: "submit", step: "schedule", mode, ms: Date.now() - openedAt.current });
@@ -635,10 +647,11 @@ function Modal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="qm-overlay" onClick={dismiss} role="dialog" aria-modal="true" aria-label="Request a quote">
-      {/* Masked in Clarity recordings: this card is where names, phone numbers
-          and addresses are typed and suggested, and none of it should end up
-          in a session replay. Clicks and scrolls are still recorded. */}
-      <div className="qm-card" data-clarity-mask="true" onClick={(e) => e.stopPropagation()}>
+      {/* In Clarity recordings the headings, buttons, errors and the success
+          screen stay readable - that is how you tell "gave up" from "was told
+          no" from "sent it" when watching one back. What someone types, and
+          the addresses suggested to them, are masked field by field below. */}
+      <div className="qm-card" onClick={(e) => e.stopPropagation()}>
         <button className="qm-close" onClick={dismiss} aria-label="Close">
           <IconClose />
         </button>
@@ -712,7 +725,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 </div>
                 <p className="qm-sub">Share your contact and address details and we&apos;ll prepare your free, no-obligation quote.</p>
                 <label className="qm-label">Name</label>
-                <input
+                <input data-clarity-mask="true"
                   className="qm-input"
                   value={data.name}
                   onChange={(e) => set({ name: e.target.value })}
@@ -721,7 +734,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                   placeholder="First and last name"
                 />
                 <label className="qm-label qm-mt">Phone</label>
-                <input
+                <input data-clarity-mask="true"
                   className="qm-input"
                   type="tel"
                   value={data.phone}
@@ -744,7 +757,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                   onVerifiedChange={setAddressVerified}
                 />
                 <label className="qm-label">Email (optional)</label>
-                <input
+                <input data-clarity-mask="true"
                   className="qm-input"
                   type="email"
                   value={data.email}
@@ -761,14 +774,24 @@ function Modal({ onClose }: { onClose: () => void }) {
                     on the step that can actually fix it. */}
                 {errorMsg && <p className="qm-err">{errorMsg}</p>}
 
-                {/* Honeypot: hidden from real users; bots fill it and get dropped. */}
+                {/* The trap field. Its label and name
+                    are deliberately nothing a browser or password manager
+                    recognises: it used to be labelled "Company", and autofill
+                    fills a Company field from a saved address - which turned a
+                    real customer into a "bot" whose request vanished behind a
+                    success screen. */}
                 <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: "auto", height: 0, width: 0, overflow: "hidden" }}>
                   <label>
-                    Company
-                    <input
+                    Leave this empty
+                    <input data-clarity-mask="true"
                       type="text"
+                      name="rcg_leave_blank"
                       tabIndex={-1}
                       autoComplete="off"
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-bwignore="true"
+                      data-form-type="other"
                       value={honeypot}
                       onChange={(e) => setHoneypot(e.target.value)}
                     />
@@ -786,7 +809,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 </div>
                 <p className="qm-sub">Select the service you want performed.</p>
                 <label className="qm-label">What do you need?</label>
-                <select className="qm-input" value={data.service} onChange={(e) => set({ service: e.target.value })}>
+                <select data-clarity-mask="true" className="qm-input" value={data.service} onChange={(e) => set({ service: e.target.value })}>
                   <option value="" disabled>
                     Choose a service…
                   </option>
@@ -798,7 +821,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 </select>
 
                 <label className="qm-label qm-mt">Tell us a bit more (optional)</label>
-                <textarea
+                <textarea data-clarity-mask="true"
                   className="qm-input"
                   rows={2}
                   value={data.details}
@@ -807,7 +830,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 />
 
                 <label className="qm-dropzone qm-mt">
-                  <input
+                  <input data-clarity-mask="true"
                     type="file"
                     accept="image/*,video/*"
                     multiple
@@ -822,7 +845,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 </label>
                 {fileError && <p className="qm-err">{fileError}</p>}
                 {files.length > 0 && (
-                  <ul className="qm-filelist">
+                  <ul className="qm-filelist" data-clarity-mask="true">
                     {files.map((f, i) => (
                       <li key={`${f.name}-${i}`}>
                         <span className="qm-file-name">{f.name}</span>
@@ -857,7 +880,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                     : "Select from the available dates and times."}
                 </p>
                 <label className="qm-label">{mode === "online" ? "Best day for you" : "Date"}</label>
-                <input
+                <input data-clarity-mask="true"
                   className="qm-input"
                   type="date"
                   min={minDate}

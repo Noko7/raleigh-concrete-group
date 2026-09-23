@@ -50,6 +50,10 @@ const DETAIL_LABELS: Record<string, string> = {
   server_409: "slot taken while they chose",
   server_429: "rate limited",
   server_500: "server error",
+  server_502: "database save failed",
+  server_503: "server not configured to save",
+  server_demo: "server not configured to save",
+  honeypot: "caught by the spam trap (not saved)",
 };
 
 function detailLabel(detail: string): string {
