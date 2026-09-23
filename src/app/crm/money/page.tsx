@@ -101,8 +101,8 @@ export default async function MoneyPage({
 
       {/* The figures the business actually runs on. Money first and in the
           order it moves, owed-to-you last because it is the one that turns
-          into a phone call - then the count of how much work it took to get
-          any of it. */}
+          into a phone call - then the value of everything quoted to get any
+          of it. */}
       <div className="crm-stats">
         <div className="crm-stat">
           <strong>{usd(board.collectedCents)}</strong>
@@ -120,13 +120,14 @@ export default async function MoneyPage({
           <strong>{usd(board.feeBalanceCents)}</strong>
           <span>Your fees, still owed to you</span>
         </div>
-        {/* The only figure here that is a count rather than a sum, and the
-            only one not subject to the row ceilings warned about above: it is
-            counted in the database, so "all time" means all time. A dash
-            rather than a zero when the read fails, because "we have never
-            quoted anybody" and "the query broke" look identical as a 0. */}
+        {/* The dollar value of every quote that has gone out, won or not -
+            the size of the pipeline, where the figures before it are what
+            came of it. Not subject to the row ceilings warned about above:
+            every sent quote is read, so "all time" means all time. A dash
+            rather than $0 when the read fails, because "we have never quoted
+            anybody" and "the query broke" look identical as a zero. */}
         <div className="crm-stat">
-          <strong>{board.quotesSentAllTime ?? "-"}</strong>
+          <strong>{board.quotesSentAllTime ? usd(board.quotesSentAllTime.cents) : "-"}</strong>
           <span>Quotes sent, all time</span>
         </div>
       </div>
@@ -135,9 +136,10 @@ export default async function MoneyPage({
           have their own "Quotes sent" list which counts versions, and two
           numbers with the same name that disagree is how somebody stops
           trusting both of them. */}
-      {board.quotesSentAllTime != null && board.quotesSentAllTime > 0 && (
+      {board.quotesSentAllTime != null && board.quotesSentAllTime.count > 0 && (
         <p className="crm-muted crm-sm money-quote-note">
-          Quotes sent counts each customer once, however many corrections or extra options they were
+          Quotes sent is the total of {board.quotesSentAllTime.count}{" "}
+          {board.quotesSentAllTime.count === 1 ? "quote" : "quotes"} at their current price, counting each customer once, however many corrections or extra options they were
           sent afterwards. Retracted quotes are not counted{board.includingTests ? "" : ", and nor are test leads"}.
         </p>
       )}

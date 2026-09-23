@@ -169,15 +169,15 @@ export type MoneyBoard = {
    */
   truncated: string[];
   /**
-   * How many quotes have ever gone to a customer. Counted, not summed: it is
-   * the one figure on this page that is not a total over the rows loaded
-   * above, so the row ceilings cannot make it too small.
+   * Every quote that has ever gone to a customer: how many, and what they add
+   * up to in dollars. Read on its own, every row, rather than summed over the
+   * rows loaded above, so the row ceilings cannot make it too small.
    *
    * Null means the read failed. The card shows a dash for that rather than a
    * zero, because "we have never quoted anybody" and "the query broke" look
-   * identical as a 0 and only one of them is worth acting on.
+   * identical as a $0 and only one of them is worth acting on.
    */
-  quotesSentAllTime: number | null;
+  quotesSentAllTime: { count: number; cents: number } | null;
   /** How many practice leads were left out. Zero hides the switch entirely. */
   testCount: number;
   /** Whether this board was built with them in. */
@@ -194,23 +194,32 @@ async function readRows<T>(session: Session, path: string): Promise<{ rows: T[];
 }
 
 /**
- * How many rows match, without loading any of them.
+ * The count and dollar total of every quote matching `path`.
  *
- * PostgREST answers `Prefer: count=exact` with the total in Content-Range
- * (`0-0/123`) whatever the limit is, so this is one indexed count rather than
- * a read that has to be capped and then apologised for. That matters here
- * because the figure it backs says "all time", and every other total on this
- * page is a sum over at most a thousand rows.
+ * Paged a thousand at a time, one small column, until a page comes back short:
+ * the figure it backs says "all time", and every other total on this page is a
+ * sum over at most a thousand rows. PostgREST's own sum() would be one request,
+ * but aggregates are switched off on Supabase by default and turning them on
+ * is a project setting nobody should have to remember.
  */
-async function countRows(session: Session, path: string): Promise<number | null> {
-  const res = await pgUser(`${path}&select=id&limit=1`, session.accessToken, {
-    headers: { Prefer: "count=exact" },
-  });
-  if (!res.ok) return null;
-  // "0-0/123", or "*/0" when nothing matched at all.
-  const total = res.headers.get("content-range")?.split("/")[1];
-  const n = Number(total);
-  return Number.isFinite(n) ? n : null;
+const SENT_PAGE = 1000;
+const SENT_MAX_PAGES = 200;
+async function sumQuotes(session: Session, path: string): Promise<{ count: number; cents: number } | null> {
+  let count = 0;
+  let cents = 0;
+  for (let page = 0; page < SENT_MAX_PAGES; page++) {
+    const res = await pgUser(
+      `${path}&select=quote_amount&order=id.asc&limit=${SENT_PAGE}&offset=${page * SENT_PAGE}`,
+      session.accessToken,
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as { quote_amount: number | string | null }[];
+    count += rows.length;
+    for (const r of rows) cents += toCents(r.quote_amount);
+    if (rows.length < SENT_PAGE) return { count, cents };
+  }
+  // 200,000 quotes. Past this, a total that is short is worse than none.
+  return null;
 }
 
 export async function moneyBoard(
@@ -251,7 +260,7 @@ export async function moneyBoard(
     // `not.is.true` rather than `is.false`: is_test arrived with test-data.sql
     // and is null on every row written before it, and `is.false` would drop
     // every one of them - which is most of the history this figure is about.
-    countRows(
+    sumQuotes(
       session,
       `quote_requests?quote_sent_at=not.is.null${includeTests ? "" : "&is_test=not.is.true"}`,
     ),
