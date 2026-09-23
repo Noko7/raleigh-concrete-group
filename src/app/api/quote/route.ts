@@ -58,8 +58,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid request." }, { status: 400 });
   }
 
-  // Honeypot: real users never see/fill this. Pretend success and drop it.
+  // Honeypot: real users never see/fill this. Pretend success and drop it -
+  // but say so in the logs, with enough to call them back. The field used to
+  // be labelled "Company", which browser autofill fills from a saved address,
+  // and a real customer caught by it vanished without a trace. Search the
+  // Vercel logs for "[quote] honeypot" if a customer says they sent a request
+  // that never arrived.
   if (asString(body.company, 100) !== "") {
+    console.warn("[quote] honeypot tripped - request dropped", {
+      name: asString(body.name, LIMITS.name),
+      phone: asString(body.phone, LIMITS.phone),
+      service: asString(body.service, LIMITS.service),
+      trap: asString(body.company, 100),
+    });
     return NextResponse.json({ ok: true });
   }
 
@@ -132,7 +143,13 @@ export async function POST(request: Request) {
   }
 
   if (!CONFIGURED) {
-    // No keys configured (e.g. preview without env) - accept but don't persist.
+    // No keys configured. Fine on a preview with no env; on the live site it
+    // means every lead is being thrown away, so it fails loudly instead of
+    // "succeeding" - the form shows the customer our phone number.
+    if (process.env.VERCEL_ENV === "production") {
+      console.error("[quote] Supabase is not configured in production - lead NOT saved", { name, phone: phoneRaw });
+      return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 503 });
+    }
     return NextResponse.json({ ok: true, demo: true });
   }
 
@@ -225,6 +242,9 @@ export async function POST(request: Request) {
       body: JSON.stringify(row),
     });
     if (!res.ok) {
+      // Logged with the database's own reason: this is the one failure where
+      // the customer is told to call and the office otherwise never hears of it.
+      console.error("[quote] insert failed", res.status, await res.text().catch(() => ""), { name, phone: phoneRaw });
       return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 502 });
     }
 
@@ -284,7 +304,8 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (e) {
+    console.error("[quote] save threw", e, { name, phone: phoneRaw });
     return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 502 });
   }
 }

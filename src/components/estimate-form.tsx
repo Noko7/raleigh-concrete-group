@@ -55,11 +55,8 @@ export function EstimateForm() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (company.trim() !== "") {
-      sent.current = true;
-      setStatus("success"); // bot trap
-      return;
-    }
+    // Judged by the server, which drops and logs it - see quote-modal.tsx.
+    if (company.trim() !== "") track("error", { detail: "honeypot" });
     if (!canSubmit || status === "sending") return;
     setStatus("sending");
     setErrorMsg("");
@@ -78,7 +75,14 @@ export function EstimateForm() {
           company,
         }),
       });
-      const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
+      const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; demo?: boolean; error?: string };
+      if (res.ok && json.ok && json.demo) {
+        // Accepted but not saved - the server has no database keys.
+        track("error", { detail: "server_demo" });
+        setErrorMsg(`We couldn't save your request just now. Please call us at ${phoneDisplay}.`);
+        setStatus("error");
+        return;
+      }
       if (res.ok && json.ok) {
         sent.current = true;
         track("submit", { ms: Date.now() - openedAt.current });
@@ -178,14 +182,20 @@ export function EstimateForm() {
         />
       </label>
 
-      {/* Honeypot: hidden from real users */}
+      {/* Trap field - see the note on the same field in quote-modal.tsx for why
+          it is no longer labelled "Company". */}
       <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", height: 0, overflow: "hidden" }}>
         <label>
-          Company
+          Leave this empty
           <input
             type="text"
+            name="rcg_leave_blank"
             tabIndex={-1}
             autoComplete="off"
+            data-1p-ignore="true"
+            data-lpignore="true"
+            data-bwignore="true"
+            data-form-type="other"
             value={company}
             onChange={(e) => setCompany(e.target.value)}
           />
