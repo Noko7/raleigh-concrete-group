@@ -65,6 +65,7 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
                       { href: "/contractors", label: t.nav.contractors, owner: true },
                       { href: "/money", label: t.nav.money, owner: true },
                       { href: "/archived", label: t.nav.archived, owner: true },
+                      { href: "/funnel", label: t.nav.funnel, owner: true },
                       { href: "/security", label: t.nav.security, owner: true },
                     ]
                   : []),

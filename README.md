@@ -72,6 +72,32 @@ single long form. Submissions save to Supabase via its REST API (no SDK installe
 To swap the address autocomplete to Google Places later, replace `AddressAutocomplete` in
 `quote-modal.tsx` (needs a Google Maps API key + billing). Photon is free and zero-config.
 
+## Where people drop off (all free on the Vercel Hobby plan)
+Vercel's Web Analytics (already on) counts page views, but custom events are
+Pro-only and there are no heatmaps on any plan. So there are two other pieces:
+
+**1. Quote funnel → CRM → Quote funnel** (`/crm/funnel`, owners only). The quote
+form records each step as it happens: opened, reached Contact / Service / Date,
+how long each step took, and when someone closes it part-way, *which step they
+were on and what was still unfinished* ("Contact - missing phone, address"). It
+also counts every time the form said no (day fully booked, upload failed, server
+rejected the phone number) and splits conversion by online vs in-person, phone
+vs computer, and the page it was opened from. Nothing personal is stored: no
+names, numbers or addresses, and nothing links an attempt to the lead it became.
+
+Setup: run `supabase/funnel.sql` once in Supabase → SQL Editor. That's it.
+
+**2. Microsoft Clarity** for heatmaps, scroll depth, rage clicks and session
+recordings on the marketing pages. Free, no traffic cap.
+1. Create a project at [clarity.microsoft.com](https://clarity.microsoft.com) for `raleighconcrete.net`.
+2. Copy its **Project ID** (Settings → Overview) into Vercel as `NEXT_PUBLIC_CLARITY_PROJECT_ID`, and redeploy.
+
+It never loads on the CRM or on the customer token pages (`/q/`, `/pay/`,
+`/confirm/`, `/join/`, `/job/`), and the quote form is masked in recordings. The
+funnel steps are also sent to Clarity as custom events (`quote_close_contact`,
+`quote_submit_schedule`, ...), so you can filter recordings to people who gave
+up on a given step and watch what happened.
+
 ## CRM (crm.raleighconcrete.net)
 A login-protected back office for managing quotes, plus two public token links you text out.
 All of it runs over Supabase's REST/Auth APIs (no extra packages).

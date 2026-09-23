@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bebas_Neue, Sora } from "next/font/google";
 
+import { Clarity } from "@/components/clarity";
 import { JsonLd } from "@/components/json-ld";
 import { QuoteModalRoot } from "@/components/quote-modal";
 import { VercelInsights } from "@/components/vercel-insights";
@@ -69,6 +70,7 @@ export default function RootLayout({
         {children}
         <QuoteModalRoot />
         <VercelInsights />
+        <Clarity />
       </body>
     </html>
   );

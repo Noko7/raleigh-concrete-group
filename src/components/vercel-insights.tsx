@@ -5,13 +5,14 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 
 // Vercel's Web Analytics and Speed Insights, with the URLs cleaned up first.
 //
-// Both send the page URL with every datapoint, and four of this app's routes
+// Both send the page URL with every datapoint, and five of this app's routes
 // carry a secret in the path:
 //
 //   /q/<token>        opens a customer's quote with no login at all
 //   /confirm/<token>  confirms their booked day, same
 //   /join/<token>     one-shot contractor invite: sets up a CRM login
 //   /job/<token>      the crew's job page (this one needs a session too)
+//   /pay/<token>      the customer's payment page, same token as their quote
 //
 // Left alone, those tokens would be sitting in the analytics dashboard, and a
 // quote link pasted out of it works for whoever has it. Query strings go the
@@ -20,7 +21,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 //
 // So neither leaves the browser. What's reported is the route - /q/[token] -
 // which is the only part any performance question is actually asked about.
-const TOKEN_ROUTES = new Set(["q", "job", "confirm", "join"]);
+const TOKEN_ROUTES = new Set(["q", "job", "confirm", "join", "pay"]);
 
 // Add a route here if it ever takes a secret in its path. Speed Insights
 // doesn't need the list (see below); this is Web Analytics' only defence.
