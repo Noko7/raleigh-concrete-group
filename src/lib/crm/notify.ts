@@ -1486,6 +1486,9 @@ export async function notifyVisitMoved(
     movedBy?: string | null;
     // Who moved it, so they aren't texted about their own change.
     actorPhone?: string | null;
+    // False when the office has already told them - rang up and went out
+    // early, say. The crew and the office still hear either way.
+    tellCustomer?: boolean;
   },
 ): Promise<void> {
   const wasDay = dayOrNull(previous);
@@ -1496,11 +1499,13 @@ export async function notifyVisitMoved(
     ? [`your free quote visit with ${BUSINESS} has been moved from:`, "", was, "to:", now]
     : [`your free quote visit with ${BUSINESS} has been moved to:`, "", now];
 
-  await sendSms(
-    q.phone,
-    text([`Hi ${firstName(q.name)},`, ...body, "", "Sorry for the change, call or text us if that time doesn't work."]),
-    { quoteId: q.id, kind: "visit_moved", role: "customer" },
-  ).catch(() => {});
+  if (crew?.tellCustomer !== false) {
+    await sendSms(
+      q.phone,
+      text([`Hi ${firstName(q.name)},`, ...body, "", "Sorry for the change, call or text us if that time doesn't work."]),
+      { quoteId: q.id, kind: "visit_moved", role: "customer" },
+    ).catch(() => {});
+  }
 
   if (!crew) return;
 

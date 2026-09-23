@@ -47,6 +47,10 @@ export function ScheduleCard({
   // carry three different times. Once the crew sets one deliberately, it wins
   // on every day, because that is what they just said they can do.
   const [overridden, setOverridden] = useState(false);
+  // Moving a booked day texts the customer unless this is unticked. Shared by
+  // every button on the card, so it rides along as a hidden field in each form.
+  const [notify, setNotify] = useState(true);
+  const notifyField = booked ? <input type="hidden" name="notify" value={notify ? "yes" : "no"} /> : null;
 
   return (
     <div className="crm-card">
@@ -96,6 +100,7 @@ export function ScheduleCard({
                   <input type="hidden" name="id" value={id} />
                   <input type="hidden" name="date" value={p.date} />
                   <input type="hidden" name="time" value={overridden ? time : (p.time ?? time)} />
+                  {notifyField}
                   <button
                     type="submit"
                     className={`crm-btn ${p.date === scheduledDate ? "crm-btn-ghost" : "crm-btn-primary"}`}
@@ -115,10 +120,20 @@ export function ScheduleCard({
       <form action={formAction} className="crm-editor sched-custom">
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="time" value={time} />
+        {notifyField}
         <label className="crm-field">
           <span>{preferred.length > 0 ? t.schedule.orPickAnother : t.schedule.workDay}</span>
           <input type="date" name="date" className="crm-input" min={minDate} defaultValue={scheduledDate ?? ""} required />
         </label>
+        {booked && (
+          <label className="cal-panel-check">
+            <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+            <span>
+              {t.schedule.notifyMoved}
+              <em>{t.schedule.notifyMovedHint}</em>
+            </span>
+          </label>
+        )}
         <div className="crm-editor-foot">
           <button type="submit" className="crm-btn crm-btn-primary" disabled={pending}>
             {pending ? t.schedule.saving : booked ? t.schedule.change : t.schedule.confirm}

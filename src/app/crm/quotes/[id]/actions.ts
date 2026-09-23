@@ -547,6 +547,12 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
   const time = String(formData.get("time") ?? "").slice(0, 10);
   if (!id) return { ok: false, error: "Missing job id." };
 
+  // Only ever consulted when a booked day MOVES. Off means the office has
+  // already told the customer (called, and went out the same day instead),
+  // and a "your project has been moved" text after the fact reads as a second
+  // change. Absent - a drag on the calendar, an older form - means on.
+  const tellCustomer = String(formData.get("notify") ?? "yes") !== "no";
+
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
 
@@ -560,6 +566,7 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
     from_time: result.previousTime ?? null,
     to: date,
     to_time: time,
+    ...(moved ? { notified: tellCustomer } : {}),
   });
 
   const info = {
@@ -575,8 +582,9 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
   };
 
   const contractor = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
-  if (moved) await notifyCustomerRescheduled(info, result.previous, result.previousTime).catch(() => {});
-  else await notifyCustomerScheduled(info).catch(() => {});
+  if (moved) {
+    if (tellCustomer) await notifyCustomerRescheduled(info, result.previous, result.previousTime).catch(() => {});
+  } else await notifyCustomerScheduled(info).catch(() => {});
   await notifyBooked(info, contractor?.phone, result.previous, result.previousTime, session.staff.phone).catch(
     () => {},
   );
@@ -587,7 +595,14 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
   revalidatePath("/crm/calendar");
   // The contractor's own job page schedules through this action too.
   revalidatePath("/job/[token]", "page");
-  return { ok: true, message: moved ? "Date changed and everyone notified." : "Date confirmed and customer texted." };
+  return {
+    ok: true,
+    message: !moved
+      ? "Date confirmed and customer texted."
+      : tellCustomer
+        ? "Date changed and everyone notified."
+        : "Date changed. The crew was told; the customer was not texted.",
+  };
 }
 
 
@@ -802,6 +817,9 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   // am" and "9:00 AM" would be two different strings in the same column.
   if (!TIME_RE.test(rawTime)) return { ok: false, error: "Pick a time for the visit." };
   const time = rawTime.trim().toUpperCase().replace(/\s+/, " ");
+  // Only for moving a visit they already have - see setJobDate. Confirming a
+  // first visit always texts them, because that text is how they find out.
+  const tellCustomer = String(formData.get("notify") ?? "yes") !== "no";
 
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
@@ -853,7 +871,7 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
     to: date,
     to_time: time,
     ...(hadAppointment
-      ? { from: current.visit_date ?? null, from_time: current.visit_time ?? null }
+      ? { from: current.visit_date ?? null, from_time: current.visit_time ?? null, notified: tellCustomer }
       : { requested: current.visit_date ?? null, requested_time: current.visit_time ?? null, moved: movedOff }),
   });
 
@@ -881,6 +899,7 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
       crewName: crew?.full_name ?? null,
       movedBy: session.staff.full_name,
       actorPhone: session.staff.phone,
+      tellCustomer,
     }).catch(() => {});
   } else {
     await notifyVisitConfirmed(
@@ -908,7 +927,9 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   return {
     ok: true,
     message: hadAppointment
-      ? "Visit moved. The customer has been texted the new day, and so has the crew."
+      ? tellCustomer
+        ? "Visit moved. The customer has been texted the new day, and so has the crew."
+        : "Visit moved. The crew was told; the customer was not texted."
       : movedOff
         ? "Visit confirmed for the new day. The customer and the crew have been texted."
         : "Visit confirmed. The customer and the crew have been texted.",

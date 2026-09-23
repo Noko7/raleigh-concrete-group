@@ -1908,6 +1908,9 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 }
 .jr-field input:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
 .jr-note { color: #6b7280; font-size: 0.85rem; line-height: 1.4; }
+.jr-check { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.9rem; cursor: pointer; }
+.jr-check input { margin-top: 0.15rem; width: 20px; height: 20px; flex: none; accent-color: var(--amber); }
+.jr-check em { display: block; font-style: normal; color: #6b7280; font-size: 0.8rem; margin-top: 0.15rem; }
 .jr-acts { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .jr-save { flex: 1; }
 .jr-msg { margin-top: 0.55rem; }

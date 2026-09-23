@@ -43,9 +43,13 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
   if (kind === "job") {
     const result = await setJobDate({ ok: false }, formData);
     return result.ok
-      ? { ok: true, message: result.message ?? "Job moved and the customer was texted." }
+      ? { ok: true, message: result.message ?? "Job moved." }
       : { ok: false, error: result.error };
   }
+
+  // Unchecked in the panel when the customer already knows. A drag sends no
+  // field at all, which means on.
+  const tellCustomer = String(formData.get("notify") ?? "yes") !== "no";
 
   // Quote visit (in-person or online).
   const time = String(formData.get("time") ?? "").slice(0, 12);
@@ -61,6 +65,7 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
     from_time: result.previousTime ?? null,
     to: date,
     to_time: time || null,
+    notified: tellCustomer,
   });
 
   // The office moving a visit from the month grid is precisely when whoever has
@@ -84,12 +89,18 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
       crewName: crew?.full_name ?? null,
       movedBy: session.staff.full_name,
       actorPhone: session.staff.phone,
+      tellCustomer,
     },
   ).catch(() => {});
   await syncQuoteToCalendar(id);
 
   refresh(id);
-  return { ok: true, message: "Visit moved. The customer and the crew were texted." };
+  return {
+    ok: true,
+    message: tellCustomer
+      ? "Visit moved. The customer and the crew were texted."
+      : "Visit moved. The crew was told; the customer was not texted.",
+  };
 }
 
 // Take the appointment off the calendar. The lead itself is untouched: this is
