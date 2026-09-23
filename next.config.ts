@@ -47,7 +47,14 @@ const RETIRED_LOCATION_REDIRECTS = locationKeys.flatMap((location) =>
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async redirects() {
-    return RETIRED_LOCATION_REDIRECTS;
+    return [
+      ...RETIRED_LOCATION_REDIRECTS,
+      // The old standalone estimate page, retired 23 Sep. Its form was a
+      // second, less careful way into /api/quote, and it had quietly stopped
+      // working. Old links and search results land on the home page, where
+      // every Get Free Quote button opens the one form that is maintained.
+      { source: "/estimate", destination: "/", permanent: true },
+    ];
   },
   images: {
     // Serve modern formats (AVIF first, WebP fallback). Originals stay lossless

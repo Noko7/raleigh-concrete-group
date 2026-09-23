@@ -25,8 +25,9 @@ export type FunnelStep = (typeof FUNNEL_STEPS)[number];
 export const FUNNEL_EVENTS = ["open", "view", "done", "back", "close", "error", "submit"] as const;
 export type FunnelEventName = (typeof FUNNEL_EVENTS)[number];
 
-// "modal" is the Get Free Quote pop-up; "estimate" is the plain /estimate page.
-export const FUNNEL_FORMS = ["modal", "estimate"] as const;
+// The Get Free Quote pop-up. (There was also a standalone /estimate page; it
+// was retired on 23 Sep, and anything still claiming to be from it is dropped.)
+export const FUNNEL_FORMS = ["modal"] as const;
 export type FunnelForm = (typeof FUNNEL_FORMS)[number];
 
 export type FunnelEvent = {
@@ -34,7 +35,7 @@ export type FunnelEvent = {
   visitor_id: string;
   form: FunnelForm;
   event: FunnelEventName;
-  step: FunnelStep | "estimate" | null;
+  step: FunnelStep | null;
   ms: number | null;
   mode: "online" | "inperson" | null;
   detail: string | null;
@@ -58,7 +59,7 @@ export function scrubPath(pathname: string): string {
 // anything unrecognised is dropped rather than stored. Returns null to discard.
 const ID_RE = /^[a-z0-9-]{8,40}$/i;
 const DETAIL_RE = /^[a-z0-9_+:,.-]{1,120}$/i;
-const STEP_SET = new Set<string>([...FUNNEL_STEPS, "estimate"]);
+const STEP_SET = new Set<string>(FUNNEL_STEPS);
 
 export function parseFunnelEvent(raw: unknown): FunnelEvent | null {
   if (!raw || typeof raw !== "object") return null;

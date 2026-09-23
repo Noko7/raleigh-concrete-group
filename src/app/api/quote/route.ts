@@ -1,15 +1,16 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
 import { ymdInDays } from "@/lib/crm/clock";
 import { TIME_RE, VISIT_LEAD_DAYS } from "@/lib/crm/constants";
-import { notifyCustomerReceived, notifyNewQuote } from "@/lib/crm/notify";
+import { alertOwner, notifyCustomerReceived, notifyNewQuote } from "@/lib/crm/notify";
 import {
   findVisitConflict,
   getStaffContactById,
   resolveAssignee,
   visitAvailability,
 } from "@/lib/crm/queries";
+import { leadReference, UUID_RE } from "@/lib/quote-submit";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 // All quote submissions go through this server-side endpoint. The browser never
@@ -50,33 +51,104 @@ function asString(v: unknown, max: number): string {
   return typeof v === "string" ? v.trim().slice(0, max) : "";
 }
 
+// What the customer is told whenever their request did NOT reach the database.
+// Always with the number, because "try again" alone is a dead end if the thing
+// that's broken is us.
+const SAVE_FAILED = "We couldn't save your request just now. Please call us at (919) 873-3919.";
+
+// Every failure answers in this shape. `saved: false` is explicit so there is
+// no response from this route that a client could mistake for a save - see
+// src/lib/quote-submit.ts for the rule the forms apply.
+function fail(status: number, error: string, extra: Record<string, unknown> = {}) {
+  return NextResponse.json({ ok: false, saved: false, error, ...extra }, { status });
+}
+
+type InsertResult =
+  | { ok: true; id: string | null; publicToken?: string; jobToken?: string }
+  | { ok: false; status: number; detail: string };
+
+async function insertLead(row: Record<string, unknown>): Promise<InsertResult> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/quote_requests`, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      apikey: WRITE_KEY,
+      Authorization: `Bearer ${WRITE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) return { ok: false, status: res.status, detail: await res.text().catch(() => "") };
+  const created = (await res.json().catch(() => [])) as Array<{ id?: string; job_token?: string; public_token?: string }>;
+  const first = Array.isArray(created) ? created[0] : undefined;
+  return {
+    ok: true,
+    id: typeof first?.id === "string" && UUID_RE.test(first.id) ? first.id : null,
+    publicToken: first?.public_token,
+    jobToken: first?.job_token,
+  };
+}
+
+// The row an earlier attempt of this same form already saved, if any.
+async function findBySubmissionId(submissionId: string): Promise<string | null> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/quote_requests?client_submission_id=eq.${encodeURIComponent(submissionId)}&select=id&limit=1`,
+    { cache: "no-store", headers: { apikey: WRITE_KEY, Authorization: `Bearer ${WRITE_KEY}` } },
+  ).catch(() => null);
+  if (!res?.ok) return null;
+  const rows = (await res.json().catch(() => [])) as Array<{ id?: string }>;
+  const id = rows[0]?.id;
+  return typeof id === "string" && UUID_RE.test(id) ? id : null;
+}
+
+// Runs the texts once the response has gone, so a slow SMS provider can never
+// hold up (or time out) the answer the customer is waiting for. Before this, the
+// alerts ran first: a lead could be saved and the function killed mid-text,
+// and the customer saw an error for a request we had - and sent it again.
+function afterResponse(work: () => Promise<void>) {
+  try {
+    after(() => work().catch((e) => console.error("[quote] post-save notification failed", e)));
+  } catch {
+    // Outside a request (a script, a test): nothing to defer to.
+    void work().catch((e) => console.error("[quote] post-save notification failed", e));
+  }
+}
+
 export async function POST(request: Request) {
+  // Nothing below is allowed to escape as an unlogged 500 with an HTML body.
+  // Whatever happens, the customer gets our number and the logs get the reason.
+  try {
+    return await handle(request);
+  } catch (e) {
+    console.error("[quote] unhandled error - lead NOT saved", e);
+    return fail(500, SAVE_FAILED);
+  }
+}
+
+async function handle(request: Request) {
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
-    return NextResponse.json({ ok: false, error: "Invalid request." }, { status: 400 });
+    return fail(400, "Invalid request.");
   }
+  if (!body || typeof body !== "object") return fail(400, "Invalid request.");
 
-  // Honeypot: real users never see/fill this. Pretend success and drop it -
-  // but say so in the logs, with enough to call them back. The field used to
-  // be labelled "Company", which browser autofill fills from a saved address,
-  // and a real customer caught by it vanished without a trace. Search the
-  // Vercel logs for "[quote] honeypot" if a customer says they sent a request
-  // that never arrived.
-  if (asString(body.company, 100) !== "") {
-    console.warn("[quote] honeypot tripped - request dropped", {
-      name: asString(body.name, LIMITS.name),
-      phone: asString(body.phone, LIMITS.phone),
-      service: asString(body.service, LIMITS.service),
-      trap: asString(body.company, 100),
-    });
-    return NextResponse.json({ ok: true });
-  }
+  // The hidden trap field. It is NOT a reason to throw a request away any
+  // more: until 23 Sep a filled trap got a fake "you're all set" and nothing
+  // was kept, and a real customer lost that way cannot be found again. Now a
+  // trapped request that passes every check below is saved - into Archived,
+  // off the calendar and the pipeline, with nobody texted but the owner - and
+  // one that doesn't pass is rejected like any other. Bots rarely produce a
+  // full street address, a real phone number and a bookable date.
+  const trapValue = asString(body.company, 100);
+  const trapped = trapValue !== "";
 
   const ip = clientIp(request);
   if (await rateLimit(`quote:${ip}`, 8, 10 * 60 * 1000)) {
-    return NextResponse.json({ ok: false, error: "Too many requests. Please call us." }, { status: 429 });
+    console.warn("[quote] rate limited", { ip });
+    return fail(429, "Too many requests. Please call us at (919) 873-3919.");
   }
 
   // ── Validate ──
@@ -105,6 +177,8 @@ export async function POST(request: Request) {
   // Both quote types pick a date and time, and both are checked the same way -
   // an online request's slot is a fallback rather than a booking, but a fallback
   // set for last Tuesday is no use to the contractor who has to confirm it.
+  // (The pop-up is the only form that posts here; the /estimate page, which
+  // asked for neither and so could never pass this, was retired on 23 Sep.)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
     errors.push("visit_date");
   } else {
@@ -142,22 +216,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: message, fields: errors }, { status: 422 });
   }
 
+
+  // One id per filled-in form, the same on every retry of it (quote-submit.ts).
+  // Anything that isn't a UUID is ignored rather than trusted.
+  const submissionIdRaw = asString(body.submission_id, 64);
+  const submissionId = UUID_RE.test(submissionIdRaw) ? submissionIdRaw.toLowerCase() : null;
+
   if (!CONFIGURED) {
-    // No keys configured. Fine on a preview with no env; on the live site it
-    // means every lead is being thrown away, so it fails loudly instead of
-    // "succeeding" - the form shows the customer our phone number.
-    if (process.env.VERCEL_ENV === "production") {
-      console.error("[quote] Supabase is not configured in production - lead NOT saved", { name, phone: phoneRaw });
-      return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 503 });
-    }
-    return NextResponse.json({ ok: true, demo: true });
+    // No database keys. This used to answer ok+demo, and the form celebrated a
+    // request that went nowhere. There is no environment in which that is the
+    // right answer to give a customer.
+    console.error("[quote] Supabase is not configured - lead NOT saved", { name, phone: phoneRaw });
+    return fail(503, SAVE_FAILED);
   }
 
   // Who this lead belongs to, resolved once and used for three things: the slot
-  // check below, the row we insert, and the text they get. It used to be worked
-  // out after the insert, which meant the availability check and the row could
-  // disagree about whose calendar the visit landed on.
-  const assignee = SERVICE_KEY ? await resolveAssignee(service) : null;
+  // check below, the row we insert, and the text they get. A trapped request is
+  // held in Archived and belongs to nobody until the owner restores it.
+  const assignee = SERVICE_KEY && !trapped ? await resolveAssignee(service) : null;
 
   // Don't put the crew in two places. Visits stack an hour apart on one
   // person's day, so what's checked is that person's window and the hour of
@@ -166,7 +242,7 @@ export async function POST(request: Request) {
   // The message stays vague on purpose: this endpoint answers to anyone, and
   // "already with Jane Smith at 10am" would hand a stranger a customer's name
   // and schedule. Staff screens get the specific version via conflictMessage.
-  if (quoteType === "inperson") {
+  if (quoteType === "inperson" && !trapped) {
     const { slots, works, wholeDay } = await visitAvailability(assignee, visitDate);
     if (!works || wholeDay) {
       return NextResponse.json(
@@ -205,12 +281,14 @@ export async function POST(request: Request) {
     }
   }
 
+
   // visit_date holds both meanings and quote_type is what separates them: on an
   // in-person row it's a booked appointment, on an online row it's the slot the
   // customer offered in case we can't price the job from photos. Nothing treats
   // an online row as an appointment until a contractor confirms it, which is
   // what flips the type to inperson.
-  const row = {
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(visitDate) ? visitDate : null;
+  const row: Record<string, unknown> = {
     name,
     phone: phoneRaw,
     email: email || null,
@@ -224,88 +302,132 @@ export async function POST(request: Request) {
     // a second booking used to slip through.
     assigned_to: assignee,
     preferred_time: preferredTime || null,
-    visit_date: /^\d{4}-\d{2}-\d{2}$/.test(visitDate) ? visitDate : null,
+    visit_date: validDate,
     visit_time: visitTime || null,
     file_urls: fileUrls,
     source_path: sourcePath || null,
+    client_submission_id: submissionId,
   };
 
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/quote_requests`, {
-      method: "POST",
-      headers: {
-        apikey: WRITE_KEY,
-        Authorization: `Bearer ${WRITE_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify(row),
-    });
-    if (!res.ok) {
-      // Logged with the database's own reason: this is the one failure where
-      // the customer is told to call and the office otherwise never hears of it.
-      console.error("[quote] insert failed", res.status, await res.text().catch(() => ""), { name, phone: phoneRaw });
-      return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 502 });
-    }
+  if (trapped) {
+    // Archived, and with the visit taken off the row (the calendar shows any
+    // row with a visit date, archived or not). What they asked for is kept in
+    // the details so nothing is lost if the owner restores it.
+    const note = `[Held for review: the hidden spam-trap field was filled ("${trapValue.slice(0, 40)}"). Requested ${quoteType || "quote"}${validDate ? ` visit ${validDate}${visitTime ? ` ${visitTime}` : ""}` : ""}.]`;
+    row.details = `${note}${details ? `\n\n${details}` : ""}`.slice(0, LIMITS.details);
+    row.visit_date = null;
+    row.visit_time = null;
+    row.preferred_time = null;
+    row.archived_at = new Date().toISOString();
+  }
 
-    const created = (await res.json().catch(() => [])) as Array<{
-      id?: string;
-      job_token?: string;
-      public_token?: string;
-    }>;
-    const newRow = created[0];
+  let inserted = await insertLead(row);
 
-    // These two are the difference between a lead you know about and one you
-    // don't, so when either is missing say so loudly in the logs. Both used to
-    // gate the whole notification block, which meant a missing service key
-    // turned every new lead into silence that looked exactly like success.
-    if (!newRow?.id) {
-      console.error("[quote] saved, but the row could not be read back - alerts will have no job link");
-    }
-    if (!SERVICE_KEY) {
-      console.error("[quote] SUPABASE_SERVICE_ROLE_KEY is not set - cannot auto-assign or look up owner numbers");
-    }
+  // The column this relies on arrives with supabase/lead-idempotency.sql. If a
+  // database is behind, saving the lead matters more than de-duplicating it.
+  if (!inserted.ok && inserted.status === 400 && /client_submission_id/.test(inserted.detail)) {
+    console.error("[quote] client_submission_id column missing - run supabase/lead-idempotency.sql; saving without it");
+    const { client_submission_id: _drop, ...withoutId } = row;
+    void _drop;
+    inserted = await insertLead(withoutId);
+  }
 
-    // The assignment itself already went in with the row above. All that's
-    // left is looking up who to text.
-    let contractorPhone: string | null = null;
-    let contractorName: string | null = null;
-    if (assignee) {
-      try {
-        const contact = await getStaffContactById(assignee);
-        contractorPhone = contact?.phone ?? null;
-        contractorName = contact?.full_name ?? null;
-      } catch {
-        // best-effort; the quote is already saved and the owner alert still goes
-      }
+  // A second attempt of a form we already saved (a retry after a timeout, a
+  // double tap). The unique index refused it; answer with the row we have.
+  if (!inserted.ok && inserted.status === 409 && submissionId) {
+    const existing = await findBySubmissionId(submissionId);
+    if (existing) {
+      console.warn("[quote] duplicate submission - returning the lead already saved", { lead: existing });
+      return NextResponse.json({ ok: true, saved: true, lead_id: existing, duplicate: true }, { status: 200 });
     }
+  }
 
-    // Text regardless of whether the two steps above worked. An alert naming the
-    // customer and their number is worth sending even with no job link attached:
-    // you can still call them back, which is the entire point of the alert.
-    const info = {
-      id: newRow?.id,
+  if (!inserted.ok) {
+    // Logged with the database's own reason and enough to call them back: the
+    // customer is being told to phone us, and this is how we'd know to phone
+    // them if they don't.
+    console.error("[quote] insert failed - lead NOT saved", inserted.status, inserted.detail.slice(0, 500), {
       name,
       phone: phoneRaw,
       service,
-      address,
-      details,
-      quote_type: row.quote_type ?? undefined,
-      visit_date: row.visit_date,
-      visit_time: row.visit_time,
-      public_token: newRow?.public_token,
-      job_token: newRow?.job_token,
-    };
-    await notifyNewQuote(info, contractorPhone, contractorName).catch((e) => {
-      console.error("[quote] new-lead alert failed", e);
     });
-    await notifyCustomerReceived(info).catch((e) => {
-      console.error("[quote] customer acknowledgement failed", e);
-    });
-
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error("[quote] save threw", e, { name, phone: phoneRaw });
-    return NextResponse.json({ ok: false, error: "Could not save. Please call us." }, { status: 502 });
+    return fail(502, SAVE_FAILED);
   }
+
+  // Saved, but the row didn't come back (it always should with
+  // return=representation). Look it up by the form's id; without an id to hand
+  // the browser, it must not show success - and a retry is safe, because the
+  // unique index will find this row rather than write a second one.
+  const leadId = inserted.id ?? (submissionId ? await findBySubmissionId(submissionId) : null);
+  if (!leadId) {
+    console.error("[quote] insert returned no row id - lead probably saved, not confirmed to the customer", {
+      name,
+      phone: phoneRaw,
+      submissionId,
+    });
+    return fail(502, SAVE_FAILED);
+  }
+
+  if (!SERVICE_KEY) {
+    console.error("[quote] SUPABASE_SERVICE_ROLE_KEY is not set - cannot auto-assign or look up owner numbers");
+  }
+
+  const ref = leadReference(leadId);
+  if (trapped) {
+    console.warn("[quote] spam-trap field filled - lead saved to Archived", { lead: leadId, name, phone: phoneRaw });
+    afterResponse(async () => {
+      await alertOwner(
+        [
+          "POSSIBLE SPAM - held in Archived",
+          "",
+          "The hidden spam-trap field on the quote form was filled, but everything else looked real. Check it isn't a customer:",
+          "",
+          `Name: ${name}`,
+          `Phone: ${phoneRaw}`,
+          service ? `Service: ${service}` : null,
+          `Address: ${address}`,
+          `Ref: ${ref}`,
+          "",
+          "CRM > Archived > Restore if it's genuine. They have NOT been texted.",
+        ]
+          .filter((l) => l !== null)
+          .join("\n"),
+        null,
+        { quoteId: leadId, kind: "spam_trap" },
+      );
+    });
+  } else {
+    afterResponse(async () => {
+      // The assignment itself already went in with the row above. All that's
+      // left is looking up who to text.
+      let contractorPhone: string | null = null;
+      let contractorName: string | null = null;
+      if (assignee) {
+        const contact = await getStaffContactById(assignee).catch(() => null);
+        contractorPhone = contact?.phone ?? null;
+        contractorName = contact?.full_name ?? null;
+      }
+      const info = {
+        id: leadId,
+        name,
+        phone: phoneRaw,
+        service,
+        address,
+        details,
+        quote_type: (row.quote_type as string | null) ?? undefined,
+        visit_date: validDate,
+        visit_time: visitTime || null,
+        public_token: inserted.ok ? inserted.publicToken : undefined,
+        job_token: inserted.ok ? inserted.jobToken : undefined,
+      };
+      // Each on its own, so the customer's acknowledgement still goes if the
+      // owner alert throws, and the other way round.
+      await notifyNewQuote(info, contractorPhone, contractorName).catch((e) =>
+        console.error("[quote] new-lead alert failed", e),
+      );
+      await notifyCustomerReceived(info).catch((e) => console.error("[quote] customer acknowledgement failed", e));
+    });
+  }
+
+  return NextResponse.json({ ok: true, saved: true, lead_id: leadId }, { status: 201 });
 }

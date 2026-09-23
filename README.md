@@ -69,6 +69,17 @@ single long form. Submissions save to Supabase via its REST API (no SDK installe
 4. Redeploy. Leads land in **Table Editor → quote_requests**; uploaded photos in
    **Storage → quote-uploads** (their URLs are saved in the lead's `file_urls`).
 
+**"You're all set!" means saved, and nothing else.** The form shows it only when `/api/quote`
+answers `{ ok: true, saved: true, lead_id }` for a row it actually wrote (`src/lib/quote-submit.ts`,
+with tests). Every other outcome - a database error, a timeout, no network, a response nobody planned
+for - shows an error with the phone number, and the form keeps what they typed. Pressing the button
+again is always safe: each filled-in form carries a submission id, and a unique index
+(`supabase/lead-idempotency.sql`, already applied) turns a repeat into the lead already saved. Photos
+upload once per form, however many times it's sent. Texts go out after the response, so a slow SMS
+provider can't turn a saved lead into an error. A request that fills the hidden spam-trap field is
+still saved, into **Archived**, and the owner is texted to check it. The standalone `/estimate`
+page was retired on 23 Sep 2026 and redirects to the home page.
+
 To swap the address autocomplete to Google Places later, replace `AddressAutocomplete` in
 `quote-modal.tsx` (needs a Google Maps API key + billing). Photon is free and zero-config.
 
