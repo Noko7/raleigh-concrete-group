@@ -51,6 +51,7 @@ export function JobReschedule({
 
   const [open, setOpen] = useState(false);
   const [start, setStart] = useState(time ?? (isJob ? "9:00 AM" : "8:00 AM"));
+  const [notify, setNotify] = useState(true);
 
   // Opening always starts from the appointment as it stands now, which after a
   // save is the day that was just set rather than the one this component first
@@ -60,6 +61,8 @@ export function JobReschedule({
   // the "customer texted" line down with it.
   function reopen() {
     setStart(time ?? (isJob ? "9:00 AM" : "8:00 AM"));
+    // Back on every time: an untick is about one move, not a setting.
+    setNotify(true);
     setOpen(true);
   }
 
@@ -106,6 +109,14 @@ export function JobReschedule({
         {/* Said before the button, not after: this change goes to a customer's
             phone, and that's the part worth knowing in advance. */}
         <p className="jr-note">{isJob ? t.contractorJob.reschedNoteJob : t.contractorJob.reschedNoteVisit}</p>
+        <label className="jr-check">
+          <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+          <span>
+            {t.schedule.notifyMoved}
+            <em>{t.schedule.notifyMovedHint}</em>
+          </span>
+        </label>
+        <input type="hidden" name="notify" value={notify ? "yes" : "no"} />
 
         <div className="jr-acts">
           <button type="submit" className="js-confirm jr-save" disabled={pending}>

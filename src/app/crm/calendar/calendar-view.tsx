@@ -746,6 +746,9 @@ function EventPanel({
   // office isn't held to either list - see the picker below.
   const [time, setTime] = useState(event.time ?? (isJob ? "9:00 AM" : DEFAULT_VISIT_SLOTS[0]));
   const [notify, setNotify] = useState(true);
+  // Separate from the cancel box above: unticking one is a decision about that
+  // action, and shouldn't be waiting pre-unticked on the other.
+  const [notifyMove, setNotifyMove] = useState(true);
 
   return (
     <div className="cal-scrim" onClick={onClose} role="presentation">
@@ -844,6 +847,7 @@ function EventPanel({
             action={(fd) => {
               fd.set("id", event.id);
               fd.set("kind", serverKind(event.kind));
+              fd.set("notify", notifyMove ? "yes" : "no");
               moveAction(fd);
             }}
           >
@@ -876,6 +880,13 @@ function EventPanel({
               <input type="hidden" name="time" value={time} />
             </label>
             <p className="crm-muted crm-sm">{isJob ? t.calendar.moveNoteJob : t.calendar.moveNoteVisit}</p>
+            <label className="cal-panel-check">
+              <input type="checkbox" checked={notifyMove} onChange={(e) => setNotifyMove(e.target.checked)} />
+              <span>
+                {t.schedule.notifyMoved}
+                <em>{t.schedule.notifyMovedHint}</em>
+              </span>
+            </label>
             <div className="cal-panel-actions">
               <button type="submit" className="crm-btn crm-btn-primary" disabled={busy}>
                 {busy ? t.calendar.saving : t.calendar.saveNewTime}

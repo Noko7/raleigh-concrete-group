@@ -223,7 +223,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     case "date_confirmed":
       return `Work day confirmed for ${String(m.to ?? "a date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
     case "date_changed":
-      return `Work day moved${m.from ? ` from ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""}` : ""} to ${String(m.to ?? "a new date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
+      return `Work day moved${m.from ? ` from ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""}` : ""} to ${String(m.to ?? "a new date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}${m.notified === false ? ", customer not texted" : ""}`;
     case "visit_confirmed": {
       const when = `${String(m.to ?? "a date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
       // Worth recording when the crew didn't take the slot the customer offered:
@@ -235,7 +235,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return `Quote visit confirmed for ${when}${asked}`;
     }
     case "visit_moved":
-      return `Quote visit moved${m.from ? ` from ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""}` : ""} to ${String(m.to ?? "a new date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
+      return `Quote visit moved${m.from ? ` from ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""}` : ""} to ${String(m.to ?? "a new date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}${m.notified === false ? ", customer not texted" : ""}`;
     case "visit_cancelled":
       return `Quote visit cancelled${m.from ? ` (was ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""})` : ""}${m.notified ? ", customer texted" : ""}`;
     case "booking_cancelled":

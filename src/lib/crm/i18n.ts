@@ -144,6 +144,8 @@ const en = {
     na: "N/A",
   },
   schedule: {
+    notifyMoved: "Text the customer the new time",
+    notifyMovedHint: "Turn this off if they already know, e.g. you called and came out the same day instead. The crew is still told.",
     confirmTitle: "Confirm the work day",
     bookedTitle: "Work day",
     waiting:
@@ -852,6 +854,8 @@ const es: typeof en = {
     na: "N/D",
   },
   schedule: {
+    notifyMoved: "Mandarle al cliente la nueva hora",
+    notifyMovedHint: "Desactívalo si ya lo sabe, por ejemplo si le llamaste y fueron el mismo día. Al equipo se le avisa igual.",
     confirmTitle: "Confirma el día de trabajo",
     bookedTitle: "Día de trabajo",
     waiting:
