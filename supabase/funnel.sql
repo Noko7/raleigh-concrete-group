@@ -34,6 +34,10 @@ create index if not exists site_funnel_events_created_at_idx on public.site_funn
 
 alter table public.site_funnel_events enable row level security;
 revoke all on public.site_funnel_events from anon, authenticated;
+-- The server's key needs these spelled out: this project's default grants do
+-- not cover new tables (schema.sql grants quote_requests the same way). Without
+-- them every event came back 403 and the Funnel page stayed empty.
+grant insert, select on public.site_funnel_events to service_role;
 
 -- Supabase's free tier holds 500MB. At a few dozen rows per quote attempt this
 -- table would take years to matter, but there is no reason to keep old clicks
