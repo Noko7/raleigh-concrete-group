@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { newAttemptId, trackFunnel } from "@/lib/funnel-client";
 import { phoneDisplay, quoteServiceOptions } from "@/lib/site-data";
 
 type Status = "idle" | "sending" | "success" | "error";
@@ -20,12 +21,42 @@ export function EstimateForm() {
 
   const phoneDigits = phone.replace(/\D/g, "");
   const phoneOk = phoneDigits.length === 10 || (phoneDigits.length === 11 && phoneDigits.startsWith("1"));
-  const canSubmit =
-    name.trim().length >= 2 && phoneOk && address.trim().length >= 5 && /\d/.test(address) && consent;
+  const addressOk = address.trim().length >= 5 && /\d/.test(address);
+  const canSubmit = name.trim().length >= 2 && phoneOk && addressOk && consent;
+
+  // Same funnel as the quote pop-up (src/lib/funnel.ts), counted separately on
+  // the Funnel page. One screen, so the only questions are "did they send it"
+  // and, if not, what was still missing when they left.
+  const attemptId = useRef("");
+  const openedAt = useRef(0);
+  const sent = useRef(false);
+  const missing = useRef("");
+  missing.current =
+    [name.trim().length < 2 && "name", !phoneOk && "phone", !addressOk && "address", !consent && "consent"]
+      .filter(Boolean)
+      .join("+") || "ready";
+  const track = (event: "open" | "close" | "error" | "submit", extra: { ms?: number; detail?: string } = {}) =>
+    trackFunnel({ attempt_id: attemptId.current, form: "estimate", step: "estimate", event, ...extra });
+
+  useEffect(() => {
+    attemptId.current = newAttemptId();
+    openedAt.current = Date.now();
+    track("open");
+    const onHide = () => {
+      if (sent.current) return;
+      sent.current = true;
+      track("close", { ms: Date.now() - openedAt.current, detail: missing.current });
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+    // Once per page view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (company.trim() !== "") {
+      sent.current = true;
       setStatus("success"); // bot trap
       return;
     }
@@ -49,12 +80,16 @@ export function EstimateForm() {
       });
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
       if (res.ok && json.ok) {
+        sent.current = true;
+        track("submit", { ms: Date.now() - openedAt.current });
         setStatus("success");
       } else {
+        track("error", { detail: `server_${res.status}` });
         setErrorMsg(json.error || `Something went wrong. Please call us at ${phoneDisplay}.`);
         setStatus("error");
       }
     } catch {
+      track("error", { detail: "network" });
       setErrorMsg(`Something went wrong. Please call us at ${phoneDisplay}.`);
       setStatus("error");
     }
@@ -73,7 +108,7 @@ export function EstimateForm() {
   }
 
   return (
-    <form className="quote-form" onSubmit={onSubmit} noValidate>
+    <form className="quote-form" onSubmit={onSubmit} noValidate data-clarity-mask="true">
       <div className="qf-row">
         <label className="qf-field">
           <span>Name</span>

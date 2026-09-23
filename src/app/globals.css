@@ -3540,3 +3540,12 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   .ao-opt-pick { grid-column: 1 / -1; }
   .ao-time, .ao-time input[type="time"] { width: 100%; }
 }
+
+/* ── CRM: Quote funnel (/crm/funnel) ─────────────────────────────────────── */
+.fn-windows { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.fn-note { font-size: 0.82rem; margin: 0.4rem 0 0.8rem; }
+.crm-table .fn-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fn-bar-col { min-width: 180px; width: 40%; }
+.fn-bar { height: 10px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); overflow: hidden; margin-bottom: 0.3rem; }
+.fn-bar-fill { display: block; height: 100%; border-radius: 4px; background: var(--crm-accent); }
+.fn-bar-label { font-size: 0.82rem; font-variant-numeric: tabular-nums; }

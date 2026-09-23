@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
 import { ymdInDays } from "@/lib/crm/clock";
 import { DEFAULT_VISIT_SLOTS, VISIT_LEAD_DAYS } from "@/lib/crm/constants";
+import { newAttemptId, trackFunnel, type TrackInput } from "@/lib/funnel-client";
 import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
 
 // Supabase via REST (no SDK). Set these in Vercel → Settings → Environment Variables:
@@ -299,6 +300,21 @@ function Modal({ onClose }: { onClose: () => void }) {
   const [dayOff, setDayOff] = useState(false);
   const minDate = useRef(minVisitDate()).current;
 
+  // Funnel tracking (src/lib/funnel.ts): which step people reach, how long each
+  // takes, and where they give up. Refs rather than state because none of it
+  // is ever drawn, and the close handlers need the latest values without being
+  // re-bound on every keystroke.
+  const attemptId = useRef(newAttemptId()).current;
+  const openedAt = useRef(Date.now());
+  const stepStartedAt = useRef(Date.now());
+  const finished = useRef(false);
+  const track = useCallback(
+    (input: Omit<TrackInput, "attempt_id" | "form">) =>
+      trackFunnel({ attempt_id: attemptId, form: "modal", ...input }),
+    [attemptId],
+  );
+  const stepMs = () => Date.now() - stepStartedAt.current;
+
   // `service` decides whose calendar this is: a lead goes to the contractor who
   // takes that job type. Checking against the primary contractor regardless,
   // which is what this used to do, answered about the wrong person's day for
@@ -321,6 +337,10 @@ function Modal({ onClose }: { onClose: () => void }) {
       };
       setDateFull(json.available === false);
       setDayOff(json.works === false);
+      // Only in-person is stopped by a full or non-working day (see canProceed).
+      if (mode === "inperson" && (json.available === false || json.works === false)) {
+        track({ event: "error", step: "schedule", mode, detail: json.works === false ? "day_off" : "day_full" });
+      }
       const open = Array.isArray(json.slots) && json.slots.length > 0 ? json.slots : DEFAULT_SLOTS;
       const taken = Array.isArray(json.taken) ? json.taken : [];
       setSlots(open);
@@ -347,19 +367,77 @@ function Modal({ onClose }: { onClose: () => void }) {
   const stepNumber = stepIndex + 1;
   const isLastStep = stepIndex === STEPS.length - 1;
 
+  // What is still stopping them on this step, in words the Funnel page can
+  // count: "phone+address" means they left Contact with both unfinished. Only
+  // which requirement - never what they typed.
+  function unmet(): string {
+    const missing: string[] = [];
+    if (current === "contact") {
+      if (data.name.trim().length < 2) missing.push("name");
+      if (!isValidPhone(data.phone)) missing.push("phone");
+      if (!(addressVerified || isFullAddress(data.address))) missing.push("address");
+      if (!isValidEmail(data.email)) missing.push("email");
+    } else if (current === "service") {
+      if (!data.service) missing.push("service");
+    } else if (current === "schedule") {
+      if (!data.visitDate) missing.push("date");
+      if (!data.visitTime) missing.push("time");
+      if (mode === "inperson" && dateFull) missing.push("day_full");
+      if (mode === "inperson" && dayOff) missing.push("day_off");
+    }
+    return missing.length ? missing.join("+") : "ready";
+  }
+
+  // Everything the dismiss paths need, kept current for handlers that are
+  // bound once (Escape, pagehide).
+  const leaveRef = useRef({ step: current as string, mode, unmet: "ready" });
+  leaveRef.current = { step: current, mode, unmet: unmet() };
+
+  const recordClose = useCallback(
+    (why?: string) => {
+      if (finished.current) return;
+      finished.current = true;
+      const { step, mode: m, unmet: u } = leaveRef.current;
+      track({ event: "close", step: step as TrackInput["step"], mode: m, ms: stepMs(), detail: why ?? u });
+    },
+    [track],
+  );
+
+  const dismiss = useCallback(() => {
+    recordClose();
+    onClose();
+  }, [recordClose, onClose]);
+
+  useEffect(() => {
+    track({ event: "open" });
+    // Closing the tab or navigating away with the form open is giving up too,
+    // and the likeliest way to do it on a phone.
+    const onHide = () => recordClose("left_page");
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [track, recordClose]);
+
+  useEffect(() => {
+    stepStartedAt.current = Date.now();
+    track({ event: "view", step: current, mode });
+    // `mode` only ever changes in the same render as the step does, so this is
+    // still one view per step shown.
+  }, [current, mode, track]);
+
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && dismiss();
     document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = "";
       document.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, [dismiss]);
 
   const set = (patch: Partial<FormState>) => setData((d) => ({ ...d, ...patch }));
 
   function pickMode(next: Mode) {
+    track({ event: "done", step: "choice", mode: next, ms: stepMs() });
     setMode(next);
     setStepIndex(0);
   }
@@ -369,11 +447,13 @@ function Modal({ onClose }: { onClose: () => void }) {
     const incoming = Array.from(list);
     const badType = incoming.find((f) => !isAllowedFile(f));
     if (badType) {
+      track({ event: "error", step: current, mode, detail: "file_type" });
       setFileError(`"${badType.name}" isn't a photo or video. Please add images or video only.`);
       return;
     }
     const tooBig = incoming.find((f) => f.size > MAX_FILE_MB * 1024 * 1024);
     if (tooBig) {
+      track({ event: "error", step: current, mode, detail: "file_size" });
       setFileError(`"${tooBig.name}" is over ${MAX_FILE_MB}MB. Try a shorter video or smaller photo.`);
       return;
     }
@@ -409,6 +489,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   // Moving between steps clears any stale complaint from the last submit, so a
   // fixed field doesn't keep showing the old reason it was rejected.
   function back() {
+    track({ event: "back", step: current, mode, ms: stepMs() });
     setErrorMsg("");
     if (stepIndex === 0) setMode(null);
     else setStepIndex((i) => i - 1);
@@ -417,8 +498,13 @@ function Modal({ onClose }: { onClose: () => void }) {
   function next() {
     if (!canProceed()) return;
     setErrorMsg("");
-    if (!isLastStep) setStepIndex((i) => i + 1);
-    else submit();
+    if (!isLastStep) {
+      // Contact records whether the address came from the search or was typed
+      // out by hand - a lot of typed ones says the autocomplete isn't helping.
+      const detail = current === "contact" ? (addressVerified ? "address_picked" : "address_typed") : undefined;
+      track({ event: "done", step: current, mode, ms: stepMs(), detail });
+      setStepIndex((i) => i + 1);
+    } else submit();
   }
 
   // Private bucket. The browser no longer has blanket write access: we ask our
@@ -458,6 +544,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   async function submit() {
     // Bot trap: a real user can't fill the hidden honeypot. Silently "succeed".
     if (honeypot.trim() !== "") {
+      finished.current = true;
       setStatus("success");
       return;
     }
@@ -469,6 +556,7 @@ function Modal({ onClose }: { onClose: () => void }) {
         try {
           fileUrls = await uploadFiles();
         } catch {
+          track({ event: "error", step: "schedule", mode, detail: "upload" });
           setErrorMsg(
             `We couldn't upload one of your photos. Try fewer or smaller files, or call us at ${phoneDisplay}.`,
           );
@@ -500,8 +588,19 @@ function Modal({ onClose }: { onClose: () => void }) {
       });
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string; fields?: string[] };
       if (res.ok && json.ok) {
+        finished.current = true;
+        track({ event: "submit", step: "schedule", mode, ms: Date.now() - openedAt.current });
         setStatus("success");
-      } else if (json.fields?.includes("address") || json.fields?.includes("phone") || json.fields?.includes("name")) {
+        return;
+      }
+      // Why the server said no: the fields it named, or the status code.
+      track({
+        event: "error",
+        step: "schedule",
+        mode,
+        detail: json.fields?.length ? `server_${json.fields.slice(0, 4).join("+")}` : `server_${res.status}`,
+      });
+      if (json.fields?.includes("address") || json.fields?.includes("phone") || json.fields?.includes("name")) {
         // Rejected on the contact details: take them back to that step rather
         // than showing the reason on a screen that can't fix it.
         setStatus("idle");
@@ -526,6 +625,7 @@ function Modal({ onClose }: { onClose: () => void }) {
         setStatus("error");
       }
     } catch {
+      track({ event: "error", step: "schedule", mode, detail: "network" });
       setErrorMsg(`Something went wrong. Please call us at ${phoneDisplay}.`);
       setStatus("error");
     }
@@ -534,9 +634,12 @@ function Modal({ onClose }: { onClose: () => void }) {
   const busy = status === "uploading" || status === "sending";
 
   return (
-    <div className="qm-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Request a quote">
-      <div className="qm-card" onClick={(e) => e.stopPropagation()}>
-        <button className="qm-close" onClick={onClose} aria-label="Close">
+    <div className="qm-overlay" onClick={dismiss} role="dialog" aria-modal="true" aria-label="Request a quote">
+      {/* Masked in Clarity recordings: this card is where names, phone numbers
+          and addresses are typed and suggested, and none of it should end up
+          in a session replay. Clicks and scrolls are still recorded. */}
+      <div className="qm-card" data-clarity-mask="true" onClick={(e) => e.stopPropagation()}>
+        <button className="qm-close" onClick={dismiss} aria-label="Close">
           <IconClose />
         </button>
 
