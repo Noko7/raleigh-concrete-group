@@ -1234,7 +1234,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-check svg { width: 30px; height: 30px; stroke-width: 2.4; }
 .qm-full { width: 100%; justify-content: center; margin-bottom: 0.5rem; }
 .qm-text-btn { background: none; border: none; color: rgba(43, 26, 18, 0.6); font-weight: 600; cursor: pointer; padding: 0.5rem; }
-.qm-demo { font-size: 0.78rem; color: rgba(43, 26, 18, 0.5); margin-top: 0.6rem; }
+.qm-ref { font-size: 0.85rem; color: rgba(43, 26, 18, 0.65); margin: 0.2rem 0 0.9rem; letter-spacing: 0.02em; }
 
 /* ──────────────────────────────────────────────────────────────────────────
    CRM (crm.raleighconcrete.net) - light admin theme

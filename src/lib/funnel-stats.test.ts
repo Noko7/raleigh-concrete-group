@@ -96,17 +96,6 @@ test("counts each attempt once per step, however often it passed through", () =>
   ]);
 });
 
-test("the /estimate page is counted apart from the pop-up", () => {
-  const s = funnelStats([
-    row("e1", "open", { form: "estimate", step: "estimate" }),
-    row("e1", "error", { form: "estimate", step: "estimate", detail: "network" }),
-    row("e1", "submit", { form: "estimate", step: "estimate" }),
-    row("e2", "open", { form: "estimate", step: "estimate" }),
-  ]);
-  assert.equal(s.opened, 0);
-  assert.deepEqual(s.estimate, { opened: 2, submitted: 1, errors: 1 });
-});
-
 test("a secret in the path never reaches the table", () => {
   assert.equal(scrubPath("/q/abc123def456"), "/q/[token]");
   assert.equal(scrubPath("/pay/abc123/done"), "/pay/[token]/done");

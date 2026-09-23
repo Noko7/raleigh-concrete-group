@@ -26,7 +26,6 @@ const STEP_LABELS: Record<string, string> = {
   contact: "Contact + address",
   service: "Service + photos",
   schedule: "Date + time",
-  estimate: "/estimate page",
 };
 
 // What each recorded code means, in the office's words.
@@ -187,7 +186,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: Promi
           Tracking isn&apos;t set up yet. Run <code>supabase/funnel.sql</code> once in Supabase → SQL Editor, and
           visits to the quote form will start showing here.
         </div>
-      ) : s.opened === 0 && s.estimate.opened === 0 ? (
+      ) : s.opened === 0 ? (
         <div className="crm-empty">Nobody has opened the quote form in the last {days} days yet.</div>
       ) : (
         <>
@@ -308,15 +307,6 @@ export default async function FunnelPage({ searchParams }: { searchParams: Promi
 
           <SplitTable title="Which page they opened it from" first="Page" rows={s.byPath} />
 
-          {s.estimate.opened > 0 && (
-            <section className="crm-card">
-              <h2 className="crm-card-title">The /estimate page</h2>
-              <p>
-                {s.estimate.opened} visits, {s.estimate.submitted} sent ({pct(s.estimate.submitted, s.estimate.opened)}),{" "}
-                {s.estimate.errors} errors. Gave-up reasons for it are in the list above under &ldquo;/estimate page&rdquo;.
-              </p>
-            </section>
-          )}
 
           {truncated && (
             <p className="crm-muted fn-note">Only the first {PAGE * MAX_PAGES} events in this range are counted. Pick a shorter range.</p>

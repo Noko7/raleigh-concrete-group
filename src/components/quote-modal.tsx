@@ -5,15 +5,34 @@ import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
 import { ymdInDays } from "@/lib/crm/clock";
 import { DEFAULT_VISIT_SLOTS, VISIT_LEAD_DAYS } from "@/lib/crm/constants";
 import { newAttemptId, trackFunnel, type TrackInput } from "@/lib/funnel-client";
+import { isConfirmedSave, leadReference, newSubmissionId } from "@/lib/quote-submit";
 import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
 
-// Supabase via REST (no SDK). Set these in Vercel → Settings → Environment Variables:
-//   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
-// Run supabase/schema.sql once to create the table + storage bucket.
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-const SUPABASE_READY = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+// Everything this form saves goes through our own server (/api/upload-url and
+// /api/quote), which holds the database keys. The browser used to check its
+// own copy of the Supabase settings and, if they were missing, skip the photo
+// upload without a word and still say "You're all set!" - so it no longer
+// looks at them at all. If the server can't save, the server says so.
 const MAX_FILE_MB = 50;
+
+// How long to wait for /api/quote before telling the customer we couldn't
+// confirm it. Generous, because the request itself is small and the server
+// answers before sending any texts; anything past this is a hang, not a slow
+// network. A retry after a timeout is safe: see submissionId below.
+const SUBMIT_TIMEOUT_MS = 30_000;
+const SIGN_TIMEOUT_MS = 15_000;
+
+// fetch with a deadline. An AbortError comes back as a thrown error, which the
+// caller treats like any other failure to confirm.
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 type Mode = "online" | "inperson";
 type Status = "idle" | "uploading" | "sending" | "success" | "error";
@@ -285,6 +304,22 @@ function Modal({ onClose }: { onClose: () => void }) {
   const [fileError, setFileError] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [honeypot, setHoneypot] = useState("");
+  // The reference of the saved lead, shown on the success screen. The success
+  // screen cannot render without one: it only exists once the server has
+  // handed back the id of the row it wrote.
+  const [leadRef, setLeadRef] = useState("");
+  // One per filled-in form, sent on every attempt (lib/quote-submit.ts). The
+  // server keeps it under a unique index, so pressing the button again after a
+  // timeout finds the lead already saved instead of making a second one.
+  const submissionId = useRef(newSubmissionId()).current;
+  // Photos already uploaded, by file. A submit the server turns down (a slot
+  // taken, a date too soon) used to upload every photo again on the next try -
+  // 34MB, three times, for one customer on 5 Sep. Now each file goes up once.
+  const uploaded = useRef(new Map<File, string>());
+  // Guards against a second submit starting while one is in flight. The button
+  // is disabled too, but state updates are async and a fast double tap can land
+  // before the re-render that disables it.
+  const inFlight = useRef(false);
   const [dateChecking, setDateChecking] = useState(false);
   const [dateFull, setDateFull] = useState(false);
   // Slots the crew already has on the chosen day. Greying these out is nicer
@@ -513,16 +548,25 @@ function Modal({ onClose }: { onClose: () => void }) {
   async function uploadFiles(): Promise<string[]> {
     const paths: string[] = [];
     for (const file of files) {
+      const already = uploaded.current.get(file);
+      if (already) {
+        paths.push(already);
+        continue;
+      }
       const contentType = fileMime(file);
       const ext = file.name.includes(".")
         ? file.name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "")
         : "bin";
 
-      const signRes = await fetch("/api/upload-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ext: ext || "bin", contentType }),
-      });
+      const signRes = await fetchWithTimeout(
+        "/api/upload-url",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ext: ext || "bin", contentType }),
+        },
+        SIGN_TIMEOUT_MS,
+      );
       if (!signRes.ok) throw new Error(`could not authorize upload (${signRes.status})`);
       const signed = (await signRes.json()) as { ok?: boolean; path?: string; uploadUrl?: string };
       if (!signed.ok || !signed.uploadUrl || !signed.path) throw new Error("could not authorize upload");
@@ -536,30 +580,42 @@ function Modal({ onClose }: { onClose: () => void }) {
         const detail = await put.text().catch(() => "");
         throw new Error(detail || `upload failed (${put.status})`);
       }
+      uploaded.current.set(file, signed.path);
       paths.push(signed.path);
     }
     return paths;
   }
 
+  // The only way to the success screen. Read the rule in lib/quote-submit.ts
+  // before changing anything here: success is shown when, and only when, the
+  // server returns the id of the row it saved. Every other outcome - an error
+  // body, a non-JSON body, a timeout, a thrown fetch, a response shape nobody
+  // has thought of yet - lands on an error with our phone number, and the
+  // form keeps everything they typed so pressing the button again just works.
   async function submit() {
-    // The trap is judged by the server, not here. This used to "succeed"
-    // without sending anything, so a trapped request left no trace anywhere -
-    // no lead, no log, nothing to recover it from. Now it is sent, the server
-    // drops it and logs it, and the funnel records that it happened.
-    if (honeypot.trim() !== "") track({ event: "error", step: current, mode, detail: "honeypot" });
+    if (inFlight.current) return;
+    inFlight.current = true;
     setErrorMsg("");
+    // Recorded, then sent like any other request. The server decides what a
+    // filled trap means (it saves it to Archived and tells the owner); the
+    // browser never again answers on the server's behalf.
+    if (honeypot.trim() !== "") track({ event: "error", step: current, mode, detail: "honeypot" });
+    const fail = (detail: string, message: string) => {
+      track({ event: "error", step: "schedule", mode, detail });
+      setErrorMsg(message);
+      setStatus("error");
+    };
     try {
       let fileUrls: string[] = [];
-      if (files.length && SUPABASE_READY) {
+      if (files.length) {
         setStatus("uploading");
         try {
           fileUrls = await uploadFiles();
         } catch {
-          track({ event: "error", step: "schedule", mode, detail: "upload" });
-          setErrorMsg(
-            `We couldn't upload one of your photos. Try fewer or smaller files, or call us at ${phoneDisplay}.`,
+          fail(
+            "upload",
+            `We couldn't upload one of your photos. Try again, remove the largest ones, or call us at ${phoneDisplay}.`,
           );
-          setStatus("error");
           return;
         }
       }
@@ -578,68 +634,81 @@ function Modal({ onClose }: { onClose: () => void }) {
         visit_time: data.visitTime,
         file_urls: fileUrls,
         source_path: typeof window !== "undefined" ? window.location.pathname : "",
-        company: honeypot, // honeypot, validated server-side
+        submission_id: submissionId,
+        company: honeypot, // trap field, judged server-side
       };
-      const res = await fetch("/api/quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const json = (await res.json().catch(() => ({ ok: false }))) as {
-        ok?: boolean;
-        demo?: boolean;
-        error?: string;
-        fields?: string[];
-      };
-      if (res.ok && json.ok && json.demo) {
-        // Accepted but not saved: the server has no database keys. Never show
-        // a customer "you're all set" for a request nobody will ever see.
-        track({ event: "error", step: "schedule", mode, detail: "server_demo" });
-        setErrorMsg(`We couldn't save your request just now. Please call us at ${phoneDisplay}.`);
-        setStatus("error");
+
+      let res: Response;
+      try {
+        res = await fetchWithTimeout(
+          "/api/quote",
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+          SUBMIT_TIMEOUT_MS,
+        );
+      } catch (e) {
+        // No answer at all: offline, dropped, or past the deadline. We don't
+        // know whether it arrived, so we don't say it did. Retrying is safe.
+        const timedOut = e instanceof DOMException && e.name === "AbortError";
+        fail(
+          timedOut ? "timeout" : "network",
+          timedOut
+            ? `We couldn't confirm your request arrived. Please press the button again (you won't be sent twice) or call us at ${phoneDisplay}.`
+            : `We couldn't reach our server. Check your connection and press the button again, or call us at ${phoneDisplay}.`,
+        );
         return;
       }
-      if (res.ok && json.ok) {
+
+      const json = (await res.json().catch(() => null)) as {
+        ok?: unknown;
+        saved?: unknown;
+        lead_id?: unknown;
+        error?: string;
+        fields?: string[];
+      } | null;
+
+      if (isConfirmedSave(res.status, json)) {
         finished.current = true;
+        setLeadRef(leadReference(json.lead_id));
         track({ event: "submit", step: "schedule", mode, ms: Date.now() - openedAt.current });
         setStatus("success");
         return;
       }
+
+      const fields = Array.isArray(json?.fields) ? json.fields : [];
+      const serverMsg = typeof json?.error === "string" && json.error ? json.error : "";
       // Why the server said no: the fields it named, or the status code.
       track({
         event: "error",
         step: "schedule",
         mode,
-        detail: json.fields?.length ? `server_${json.fields.slice(0, 4).join("+")}` : `server_${res.status}`,
+        detail: fields.length ? `server_${fields.slice(0, 4).join("+")}` : `server_${res.status}`,
       });
-      if (json.fields?.includes("address") || json.fields?.includes("phone") || json.fields?.includes("name")) {
+      if (fields.includes("address") || fields.includes("phone") || fields.includes("name")) {
         // Rejected on the contact details: take them back to that step rather
         // than showing the reason on a screen that can't fix it.
         setStatus("idle");
         setStepIndex(STEPS.indexOf("contact"));
         setAddressVerified(false);
-        setErrorMsg(json.error || "Please check your contact details.");
-      } else if (
-        res.status === 409 ||
-        json.fields?.includes("visit_date") ||
-        json.fields?.includes("visit_time")
-      ) {
+        setErrorMsg(serverMsg || "Please check your contact details.");
+      } else if (res.status === 409 || fields.includes("visit_date") || fields.includes("visit_time")) {
         // The day filled up, the slot went, or the date is too soon - all of
         // them mean "go back and pick again". Re-check the day on the way so
         // the chips redraw against what's actually left rather than the
         // snapshot they chose from.
         setStatus("idle");
         setStepIndex(STEPS.indexOf("schedule"));
-        setErrorMsg(json.error || "");
+        setErrorMsg(serverMsg || "That time isn't available any more. Please pick another.");
         void checkVisitDate(data.visitDate, data.service);
       } else {
-        setErrorMsg(json.error || `Something went wrong saving your request. Please call us at ${phoneDisplay}.`);
+        // Includes a 2xx that isn't a confirmed save: whatever it is, it is
+        // not proof the lead exists, so it is not a success.
+        setErrorMsg(serverMsg || `We couldn't save your request just now. Please call us at ${phoneDisplay}.`);
         setStatus("error");
       }
     } catch {
-      track({ event: "error", step: "schedule", mode, detail: "network" });
-      setErrorMsg(`Something went wrong. Please call us at ${phoneDisplay}.`);
-      setStatus("error");
+      fail("client_exception", `Something went wrong. Please press the button again or call us at ${phoneDisplay}.`);
+    } finally {
+      inFlight.current = false;
     }
   }
 
@@ -656,7 +725,9 @@ function Modal({ onClose }: { onClose: () => void }) {
           <IconClose />
         </button>
 
-        {status === "success" ? (
+        {/* Both, not either: a success screen with no saved row behind it is
+            the exact bug this form has had three times. */}
+        {status === "success" && leadRef ? (
           <div className="qm-body qm-success">
             <div className="qm-check">
               <IconCheck />
@@ -666,15 +737,17 @@ function Modal({ onClose }: { onClose: () => void }) {
               We got your request and we&apos;ll reach out the same day with your quote. Want to talk
               now? Give us a call.
             </p>
+            {/* Proof it was saved: the reference is the start of the row's id,
+                which only exists once the server has written it. */}
+            <p className="qm-ref">
+              Reference <strong>{leadRef}</strong>
+            </p>
             <a href={phoneHref} className="cta-primary qm-full">
               Call {phoneDisplay}
             </a>
             <button className="qm-text-btn" onClick={onClose}>
               Close
             </button>
-            {!SUPABASE_READY && (
-              <p className="qm-demo">Demo mode. Add your Supabase keys in Vercel to start saving real requests.</p>
-            )}
           </div>
         ) : (
           <>

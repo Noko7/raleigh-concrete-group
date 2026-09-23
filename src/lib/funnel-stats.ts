@@ -39,7 +39,6 @@ export type FunnelStats = {
   closeReasons: Count[];
   /** "schedule · day_full" - every time the form said no. */
   errors: Count[];
-  estimate: { opened: number; submitted: number; errors: number };
 };
 
 export function median(values: number[]): number | null {
@@ -162,9 +161,6 @@ export function funnelStats(rows: FunnelRow[]): FunnelStats {
     return [...m.values()].sort((x, y) => y.opened - x.opened || x.key.localeCompare(y.key)).slice(0, limit);
   }
 
-  const est = rows.filter((r) => r.form === "estimate");
-  const estAttempts = (event: string) => new Set(est.filter((r) => r.event === event).map((r) => r.attempt_id)).size;
-
   return {
     opened: list.length,
     visitors: new Set(list.map((a) => a.visitor)).size,
@@ -176,7 +172,6 @@ export function funnelStats(rows: FunnelRow[]): FunnelStats {
     byPath: split((a) => a.path, 12),
     closeReasons: tally(closeKeys, 12),
     errors: tally(errorKeys, 12),
-    estimate: { opened: estAttempts("open"), submitted: estAttempts("submit"), errors: est.filter((r) => r.event === "error").length },
   };
 }
 
