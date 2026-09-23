@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CLARITY_PROJECT_ID } from "@/lib/clarity-id";
 import { requireOwner } from "@/lib/crm/auth";
 import { crmBase } from "@/lib/crm/nav";
 import { pgAdmin } from "@/lib/crm/rest";
@@ -151,7 +152,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: Promi
 
   const { rows, missingTable, truncated } = await loadRows(days);
   const s = funnelStats(rows);
-  const clarityOn = Boolean(process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID);
+  const clarityOn = Boolean(CLARITY_PROJECT_ID);
 
   return (
     <main className="crm-page crm-page-wide">
@@ -327,7 +328,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: Promi
             : "Not switched on. Create a free project at clarity.microsoft.com, then add its Project ID in Vercel as NEXT_PUBLIC_CLARITY_PROJECT_ID and redeploy."}
         </p>
         {clarityOn && (
-          <a className="crm-btn crm-btn-ghost" href="https://clarity.microsoft.com/projects" target="_blank" rel="noopener noreferrer">
+          <a className="crm-btn crm-btn-ghost" href={`https://clarity.microsoft.com/projects/view/${CLARITY_PROJECT_ID}/dashboard`} target="_blank" rel="noopener noreferrer">
             Open Clarity
           </a>
         )}

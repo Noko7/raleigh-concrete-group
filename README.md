@@ -88,9 +88,9 @@ names, numbers or addresses, and nothing links an attempt to the lead it became.
 Setup: run `supabase/funnel.sql` once in Supabase → SQL Editor. That's it.
 
 **2. Microsoft Clarity** for heatmaps, scroll depth, rage clicks and session
-recordings on the marketing pages. Free, no traffic cap.
-1. Create a project at [clarity.microsoft.com](https://clarity.microsoft.com) for `raleighconcrete.net`.
-2. Copy its **Project ID** (Settings → Overview) into Vercel as `NEXT_PUBLIC_CLARITY_PROJECT_ID`, and redeploy.
+recordings on the marketing pages. Free, no traffic cap. Already on: the
+project ID (`ymldax22ww`) is set in `src/lib/clarity-id.ts`. Setting
+`NEXT_PUBLIC_CLARITY_PROJECT_ID` in Vercel overrides it.
 
 It never loads on the CRM or on the customer token pages (`/q/`, `/pay/`,
 `/confirm/`, `/join/`, `/job/`), and the quote form is masked in recordings. The
