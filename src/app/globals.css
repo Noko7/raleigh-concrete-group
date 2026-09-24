@@ -1234,6 +1234,12 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-check svg { width: 30px; height: 30px; stroke-width: 2.4; }
 .qm-full { width: 100%; justify-content: center; margin-bottom: 0.5rem; }
 .qm-text-btn { background: none; border: none; color: rgba(43, 26, 18, 0.6); font-weight: 600; cursor: pointer; padding: 0.5rem; }
+/* The way through the schedule step when no time suits. Underlined so it reads
+   as a real option, not fine print - it is how nobody gets stuck there. */
+.qm-skip { display: block; margin: 0.8rem auto 0; padding: 0.4rem; text-decoration: underline; text-underline-offset: 3px; font-size: 0.9rem; text-align: center; }
+.qm-fallback { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; margin-top: 0.8rem; }
+.qm-fallback .qm-text-btn { text-decoration: none; }
+.qm-hint { font-size: 0.78rem; color: rgba(43, 26, 18, 0.55); margin: 0.2rem 0 0; }
 .qm-ref { font-size: 0.85rem; color: rgba(43, 26, 18, 0.65); margin: 0.2rem 0 0.9rem; letter-spacing: 0.02em; }
 
 /* ──────────────────────────────────────────────────────────────────────────

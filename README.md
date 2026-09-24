@@ -80,6 +80,31 @@ provider can't turn a saved lead into an error. A request that fills the hidden 
 still saved, into **Archived**, and the owner is texted to check it. The standalone `/estimate`
 page was retired on 23 Sep 2026 and redirects to the home page.
 
+**A request with a name and a phone number is always saved** (24 Sep 2026). Nothing else stops it:
+
+- **Address:** anything 5+ characters gets through. The field still asks for the full address and
+  shows a green light when it has one. A partial one is noted on the lead ("confirm it").
+- **Email:** optional. A mistyped one is kept in a note, not refused.
+- **Visit time:** optional for both types. "Skip this" (online) and "None of these work? Send it and
+  we'll call you" (in person) send the request without a time. If an in-person slot goes between
+  picking and sending, or the calendar can't be read, the lead is saved without the slot.
+  The success screen says we'll call to set a time, and the note says what they asked for.
+- **Photos:** each one gets a retry and is only given up on if it stalls for 45s. A failed photo is
+  skipped, the request goes anyway, and the success screen asks them to text it.
+- **Database blip:** retried once. If it still fails, the owner is texted the whole lead ("NEW LEAD -
+  NOT SAVED"), and the customer gets a **Text us this request** button that opens their messages
+  with their details already filled in.
+
+The notes go at the top of the lead's details, where the pipeline card and the owner's text show them.
+
+**Started but not sent.** Once someone has typed a name and phone number, the form saves it to
+`quote_drafts` (`supabase/quote-drafts.sql`, already applied) and keeps saving as they go. If they
+close the form or the tab without sending, the owner gets one text ("QUOTE STARTED, NOT SENT") and
+they're listed at the top of **CRM → Funnel** with tap-to-call and a Dismiss button. They haven't
+agreed to texts at that point, so call, don't text. The form also remembers what they typed for the
+rest of the tab: closing it by accident and opening it again picks up where they were, as the same
+request.
+
 To swap the address autocomplete to Google Places later, replace `AddressAutocomplete` in
 `quote-modal.tsx` (needs a Google Maps API key + billing). Photon is free and zero-config.
 

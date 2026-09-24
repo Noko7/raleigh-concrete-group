@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { isConfirmedSave, leadReference, newSubmissionId, UUID_RE } from "./quote-submit.ts";
+import { isConfirmedSave, isValidUsPhone, leadReference, newSubmissionId, smsFallbackHref, UUID_RE } from "./quote-submit.ts";
 
 const ID = "3f2b8c1e-9a4d-4e7f-8b2c-1d5e6f7a8b9c";
 
@@ -40,4 +40,35 @@ test("leadReference is short, stable and readable", () => {
 test("newSubmissionId produces ids the server will accept", () => {
   for (let i = 0; i < 50; i++) assert.match(newSubmissionId(), UUID_RE);
   assert.notEqual(newSubmissionId(), newSubmissionId());
+});
+
+test("visit_booked rides along on a confirmed save and doesn't change what counts as one", () => {
+  const id = "0f8b6a8e-3c4d-4e5f-9a0b-1c2d3e4f5a6b";
+  assert.equal(isConfirmedSave(201, { ok: true, saved: true, lead_id: id, visit_booked: false }), true);
+  assert.equal(isConfirmedSave(201, { ok: true, visit_booked: true }), false);
+});
+
+test("a lead needs a US phone number and nothing else from this module", () => {
+  assert.equal(isValidUsPhone("(919) 555-0123"), true);
+  assert.equal(isValidUsPhone("+1 919.555.0123"), true);
+  assert.equal(isValidUsPhone("555-0123"), false);
+  assert.equal(isValidUsPhone("2 919 555 0123"), false);
+  assert.equal(isValidUsPhone(""), false);
+});
+
+test("the text-us fallback carries what they typed, to our number", () => {
+  const href = smsFallbackHref("tel:+19198733919", {
+    name: "Ann Lee",
+    phone: "919-555-0123",
+    address: "1 Oak St, Cary, NC",
+    service: "Patio",
+    mode: "inperson",
+    when: "",
+  });
+  assert.ok(href.startsWith("sms:+19198733919?&body="));
+  const body = decodeURIComponent(href.split("body=")[1]);
+  assert.match(body, /Name: Ann Lee/);
+  assert.match(body, /Address: 1 Oak St, Cary, NC/);
+  assert.match(body, /in-person visit/);
+  assert.doesNotMatch(body, /Visit:/);
 });
