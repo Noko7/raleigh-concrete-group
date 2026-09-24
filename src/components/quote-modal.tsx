@@ -1090,7 +1090,6 @@ function Modal({ onClose }: { onClose: () => void }) {
                 <span className="qm-ac-status qm-slot">
                   {!isValidEmail(data.email) ? "That email doesn't look right. Check it, or leave it blank." : ""}
                 </span>
-                <p className="qm-hint">We save this as you type, so if anything goes wrong we can still call you back.</p>
 
                 {/* A server-side rejection of the contact details lands here,
                     on the step that can actually fix it. */}

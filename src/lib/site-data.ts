@@ -36,6 +36,10 @@ export type ServiceGroup = "core" | "concrete" | "hardscaping";
 export type Service = {
   slug: string;
   name: string;
+  // The name where a sentence needs one of it: "a Concrete Driveway quote",
+  // not "a Concrete Driveways quote". Only set when it differs from `name`;
+  // read it through serviceSingular().
+  singular?: string;
   navLabel: string;
   group: ServiceGroup;
   blurb: string;
@@ -46,11 +50,14 @@ export type Service = {
   beforeAfter?: BeforeAfterPair;
 };
 
+export const serviceSingular = (s: Pick<Service, "name" | "singular">): string => s.singular ?? s.name;
+
 export const services: Service[] = [
   // ── Core 6 (priority, shown in nav + homepage) ──
   {
     slug: "concrete-driveways",
     name: "Concrete Driveways",
+    singular: "Concrete Driveway",
     navLabel: "Driveways",
     group: "core",
     blurb:
@@ -73,6 +80,7 @@ export const services: Service[] = [
   {
     slug: "retaining-walls",
     name: "Retaining Walls",
+    singular: "Retaining Wall",
     navLabel: "Retaining Walls",
     group: "core",
     blurb:
@@ -91,6 +99,7 @@ export const services: Service[] = [
   {
     slug: "paver-patios",
     name: "Paver Patios",
+    singular: "Paver Patio",
     navLabel: "Paver Patios",
     group: "core",
     blurb:
@@ -114,6 +123,7 @@ export const services: Service[] = [
   {
     slug: "concrete-patios",
     name: "Concrete Patios",
+    singular: "Concrete Patio",
     navLabel: "Concrete Patios",
     group: "core",
     blurb:
@@ -132,6 +142,7 @@ export const services: Service[] = [
   {
     slug: "walkways-sidewalks",
     name: "Walkways & Sidewalks",
+    singular: "Walkway & Sidewalk",
     navLabel: "Walkways",
     group: "core",
     blurb:
@@ -170,6 +181,7 @@ export const services: Service[] = [
   {
     slug: "concrete-slabs-flatwork",
     name: "Concrete Slabs & Flatwork",
+    singular: "Concrete Slab & Flatwork",
     navLabel: "Slabs & Flatwork",
     group: "concrete",
     blurb:
@@ -228,6 +240,7 @@ export const services: Service[] = [
   {
     slug: "pool-decks",
     name: "Pool Decks",
+    singular: "Pool Deck",
     navLabel: "Pool Decks",
     group: "concrete",
     blurb:
@@ -264,6 +277,7 @@ export const services: Service[] = [
   {
     slug: "commercial-sidewalks-walkways",
     name: "Commercial Sidewalks & Walkways",
+    singular: "Commercial Sidewalk & Walkway",
     navLabel: "Commercial Walkways",
     group: "concrete",
     blurb:
@@ -282,6 +296,7 @@ export const services: Service[] = [
   {
     slug: "commercial-parking-approach-slabs",
     name: "Commercial Parking & Approach Slabs",
+    singular: "Commercial Parking & Approach Slab",
     navLabel: "Parking Slabs",
     group: "concrete",
     blurb:
@@ -338,6 +353,7 @@ export const services: Service[] = [
   {
     slug: "paver-driveways",
     name: "Paver Driveways",
+    singular: "Paver Driveway",
     navLabel: "Paver Driveways",
     group: "hardscaping",
     blurb:
@@ -356,6 +372,7 @@ export const services: Service[] = [
   {
     slug: "paver-walkways-pathways",
     name: "Paver Walkways & Pathways",
+    singular: "Paver Walkway & Pathway",
     navLabel: "Paver Walkways",
     group: "hardscaping",
     blurb:
@@ -392,6 +409,7 @@ export const services: Service[] = [
   {
     slug: "steps-stoops-landings",
     name: "Steps, Stoops & Landings",
+    singular: "Steps & Stoop",
     navLabel: "Steps & Stoops",
     group: "hardscaping",
     blurb:
@@ -410,6 +428,7 @@ export const services: Service[] = [
   {
     slug: "seating-walls-fire-pits",
     name: "Seating Walls & Fire Pits",
+    singular: "Seating Wall & Fire Pit",
     navLabel: "Fire Pits",
     group: "hardscaping",
     blurb:
@@ -1243,7 +1262,6 @@ export type GalleryImage = { src: string; alt: string };
 export const galleryImages: GalleryImage[] = [
   { src: "/images/residential_driveway_raleigh_concrete_2.png", alt: "Newly poured residential driveway" },
   { src: "/images/back_patio_finished.png", alt: "Finished backyard concrete patio" },
-  { src: "/images/pavers_backyard_porchsetup.png", alt: "Backyard paver porch setup" },
   { src: "/images/pavers_driveway.png", alt: "Custom paver driveway in Raleigh" },
   { src: "/images/retaining_wall.png", alt: "Block retaining wall installation" },
   { src: "/images/retaining-wall-brick.png", alt: "Brick retaining wall installation" },
@@ -1258,11 +1276,9 @@ export const galleryImages: GalleryImage[] = [
   { src: "/images/parkinglot-commercial-job.png", alt: "Commercial parking lot concrete project" },
   { src: "/images/commercial-entryway-clean.png", alt: "Clean commercial concrete entryway" },
   { src: "/images/commercial-sidewalk-entry-way-medical.png", alt: "Commercial sidewalk near medical building" },
-  { src: "/images/walkway_entryway-commercial.png", alt: "Commercial walkway and entryway concrete" },
   { src: "/images/hoa_sidewalk_commercial.png", alt: "HOA commercial sidewalk concrete work" },
   { src: "/images/loadnig_dock_commercial.png", alt: "Commercial loading dock concrete project" },
   { src: "/images/driveway_close_up_detailed_8k.png", alt: "Broom-finished concrete driveway close-up" },
-  { src: "/images/workers_pouring_driveway_live_action.png", alt: "Our crew pouring a new concrete driveway" },
   // Paver work, 2026. One or two frames per job rather than every angle: four
   // shots of the same patio read as a thin portfolio, not a deep one.
   { src: "/images/pavers_patio_cobble_finished.jpeg", alt: "Tumbled cobble paver patio with charcoal border" },

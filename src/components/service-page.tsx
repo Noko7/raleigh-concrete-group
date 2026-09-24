@@ -19,6 +19,7 @@ import {
   links,
   phoneDisplay,
   type Service,
+  serviceSingular,
 } from "@/lib/site-data";
 
 function CtaBar() {
@@ -199,7 +200,7 @@ export function ServicePage({ service }: { service: Service }) {
               <div className="overflow-hidden rounded-2xl border border-white/10">
                 <Image
                   src={secondaryShowcaseImage}
-                  alt={`${service.name} project in Raleigh`}
+                  alt={`${serviceSingular(service)} project in Raleigh`}
                   width={1000}
                   height={750}
                   className="h-full w-full object-cover"
@@ -221,7 +222,7 @@ export function ServicePage({ service }: { service: Service }) {
         <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8" id="quote">
           <div className="rounded-3xl bg-ivory p-8 text-center text-[#2b1a12] md:p-12">
             <h2 className="mb-3 font-headline text-4xl text-[#2b1a12] md:text-5xl">
-              Get Your Free {service.name} Quote
+              Get Your Free {serviceSingular(service)} Quote
             </h2>
             <p className="mx-auto mb-7 max-w-2xl text-[#2b1a12]/80">
               Tell us a little about your project and we&apos;ll get you a free, written price.

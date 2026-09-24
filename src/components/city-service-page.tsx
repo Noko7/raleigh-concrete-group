@@ -18,6 +18,7 @@ import {
   links,
   phoneDisplay,
   type LocationKey,
+  serviceSingular,
 } from "@/lib/site-data";
 
 export function CityServicePage({
@@ -118,7 +119,7 @@ export function CityServicePage({
                 <div className="overflow-hidden rounded-2xl border border-white/10">
                   <Image
                     src={service.image}
-                    alt={`${service.name} project in ${city}, NC`}
+                    alt={`${serviceSingular(service)} project in ${city}, NC`}
                     width={1000}
                     height={750}
                     className="h-full w-full object-cover"
@@ -137,7 +138,7 @@ export function CityServicePage({
           <section className="mx-auto w-full max-w-3xl px-4 pb-12 md:px-8">
             <div className="rounded-3xl border-l-4 border-amber-accent bg-white/5 p-6 md:p-8">
               <h2 className="mb-3 font-headline text-2xl text-ivory">
-                What a {service.name} Project in {city} Looks Like
+                What a {serviceSingular(service)} Project in {city} Looks Like
               </h2>
               <p className="text-lg leading-relaxed text-slate-300">{projectExample}</p>
             </div>
@@ -171,7 +172,7 @@ export function CityServicePage({
         <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8" id="quote">
           <div className="rounded-3xl bg-ivory p-8 text-center text-[#2b1a12] md:p-12">
             <h2 className="mb-3 font-headline text-4xl text-[#2b1a12] md:text-5xl">
-              Free {service.name} Quote in {city}
+              Free {serviceSingular(service)} Quote in {city}
             </h2>
             <p className="mx-auto mb-7 max-w-2xl text-[#2b1a12]/80">
               Tell us a little about your project and we&apos;ll get you a free, written price.
