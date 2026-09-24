@@ -271,6 +271,39 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   }
 
   // ── Default: the quote with accept / decline actions ──
+  // A quote with line items or a choice of options: the decision is the page.
+  const built = hasPrice && (itemised || offersChoice);
+  // The five sections, in a fixed order, so every quote we send answers the
+  // same questions in the same places. Quotes written before the sections
+  // existed fall back to their old free text rather than an empty panel.
+  const hasDetails = sections.length > 0 || Boolean(quote.quote_summary);
+  const details = (
+    <>
+    {sections.length > 0 ? (
+      <div className="cq-summary">
+        <h2>What&apos;s included</h2>
+        <QuoteSections sections={sections.map(([field, value]) => [QUOTE_SECTION_LABELS[field], value] as const)} />
+      </div>
+    ) : (
+      quote.quote_summary && (
+        <div className="cq-summary">
+          <h2>What&apos;s included</h2>
+          <p>{quote.quote_summary}</p>
+        </div>
+      )
+    )}
+    </>
+  );
+  // Trust markers echo the site's own published copy (clear pricing, on time,
+  // local) - no warranty or licensing claims per business policy in
+  // site-data.ts.
+  const trust = (
+    <ul className="cq-trust">
+      <li>Local Raleigh crew</li>
+      <li>Clear pricing, no surprises</li>
+      <li>We show up when we say</li>
+    </ul>
+  );
   return (
     <main className="cq-wrap">
       <ViewBeacon token={token} />
@@ -312,14 +345,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
                 Good through {prettyDate(quote.quote_expires_at.slice(0, 10))}
               </p>
             )}
-            {/* Trust markers echo the site's own published copy (clear pricing,
-                on time, local) - no warranty or licensing claims per business
-                policy in site-data.ts. */}
-            <ul className="cq-trust">
-              <li>Local Raleigh crew</li>
-              <li>Clear pricing, no surprises</li>
-              <li>We show up when we say</li>
-            </ul>
+            {!built && trust}
           </>
         ) : (
           <p className="cq-lead">
@@ -327,24 +353,11 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           </p>
         )}
 
-        {/* The five sections, in a fixed order, so every quote we send
-            answers the same questions in the same places. Quotes written
-            before the sections existed fall back to their old free text
-            rather than showing the customer an empty panel. */}
-        {sections.length > 0 ? (
-          <div className="cq-summary">
-            <h2>What&apos;s included</h2>
-            <QuoteSections sections={sections.map(([field, value]) => [QUOTE_SECTION_LABELS[field], value] as const)} />
-          </div>
-        ) : (
-          quote.quote_summary && (
-            <div className="cq-summary">
-              <h2>What&apos;s included</h2>
-              <p>{quote.quote_summary}</p>
-            </div>
-          )
-        )}
-
+        {/* A quote with options leads with the options: which way, what to
+            add, the total, Approve. The job details are the same whichever
+            they pick, so they fold away underneath for whoever wants them.
+            A one-price quote keeps them above the decision, as before. */}
+        {!built && details}
         {hasPrice ? (
           <QuoteActions
             token={token}
@@ -369,6 +382,17 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             }))}
           />
         ) : null}
+
+        {built && hasDetails && (
+          <details className="cq-details">
+            <summary>
+              <span>Show job details</span>
+              <span className="cq-details-sub">What&apos;s included, step by step</span>
+            </summary>
+            {details}
+          </details>
+        )}
+        {built && trust}
 
         {/* Where the job is and what it is, under the decision rather than
             over it. It is what somebody checks after they have decided they

@@ -11,6 +11,10 @@ type GalleryCarouselProps = {
   images: GalleryImage[];
 };
 
+// How long each photo takes to pass: about 36px a second on desktop and 24 on
+// a phone, slow enough to look at a photo as it goes by.
+const SECONDS_PER_PHOTO = 12;
+
 // Continuous, smooth auto-scrolling strip of recent work. The list is rendered
 // twice and the track animates to -50% so the loop is seamless. Clicking any
 // tile opens an expandable lightbox.
@@ -20,7 +24,10 @@ export function GalleryCarousel({ images }: GalleryCarouselProps) {
   return (
     <>
       <div className="gscroll" role="region" aria-label="Recent work gallery">
-        <div className="gscroll-track">
+        {/* The loop's length follows the number of photos, so the strip moves
+            at the same calm pace however many there are. A fixed 95s made it
+            speed up every time photos were added. */}
+        <div className="gscroll-track" style={{ ["--gscroll-seconds" as string]: `${images.length * SECONDS_PER_PHOTO}s` }}>
           {[...images, ...images].map((img, i) => {
             const realIndex = i % images.length;
             return (
