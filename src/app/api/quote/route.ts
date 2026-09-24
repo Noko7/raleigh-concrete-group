@@ -5,8 +5,8 @@ import { ymdInDays } from "@/lib/crm/clock";
 import { TIME_RE, VISIT_LEAD_DAYS } from "@/lib/crm/constants";
 import { alertOwner, notifyCustomerReceived, notifyNewQuote } from "@/lib/crm/notify";
 import {
-  findVisitConflict,
   getStaffContactById,
+  nextOpenVisitDays,
   resolveAssignee,
   visitAvailability,
 } from "@/lib/crm/queries";
@@ -19,15 +19,15 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 // public anon key from reading or writing the table), your customer data can't
 // be scraped or spammed straight from the client.
 //
-// THE RULE (24 Sep 2026): a request with a name and a phone number we can call
-// is saved. Always. Nothing else it carries - an address the form couldn't
-// verify, an email with a typo, a visit slot that went while they were typing,
-// a calendar we couldn't read, photos that didn't upload - is a reason to turn
-// a customer away. Each of those becomes a note at the top of the lead's
-// details for the office to sort out on the phone, and the customer is told
-// the truth about it on the success screen. The only refusals left are a
-// missing name or number, a rate limit, and a database that won't take the
-// row - and that last one texts the owner the lead in full.
+// THE RULE (24 Sep 2026): a request with a name, a phone number and a visit
+// day and time is saved. An address the form couldn't verify, an email with a
+// typo, photos that didn't upload, a calendar we couldn't read - none of those
+// turns a customer away; each becomes a note at the top of the lead's details
+// for the office. The refusals left are: no name or number, no day and time
+// (the form can't send without them, and they're a good bot filter), a slot
+// somebody else just took (sent back to pick another, with the next open days
+// offered), a rate limit, and a database that won't take the row - and that
+// last one texts the owner the lead in full.
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -108,19 +108,6 @@ async function insertLead(row: Record<string, unknown>): Promise<InsertResult> {
   };
 }
 
-// Whether a row already saved has a visit on it: the answer a retry of the same
-// form needs, so its success screen says the same thing the first would have.
-async function visitBookedFor(id: string): Promise<boolean> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/quote_requests?id=eq.${id}&select=quote_type,visit_date&limit=1`, {
-    cache: "no-store",
-    headers: { apikey: WRITE_KEY, Authorization: `Bearer ${WRITE_KEY}` },
-    signal: AbortSignal.timeout(5_000),
-  }).catch(() => null);
-  if (!res?.ok) return false;
-  const rows = (await res.json().catch(() => [])) as Array<{ quote_type?: string; visit_date?: string | null }>;
-  return rows[0]?.quote_type === "inperson" && Boolean(rows[0]?.visit_date);
-}
-
 // The row an earlier attempt of this same form already saved, if any.
 async function findBySubmissionId(submissionId: string): Promise<string | null> {
   const res = await fetch(
@@ -195,14 +182,6 @@ async function markDraftSent(submissionId: string | null, leadId: string) {
     .catch((e) => console.error("[quote] could not mark draft sent", e));
 }
 
-// "2026-09-26" + "10:00 AM" -> "Sat Sep 26 at 10:00 AM", for notes on the lead.
-function whenLabel(date: string, time: string): string {
-  const d = /^\d{4}-\d{2}-\d{2}$/.test(date)
-    ? new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })
-    : date;
-  return [d, time].filter(Boolean).join(" at ") || "no time";
-}
-
 export async function POST(request: Request) {
   // Nothing below is allowed to escape as an unlogged 500 with an HTML body.
   // Whatever happens, the customer gets our number and the logs get the reason.
@@ -257,15 +236,27 @@ async function handle(request: Request) {
   const visitTimeRaw = asString(body.visit_time, 40);
   const sourcePath = asString(body.source_path, LIMITS.source_path);
 
-  // Only what we can't call them back without. Everything else below is a
-  // note on the lead, never a refusal (see THE RULE at the top).
+  // What a request can't be saved without: someone to call, and a visit day
+  // and time. The time is required on purpose (owner's call, 24 Sep): the
+  // follow-up is automatic from there - the customer's text confirms it - and
+  // a real bookable slot is a better bot filter than any hidden field. The
+  // form can't send without one, so these only ever fire on a tampered request
+  // or one left open across midnight, and each names the field so the form
+  // takes them straight back to it.
   const errors: string[] = [];
   if (name.length < 2) errors.push("name");
   if (!isValidUsPhone(phoneRaw)) errors.push("phone");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(visitDateRaw) || visitDateRaw < ymdInDays(VISIT_LEAD_DAYS)) errors.push("visit_date");
+  if (!TIME_RE.test(visitTimeRaw)) errors.push("visit_time");
   if (errors.length) {
-    return fail(422, errors.includes("phone") ? "Please enter a 10-digit US phone number." : "Please enter your name.", {
-      fields: errors,
-    });
+    const message = errors.includes("phone")
+      ? "Please enter a 10-digit US phone number."
+      : errors.includes("name")
+        ? "Please enter your name."
+        : errors.includes("visit_date")
+          ? `Please pick a day at least ${VISIT_LEAD_DAYS} days from today.`
+          : "Please pick a time.";
+    return fail(422, message, { fields: errors });
   }
 
   if (trapped && !isFullAddress(address)) {
@@ -288,25 +279,8 @@ async function handle(request: Request) {
   // tampered request, and still a person with a phone number.
   const quoteType = QUOTE_TYPES.has(quoteTypeRaw) ? quoteTypeRaw : "";
 
-  // The visit. Optional for both types now: an online customer can skip the
-  // fallback, and an in-person one who can't find a time that suits can send
-  // it and be called. When they did pick one, it's kept if it's a real day
-  // inside the lead time and a real slot; otherwise it's dropped into a note.
-  let visitDate = "";
-  let visitTime = "";
-  const askedVisit = Boolean(visitDateRaw || visitTimeRaw);
-  if (askedVisit) {
-    const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(visitDateRaw) && visitDateRaw >= ymdInDays(VISIT_LEAD_DAYS);
-    const timeOk = TIME_RE.test(visitTimeRaw);
-    if (dateOk && timeOk) {
-      visitDate = visitDateRaw;
-      visitTime = visitTimeRaw;
-    } else {
-      notes.push(`Asked for ${whenLabel(visitDateRaw, visitTimeRaw)}, which isn't a bookable time - call to set one`);
-    }
-  } else if (quoteType === "inperson") {
-    notes.push("No visit time picked - call to set one");
-  }
+  const visitDate = visitDateRaw;
+  const visitTime = visitTimeRaw;
 
   // file_urls: only accept paths we created in our own bucket.
   let fileUrls: string[] | null = null;
@@ -359,41 +333,30 @@ async function handle(request: Request) {
   // person's day, so what's checked is that person's window and the hour of
   // clearance around anything already on it.
   //
-  // A slot that fails the check no longer sends the customer back to pick
-  // again - three refusals on 7 Sep and a customer on 18 Sep who cycled dates
-  // until they gave up are what that cost. The request is saved without the
-  // slot, the note says what they asked for, and the success screen tells them
-  // we'll call to set a time. The form still greys out taken times, so this is
-  // the rare race, not the normal path.
+  // Only one thing can refuse an in-person slot now: another customer already
+  // has that hour with the same person (lib/crm/queries.ts visitAvailability -
+  // contractor hours, days off and pour days no longer do; contractors move
+  // quote visits around). When it happens it's two people racing for one slot,
+  // and the customer is sent back to pick again, not told "we'll call you" -
+  // the 409 carries the next open days, and the form lands them on the
+  // schedule step with everything else still filled in.
   //
-  // The reason stays out of the customer's view on purpose: this endpoint
-  // answers to anyone, and "already with Jane Smith at 10am" would hand a
-  // stranger a customer's name and schedule.
-  let visitBooked = quoteType === "inperson" && Boolean(visitDate);
-  if (visitBooked && !trapped) {
-    const asked = whenLabel(visitDate, visitTime);
+  // If the calendar can't be read at all, the slot they picked from the form's
+  // just-fetched list is kept and the office is told it wasn't re-checked.
+  // Refusing would lose a lead over our outage.
+  if (quoteType === "inperson" && !trapped) {
+    let clash = "";
     try {
-      const { slots, works, wholeDay } = await visitAvailability(assignee, visitDate);
-      let why = "";
-      if (!works) why = "not a working day";
-      else if (wholeDay) why = "a job is booked that day";
-      else if (!slots.includes(visitTime)) why = "outside working hours";
-      else {
-        const clash = await findVisitConflict(assignee, visitDate, visitTime);
-        if (clash) why = clash.kind === "job" ? "a job is booked that day" : "that time was taken";
-      }
-      if (why) {
-        notes.push(`Asked for ${asked}, but ${why} - call to set a time`);
-        visitBooked = false;
-      }
+      const { slots, taken } = await visitAvailability(assignee, visitDate);
+      if (!slots.includes(visitTime)) clash = "That time isn't one we offer. Please pick one of the times shown.";
+      else if (taken.includes(visitTime)) clash = "Someone just booked that time. Please pick another.";
     } catch (e) {
-      console.error("[quote] availability check failed - saving without the slot", e);
-      notes.push(`Asked for ${asked}; the calendar couldn't be checked - confirm the time`);
-      visitBooked = false;
+      console.error("[quote] availability check failed - keeping the slot they picked", e);
+      notes.push("The calendar couldn't be re-checked when they sent this - make sure the crew is free then");
     }
-    if (!visitBooked) {
-      visitDate = "";
-      visitTime = "";
+    if (clash) {
+      const nextOpen = await nextOpenVisitDays(assignee, visitDate, 3).catch(() => []);
+      return fail(409, clash, { fields: ["visit_time"], next_open: nextOpen });
     }
   }
 
@@ -465,8 +428,7 @@ async function handle(request: Request) {
     const existing = await findBySubmissionId(submissionId);
     if (existing) {
       console.warn("[quote] duplicate submission - returning the lead already saved", { lead: existing });
-      const vb = await visitBookedFor(existing);
-      return NextResponse.json({ ok: true, saved: true, lead_id: existing, duplicate: true, visit_booked: vb }, { status: 200 });
+      return NextResponse.json({ ok: true, saved: true, lead_id: existing, duplicate: true }, { status: 200 });
     }
   }
 
@@ -568,5 +530,5 @@ async function handle(request: Request) {
 
   await markDraftSent(submissionId, leadId);
 
-  return NextResponse.json({ ok: true, saved: true, lead_id: leadId, visit_booked: visitBooked && !trapped }, { status: 201 });
+  return NextResponse.json({ ok: true, saved: true, lead_id: leadId }, { status: 201 });
 }

@@ -42,13 +42,7 @@ test("newSubmissionId produces ids the server will accept", () => {
   assert.notEqual(newSubmissionId(), newSubmissionId());
 });
 
-test("visit_booked rides along on a confirmed save and doesn't change what counts as one", () => {
-  const id = "0f8b6a8e-3c4d-4e5f-9a0b-1c2d3e4f5a6b";
-  assert.equal(isConfirmedSave(201, { ok: true, saved: true, lead_id: id, visit_booked: false }), true);
-  assert.equal(isConfirmedSave(201, { ok: true, visit_booked: true }), false);
-});
-
-test("a lead needs a US phone number and nothing else from this module", () => {
+test("isValidUsPhone", () => {
   assert.equal(isValidUsPhone("(919) 555-0123"), true);
   assert.equal(isValidUsPhone("+1 919.555.0123"), true);
   assert.equal(isValidUsPhone("555-0123"), false);

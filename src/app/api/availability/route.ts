@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { MAX_JOBS_PER_DAY, countJobsOn, resolveAssignee, visitAvailability } from "@/lib/crm/queries";
+import { MAX_JOBS_PER_DAY, countJobsOn, nextOpenVisitDays, resolveAssignee, visitAvailability } from "@/lib/crm/queries";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 // Public, token-free availability check used by the customer scheduling UIs.
@@ -8,8 +8,10 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 //   type=job    booked work days. Still one a day for the whole business, so
 //               the answer is a yes/no on the date.
 //   type=quote  in-person quote visits. These stack an hour apart on ONE
-//               contractor's calendar, so the answer is that person's slots for
-//               the day and which of them are spoken for.
+//               contractor's calendar, so the answer is the day's slots and
+//               which of them another customer already has. Their working
+//               hours don't limit it (see visitAvailability). A full day comes
+//               back with the next open days.
 //
 // Times only, never names: this endpoint answers to anyone, so it must not leak
 // who is on the calendar or which customer is in a slot.
@@ -42,16 +44,21 @@ export async function GET(request: Request) {
   }
 
   const service = (searchParams.get("service") || "").slice(0, 120);
-  const { slots, taken, wholeDay, works } = await visitAvailability(await resolveAssignee(service), date);
+  const assignee = await resolveAssignee(service);
+  const { slots, taken } = await visitAvailability(assignee, date);
+  // Every hour already taken: offer the next open days in the same answer, so
+  // the form can show them as one-tap choices instead of a dead end.
+  const available = taken.length < slots.length;
+  const nextOpen = available ? [] : await nextOpenVisitDays(assignee, date, 3).catch(() => []);
 
   return NextResponse.json({
     ok: true,
-    // A day with no slot left on it is full, however that came about: every
-    // hour booked, a pour taking the whole day, or a day they don't work.
-    available: works && !wholeDay && taken.length < slots.length,
+    available,
     slots,
     taken,
-    wholeDay,
-    works,
+    // Kept for any form still open from before 24 Sep: every day is worked
+    // now (contractor hours no longer block a booking).
+    works: true,
+    next_open: nextOpen,
   });
 }

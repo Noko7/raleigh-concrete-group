@@ -4,6 +4,7 @@
 import { todayYmd, ymdInDays } from "./clock";
 import {
   DECLINE_CREDIT,
+  DEFAULT_VISIT_SLOTS,
   DEFAULT_WORK_HOURS,
   LEAD_TIME_DAYS,
   MAX_PREFERRED_DATES,
@@ -15,6 +16,7 @@ import {
   PACKAGE_TITLE_MAX,
   TIME_RE,
   VISIT_GAP_MINUTES,
+  VISIT_LEAD_DAYS,
   isChoice,
   minutesOfTime,
   noEmDash,
@@ -1178,31 +1180,61 @@ export async function getWorkHours(staffId: string | null | undefined): Promise<
 }
 
 /**
- * What a contractor's day looks like to somebody trying to book a visit on it.
+ * The visit times the public quote form offers on a day, and which of them are
+ * taken.
+ *
+ * Deliberately soft (owner's call, 24 Sep 2026): contractors move quote visits
+ * around anyway, so their working hours, days off and pour days no longer
+ * stop a customer booking. Every day offers the standard slots plus any extra
+ * hours the contractor has set (someone who works evenings still gets evening
+ * slots). The one hard rule left is not handing two customers the same hour
+ * with the same person: a slot within an hour of a visit already on their
+ * calendar is taken.
  *
  * Times only, never names: this feeds an endpoint that answers to anyone, so it
  * must not leak who is on the calendar. The staff-facing version of the same
  * question is findVisitConflict + conflictMessage.
- *
- *   slots     every start time they offer that day, from their own hours
- *   taken     the ones within an hour of something already booked
- *   wholeDay  they're on a pour; nothing on this day is bookable
- *   works     they don't work this weekday at all
  */
 export async function visitAvailability(
   staffId: string | null | undefined,
   date: string,
-): Promise<{ slots: string[]; taken: string[]; wholeDay: boolean; works: boolean }> {
-  const hours = await getWorkHours(staffId);
-  const slots = slotsFor(hours);
-  if (!ISO_DATE.test(date)) return { slots, taken: [], wholeDay: false, works: true };
-  if (!worksOn(hours, date)) return { slots, taken: slots, wholeDay: false, works: false };
+): Promise<{ slots: string[]; taken: string[] }> {
+  const own = slotsFor(await getWorkHours(staffId));
+  const slots = [...new Set([...DEFAULT_VISIT_SLOTS, ...own])].sort(
+    (x, y) => (minutesOfTime(x) ?? 0) - (minutesOfTime(y) ?? 0),
+  );
+  if (!ISO_DATE.test(date)) return { slots, taken: [] };
+  const visits = (await contractorCommitments(staffId ?? null, date)).filter((c) => c.kind === "visit");
+  const taken = slots.filter((s) => visits.some((c) => tooClose(c.time, s)));
+  return { slots, taken };
+}
 
-  const busy = await contractorCommitments(staffId ?? null, date);
-  if (busy.some((c) => c.kind === "job")) return { slots, taken: slots, wholeDay: true, works: true };
-
-  const taken = slots.filter((s) => busy.some((c) => tooClose(c.time, s)));
-  return { slots, taken, wholeDay: false, works: true };
+/**
+ * The next few days after `afterDate` with a visit slot free, and those slots.
+ * Offered by the quote form when every time on the day they picked is taken,
+ * so an open day is one tap away rather than found by trying dates one at a
+ * time (18 Sep: a customer cycled dates and gave up). Never before the lead
+ * time; looks at most `horizon` days ahead.
+ */
+export async function nextOpenVisitDays(
+  staffId: string | null | undefined,
+  afterDate: string,
+  want = 3,
+  horizon = 21,
+): Promise<{ date: string; slots: string[] }[]> {
+  const earliest = ymdInDays(VISIT_LEAD_DAYS);
+  const from = ISO_DATE.test(afterDate) && afterDate >= earliest ? afterDate : earliest;
+  const day = new Date(`${from}T12:00:00Z`);
+  // Starts the day after the one they picked, or on the earliest bookable day.
+  if (from === afterDate) day.setUTCDate(day.getUTCDate() + 1);
+  const out: { date: string; slots: string[] }[] = [];
+  for (let i = 0; i < horizon && out.length < want; i++, day.setUTCDate(day.getUTCDate() + 1)) {
+    const ymd = day.toISOString().slice(0, 10);
+    const { slots, taken } = await visitAvailability(staffId, ymd);
+    const free = slots.filter((s) => !taken.includes(s));
+    if (free.length) out.push({ date: ymd, slots: free });
+  }
+  return out;
 }
 
 // Service-role phone lookup for one staff member (used by token-gated server code

@@ -873,13 +873,7 @@ export function newQuoteMessage(q: QuoteInfo): string {
           ? `${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}${
               q.quote_type === "online" ? " (not confirmed - confirm it on the job page)" : ""
             }`
-          : // In person but no time: they skipped it, or the one they asked
-            // for had gone by the time they sent it. Either way the form
-            // saved the lead rather than turning them away, and this is the
-            // reader's cue that the next step is theirs.
-            q.quote_type === "inperson"
-            ? "Not booked yet - call or text them to set a time"
-            : null,
+          : null,
     ),
     ...block("Details:", details),
     q.job_token ? jobLink(q.job_token) : null,
@@ -906,18 +900,7 @@ export async function notifyNewQuote(
 // ── 3. Acknowledge the customer the moment their request lands ──────────────
 export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
   const msg =
-    q.quote_type === "inperson" && !dayOrNull(q.visit_date)
-      ? // In person with no time on the row: the form saved the request rather
-        // than turning them away over a slot. Promise the call, not a booking.
-        text([
-          `Hi ${firstName(q.name)},`,
-          `this is ${OWNER_NAME} with ${BUSINESS}. We got your request for a free in-person quote.`,
-          "",
-          "We'll call or text you shortly to set a time that works for you.",
-          "",
-          OPT_OUT_LINE,
-        ])
-      : q.quote_type === "inperson"
+    q.quote_type === "inperson"
       ? text([
           `Hi ${firstName(q.name)},`,
           `this is ${OWNER_NAME} with ${BUSINESS}. You're set for your free in-person quote:`,

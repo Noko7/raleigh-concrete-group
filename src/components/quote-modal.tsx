@@ -180,6 +180,12 @@ function prettyDay(s: string): string {
   return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
+// "2026-09-28" -> "Mon, Sep 28", for the one-tap day chips.
+function shortDay(s: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
 function cityFromAddress(address: string): string {
   const parts = address.split(",").map((p) => p.trim());
   return parts.length >= 2 ? parts[1] : "";
@@ -404,9 +410,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   // screen cannot render without one: it only exists once the server has
   // handed back the id of the row it wrote.
   const [leadRef, setLeadRef] = useState("");
-  // What the success screen needs to be honest: whether an in-person visit was
-  // actually booked, and how many photos didn't make it.
-  const [visitBooked, setVisitBooked] = useState(true);
+  // Photos that didn't make it, for the success screen to ask for by text.
   const [filesFailed, setFilesFailed] = useState(0);
   const [uploadNote, setUploadNote] = useState("");
   // One per filled-in form, sent on every attempt (lib/quote-submit.ts). The
@@ -434,9 +438,10 @@ function Modal({ onClose }: { onClose: () => void }) {
   // The slots this contractor actually offers on the chosen day, which is a
   // function of their own working hours rather than a fixed list of five.
   const [slots, setSlots] = useState<string[]>(DEFAULT_SLOTS);
-  // They don't work that weekday at all. Distinct from "every hour is taken",
-  // because the answer is a different day rather than a different time.
-  const [dayOff, setDayOff] = useState(false);
+  // When every time on the day they picked is taken: the next days with a
+  // free time, offered as one tap each (from /api/availability, or from the
+  // server's answer when a slot went between picking and sending).
+  const [nextOpen, setNextOpen] = useState<{ date: string; slots: string[] }[]>([]);
   const minDate = useRef(minVisitDate()).current;
 
   // Funnel tracking (src/lib/funnel.ts): which step people reach, how long each
@@ -460,7 +465,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   // every lead the routing rules send elsewhere.
   async function checkVisitDate(date: string, service: string) {
     setDateFull(false);
-    setDayOff(false);
+    setNextOpen([]);
     setTakenTimes([]);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     setDateChecking(true);
@@ -472,13 +477,12 @@ function Modal({ onClose }: { onClose: () => void }) {
         available?: boolean;
         slots?: string[];
         taken?: string[];
-        works?: boolean;
+        next_open?: { date: string; slots: string[] }[];
       };
       setDateFull(json.available === false);
-      setDayOff(json.works === false);
-      // Only in-person is stopped by a full or non-working day (see canProceed).
-      if (mode === "inperson" && (json.available === false || json.works === false)) {
-        track({ event: "error", step: "schedule", mode, detail: json.works === false ? "day_off" : "day_full" });
+      if (json.available === false) {
+        setNextOpen(Array.isArray(json.next_open) ? json.next_open.slice(0, 3) : []);
+        track({ event: "error", step: "schedule", mode, detail: "day_full" });
       }
       const open = Array.isArray(json.slots) && json.slots.length > 0 ? json.slots : DEFAULT_SLOTS;
       const taken = Array.isArray(json.taken) ? json.taken : [];
@@ -495,7 +499,6 @@ function Modal({ onClose }: { onClose: () => void }) {
     } catch {
       // Don't block on a network hiccup; the server re-checks either way.
       setDateFull(false);
-      setDayOff(false);
     } finally {
       setDateChecking(false);
     }
@@ -520,8 +523,7 @@ function Modal({ onClose }: { onClose: () => void }) {
     } else if (current === "schedule") {
       if (!data.visitDate) missing.push("date");
       if (!data.visitTime) missing.push("time");
-      if (mode === "inperson" && dateFull) missing.push("day_full");
-      if (mode === "inperson" && dayOff) missing.push("day_off");
+      if (dateFull) missing.push("day_full");
     }
     return missing.length ? missing.join("+") : "ready";
   }
@@ -683,7 +685,7 @@ function Modal({ onClose }: { onClose: () => void }) {
       // offering a fallback we may never use, so "that day is busy" is not a
       // reason to stop them submitting their photos.
       if (mode === "online") return picked && !dateChecking;
-      return picked && !dateFull && !dayOff && !dateChecking;
+      return picked && !dateFull && !dateChecking;
     }
     return false;
   }
@@ -771,7 +773,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   // body, a non-JSON body, a timeout, a thrown fetch, a response shape nobody
   // has thought of yet - lands on an error with our phone number, and the
   // form keeps everything they typed so pressing the button again just works.
-  async function submit(opts: { skipVisit?: boolean } = {}) {
+  async function submit() {
     if (inFlight.current) return;
     inFlight.current = true;
     setErrorMsg("");
@@ -795,7 +797,6 @@ function Modal({ onClose }: { onClose: () => void }) {
         if (failedCount) track({ event: "error", step: "schedule", mode, detail: "upload" });
       }
       setStatus("sending");
-      const skip = Boolean(opts.skipVisit);
       const payload = {
         name: data.name,
         phone: data.phone,
@@ -805,8 +806,8 @@ function Modal({ onClose }: { onClose: () => void }) {
         city: cityFromAddress(data.address),
         details: data.details,
         quote_type: mode ?? "inperson",
-        visit_date: skip ? "" : data.visitDate,
-        visit_time: skip ? "" : data.visitTime,
+        visit_date: data.visitDate,
+        visit_time: data.visitTime,
         file_urls: fileUrls,
         files_failed: failedCount,
         source_path: typeof window !== "undefined" ? window.location.pathname : "",
@@ -846,7 +847,6 @@ function Modal({ onClose }: { onClose: () => void }) {
         finished.current = true;
         leadSaved.current = true;
         clearSaved();
-        setVisitBooked(json.visit_booked !== false);
         setFilesFailed(failedCount);
         setLeadRef(leadReference(json.lead_id));
         track({ event: "submit", step: "schedule", mode, ms: Date.now() - openedAt.current });
@@ -870,11 +870,24 @@ function Modal({ onClose }: { onClose: () => void }) {
         setStepIndex(STEPS.indexOf("contact"));
         setAddressVerified(false);
         setErrorMsg(serverMsg || "Please check your contact details.");
+      } else if (res.status === 409 || fields.includes("visit_date") || fields.includes("visit_time")) {
+        // Somebody took that time between them picking it and sending, or the
+        // day is no longer bookable (a form left open past midnight). Back to
+        // the schedule step to pick again - everything else stays filled in,
+        // photos already uploaded stay uploaded, and the same submission id
+        // goes with the next press. The server sends the next open days so
+        // the new pick is one tap.
+        setStatus("idle");
+        setStepIndex(STEPS.indexOf("schedule"));
+        setErrorMsg(serverMsg || "That time isn't available any more. Please pick another.");
+        const offered = (json as { next_open?: unknown } | null)?.next_open;
+        void checkVisitDate(data.visitDate, data.service).then(() => {
+          if (Array.isArray(offered) && offered.length) setNextOpen(offered.slice(0, 3) as typeof nextOpen);
+        });
+        set({ visitTime: "" });
       } else {
         // Includes a 2xx that isn't a confirmed save: whatever it is, it is
-        // not proof the lead exists, so it is not a success. (A slot that went
-        // while they chose is no longer a refusal - the server saves the lead
-        // without it - so there is no "go back and pick again" branch.)
+        // not proof the lead exists, so it is not a success.
         setErrorMsg(serverMsg || `We couldn't save your request just now. Please text or call us at ${phoneDisplay}.`);
         setStatus("error");
       }
@@ -916,11 +929,9 @@ function Modal({ onClose }: { onClose: () => void }) {
             </div>
             <h2 className="qm-title">You&apos;re all set!</h2>
             <p className="qm-sub">
-              {mode === "inperson" && !visitBooked
-                ? "We got your request. We'll call or text you shortly to set a time for your visit."
-                : "We got your request and we'll reach out the same day with your quote. Want to talk now? Give us a call."}
+              We got your request and we&apos;ll reach out the same day with your quote. Want to talk now? Give us a call.
             </p>
-            {mode === "inperson" && visitBooked && data.visitDate && (
+            {mode === "inperson" && data.visitDate && (
               <p className="qm-sub">
                 Your visit: <strong>{prettyDay(data.visitDate)} at {data.visitTime}</strong>
               </p>
@@ -1185,10 +1196,8 @@ function Modal({ onClose }: { onClose: () => void }) {
                     )
                   ) : dateChecking ? (
                     "Checking that day…"
-                  ) : dayOff ? (
-                    "We don't take visits that day, please pick another."
                   ) : dateFull ? (
-                    "That day is fully booked, please pick another."
+                    "That day is fully booked - pick another, or one of these:"
                   ) : data.visitDate ? (
                     <>
                       <IconCheck className="qm-ac-check" /> {prettyDay(data.visitDate)} is open
@@ -1221,25 +1230,31 @@ function Modal({ onClose }: { onClose: () => void }) {
                   <span className="qm-ac-status qm-slot">Greyed-out times are already booked that day.</span>
                 )}
 
-                {/* The way through when no slot suits: send it without one and
-                    we call to set a time. Picking a time is the step people
-                    gave up on most (18 Sep: cycled dates, left), and a missing
-                    time costs a phone call - a missing lead costs the job. */}
-                <button
-                  type="button"
-                  className="qm-text-btn qm-skip"
-                  disabled={busy}
-                  onClick={() => {
-                    track({ event: "done", step: "schedule", mode, ms: stepMs(), detail: "skipped_time" });
-                    void submit({ skipVisit: true });
-                  }}
-                >
-                  {mode === "online"
-                    ? "Skip this - just send my request"
-                    : dateFull || dayOff
-                      ? "No day works? Send it and we'll call you to set a time"
-                      : "None of these times work? Send it and we'll call you"}
-                </button>
+                {/* A full day is never a dead end: the next days with a free
+                    time, one tap each. Picking one sets the day and re-checks
+                    it, and the times redraw for that day. */}
+                {nextOpen.length > 0 && (
+                  <div className="qm-next-open">
+                    <span className="qm-ac-status">Next open:</span>
+                    <div className="qm-chips">
+                      {nextOpen.map((d) => (
+                        <button
+                          key={d.date}
+                          type="button"
+                          className="qm-chip"
+                          onClick={() => {
+                            track({ event: "done", step: "schedule", mode, detail: "picked_next_open" });
+                            setErrorMsg("");
+                            set({ visitDate: d.date, visitTime: "" });
+                            void checkVisitDate(d.date, data.service);
+                          }}
+                        >
+                          {shortDay(d.date)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Shown whenever there's a message, not only in the "error"
                     status: a rejected date bounces back here as idle, and the

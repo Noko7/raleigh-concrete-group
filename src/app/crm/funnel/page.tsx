@@ -49,7 +49,7 @@ const DETAIL_LABELS: Record<string, string> = {
   upload: "some photos failed to upload (request still sent)",
   timeout: "no answer from our server in 30s",
   client_exception: "form error in their browser",
-  skipped_time: "sent without picking a time",
+  picked_next_open: "picked a suggested open day",
   network: "network error",
   server_409: "slot taken while they chose",
   server_429: "rate limited",

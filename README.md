@@ -80,15 +80,21 @@ provider can't turn a saved lead into an error. A request that fills the hidden 
 still saved, into **Archived**, and the owner is texted to check it. The standalone `/estimate`
 page was retired on 23 Sep 2026 and redirects to the home page.
 
-**A request with a name and a phone number is always saved** (24 Sep 2026). Nothing else stops it:
+**A request with a name, a phone number and a visit day and time is always saved** (24 Sep 2026).
+The day and time stay required: they make the follow-up automatic (the customer's text confirms the
+visit), and a real bookable slot filters out bots. Nothing else stops a request:
 
 - **Address:** anything 5+ characters gets through. The field still asks for the full address and
   shows a green light when it has one. A partial one is noted on the lead ("confirm it").
 - **Email:** optional. A mistyped one is kept in a note, not refused.
-- **Visit time:** optional for both types. "Skip this" (online) and "None of these work? Send it and
-  we'll call you" (in person) send the request without a time. If an in-person slot goes between
-  picking and sending, or the calendar can't be read, the lead is saved without the slot.
-  The success screen says we'll call to set a time, and the note says what they asked for.
+- **Visit times are soft:** every day offers the standard slots, plus any extra hours a contractor
+  has set. Contractor working hours, days off and pour days no longer block a booking, because
+  contractors move quote visits around anyway. The only thing that takes a time away is another
+  customer's visit within the hour with the same person. If every time on a day is taken, the form
+  shows the next open days as one-tap chips. If someone takes the slot between picking and sending,
+  the customer lands back on the schedule step with the next open days offered and everything else
+  still filled in. If the calendar can't be read, their slot is kept and the lead notes it wasn't
+  re-checked.
 - **Photos:** each one gets a retry and is only given up on if it stalls for 45s. A failed photo is
   skipped, the request goes anyway, and the success screen asks them to text it.
 - **Database blip:** retried once. If it still fails, the owner is texted the whole lead ("NEW LEAD -
