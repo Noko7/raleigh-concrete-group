@@ -1486,7 +1486,7 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .crm-btn-send:disabled { opacity: 0.6; cursor: default; }
 .crm-editor-hint { margin-top: 0.6rem; }
 .crm-confirm { border-top: 1px solid var(--crm-border); margin-top: 0.4rem; padding-top: 1rem; }
-.crm-confirm h3 { font-family: var(--font-headline), sans-serif; font-size: 1.25rem; margin-bottom: 0.2rem; }
+.crm-confirm > h3 { font-family: var(--font-headline), sans-serif; font-size: 1.25rem; margin-bottom: 0.2rem; }
 .crm-confirm-row { display: flex; align-items: baseline; justify-content: space-between; margin: 0.8rem 0 0.4rem; padding: 0.6rem 0.8rem; background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.5rem; }
 .crm-confirm-row strong { font-size: 1.3rem; color: var(--amber); }
 .crm-confirm-summary { white-space: pre-wrap; background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.5rem; padding: 0.6rem 0.8rem; font-size: 0.9rem; color: var(--crm-text); margin-bottom: 0.9rem; max-height: 160px; overflow-y: auto; }
@@ -1587,6 +1587,128 @@ textarea.qm-input { min-height: 0; resize: vertical; }
   cursor: pointer; font-family: inherit;
 }
 .crm-na-btn:hover { border-color: var(--amber); color: var(--amber); }
+/* ── Owner job page (/crm/quotes/[id]) ─────────────────────────────────────
+   Built for the question the owner opens it with: where is this job and what
+   do I do about it. Top to bottom: who it is and a way to reach them, where
+   the job sits, the one next step, then the work (left) and the facts (right).
+   Everything looked at now and then folds away under "More" at the bottom of
+   the side column. One column on a phone, in that same order. */
+.jb { max-width: 1180px; margin: 0 auto; }
+.jb-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.jb-id { min-width: 0; }
+.jb-name { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.jb-name h1 { font-family: var(--font-headline), sans-serif; font-size: 2.5rem; line-height: 1; letter-spacing: 0.01em; margin: 0; overflow-wrap: anywhere; }
+.jb-what { margin: 0.35rem 0 0; color: var(--crm-muted); font-size: 0.95rem; overflow-wrap: anywhere; }
+.jb-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.jb-actions .crm-btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+
+/* The stage line. Past stages are quiet, the current one is amber, the rest
+   are outlines - readable at a glance without a legend. */
+.jb-stages { list-style: none; margin: 0 0 0.9rem; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.35rem; }
+.jb-stage {
+  position: relative; text-align: center; font-size: 0.8rem; font-weight: 700; color: var(--crm-muted);
+  padding: 0.5rem 0.25rem 0.45rem; border-radius: 0.5rem; border: 1px solid var(--crm-border);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.jb-stage-past { color: var(--crm-text); background: rgba(194, 104, 42, 0.14); border-color: transparent; }
+.jb-stage-now { color: #fff; background: var(--crm-accent); border-color: var(--crm-accent); }
+
+/* The next step: one sentence and one button. Tone only changes the edge
+   colour, so it reads as the same component in every state. */
+.jb-next {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.9rem 1.25rem; flex-wrap: wrap;
+  background: var(--crm-surface); border: 1px solid var(--crm-border); border-left: 4px solid var(--crm-accent);
+  border-radius: 0.9rem; padding: 1rem 1.15rem; margin-bottom: 1.1rem;
+}
+.jb-next-wait { border-left-color: #a78bfa; }
+.jb-next-done { border-left-color: #22c55e; }
+.jb-next-lost { border-left-color: #6b7280; }
+.jb-next-title { font-family: var(--font-headline), sans-serif; font-size: 1.6rem; line-height: 1.05; letter-spacing: 0.01em; margin: 0; }
+.jb-next-body { margin: 0.25rem 0 0; color: var(--crm-muted); font-size: 0.95rem; max-width: 60ch; }
+.jb-next-btn { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; padding-left: 1.4rem; padding-right: 1.4rem; }
+
+.jb-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 1.1rem; align-items: start; }
+.jb-main, .jb-side { min-width: 0; }
+.jb-main > [id] { scroll-margin-top: 5rem; }
+#quote { scroll-margin-top: 5rem; }
+.jb-dl > div { grid-template-columns: 110px minmax(0, 1fr); }
+.jb-dl dd { overflow-wrap: anywhere; }
+.jb-settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+
+/* More: native <details>, so it works with no script and remembers nothing it
+   shouldn't. The count says whether a fold is worth opening. */
+.jb-more { border: 1px solid var(--crm-border); border-radius: 0.9rem; background: var(--crm-surface); overflow: hidden; }
+.jb-fold + .jb-fold { border-top: 1px solid var(--crm-border); }
+.jb-fold > summary {
+  display: flex; align-items: center; gap: 0.5rem; min-height: 52px; padding: 0 1.15rem;
+  font-weight: 700; cursor: pointer; list-style: none;
+}
+.jb-fold > summary::-webkit-details-marker { display: none; }
+.jb-fold > summary::after { content: "+"; margin-left: auto; font-size: 1.2rem; color: var(--crm-muted); }
+.jb-fold[open] > summary::after { content: "\2212"; }
+.jb-fold > summary:hover { background: rgba(255, 255, 255, 0.04); }
+.jb-count { font-size: 0.75rem; font-weight: 800; color: var(--crm-muted); background: rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 0.1rem 0.5rem; }
+.jb-fold-body { padding: 0 1.15rem 1.1rem; }
+/* A component that brings its own card, flattened into the fold. */
+.jb-fold-flat .crm-card { background: none; border: none; padding: 0; margin: 0; }
+.jb-fold-flat .crm-card-title { display: none; }
+
+/* The quote, on paper: the one part of this page the customer will read, so
+   it is drawn in their page's colours rather than the CRM's. */
+.crm-paper { background: #fff; color: #1f2328; border-color: transparent; display: flex; flex-direction: column; gap: 0.9rem; }
+.crm-paper .crm-card-title { color: #2b1a12; margin-bottom: 0; }
+.crm-paper-head { display: flex; flex-direction: column; gap: 0.2rem; }
+.crm-paper-sub { font-size: 0.9rem; color: #4b5563; }
+.crm-paper .crm-muted { color: #4b5563; }
+.crm-paper .crm-btn-ghost { background: #fff; color: #1f2328; border-color: #d1d5db; }
+.crm-paper .crm-btn-ghost:hover { background: #f3f4f6; }
+.crm-paper .crm-editor-foot { flex-wrap: wrap; margin-top: 0; }
+.crm-paper .crm-editor-foot .crm-btn { min-height: 48px; }
+.crm-paper .crm-btn-send { flex: 1 1 12rem; }
+.crm-paper .crm-saved { color: #15803d; }
+.crm-paper .crm-auth-error { color: #b91c1c; }
+.crm-paper .crm-confirm { border-top-color: #e5e7eb; display: flex; flex-direction: column; gap: 0.6rem; }
+.crm-paper .crm-confirm > h3 { color: #2b1a12; font-size: 1.5rem; }
+.crm-paper .crm-confirm-row { background: #faf8f4; border-color: #e5e7eb; color: #1f2328; }
+.crm-paper .crm-confirm-row strong { color: var(--amber-dark); }
+.crm-paper .crm-confirm-summary { background: #faf8f4; border-color: #e5e7eb; color: #1f2328; }
+.crm-paper .jq-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; font-weight: 800; color: #374151; }
+.crm-paper .jq-field textarea { padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; font-weight: 500; }
+
+/* One column. The two columns dissolve into a single list so it can be put in
+   the order a phone is read in: the live step, then what the customer asked
+   for and sent, then the quote, then the job's settings and the rest. Without
+   this the photos a new lead is priced from sat below the whole quote form. */
+@media (max-width: 900px) {
+  .jb-grid { display: flex; flex-direction: column; gap: 0; }
+  .jb-main, .jb-side { display: contents; }
+  /* Flex items floor at their content's width; a row of date controls was
+     enough to push a card past the screen edge. */
+  .jb-main > *, .jb-side > * { min-width: 0; max-width: 100%; }
+  .jb-o-step { order: 1; }
+  .jb-o-customer { order: 2; }
+  .jb-o-photos { order: 3; }
+  #quote { order: 4; }
+  .jb-grid .qs { order: 5; }
+  .jb-settings { order: 6; }
+  .jb-more { order: 7; }
+}
+@media (max-width: 640px) {
+  .jb-name h1 { font-size: 2.1rem; }
+  /* Call, Text, Map in one thumb row; the quote page link on its own below. */
+  .jb-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .jb-actions .crm-btn:last-child { grid-column: 1 / -1; }
+  /* Six stages do not fit six-across on a phone: only the ones either side of
+     now are shown, which is the part of the line that matters. */
+  .jb-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .jb-stage { display: none; }
+  .jb-stage-now, .jb-stage-now + .jb-stage, .jb-stage:has(+ .jb-stage-now) { display: block; }
+  .jb-next { flex-direction: column; align-items: stretch; }
+  .jb-next-btn { width: 100%; }
+  .jb-settings-row { grid-template-columns: 1fr; }
+  .jb-dl > div { grid-template-columns: 96px minmax(0, 1fr); }
+}
+
 /* ── Staff photo upload ── */
 .pu { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0.5rem 0 0.9rem; }
 .pu-btn {
@@ -2966,8 +3088,11 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .ag-badge-void     { background: rgba(255, 255, 255, 0.06); color: var(--crm-muted); }
 
 /* ── Photo grid + lightbox ── */
-.pg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.6rem; }
-.pg-thumb { padding: 0; border: 1px solid var(--crm-border); border-radius: 0.6rem; overflow: hidden; aspect-ratio: 1; background: #1a1f24; cursor: pointer; position: relative; }
+.pg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(110px, 100%), 1fr)); gap: 0.6rem; }
+/* min-width 0: a grid item's floor is otherwise its content's natural size,
+   and a phone photo is thousands of pixels wide - one thumbnail pushed the
+   whole job page sideways. */
+.pg-thumb { min-width: 0; padding: 0; border: 1px solid var(--crm-border); border-radius: 0.6rem; overflow: hidden; aspect-ratio: 1; background: #1a1f24; cursor: pointer; position: relative; }
 .pg-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pg-video-tag { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; color: var(--crm-muted); }
 .pg-lightbox { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.88); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 1rem; }

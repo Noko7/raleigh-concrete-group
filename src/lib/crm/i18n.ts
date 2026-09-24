@@ -584,14 +584,6 @@ const en = {
     quoteSummary: "What the customer sees",
     quotePlaceholder: "What's included, the scope, roughly how long it takes.",
     notApplicable: "Not applicable",
-    // The quote form, laid out like the page the customer opens.
-    quotePriceLabel: "Price, all in",
-    quoteTotalLabel: "Total, worked out from the options below",
-    quoteIncluded: "What's included",
-    quoteDone: "{n} of 5 done",
-    quotePreviewOpen: "See what {name} sees",
-    quotePreviewClose: "Hide preview",
-    quotePreviewNote: "This is exactly how it shows on {name}'s phone.",
     quoteNeedPrice: "Add a price to send it.",
     quoteNeedSections: "Fill in {n} more to send it. Tap Not applicable if one doesn't apply.",
     sections: {
