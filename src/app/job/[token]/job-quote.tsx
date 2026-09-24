@@ -202,7 +202,7 @@ export function JobQuote({
   // "nothing has happened yet" is still to wait.
   if (awaitingReply && !open) {
     const when = sentAt
-      ? new Date(sentAt).toLocaleString(locale === "es" ? "es-US" : "en-US", {
+      ? new Date(sentAt).toLocaleString("en-US", {
           dateStyle: "medium",
           timeStyle: "short",
           timeZone: BUSINESS_TZ,

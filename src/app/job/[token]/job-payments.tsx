@@ -194,7 +194,7 @@ export function JobPayments({
               <li key={r.id} className={r.status === "pending" ? "jp-row jp-row-pending" : "jp-row"}>
                 <span className="jp-row-how">{t.methods[r.method as PaymentMethod] ?? r.method}</span>
                 <span className="jp-row-when">
-                  {new Date(r.paid_at ?? r.created_at).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
+                  {new Date(r.paid_at ?? r.created_at).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
                   })}

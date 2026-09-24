@@ -22,7 +22,7 @@ import type { ScheduleState } from "./types";
 
 // Raleigh time, like every other stamp the crew and the office read together.
 function stamp(iso: string, locale: Locale) {
-  return new Date(iso).toLocaleString(locale === "es" ? "es-US" : "en-US", {
+  return new Date(iso).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",

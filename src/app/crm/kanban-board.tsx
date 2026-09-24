@@ -32,7 +32,7 @@ export type BoardQuote = {
 
 function shortDate(ymd: string | null, locale: Locale): string {
   if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "";
-  return new Date(`${ymd}T00:00:00`).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
+  return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
   });
@@ -118,8 +118,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
   // job looks the same however they reach it. Owners get the full editor.
   const cardHref = (q: BoardQuote) =>
     role === "contractor" && q.job_token ? `/job/${q.job_token}` : `${base}/quotes/${q.id}`;
-  // Column headings and the Move menu read from the translated status names, so
-  // the board doesn't end up half-Spanish.
+  // Column headings and the Move menu read from the same status names.
   const statusLabel = (s: Status) => t.status[s];
   const router = useRouter();
   const [quotes, setQuotes] = useState<BoardQuote[]>(initialQuotes);

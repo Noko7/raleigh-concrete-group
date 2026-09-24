@@ -16,12 +16,8 @@ import type { SaveState } from "./types";
 
 const initial: SaveState = { ok: true };
 
-// Spanish day names live here rather than in the dictionary: they are three
-// letters each and pair one-to-one with WEEKDAY_LABELS, so a nested object in
-// i18n.ts would be seven keys to say what one array already says.
 const DAY_NAMES: Record<Locale, string[]> = {
   en: WEEKDAY_LABELS,
-  es: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
 };
 
 const HOURS = Array.from({ length: WORK_HOUR_MAX - WORK_HOUR_MIN + 1 }, (_, i) => WORK_HOUR_MIN + i);

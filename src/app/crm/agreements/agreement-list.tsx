@@ -15,7 +15,7 @@ const statusLabel = (t: Dict, s: AgreementStatus): string =>
 const ORDER: AgreementStatus[] = ["pending", "sent", "signed", "declined", "void"];
 
 function fmt(iso: string, locale: Locale) {
-  return new Date(iso).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
+  return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",

@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 
-import { dict, LOCALES, LOCALE_LABELS, type Locale } from "@/lib/crm/i18n";
+import { dict, type Locale } from "@/lib/crm/i18n";
 import { saveSettings } from "./actions";
 import type { SaveState } from "./types";
 
@@ -34,18 +34,6 @@ export function SettingsForm({ fullName, phone, email, role, locale }: Props) {
       <label className="crm-field">
         <span>{t.settings.yourName}</span>
         <input className="crm-input" name="full_name" defaultValue={fullName} maxLength={120} autoComplete="name" />
-      </label>
-
-      <label className="crm-field">
-        <span>{t.settings.language}</span>
-        <select className="crm-input" name="locale" defaultValue={locale}>
-          {LOCALES.map((l) => (
-            <option key={l} value={l}>
-              {LOCALE_LABELS[l]}
-            </option>
-          ))}
-        </select>
-        <small className="crm-muted crm-sm">{t.settings.languageHint}</small>
       </label>
 
       <label className="crm-field">
