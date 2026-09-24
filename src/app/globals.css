@@ -17,6 +17,12 @@
 
 html, body {
   min-height: 100%;
+  /* Nothing may push the page sideways on a phone. clip, not hidden: hidden
+     turns body into a scroll container, which breaks every position: sticky
+     header and bar on the site. This is the backstop; the elements that were
+     overflowing are fixed where they are styled. */
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 body {
@@ -811,13 +817,19 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 }
 
 /* ─── Mobile sticky bar ──────────────────────────────── */
+.mobile-bar > a { min-width: 0; padding-left: 0.6rem; padding-right: 0.6rem; }
 .mobile-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 40;
-  display: flex;
+  /* Grid, not three flex-1 buttons: the buttons are nowrap with 1.5rem of
+     side padding each, which added up to wider than a 360px phone and pushed
+     Text off the right edge. The main CTA gets the room it needs, the other
+     two share the rest. */
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
   padding: 0.75rem 1rem;
   background: rgba(28, 31, 36, 0.95);
@@ -940,61 +952,57 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   margin-bottom: 0.65rem;
 }
 
-.qm-step-head {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  margin-bottom: 0.5rem;
+/* "Step 2 of 3", then the question. The count is plain text rather than a
+   numbered badge: it answers "how much longer is this", which is the thing a
+   hesitant customer actually wants to know. */
+.qm-step-head { margin-bottom: 1.1rem; }
+.qm-step-count {
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--amber-dark);
 }
-.qm-step-head .qm-title {
-  margin: 0;
-}
-.qm-step-num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 9999px;
-  background: var(--amber-accent, #c2682a);
-  color: #fff;
-  font-weight: 800;
-  font-size: 1rem;
-}
+.qm-step-head .qm-sub { margin-bottom: 0; }
 
 .qm-title {
   font-family: var(--font-headline), sans-serif;
-  font-size: 2rem;
-  line-height: 1.04;
+  font-size: 2.2rem;
+  line-height: 1.02;
   letter-spacing: 0.01em;
   color: #2b1a12;
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.4rem;
+  padding-right: 2.5rem; /* clear of the close button */
 }
-.qm-sub { color: rgba(43, 26, 18, 0.72); font-size: 0.96rem; margin: 0 0 1.2rem; }
+.qm-sub { color: rgba(43, 26, 18, 0.78); font-size: 1rem; line-height: 1.45; margin: 0 0 1.2rem; }
 
+/* Sentence case, full size. Small uppercase labels are harder to read at a
+   glance, and a glance is all most people give a form on their phone. */
 .qm-label {
   display: block;
-  font-size: 0.8rem;
+  font-size: 0.98rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: #2b1a12;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
 }
+.qm-optional { font-weight: 500; font-size: 0.85rem; color: rgba(43, 26, 18, 0.62); margin-left: 0.2rem; }
 .qm-mt { margin-top: 1rem; }
 
+/* 17px text: iOS zooms the page into any field under 16px, and a zoomed form
+   is one where the Next button has scrolled away. */
 .qm-input {
   width: 100%;
-  border-radius: 0.7rem;
-  border: 1.5px solid rgba(43, 26, 18, 0.2);
+  min-height: 3.25rem;
+  border-radius: 0.8rem;
+  border: 1.5px solid rgba(43, 26, 18, 0.22);
   background: #fff;
-  padding: 0.8rem 0.9rem;
-  font-size: 1rem;
+  padding: 0.85rem 1rem;
+  font-size: 1.0625rem;
   color: #2b1a12;
   font-family: inherit;
   color-scheme: light;
 }
+.qm-input::placeholder, .qm-autocomplete > input::placeholder { color: rgba(43, 26, 18, 0.45); }
+textarea.qm-input { min-height: 0; resize: vertical; }
 .qm-input option { background-color: #fff; color: #2b1a12; }
 .qm-input:focus {
   outline: none;
@@ -1002,57 +1010,94 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   box-shadow: 0 0 0 3px rgba(194, 104, 42, 0.16);
 }
 
-/* Choice cards */
-.qm-choices { display: grid; gap: 0.85rem; margin-bottom: 0.5rem; }
+/* Choice cards: icon, one line of what it is, one line of what happens, and
+   an arrow. The first is the one we want most people on, so it is tinted. */
+.qm-choices { display: grid; gap: 0.75rem; margin-bottom: 1rem; }
 .qm-choice {
   position: relative;
   text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  padding: 1.15rem 1.2rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.1rem 1rem 1.1rem 1.1rem;
   border-radius: 1rem;
   border: 2px solid rgba(43, 26, 18, 0.14);
   background: #fff;
   cursor: pointer;
+  font: inherit;
+  color: #2b1a12;
   transition: border-color 140ms, transform 120ms, box-shadow 140ms;
 }
 .qm-choice:hover {
   border-color: var(--amber);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(194, 104, 42, 0.18);
+  box-shadow: 0 10px 26px rgba(194, 104, 42, 0.16);
 }
-.qm-choice-badge {
-  position: absolute;
-  top: 0.9rem;
-  right: 1rem;
-  background: var(--amber);
-  color: #fff;
-  font-size: 0.62rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
+.qm-choice:active { transform: scale(0.985); }
+.qm-choice--main { border-color: var(--amber); background: #fff7f0; }
+.qm-choice-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 3rem; height: 3rem; border-radius: 0.8rem;
+  background: rgba(194, 104, 42, 0.12); color: var(--amber-dark);
 }
-.qm-choice-icon { display: inline-flex; color: var(--amber); }
-.qm-choice-icon svg { width: 30px; height: 30px; }
+.qm-choice--main .qm-choice-icon { background: var(--amber); color: #fff; }
+.qm-choice-icon svg { width: 26px; height: 26px; }
+.qm-choice-text { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
 .qm-choice-title {
   font-family: var(--font-headline), sans-serif;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
+  line-height: 1;
   color: #2b1a12;
 }
-.qm-choice-desc { font-size: 0.9rem; color: rgba(43, 26, 18, 0.72); line-height: 1.4; }
+.qm-choice-desc { font-size: 0.95rem; color: rgba(43, 26, 18, 0.75); line-height: 1.35; }
+.qm-choice-badge {
+  position: absolute;
+  top: -0.7rem;
+  left: 1rem;
+  background: #2b1a12;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+}
+.qm-choice-arrow { width: 22px; height: 22px; color: var(--amber-dark); }
+.qm-choice-foot { text-align: center; font-size: 0.95rem; color: rgba(43, 26, 18, 0.75); margin: 0.25rem 0 1rem; }
+.qm-choice-foot a { color: #2b1a12; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Service tiles: every option visible, one tap each. */
+.qm-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+.qm-tile {
+  position: relative;
+  min-height: 3.4rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.8rem;
+  border: 1.5px solid rgba(43, 26, 18, 0.2);
+  background: #fff;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #2b1a12;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 130ms, background 130ms;
+}
+.qm-tile:hover { border-color: var(--amber); }
+.qm-tile:active { transform: scale(0.98); }
+.qm-tile--on { border-color: var(--amber); background: var(--amber); color: #fff; padding-right: 2rem; }
+.qm-tile-check { position: absolute; right: 0.6rem; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); }
 
 /* Address autocomplete */
 .qm-autocomplete { position: relative; }
 .qm-autocomplete > input {
   width: 100%;
-  border-radius: 0.7rem;
-  border: 1.5px solid rgba(43, 26, 18, 0.2);
+  min-height: 3.25rem;
+  border-radius: 0.8rem;
+  border: 1.5px solid rgba(43, 26, 18, 0.22);
   background: #fff;
-  padding: 0.8rem 0.9rem;
-  font-size: 1rem;
+  padding: 0.85rem 1rem;
+  font-size: 1.0625rem;
   color: #2b1a12;
   font-family: inherit;
 }
@@ -1082,14 +1127,14 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   text-align: left;
   background: none;
   border: none;
-  padding: 0.6rem 0.7rem;
+  padding: 0.75rem 0.8rem;
   border-radius: 0.5rem;
-  font-size: 0.92rem;
+  font-size: 1rem;
   color: #2b1a12;
   cursor: pointer;
 }
 .qm-suggestions button:hover { background: rgba(194, 104, 42, 0.1); }
-.qm-ac-status { display: block; margin-top: 0.4rem; font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); }
+.qm-ac-status { display: block; margin-top: 0.4rem; font-size: 0.85rem; color: rgba(43, 26, 18, 0.7); }
 .qm-ac-ok { display: flex; align-items: center; gap: 0.3rem; color: #2f6b46; font-weight: 700; }
 .qm-ac-full { color: #b91c1c; font-weight: 700; }
 .qm-ac-check { width: 14px; height: 14px; }
@@ -1111,8 +1156,11 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-dropzone:hover { border-color: var(--amber); background: rgba(194, 104, 42, 0.06); }
 .qm-dropzone-icon { display: inline-flex; color: var(--amber); }
 .qm-dropzone-icon svg { width: 32px; height: 32px; }
-.qm-dropzone-title { font-weight: 700; color: #2b1a12; }
-.qm-dropzone-hint { font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); }
+.qm-dropzone-title { font-weight: 700; font-size: 1.05rem; color: #2b1a12; }
+.qm-dropzone-hint { font-size: 0.85rem; color: rgba(43, 26, 18, 0.7); }
+/* Photo quotes live or die on the photo, so on that path it is the loudest
+   thing after the tiles. */
+.qm-dropzone--main { border-color: var(--amber); background: #fff7f0; }
 
 .qm-filelist { list-style: none; margin: 0.7rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .qm-filelist li {
@@ -1130,13 +1178,15 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-filelist button svg { width: 16px; height: 16px; }
 
 /* Schedule chips */
-.qm-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+/* Even columns so a list of start times reads as a grid, not a ragged row. */
+.qm-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.25rem, 1fr)); gap: 0.5rem; }
 .qm-chip {
   border-radius: 999px;
   border: 1.5px solid rgba(43, 26, 18, 0.22);
   background: #fff;
-  padding: 0.55rem 1rem;
-  font-size: 0.9rem;
+  min-height: 2.9rem;
+  padding: 0.6rem 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #2b1a12;
   cursor: pointer;
@@ -1157,9 +1207,9 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-consent {
   padding: 0 1.5rem;
   margin: 0.5rem 0 0;
-  font-size: 0.72rem;
-  line-height: 1.45;
-  color: rgba(43, 26, 18, 0.6);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: rgba(43, 26, 18, 0.68);
 }
 @media (min-width: 768px) { .qm-consent { padding: 0 2rem; } }
 .qm-consent-link { color: #8a5a2b; text-decoration: underline; font-weight: 600; }
@@ -1184,6 +1234,11 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   border-radius: 0.4rem;
 }
 
+.qm-card button:focus-visible, .qm-card a:focus-visible {
+  outline: 3px solid rgba(194, 104, 42, 0.55);
+  outline-offset: 2px;
+}
+
 /* Footer nav */
 .qm-footer {
   /* Pinned by the card's flex column rather than by position:sticky. Sticky
@@ -1205,17 +1260,25 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   }
 }
 .qm-consent { flex: 0 0 auto; }
+/* Back is small and round; Next takes the rest of the row. One obvious button. */
 .qm-back {
-  background: none;
-  border: none;
-  font-weight: 700;
-  font-size: 0.92rem;
-  color: rgba(43, 26, 18, 0.7);
+  flex: 0 0 auto;
+  width: 3.4rem;
+  height: 3.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid rgba(43, 26, 18, 0.2);
+  color: #2b1a12;
   cursor: pointer;
 }
-.qm-back:hover { color: #2b1a12; }
+.qm-back svg { width: 22px; height: 22px; }
+.qm-back:hover { border-color: #2b1a12; }
 .qm-back:disabled { opacity: 0.4; cursor: default; }
-.qm-next { padding: 0.8rem 1.6rem; }
+.qm-next { flex: 1 1 auto; justify-content: center; min-height: 3.4rem; font-size: 1.08rem; padding: 0.8rem 1.4rem; }
+.qm-next:active:not(:disabled) { transform: scale(0.98); }
 .qm-next:disabled { opacity: 0.5; cursor: default; box-shadow: none; transform: none; }
 
 /* Success */
@@ -1239,7 +1302,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-skip { display: block; margin: 0.8rem auto 0; padding: 0.4rem; text-decoration: underline; text-underline-offset: 3px; font-size: 0.9rem; text-align: center; }
 .qm-fallback { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; margin-top: 0.8rem; }
 .qm-fallback .qm-text-btn { text-decoration: none; }
-.qm-hint { font-size: 0.78rem; color: rgba(43, 26, 18, 0.55); margin: 0.2rem 0 0; }
+.qm-hint { font-size: 0.82rem; color: rgba(43, 26, 18, 0.68); margin: 0.2rem 0 0; }
 .qm-ref { font-size: 0.85rem; color: rgba(43, 26, 18, 0.65); margin: 0.2rem 0 0.9rem; letter-spacing: 0.02em; }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -1617,26 +1680,53 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
    query below masks this by switching to a column layout, but the base (i.e.
    desktop) row needs its own escape hatch. */
 .cq-price { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; background: #fff; border-radius: 0.9rem; padding: 1.1rem 1.25rem; margin-bottom: 1.25rem; border: 2px solid var(--amber); }
-.cq-price-label { font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.06em; color: rgba(43, 26, 18, 0.6); }
+.cq-price-label { font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.06em; color: rgba(43, 26, 18, 0.68); }
 .cq-price-value { font-family: var(--font-headline), sans-serif; font-size: 2.2rem; color: #2b1a12; }
 .cq-meta { display: grid; gap: 0.5rem; margin-bottom: 1.25rem; }
 .cq-meta > div { display: grid; grid-template-columns: 90px 1fr; font-size: 0.9rem; }
 .cq-meta dt { color: rgba(43, 26, 18, 0.55); font-weight: 700; }
 .cq-meta dd { margin: 0; }
 .cq-summary { background: #fff; border-radius: 0.9rem; padding: 1.1rem 1.25rem; margin-bottom: 1.25rem; }
-.cq-summary h2 { font-weight: 800; font-size: 0.95rem; margin-bottom: 0.4rem; }
+.cq-summary h2 { font-family: var(--font-headline), sans-serif; font-size: 1.6rem; line-height: 1; letter-spacing: 0.01em; margin-bottom: 0.4rem; }
 .cq-summary p { white-space: pre-wrap; color: rgba(43, 26, 18, 0.85); }
-/* The five sections. Each is a labelled block rather than a table row: the
-   answers run to a few lines each, and a label sitting in its own column
-   beside a paragraph leaves the label stranded at the top of a tall cell. */
-.cq-sections { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.75rem; }
-.cq-section { display: block; }
-.cq-section + .cq-section { border-top: 1px solid rgba(43, 26, 18, 0.1); padding-top: 0.9rem; }
-.cq-section dt {
-  font-size: 0.72rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--amber-dark); margin-bottom: 0.2rem;
+/* The five sections, as the job happens: one rail down the left, a stop on it
+   for each section. Answers run from two words to a paragraph, and a rail is
+   what keeps a "Not applicable" and a paragraph looking like the same list
+   rather than a row of mismatched boxes.
+     short  label and answer share a row
+     long   label above, answer below, folded past a few lines (section-text)
+     nothing  "Not applicable" and friends, quieter than the real work */
+.cq-steps { list-style: none; margin: 0.9rem 0 0; padding: 0; }
+.cq-step { position: relative; padding: 0 0 1.1rem 1.6rem; }
+.cq-step:last-child { padding-bottom: 0.1rem; }
+/* The rail: from this stop to the next. The last stop has none. */
+.cq-step::before {
+  content: ""; position: absolute; left: 0.34rem; top: 1.1rem; bottom: 0;
+  width: 2px; background: rgba(194, 104, 42, 0.28);
 }
-.cq-section dd { margin: 0; white-space: pre-wrap; color: rgba(43, 26, 18, 0.85); line-height: 1.5; }
+.cq-step:last-child::before { display: none; }
+/* The stop. */
+.cq-step::after {
+  content: ""; position: absolute; left: 0; top: 0.3rem;
+  width: 0.8rem; height: 0.8rem; border-radius: 999px;
+  background: var(--amber); box-shadow: 0 0 0 3px #fff;
+}
+.cq-step-label { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 800; line-height: 1.35; color: #2b1a12; }
+.cq-step-text { margin: 0; white-space: pre-wrap; font-size: 0.98rem; line-height: 1.55; color: rgba(43, 26, 18, 0.85); overflow-wrap: anywhere; }
+.cq-step-short { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: 1rem; }
+.cq-step-short .cq-step-label { margin: 0; }
+.cq-step-short .cq-step-text { text-align: right; font-weight: 600; margin-left: auto; }
+.cq-step-nothing::after { background: #fff; box-shadow: inset 0 0 0 2px rgba(43, 26, 18, 0.3), 0 0 0 3px #fff; }
+.cq-step-nothing .cq-step-label, .cq-step-nothing .cq-step-text { color: rgba(43, 26, 18, 0.62); font-weight: 600; }
+.cq-step-text-folded {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden;
+}
+/* Tall enough for a thumb, and it looks like a link, not a second Approve. */
+.cq-step-more {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 0.1rem;
+  background: none; border: none; font: inherit; font-size: 0.95rem; font-weight: 700;
+  color: var(--amber-dark); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
 /* How long the price is good for, under the number it applies to. */
 .cq-expiry { margin-top: 0.5rem; font-size: 0.82rem; font-weight: 700; color: rgba(43, 26, 18, 0.6); }
 .cq-cta { display: flex; gap: 0.7rem; flex-wrap: wrap; }
@@ -1647,8 +1737,8 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cq-btn-primary { background: #2b1a12; color: #fff; }
 .cq-btn-secondary { background: var(--amber); color: #fff; border: 2px solid var(--amber); }
 .cq-btn-secondary:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
-.cq-fine { margin-top: 1rem; font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); text-align: center; }
-.cq-price-sub { display: block; width: 100%; font-size: 0.78rem; color: rgba(43, 26, 18, 0.6); }
+.cq-fine { margin-top: 1rem; font-size: 0.85rem; color: rgba(43, 26, 18, 0.7); text-align: center; }
+.cq-price-sub { display: block; width: 100%; font-size: 0.85rem; color: rgba(43, 26, 18, 0.7); }
 /* Column, not a wrapping row: at a row width wide enough to fit two items but
    not three, one pair shares a flex line while the third sits alone. Flex's
    default cross-axis stretch then pads the shorter item in that pair up to
@@ -2244,8 +2334,13 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 /* Mobile: the quote page is used almost exclusively on a phone. Full-bleed
    card, thumb-sized targets, and the price impossible to miss. */
 @media (max-width: 640px) {
-  .cq-wrap { padding: 0.75rem; align-items: flex-start; }
-  .cq-card, .cq-confirm { padding: 1.35rem 1.1rem; border-radius: 1rem; }
+  /* Edge to edge. The link arrives by text, so this is nearly always a phone,
+     and the dark margin around a floating card was 24px of every line the
+     customer never got back. */
+  .cq-wrap { padding: 0; align-items: stretch; background: var(--ivory); }
+  .cq-card, .cq-confirm { max-width: none; min-height: 100dvh; padding: 1.25rem 1.1rem 2rem; border-radius: 0; }
+  .cq-summary, .cq-opts { padding: 1rem 1rem 1.1rem; }
+  .cq-lead { font-size: 1.02rem; line-height: 1.5; }
   .cq-title { font-size: 1.7rem; }
   .cq-price { flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 1rem 1.1rem; }
   .cq-price-value { font-size: 2.6rem; }

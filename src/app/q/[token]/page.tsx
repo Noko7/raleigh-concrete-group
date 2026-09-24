@@ -9,6 +9,7 @@ import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, getWorkHours, isQuoteExpired, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
 import { QuoteActions } from "./quote-actions";
+import { SectionText } from "./section-text";
 import { ViewBeacon } from "./view-beacon";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,14 @@ function prettyDate(s: string): string {
   const d = new Date(`${s}T00:00:00`);
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 }
+
+// A one-liner answer ("Not applicable", "Included", "Same day") sits on the
+// same row as its label instead of taking two lines on its own. Anything
+// longer gets the label above and the text below.
+const SHORT_ANSWER = 42;
+// "Nothing to do here" answers, shown quieter so the sections that are real
+// work stand out.
+const NOTHING_RE = /^(n\/?a|not applicable|none|not needed|no permits? (needed|required))\.?$/i;
 
 function CheckMark() {
   return (
@@ -333,14 +342,25 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
         {sections.length > 0 ? (
           <div className="cq-summary">
             <h2>What&apos;s included</h2>
-            <dl className="cq-sections">
-              {sections.map(([field, value]) => (
-                <div key={field} className="cq-section">
-                  <dt>{QUOTE_SECTION_LABELS[field]}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ))}
-            </dl>
+            {/* The sections are the job in the order it happens, so they read
+                as one line down the side with a stop for each. Whatever length
+                each answer is, the line keeps them looking like one list. */}
+            <ol className="cq-steps">
+              {sections.map(([field, raw]) => {
+                const value = raw.trim();
+                const short = value.length <= SHORT_ANSWER && !value.includes("\n");
+                const nothing = NOTHING_RE.test(value);
+                return (
+                  <li
+                    key={field}
+                    className={`cq-step${short ? " cq-step-short" : ""}${nothing ? " cq-step-nothing" : ""}`}
+                  >
+                    <h3 className="cq-step-label">{QUOTE_SECTION_LABELS[field]}</h3>
+                    {short ? <p className="cq-step-text">{value}</p> : <SectionText text={value} />}
+                  </li>
+                );
+              })}
+            </ol>
           </div>
         ) : (
           quote.quote_summary && (
