@@ -6,6 +6,8 @@ import { crmBase } from "@/lib/crm/nav";
 import { pgAdmin } from "@/lib/crm/rest";
 import { formatMs, funnelStats, type Count, type FunnelRow, type SplitRow } from "@/lib/funnel-stats";
 
+import { dismissDraft } from "./actions";
+
 export const dynamic = "force-dynamic";
 
 // The quote funnel: of the people who opened Get Free Quote, how many got to
@@ -44,7 +46,10 @@ const DETAIL_LABELS: Record<string, string> = {
   day_off: "day not worked",
   file_type: "file wasn't a photo/video",
   file_size: "file too big",
-  upload: "photo upload failed",
+  upload: "some photos failed to upload (request still sent)",
+  timeout: "no answer from our server in 30s",
+  client_exception: "form error in their browser",
+  skipped_time: "sent without picking a time",
   network: "network error",
   server_409: "slot taken while they chose",
   server_429: "rate limited",
@@ -91,6 +96,128 @@ async function loadRows(days: number): Promise<{ rows: FunnelRow[]; missingTable
     if (batch.length < PAGE) return { rows, missingTable: false, truncated: false };
   }
   return { rows, missingTable: false, truncated: true };
+}
+
+// People who typed a name and number into the form and never sent it
+// (supabase/quote-drafts.sql). The point of this page for the office: a list to
+// call. Left out: anyone still on the form (touched in the last 10 minutes and
+// hasn't left), and anyone whose number turns up on a lead since - they sent it
+// in another tab or rang us.
+type Draft = {
+  submission_id: string;
+  created_at: string;
+  updated_at: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  mode: string | null;
+  service: string | null;
+  step: string | null;
+  left_at: string | null;
+};
+
+const digits = (p: string | null | undefined) => (p ?? "").replace(/\D/g, "").slice(-10);
+
+async function loadDrafts(days: number): Promise<Draft[] | null> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const res = await pgAdmin(
+    `quote_drafts?select=submission_id,created_at,updated_at,name,phone,email,address,mode,service,step,left_at` +
+      `&lead_id=is.null&dismissed_at=is.null&updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=200`,
+  );
+  // 404: supabase/quote-drafts.sql hasn't been run yet.
+  if (!res.ok) return null;
+  const drafts = (await res.json()) as Draft[];
+  if (!drafts.length) return drafts;
+
+  const leads = await pgAdmin(
+    `quote_requests?select=phone,created_at&created_at=gte.${encodeURIComponent(since)}&limit=2000`,
+  );
+  const sent = leads.ok ? ((await leads.json()) as { phone: string | null; created_at: string }[]) : [];
+  const stillHere = Date.now() - 10 * 60 * 1000;
+  return drafts.filter((d) => {
+    if (!d.left_at && new Date(d.updated_at).getTime() > stillHere) return false;
+    const p = digits(d.phone);
+    return !sent.some((l) => digits(l.phone) === p && l.created_at >= d.created_at);
+  });
+}
+
+function whenShort(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function DraftsCard({ drafts }: { drafts: Draft[] }) {
+  return (
+    <section className="crm-card">
+      <h2 className="crm-card-title">Started a quote, didn&apos;t send it ({drafts.length})</h2>
+      <p className="crm-muted fn-note">
+        They typed a name and number into the form and left without pressing send. They haven&apos;t agreed to
+        texts yet, so call rather than text. Dismiss once you&apos;ve dealt with one.
+      </p>
+      {drafts.length === 0 ? (
+        <p className="crm-muted">Nobody right now.</p>
+      ) : (
+        <div className="crm-table-wrap">
+          <table className="crm-table">
+            <thead>
+              <tr>
+                <th>Who</th>
+                <th>Address / service</th>
+                <th>Got to</th>
+                <th>When</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {drafts.map((d) => (
+                <tr key={d.submission_id}>
+                  <td>
+                    <strong>{d.name || "(no name)"}</strong>
+                    <br />
+                    {d.phone && <a href={`tel:+1${digits(d.phone)}`}>{d.phone}</a>}
+                    {d.email && (
+                      <>
+                        <br />
+                        <span className="crm-muted">{d.email}</span>
+                      </>
+                    )}
+                  </td>
+                  <td>
+                    {d.address || <span className="crm-muted">no address</span>}
+                    {d.service && (
+                      <>
+                        <br />
+                        <span className="crm-muted">{d.service}</span>
+                      </>
+                    )}
+                  </td>
+                  <td>
+                    {(d.step && STEP_LABELS[d.step]) || "-"}
+                    {d.mode && <div className="crm-muted">{d.mode === "online" ? "Online" : "In person"}</div>}
+                  </td>
+                  <td>{whenShort(d.updated_at)}</td>
+                  <td className="crm-row-actions">
+                    <form action={dismissDraft}>
+                      <input type="hidden" name="submission_id" value={d.submission_id} />
+                      <button type="submit" className="crm-btn crm-btn-ghost">
+                        Dismiss
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function CountTable({ title, empty, rows, label }: { title: string; empty: string; rows: Count[]; label: (k: string) => string }) {
@@ -153,7 +280,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const days = WINDOWS.find((d) => String(d) === sp.days) ?? 30;
 
-  const { rows, missingTable, truncated } = await loadRows(days);
+  const [{ rows, missingTable, truncated }, drafts] = await Promise.all([loadRows(days), loadDrafts(days)]);
   const s = funnelStats(rows);
   const clarityOn = Boolean(CLARITY_PROJECT_ID);
 
@@ -180,6 +307,8 @@ export default async function FunnelPage({ searchParams }: { searchParams: Promi
           ))}
         </nav>
       </div>
+
+      {drafts && <DraftsCard drafts={drafts} />}
 
       {missingTable ? (
         <div className="crm-empty">

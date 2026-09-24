@@ -5,7 +5,14 @@ import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
 import { ymdInDays } from "@/lib/crm/clock";
 import { DEFAULT_VISIT_SLOTS, VISIT_LEAD_DAYS } from "@/lib/crm/constants";
 import { newAttemptId, trackFunnel, type TrackInput } from "@/lib/funnel-client";
-import { isConfirmedSave, leadReference, newSubmissionId } from "@/lib/quote-submit";
+import {
+  isConfirmedSave,
+  isValidUsPhone,
+  leadReference,
+  newSubmissionId,
+  smsFallbackHref,
+  UUID_RE,
+} from "@/lib/quote-submit";
 import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
 
 // Everything this form saves goes through our own server (/api/upload-url and
@@ -21,6 +28,89 @@ const MAX_FILE_MB = 50;
 // network. A retry after a timeout is safe: see submissionId below.
 const SUBMIT_TIMEOUT_MS = 30_000;
 const SIGN_TIMEOUT_MS = 15_000;
+// A photo upload is given up on when no bytes have moved for this long - not
+// after a fixed total, because a 40MB video on a weak signal is slow but fine,
+// and one that has stopped moving is not going to finish.
+const UPLOAD_STALL_MS = 45_000;
+
+// What they've typed, kept for this tab so closing the form by accident (a tap
+// outside it, Escape, the back gesture) and opening it again doesn't mean
+// typing it all again. Also carries the submission id, so the reopened form is
+// the same request and not a second one. Cleared once it's sent. Photos can't
+// be kept this way; the rest can.
+const DRAFT_KEY = "rcg_quote_form_v1";
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+type Saved = {
+  v: 1;
+  at: number;
+  submissionId: string;
+  mode: Mode | null;
+  stepIndex: number;
+  data: FormState;
+  addressVerified: boolean;
+};
+function loadSaved(): Saved | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as Saved;
+    if (s?.v !== 1 || Date.now() - s.at > DRAFT_MAX_AGE_MS || !UUID_RE.test(s.submissionId)) return null;
+    return {
+      ...s,
+      mode: s.mode === "online" || s.mode === "inperson" ? s.mode : null,
+      stepIndex: Number.isInteger(s.stepIndex) && s.stepIndex >= 0 && s.stepIndex < 3 ? s.stepIndex : 0,
+      data: { ...EMPTY, ...s.data },
+    };
+  } catch {
+    return null;
+  }
+}
+function storeSaved(s: Omit<Saved, "v" | "at">) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ v: 1, at: Date.now(), ...s }));
+  } catch {
+    // Private mode or storage full: the form still works, it just won't remember.
+  }
+}
+function clearSaved() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {}
+}
+
+// PUT a file to its signed URL with progress, giving up only when it stalls.
+function putFile(url: string, file: File, contentType: string, onProgress: (f: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => xhr.abort(), UPLOAD_STALL_MS);
+    };
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.setRequestHeader("x-upsert", "true");
+    xhr.upload.onprogress = (e) => {
+      arm();
+      if (e.lengthComputable && e.total) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      clearTimeout(timer);
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("upload network error"));
+    };
+    xhr.onabort = () => {
+      clearTimeout(timer);
+      reject(new Error("upload stalled"));
+    };
+    arm();
+    xhr.send(file);
+  });
+}
 
 // fetch with a deadline. An AbortError comes back as a thrown error, which the
 // caller treats like any other failure to confirm.
@@ -96,9 +186,13 @@ function cityFromAddress(address: string): string {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-function isValidPhone(phone: string): boolean {
-  const d = phone.replace(/\D/g, "");
-  return d.length === 10 || (d.length === 11 && d.startsWith("1"));
+const isValidPhone = isValidUsPhone;
+// Enough of an address to go on. A full "123 Main St, Raleigh, NC" is still
+// what the field asks for and what it shows a green light for, but it no longer
+// stops anyone: a lead with a partial address is a phone call, a lead that gave
+// up on the address field is nothing. The server notes it on the lead.
+function hasSomeAddress(a: string): boolean {
+  return a.trim().length >= 5;
 }
 function isValidEmail(email: string): boolean {
   return email === "" || EMAIL_RE.test(email);
@@ -295,10 +389,12 @@ function AddressAutocomplete({
 
 /* ── The modal ────────────────────────────────────────────────────────────── */
 function Modal({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<Mode | null>(null);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [data, setData] = useState<FormState>(EMPTY);
-  const [addressVerified, setAddressVerified] = useState(false);
+  // Picked up where they left off, if they closed it earlier in this tab.
+  const restored = useRef(loadSaved()).current;
+  const [mode, setMode] = useState<Mode | null>(restored?.mode ?? null);
+  const [stepIndex, setStepIndex] = useState(restored?.mode ? restored.stepIndex : 0);
+  const [data, setData] = useState<FormState>(restored?.data ?? EMPTY);
+  const [addressVerified, setAddressVerified] = useState(restored?.addressVerified ?? false);
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [fileError, setFileError] = useState("");
@@ -308,10 +404,15 @@ function Modal({ onClose }: { onClose: () => void }) {
   // screen cannot render without one: it only exists once the server has
   // handed back the id of the row it wrote.
   const [leadRef, setLeadRef] = useState("");
+  // What the success screen needs to be honest: whether an in-person visit was
+  // actually booked, and how many photos didn't make it.
+  const [visitBooked, setVisitBooked] = useState(true);
+  const [filesFailed, setFilesFailed] = useState(0);
+  const [uploadNote, setUploadNote] = useState("");
   // One per filled-in form, sent on every attempt (lib/quote-submit.ts). The
   // server keeps it under a unique index, so pressing the button again after a
   // timeout finds the lead already saved instead of making a second one.
-  const submissionId = useRef(newSubmissionId()).current;
+  const submissionId = useRef(restored?.submissionId ?? newSubmissionId()).current;
   // Photos already uploaded, by file. A submit the server turns down (a slot
   // taken, a date too soon) used to upload every photo again on the next try -
   // 34MB, three times, for one customer on 5 Sep. Now each file goes up once.
@@ -320,6 +421,9 @@ function Modal({ onClose }: { onClose: () => void }) {
   // is disabled too, but state updates are async and a fast double tap can land
   // before the re-render that disables it.
   const inFlight = useRef(false);
+  // Set the moment the server confirms the save. After that there is no draft
+  // to rescue, and nothing may report this form as abandoned.
+  const leadSaved = useRef(false);
   const [dateChecking, setDateChecking] = useState(false);
   const [dateFull, setDateFull] = useState(false);
   // Slots the crew already has on the chosen day. Greying these out is nicer
@@ -410,8 +514,7 @@ function Modal({ onClose }: { onClose: () => void }) {
     if (current === "contact") {
       if (data.name.trim().length < 2) missing.push("name");
       if (!isValidPhone(data.phone)) missing.push("phone");
-      if (!(addressVerified || isFullAddress(data.address))) missing.push("address");
-      if (!isValidEmail(data.email)) missing.push("email");
+      if (!hasSomeAddress(data.address)) missing.push("address");
     } else if (current === "service") {
       if (!data.service) missing.push("service");
     } else if (current === "schedule") {
@@ -422,6 +525,72 @@ function Modal({ onClose }: { onClose: () => void }) {
     }
     return missing.length ? missing.join("+") : "ready";
   }
+
+  // ── The safety net under the submit button ──
+  // Once there's a name and a number, what they've typed goes to
+  // /api/quote/draft as they go, and once more marked `left` if they close the
+  // form or the tab without sending. If they never press the button - stuck on
+  // the address, a phone call interrupting, an error they gave up on - the
+  // office still has a number to call (CRM > Funnel, and a text to the owner).
+  const draftRef = useRef({ data, mode, step: current as string });
+  draftRef.current = { data, mode, step: current };
+  const sendDraft = useCallback(
+    (left: boolean) => {
+      if (leadSaved.current) return;
+      const { data: d, mode: m, step } = draftRef.current;
+      if (d.name.trim().length < 2 || !isValidPhone(d.phone)) return;
+      const body = JSON.stringify({
+        submission_id: submissionId,
+        name: d.name,
+        phone: d.phone,
+        email: d.email,
+        address: d.address,
+        service: d.service,
+        mode: m,
+        step,
+        source_path: window.location.pathname,
+        left,
+      });
+      try {
+        // A beacon survives the tab closing, which is the case that matters.
+        const sent =
+          left &&
+          typeof navigator.sendBeacon === "function" &&
+          navigator.sendBeacon("/api/quote/draft", new Blob([body], { type: "application/json" }));
+        if (!sent) {
+          fetch("/api/quote/draft", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+            keepalive: true,
+          }).catch(() => {});
+        }
+      } catch {
+        // Never allowed to get in the way of the form.
+      }
+    },
+    [submissionId],
+  );
+
+  // Saved a moment after they stop typing, and on every step change.
+  const contactKey = `${data.name}|${data.phone}|${data.address}|${data.email}|${data.service}|${current}`;
+  useEffect(() => {
+    if (leadSaved.current) return;
+    const t = setTimeout(() => sendDraft(false), 1500);
+    return () => clearTimeout(t);
+  }, [contactKey, sendDraft]);
+
+  // And kept in this tab, so reopening the form picks up where they were.
+  useEffect(() => {
+    if (leadSaved.current) return;
+    storeSaved({ submissionId, mode, stepIndex, data, addressVerified });
+  }, [submissionId, mode, stepIndex, data, addressVerified]);
+
+  useEffect(() => {
+    const onHide = () => sendDraft(true);
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [sendDraft]);
 
   // Everything the dismiss paths need, kept current for handlers that are
   // bound once (Escape, pagehide).
@@ -440,8 +609,9 @@ function Modal({ onClose }: { onClose: () => void }) {
 
   const dismiss = useCallback(() => {
     recordClose();
+    sendDraft(true);
     onClose();
-  }, [recordClose, onClose]);
+  }, [recordClose, onClose, sendDraft]);
 
   useEffect(() => {
     track({ event: "open" });
@@ -498,15 +668,12 @@ function Modal({ onClose }: { onClose: () => void }) {
 
   function canProceed(): boolean {
     if (current === "contact") {
-      // A quote needs an address we can actually find: either one picked from
-      // the search, or one typed out in full with city and state. A bare house
-      // number and street used to be enough, which cost a phone call to chase.
-      return (
-        data.name.trim().length >= 2 &&
-        isValidPhone(data.phone) &&
-        isValidEmail(data.email) &&
-        (addressVerified || isFullAddress(data.address))
-      );
+      // Name, a phone number, and something for an address. That's all that
+      // stops anyone. The field still asks for the full address and lights up
+      // green when it has one; a partial one is noted on the lead for the
+      // office to confirm on the call. An email with a typo doesn't stop them
+      // either - it's optional, and the server drops a bad one into a note.
+      return data.name.trim().length >= 2 && isValidPhone(data.phone) && hasSomeAddress(data.address);
     }
     if (current === "service") return data.service !== "";
     if (current === "schedule") {
@@ -545,45 +712,57 @@ function Modal({ onClose }: { onClose: () => void }) {
   // Private bucket. The browser no longer has blanket write access: we ask our
   // server for a one-time signed upload URL (rate-limited + type-checked) and
   // PUT the file straight to it. We store only the object path on the lead row.
-  async function uploadFiles(): Promise<string[]> {
+  //
+  // Photos are optional, so they can never stop the request: a file that won't
+  // go up (after one retry) is counted and skipped, the request is sent with
+  // the rest, and the success screen asks them to text the missing ones. Until
+  // 24 Sep one failed photo meant no lead at all - 31 Aug, six photos uploaded
+  // and nothing saved.
+  async function uploadFiles(): Promise<{ paths: string[]; failed: number }> {
     const paths: string[] = [];
-    for (const file of files) {
+    let failed = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const already = uploaded.current.get(file);
       if (already) {
         paths.push(already);
         continue;
       }
-      const contentType = fileMime(file);
-      const ext = file.name.includes(".")
-        ? file.name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "")
-        : "bin";
-
-      const signRes = await fetchWithTimeout(
-        "/api/upload-url",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ext: ext || "bin", contentType }),
-        },
-        SIGN_TIMEOUT_MS,
-      );
-      if (!signRes.ok) throw new Error(`could not authorize upload (${signRes.status})`);
-      const signed = (await signRes.json()) as { ok?: boolean; path?: string; uploadUrl?: string };
-      if (!signed.ok || !signed.uploadUrl || !signed.path) throw new Error("could not authorize upload");
-
-      const put = await fetch(signed.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": contentType, "x-upsert": "true" },
-        body: file,
-      });
-      if (!put.ok) {
-        const detail = await put.text().catch(() => "");
-        throw new Error(detail || `upload failed (${put.status})`);
+      const label = files.length > 1 ? `Uploading photo ${i + 1} of ${files.length}` : "Uploading photo";
+      setUploadNote(`${label}…`);
+      let done = false;
+      for (let attempt = 0; attempt < 2 && !done; attempt++) {
+        try {
+          const contentType = fileMime(file);
+          const ext = file.name.includes(".")
+            ? file.name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "")
+            : "bin";
+          const signRes = await fetchWithTimeout(
+            "/api/upload-url",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ext: ext || "bin", contentType }),
+            },
+            SIGN_TIMEOUT_MS,
+          );
+          if (!signRes.ok) throw new Error(`could not authorize upload (${signRes.status})`);
+          const signed = (await signRes.json()) as { ok?: boolean; path?: string; uploadUrl?: string };
+          if (!signed.ok || !signed.uploadUrl || !signed.path) throw new Error("could not authorize upload");
+          await putFile(signed.uploadUrl, file, contentType, (f) =>
+            setUploadNote(`${label}… ${Math.round(f * 100)}%`),
+          );
+          uploaded.current.set(file, signed.path);
+          paths.push(signed.path);
+          done = true;
+        } catch {
+          // Once more, then move on without it.
+        }
       }
-      uploaded.current.set(file, signed.path);
-      paths.push(signed.path);
+      if (!done) failed++;
     }
-    return paths;
+    setUploadNote("");
+    return { paths, failed };
   }
 
   // The only way to the success screen. Read the rule in lib/quote-submit.ts
@@ -592,7 +771,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   // body, a non-JSON body, a timeout, a thrown fetch, a response shape nobody
   // has thought of yet - lands on an error with our phone number, and the
   // form keeps everything they typed so pressing the button again just works.
-  async function submit() {
+  async function submit(opts: { skipVisit?: boolean } = {}) {
     if (inFlight.current) return;
     inFlight.current = true;
     setErrorMsg("");
@@ -607,19 +786,16 @@ function Modal({ onClose }: { onClose: () => void }) {
     };
     try {
       let fileUrls: string[] = [];
+      let failedCount = 0;
       if (files.length) {
         setStatus("uploading");
-        try {
-          fileUrls = await uploadFiles();
-        } catch {
-          fail(
-            "upload",
-            `We couldn't upload one of your photos. Try again, remove the largest ones, or call us at ${phoneDisplay}.`,
-          );
-          return;
-        }
+        const up = await uploadFiles();
+        fileUrls = up.paths;
+        failedCount = up.failed;
+        if (failedCount) track({ event: "error", step: "schedule", mode, detail: "upload" });
       }
       setStatus("sending");
+      const skip = Boolean(opts.skipVisit);
       const payload = {
         name: data.name,
         phone: data.phone,
@@ -629,10 +805,10 @@ function Modal({ onClose }: { onClose: () => void }) {
         city: cityFromAddress(data.address),
         details: data.details,
         quote_type: mode ?? "inperson",
-        preferred_time: data.visitTime,
-        visit_date: data.visitDate,
-        visit_time: data.visitTime,
+        visit_date: skip ? "" : data.visitDate,
+        visit_time: skip ? "" : data.visitTime,
         file_urls: fileUrls,
+        files_failed: failedCount,
         source_path: typeof window !== "undefined" ? window.location.pathname : "",
         submission_id: submissionId,
         company: honeypot, // trap field, judged server-side
@@ -652,8 +828,8 @@ function Modal({ onClose }: { onClose: () => void }) {
         fail(
           timedOut ? "timeout" : "network",
           timedOut
-            ? `We couldn't confirm your request arrived. Please press the button again (you won't be sent twice) or call us at ${phoneDisplay}.`
-            : `We couldn't reach our server. Check your connection and press the button again, or call us at ${phoneDisplay}.`,
+            ? `We couldn't confirm your request arrived. Please press the button again (you won't be sent twice), or text or call us at ${phoneDisplay}.`
+            : `We couldn't reach our server. Check your connection and press the button again, or text or call us at ${phoneDisplay}.`,
         );
         return;
       }
@@ -668,6 +844,10 @@ function Modal({ onClose }: { onClose: () => void }) {
 
       if (isConfirmedSave(res.status, json)) {
         finished.current = true;
+        leadSaved.current = true;
+        clearSaved();
+        setVisitBooked(json.visit_booked !== false);
+        setFilesFailed(failedCount);
         setLeadRef(leadReference(json.lead_id));
         track({ event: "submit", step: "schedule", mode, ms: Date.now() - openedAt.current });
         setStatus("success");
@@ -690,29 +870,31 @@ function Modal({ onClose }: { onClose: () => void }) {
         setStepIndex(STEPS.indexOf("contact"));
         setAddressVerified(false);
         setErrorMsg(serverMsg || "Please check your contact details.");
-      } else if (res.status === 409 || fields.includes("visit_date") || fields.includes("visit_time")) {
-        // The day filled up, the slot went, or the date is too soon - all of
-        // them mean "go back and pick again". Re-check the day on the way so
-        // the chips redraw against what's actually left rather than the
-        // snapshot they chose from.
-        setStatus("idle");
-        setStepIndex(STEPS.indexOf("schedule"));
-        setErrorMsg(serverMsg || "That time isn't available any more. Please pick another.");
-        void checkVisitDate(data.visitDate, data.service);
       } else {
         // Includes a 2xx that isn't a confirmed save: whatever it is, it is
-        // not proof the lead exists, so it is not a success.
-        setErrorMsg(serverMsg || `We couldn't save your request just now. Please call us at ${phoneDisplay}.`);
+        // not proof the lead exists, so it is not a success. (A slot that went
+        // while they chose is no longer a refusal - the server saves the lead
+        // without it - so there is no "go back and pick again" branch.)
+        setErrorMsg(serverMsg || `We couldn't save your request just now. Please text or call us at ${phoneDisplay}.`);
         setStatus("error");
       }
     } catch {
-      fail("client_exception", `Something went wrong. Please press the button again or call us at ${phoneDisplay}.`);
+      fail("client_exception", `Something went wrong. Please press the button again, or text or call us at ${phoneDisplay}.`);
     } finally {
       inFlight.current = false;
+      setUploadNote("");
     }
   }
 
   const busy = status === "uploading" || status === "sending";
+  const smsHref = smsFallbackHref(phoneHref, {
+    name: data.name,
+    phone: data.phone,
+    address: data.address,
+    service: data.service,
+    mode: mode ?? "",
+    when: data.visitDate ? `${prettyDay(data.visitDate)}${data.visitTime ? ` at ${data.visitTime}` : ""}` : "",
+  });
 
   return (
     <div className="qm-overlay" onClick={dismiss} role="dialog" aria-modal="true" aria-label="Request a quote">
@@ -734,9 +916,26 @@ function Modal({ onClose }: { onClose: () => void }) {
             </div>
             <h2 className="qm-title">You&apos;re all set!</h2>
             <p className="qm-sub">
-              We got your request and we&apos;ll reach out the same day with your quote. Want to talk
-              now? Give us a call.
+              {mode === "inperson" && !visitBooked
+                ? "We got your request. We'll call or text you shortly to set a time for your visit."
+                : "We got your request and we'll reach out the same day with your quote. Want to talk now? Give us a call."}
             </p>
+            {mode === "inperson" && visitBooked && data.visitDate && (
+              <p className="qm-sub">
+                Your visit: <strong>{prettyDay(data.visitDate)} at {data.visitTime}</strong>
+              </p>
+            )}
+            {/* Photos are never why a request fails, so the ones that didn't
+                upload get a way to follow on, not an error. */}
+            {filesFailed > 0 && (
+              <p className="qm-err">
+                {filesFailed === 1 ? "One photo" : `${filesFailed} photos`} didn&apos;t upload.{" "}
+                <a href={smsHref} className="qm-consent-link">
+                  Text {filesFailed === 1 ? "it" : "them"} to us
+                </a>{" "}
+                at {phoneDisplay}.
+              </p>
+            )}
             {/* Proof it was saved: the reference is the start of the row's id,
                 which only exists once the server has written it. */}
             <p className="qm-ref">
@@ -840,8 +1039,9 @@ function Modal({ onClose }: { onClose: () => void }) {
                   placeholder="you@email.com"
                 />
                 <span className="qm-ac-status qm-slot">
-                  {!isValidEmail(data.email) ? "Enter a valid email address." : ""}
+                  {!isValidEmail(data.email) ? "That email doesn't look right - check it, or leave it blank." : ""}
                 </span>
+                <p className="qm-hint">We save what you type as you go, so if anything goes wrong we can still call you back.</p>
 
                 {/* A server-side rejection of the contact details lands here,
                     on the step that can actually fix it. */}
@@ -1021,11 +1221,43 @@ function Modal({ onClose }: { onClose: () => void }) {
                   <span className="qm-ac-status qm-slot">Greyed-out times are already booked that day.</span>
                 )}
 
+                {/* The way through when no slot suits: send it without one and
+                    we call to set a time. Picking a time is the step people
+                    gave up on most (18 Sep: cycled dates, left), and a missing
+                    time costs a phone call - a missing lead costs the job. */}
+                <button
+                  type="button"
+                  className="qm-text-btn qm-skip"
+                  disabled={busy}
+                  onClick={() => {
+                    track({ event: "done", step: "schedule", mode, ms: stepMs(), detail: "skipped_time" });
+                    void submit({ skipVisit: true });
+                  }}
+                >
+                  {mode === "online"
+                    ? "Skip this - just send my request"
+                    : dateFull || dayOff
+                      ? "No day works? Send it and we'll call you to set a time"
+                      : "None of these times work? Send it and we'll call you"}
+                </button>
+
                 {/* Shown whenever there's a message, not only in the "error"
                     status: a rejected date bounces back here as idle, and the
                     reason has to come with it. */}
                 {(status === "error" || errorMsg) && (
-                  <p className="qm-err">{errorMsg || `Something went wrong. Please call us at ${phoneDisplay} instead.`}</p>
+                  <p className="qm-err">{errorMsg || `Something went wrong. Please text or call us at ${phoneDisplay} instead.`}</p>
+                )}
+                {/* When we couldn't take it, sending it to us has to be one tap
+                    and not a retelling: the text arrives with what they typed. */}
+                {status === "error" && (
+                  <div className="qm-fallback">
+                    <a href={smsHref} className="cta-primary qm-full">
+                      Text us this request
+                    </a>
+                    <a href={phoneHref} className="qm-text-btn">
+                      Or call {phoneDisplay}
+                    </a>
+                  </div>
                 )}
               </div>
             )}
@@ -1052,7 +1284,7 @@ function Modal({ onClose }: { onClose: () => void }) {
               </button>
               <button className="cta-primary qm-next" onClick={next} disabled={!canProceed() || busy}>
                 {status === "uploading"
-                  ? "Uploading…"
+                  ? uploadNote || "Uploading…"
                   : status === "sending"
                     ? "Sending…"
                     : !isLastStep

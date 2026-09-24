@@ -19,7 +19,12 @@
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** What /api/quote returns when, and only when, the lead is in the database. */
-export type ConfirmedSave = { ok: true; saved: true; lead_id: string; duplicate?: boolean };
+//
+// `visit_booked` is false for an in-person request saved without a time: the
+// customer skipped it, or the slot they picked had gone by the time they sent
+// it. The lead is saved either way - a time is never a reason to lose one - and
+// the success screen says we'll call to set it instead of confirming a visit.
+export type ConfirmedSave = { ok: true; saved: true; lead_id: string; duplicate?: boolean; visit_booked?: boolean };
 
 export function isConfirmedSave(status: number, body: unknown): body is ConfirmedSave {
   if (status !== 200 && status !== 201) return false;
@@ -47,4 +52,32 @@ export function newSubmissionId(): string {
       Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
     return `${hex(8)}-${hex(4)}-4${hex(3)}-a${hex(3)}-${hex(12)}`;
   }
+}
+
+/** 10 digits, or 11 starting with 1. The one thing a lead can't be saved without. */
+export function isValidUsPhone(phone: string): boolean {
+  const d = (phone || "").replace(/\D/g, "");
+  return d.length === 10 || (d.length === 11 && d.startsWith("1"));
+}
+
+/**
+ * The last resort when our server can't take the request: an sms: link to our
+ * number with what they typed already in the message, so "call us" is one tap
+ * and they don't have to say it all again. Kept short - it's a text message.
+ */
+export function smsFallbackHref(
+  toDigits: string,
+  f: { name: string; phone: string; address: string; service: string; mode: string; when: string },
+): string {
+  const lines = [
+    "Quote request from the website:",
+    f.name && `Name: ${f.name}`,
+    f.phone && `Phone: ${f.phone}`,
+    f.address && `Address: ${f.address}`,
+    f.service && `Service: ${f.service}`,
+    f.mode && `Type: ${f.mode === "online" ? "online quote" : "in-person visit"}`,
+    f.when && `Visit: ${f.when}`,
+  ].filter(Boolean);
+  // "?&body=" is the form both iOS and Android read.
+  return `sms:+1${toDigits.replace(/\D/g, "").slice(-10)}?&body=${encodeURIComponent(lines.join("\n"))}`;
 }
