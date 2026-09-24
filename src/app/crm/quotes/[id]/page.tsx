@@ -10,6 +10,7 @@ import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText, quoteSends } from "@/lib/crm/events";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
+import { usd } from "@/lib/crm/fees";
 import {
   getQuote,
   listAgreementsForQuote,
@@ -28,6 +29,7 @@ import { PhotoUpload } from "../../photo-upload";
 import { AcceptOffline } from "./accept-offline";
 import { CompleteCard } from "./complete-card";
 import { MessageLog } from "./message-log";
+import { JobSettings } from "./job-settings";
 import { QuoteEditor } from "./quote-editor";
 import { QuoteSends } from "./quote-sends";
 import { CancelAppointment } from "./cancel-appointment";
@@ -40,6 +42,21 @@ export const dynamic = "force-dynamic";
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: BUSINESS_TZ });
+}
+
+// The six places a job can be, left to right. "Lost" is not one of them: it is
+// a way out of the line, shown instead of it.
+const STAGES = [
+  { key: "new", label: "Lead" },
+  { key: "quoted", label: "Quoted" },
+  { key: "approved", label: "Approved" },
+  { key: "scheduled", label: "Scheduled" },
+  { key: "completed", label: "Done" },
+  { key: "paid", label: "Paid" },
+] as const;
+
+function shortDay(s: string) {
+  return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
 function prettyDate(s: string) {
@@ -142,26 +159,274 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(quote.address)}`
     : null;
 
+  // ── What to do next ──
+  // One card, one sentence, one button, worked out from where the job is. The
+  // page has fifteen things on it; this is the one that moves the job along.
+  const firstName = quote.name.split(" ")[0];
+  const stageIndex = Math.max(0, STAGES.findIndex((st) => st.key === quote.status));
+  const dueCents = money?.ledger.dueCents ?? 0;
+  const next: { tone: "go" | "wait" | "done" | "lost"; title: string; body: string; href?: string; cta?: string } =
+    quote.status === "lost"
+      ? { tone: "lost", title: "Marked lost", body: "Change the status under Job if it comes back." }
+      : quote.status === "paid"
+        ? { tone: "done", title: "All done", body: "The work is finished and the job is paid in full." }
+        : quote.status === "completed"
+          ? dueCents > 0
+            ? { tone: "go", title: `Collect ${usd(dueCents)}`, body: "The work is done. Take the balance or record a payment.", href: "#payments", cta: "Take payment" }
+            : { tone: "done", title: "Done and paid up", body: "Nothing is owed on this job." }
+          : quote.status === "scheduled"
+            ? {
+                tone: "go",
+                title: "Mark it done after the work",
+                body: quote.scheduled_date
+                  ? `Booked for ${prettyDate(quote.scheduled_date)}${quote.scheduled_time ? ` at ${quote.scheduled_time}` : ""}.`
+                  : "It's on the calendar.",
+                href: "#finish",
+                cta: "Mark done",
+              }
+            : quote.customer_response === "accepted"
+              ? {
+                  tone: "go",
+                  title: "Pick the work day",
+                  body:
+                    (quote.preferred_dates ?? []).filter(Boolean).length > 0
+                      ? `${firstName} approved and suggested ${(quote.preferred_dates ?? []).filter(Boolean).map(shortDay).join(", ")}.`
+                      : `${firstName} approved the quote.`,
+                  href: "#schedule",
+                  cta: "Schedule it",
+                }
+              : quote.customer_response === "declined"
+                ? { tone: "wait", title: `${firstName} declined`, body: "Send a new price if you want another go at it.", href: "#quote", cta: "Edit quote" }
+                : quote.quote_sent_at
+                  ? {
+                      tone: "wait",
+                      title: `Waiting on ${firstName}`,
+                      body: `Sent ${fmt(quote.quote_sent_at)}. ${
+                        quote.view_count > 0 ? `Opened ${quote.view_count} time${quote.view_count === 1 ? "" : "s"}.` : "Not opened yet."
+                      }`,
+                      href: showOfflineAccept ? "#accept" : undefined,
+                      cta: showOfflineAccept ? "They said yes by phone" : undefined,
+                    }
+                  : {
+                      tone: "go",
+                      title: "Send the quote",
+                      body: visitDate
+                        ? `Visit ${prettyDate(visitDate)}${quote.visit_time ? ` at ${quote.visit_time}` : ""}. Price it after.`
+                        : photoUrls.length
+                          ? `${firstName} sent ${photoUrls.length} photo${photoUrls.length === 1 ? "" : "s"}. Price it from those.`
+                          : `No photos yet. Call ${firstName} or book a visit.`,
+                      href: "#quote",
+                      cta: "Write the quote",
+                    };
+
+  const phoneDigits = quote.phone.replace(/[^0-9+]/g, "");
+  const photoCount = internalUrls.length + beforeUrls.length + afterUrls.length;
+
   return (
-    <main className="crm-page">
+    <main className="crm-page jb">
       <div className="crm-breadcrumb">
         <Link href={`${base}/`}>{t.job.backToAll}</Link>
       </div>
 
-      <div className="crm-page-head">
-        <h1>{quote.name}</h1>
-        <span className={`crm-badge crm-badge-${quote.status}`}>{t.status[quote.status] ?? quote.status}</span>
-      </div>
+      {/* ── Who, and the three ways to reach them ── */}
+      <header className="jb-head">
+        <div className="jb-id">
+          <div className="jb-name">
+            <h1>{quote.name}</h1>
+            <span className={`crm-badge crm-badge-${quote.status}`}>{t.status[quote.status] ?? quote.status}</span>
+            {quote.is_test && <span className="test-pill">Practice</span>}
+          </div>
+          <p className="jb-what">
+            {[quote.service, quote.address].filter(Boolean).join(" · ") || t.job.na}
+          </p>
+        </div>
+        <nav className="jb-actions" aria-label="Contact">
+          <a href={`tel:${phoneDigits}`} className="crm-btn crm-btn-primary">Call</a>
+          <a href={`sms:${phoneDigits}`} className="crm-btn crm-btn-ghost">Text</a>
+          {mapsLink && (
+            <a href={mapsLink} target="_blank" rel="noreferrer" className="crm-btn crm-btn-ghost">Map</a>
+          )}
+          <a href={customerLink} target="_blank" rel="noreferrer" className="crm-btn crm-btn-ghost">Their quote page</a>
+        </nav>
+      </header>
 
-      <div className="crm-grid">
-        <section className="crm-col">
-          <div className="crm-card">
+      {/* ── Where it is ── */}
+      {quote.status === "lost" ? null : (
+        <ol className="jb-stages" aria-label="Job stage">
+          {STAGES.map((st, i) => (
+            <li
+              key={st.key}
+              className={i < stageIndex ? "jb-stage jb-stage-past" : i === stageIndex ? "jb-stage jb-stage-now" : "jb-stage"}
+              aria-current={i === stageIndex ? "step" : undefined}
+            >
+              {st.label}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {/* ── What to do about it ── */}
+      <section className={`jb-next jb-next-${next.tone}`} aria-label="Next up">
+        <div>
+          <p className="jb-next-title">{next.title}</p>
+          <p className="jb-next-body">{next.body}</p>
+        </div>
+        {next.href && next.cta && (
+          <a href={next.href} className="crm-btn crm-btn-primary jb-next-btn">
+            {next.cta}
+          </a>
+        )}
+      </section>
+
+      <div className="jb-grid">
+        {/* ── The work: whichever step is live, then the quote ── */}
+        <div className="jb-main">
+          {showOfflineAccept && (
+            <div className="jb-o-step" id="accept">
+              <AcceptOffline
+                id={quote.id}
+                customerName={quote.name}
+                amount={quote.quote_amount}
+                options={options.map((o) => ({
+                  id: o.id,
+                  title: o.title,
+                  description: o.description,
+                  amount: Number(o.amount),
+                  required: o.required,
+                }))}
+                packages={packages.map((p) => ({
+                  id: p.id,
+                  title: p.title,
+                  amount: Number(p.amount),
+                  recommended: p.recommended,
+                }))}
+                minDate={minJobDate}
+                locale={locale}
+              />
+            </div>
+          )}
+
+          {showSchedule && (
+            <div className="jb-o-step" id="schedule">
+              <ScheduleCard
+                id={quote.id}
+                scheduledDate={quote.scheduled_date}
+                scheduledTime={quote.scheduled_time}
+                preferred={preferredSlots(quote.preferred_dates, quote.preferred_times)}
+                minDate={minJobDate}
+                locale={locale}
+              />
+            </div>
+          )}
+
+          {quote.status === "scheduled" && (
+            <div className="jb-o-step" id="finish">
+              <CompleteCard
+                id={quote.id}
+                title={t.finish.title}
+                hint={t.finish.hint}
+                // Not a warning. The reminder two days out is a courtesy
+                // check-in, and a job that hasn't had one yet is not a job in
+                // trouble.
+                statusNote={quote.confirmed_at ? t.finish.confirmed : t.finish.scheduledNote}
+                statusIsWarning={false}
+                buttonLabel={t.finish.markCompleted}
+                beforeCount={quote.before_urls?.length ?? 0}
+                afterCount={quote.after_urls?.length ?? 0}
+              />
+            </div>
+          )}
+
+          {/* The money on this job, from the moment they approve: a deposit is
+              collected long before the work is finished. */}
+          {money && (
+            <div className="jb-o-step" id="payments">
+              <QuotePayments
+                id={quote.id}
+                locale={locale}
+                isOwner={isOwner}
+                cardReady={cardReady}
+                totalCents={money.ledger.totalCents}
+                paidCents={money.ledger.paidCents}
+                dueCents={money.ledger.dueCents}
+                feeTotalCents={money.ledger.feeTotalCents}
+                feeCollectedCents={money.ledger.feeCollectedCents}
+                feeDueCents={money.ledger.feeDueNowCents}
+                rows={money.rows.map((r) => ({
+                  id: r.id,
+                  method: r.method,
+                  amount_cents: r.amount_cents,
+                  refunded_cents: r.refunded_cents,
+                  status: r.status,
+                  paid_at: r.paid_at,
+                  created_at: r.created_at,
+                  // Only a settled card payment has anything on Stripe's side
+                  // to reverse.
+                  refundable:
+                    r.method === "card" && r.status !== "pending" && Boolean(r.payment_intent_id && r.stripe_account_id),
+                }))}
+              />
+            </div>
+          )}
+
+          <QuoteEditor
+            id={quote.id}
+            options={options.map((o) => ({
+              id: o.id,
+              title: o.title,
+              description: o.description,
+              // numeric(10,2) arrives as a string from PostgREST.
+              amount: Number(o.amount),
+              required: o.required,
+              customer_response: o.customer_response,
+            }))}
+            packages={packages.map((p) => ({
+              id: p.id,
+              title: p.title,
+              description: p.description,
+              amount: Number(p.amount),
+              recommended: p.recommended,
+              customer_response: p.customer_response,
+            }))}
+            customerName={quote.name}
+            awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
+            initial={{
+              quote_amount: quote.quote_amount,
+              quote_summary: quote.quote_summary,
+              customer_response: quote.customer_response,
+              quote_scope: quote.quote_scope,
+              quote_permits: quote.quote_permits,
+              quote_prep: quote.quote_prep,
+              quote_pour: quote.quote_pour,
+              quote_cleanup: quote.quote_cleanup,
+            }}
+          />
+
+          {/* Every price this customer has been given, under the quote it is
+              the history of. Where a sent quote is taken back or another
+              option goes out. */}
+          <QuoteSends
+              quoteId={quote.id}
+              customerName={quote.name}
+              sends={quoteSends(events, quote.quote_amount)}
+              canRetract={isOwner}
+              canAddOption={canAddOption}
+              currentAmount={quote.quote_amount}
+              service={quote.service}
+              options={packages.map((p) => ({ id: p.id, title: p.title, amount: Number(p.amount), recommended: p.recommended }))}
+              locale={locale}
+            />
+        </div>
+
+        {/* ── The facts: who, what they asked for, the job's settings ── */}
+        <aside className="jb-side">
+          <div className="crm-card jb-o-customer">
             <h2 className="crm-card-title">{t.job.customer}</h2>
-            <dl className="crm-dl">
+            <dl className="crm-dl jb-dl">
               <div>
                 <dt>{t.job.phone}</dt>
                 <dd>
-                  <a href={`tel:${quote.phone.replace(/[^0-9+]/g, "")}`}>{quote.phone}</a>
+                  <a href={`tel:${phoneDigits}`}>{quote.phone}</a>
                 </dd>
               </div>
               {quote.email && (
@@ -172,10 +437,6 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   </dd>
                 </div>
               )}
-              <div>
-                <dt>{t.job.service}</dt>
-                <dd>{quote.service || t.job.na}</dd>
-              </div>
               <div>
                 <dt>{t.job.type}</dt>
                 <dd>
@@ -214,20 +475,6 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 </div>
               )}
               <div>
-                <dt>{t.job.address}</dt>
-                <dd>
-                  {quote.address || t.job.na}
-                  {mapsLink && (
-                    <>
-                      {" "}
-                      <a href={mapsLink} target="_blank" rel="noreferrer" className="crm-link-strong">
-                        {t.job.map}
-                      </a>
-                    </>
-                  )}
-                </dd>
-              </div>
-              <div>
                 <dt>{t.job.received}</dt>
                 <dd>{fmt(quote.created_at)}</dd>
               </div>
@@ -237,23 +484,6 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   {quote.view_count} {quote.viewed_at ? `· ${t.job.firstViewed} ${fmt(quote.viewed_at)}` : `· ${t.job.notOpened}`}
                 </dd>
               </div>
-              {quote.customer_response && (
-                <div>
-                  <dt>{t.job.customerResponse}</dt>
-                  <dd>
-                    {quote.customer_response === "accepted" ? (
-                      <strong className="crm-link-strong">
-                        {t.job.accepted}{quote.discount_accepted ? " ($150)" : ""}
-                        {quote.scheduled_date
-                          ? ` · ${prettyDate(quote.scheduled_date)}${quote.scheduled_time ? ` ${t.contractorJob.at} ${quote.scheduled_time}` : ""}`
-                          : ""}
-                      </strong>
-                    ) : (
-                      t.job.declined
-                    )}
-                  </dd>
-                </div>
-              )}
             </dl>
             {quote.details && (
               <div className="crm-details-block">
@@ -263,285 +493,168 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             )}
           </div>
 
-          <div className="crm-card">
-            <h2 className="crm-card-title">{t.job.photos} ({photoUrls.length})</h2>
+          <JobSettings
+            id={quote.id}
+            contractors={contractors.map((c) => ({ id: c.id, label: c.full_name || c.email || "Contractor" }))}
+            initial={{
+              name: quote.name,
+              status: quote.status,
+              assigned_to: quote.assigned_to,
+              internal_notes: quote.internal_notes,
+            }}
+          />
+
+          <div className="crm-card jb-o-photos">
+            <h2 className="crm-card-title">
+              {t.job.photos} ({photoUrls.length})
+            </h2>
             {photoUrls.length === 0 ? (
-              <p className="crm-muted">
-                {quote.quote_type === "online"
-                  ? t.job.noFiles
-                  : t.job.noFilesInPerson}
-              </p>
+              <p className="crm-muted">{quote.quote_type === "online" ? t.job.noFiles : t.job.noFilesInPerson}</p>
             ) : (
               <PhotoGrid urls={photoUrls} />
             )}
           </div>
 
-          {/* Ours, kept apart from the customer's own uploads above. Which
-              set a photo belongs to is the point: the before/after pair is
-              the record of the work, and a picture the customer sent in
-              before we started is not that. */}
-          <div className="crm-card">
-            <h2 className="crm-card-title">Our photos</h2>
-            <p className="crm-muted crm-sm">Only staff see these. The customer&apos;s quote page never shows photos.</p>
-
-            <h3 className="crm-photo-head">Site notes ({internalUrls.length})</h3>
-            {internalUrls.length > 0 && <PhotoGrid urls={internalUrls} />}
-            <PhotoUpload quoteId={quote.id} kind="internal" label="Add site photos" />
-
-            <h3 className="crm-photo-head">Before ({beforeUrls.length})</h3>
-            {beforeUrls.length > 0 && <PhotoGrid urls={beforeUrls} />}
-            <PhotoUpload quoteId={quote.id} kind="before" label="Add before photos" />
-
-            <h3 className="crm-photo-head">After ({afterUrls.length})</h3>
-            {afterUrls.length > 0 && <PhotoGrid urls={afterUrls} />}
-            <PhotoUpload quoteId={quote.id} kind="after" label="Add after photos" />
-          </div>
-
-          <div className="crm-card">
-            <h2 className="crm-card-title">Customer agreement ({agreements.length})</h2>
-            <p className="crm-muted crm-sm">
-              Send the agreement from DocuSeal, then track it here. {quote.email
-                ? `DocuSeal will email ${quote.email}.`
-                : "This customer has no email on file, so DocuSeal can't email them - share the signing link another way."}
-            </p>
-            <AgreementList agreements={agreements} isOwner={isOwner} locale={locale} />
-            {isOwner && (
-              <div className="ag-add">
-                <AddAgreement kind="customer" targetId={quote.id} defaultTitle={`Customer agreement for ${quote.name}`} />
+          {/* Everything that is looked at now and then rather than every
+              visit. Closed by default so the page stays about the next step;
+              the count on each says whether there is anything inside. */}
+          <div className="jb-more">
+            {/* Ours, kept apart from the customer's uploads above: the
+                before/after pair is the record of the work. */}
+            <details className="jb-fold">
+              <summary>
+                Our photos <span className="jb-count">{photoCount}</span>
+              </summary>
+              <div className="jb-fold-body">
+                <p className="crm-muted crm-sm">Only staff see these. The customer&apos;s quote page never shows photos.</p>
+                <h3 className="crm-photo-head">Site notes ({internalUrls.length})</h3>
+                {internalUrls.length > 0 && <PhotoGrid urls={internalUrls} />}
+                <PhotoUpload quoteId={quote.id} kind="internal" label="Add site photos" />
+                <h3 className="crm-photo-head">Before ({beforeUrls.length})</h3>
+                {beforeUrls.length > 0 && <PhotoGrid urls={beforeUrls} />}
+                <PhotoUpload quoteId={quote.id} kind="before" label="Add before photos" />
+                <h3 className="crm-photo-head">After ({afterUrls.length})</h3>
+                {afterUrls.length > 0 && <PhotoGrid urls={afterUrls} />}
+                <PhotoUpload quoteId={quote.id} kind="after" label="Add after photos" />
               </div>
+            </details>
+
+            {/* Whether anyone was actually told, then everything that ever
+                happened to the job. */}
+            <details className="jb-fold">
+              <summary>
+                Texts sent <span className="jb-count">{messages.length}</span>
+              </summary>
+              <div className="jb-fold-body jb-fold-flat">
+                <MessageLog messages={messages} isOwner={isOwner} />
+              </div>
+            </details>
+
+            <details className="jb-fold">
+              <summary>
+                {t.job.activity} <span className="jb-count">{events.length}</span>
+              </summary>
+              <div className="jb-fold-body">
+                {events.length === 0 ? (
+                  <p className="crm-muted crm-sm">Nothing yet.</p>
+                ) : (
+                  <ul className="crm-timeline">
+                    {events.map((e) => (
+                      <li key={e.id}>
+                        <span className="crm-timeline-dot" />
+                        <div>
+                          <strong>{eventText(e, nameMap)}</strong>
+                          <div className="crm-muted crm-sm">
+                            {eventActor(e, nameMap)} · {fmt(e.created_at)}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </details>
+
+            <details className="jb-fold">
+              <summary>
+                Customer agreement <span className="jb-count">{agreements.length}</span>
+              </summary>
+              <div className="jb-fold-body">
+                <p className="crm-muted crm-sm">
+                  Send the agreement from DocuSeal, then track it here.{" "}
+                  {quote.email
+                    ? `DocuSeal will email ${quote.email}.`
+                    : "This customer has no email on file, so DocuSeal can't email them. Share the signing link another way."}
+                </p>
+                <AgreementList agreements={agreements} isOwner={isOwner} locale={locale} />
+                {isOwner && (
+                  <div className="ag-add">
+                    <AddAgreement kind="customer" targetId={quote.id} defaultTitle={`Customer agreement for ${quote.name}`} />
+                  </div>
+                )}
+              </div>
+            </details>
+
+            {(quote.scheduled_date || visitDate) && quote.status !== "completed" && quote.status !== "paid" && (
+              <details className="jb-fold">
+                <summary>{t.calendar.cancelAppt}</summary>
+                {/* One control per appointment the job has: a booked work day
+                    and a quote visit are different days and different texts. */}
+                <div className="jb-fold-body">
+                  {quote.scheduled_date && (
+                    <CancelAppointment id={quote.id} kind="job" customerName={quote.name} locale={locale} />
+                  )}
+                  {visitDate && <CancelAppointment id={quote.id} kind="visit" customerName={quote.name} locale={locale} />}
+                </div>
+              </details>
+            )}
+
+            <details className="jb-fold">
+              <summary>{t.links.title}</summary>
+              <div className="jb-fold-body">
+                <p className="crm-muted crm-sm">{t.links.hint}</p>
+                <CopyField label={t.links.customerLink} value={customerLink} />
+                <CopyField label={t.links.jobLink} value={jobLink} />
+                <div className="crm-editor-foot">
+                  <form action={rotateTokens}>
+                    <input type="hidden" name="id" value={quote.id} />
+                    <button type="submit" className="crm-btn crm-btn-ghost">
+                      {t.links.regenerate}
+                    </button>
+                  </form>
+                  <span className="crm-muted crm-sm">{t.links.regenerateHint}</span>
+                </div>
+              </div>
+            </details>
+
+            {/* The least-used control here and the only one that changes what
+                the business thinks it earned. A practice lead behaves exactly
+                like a real one and stays out of every figure on Money. */}
+            {isOwner && (
+              <details className="jb-fold">
+                <summary>
+                  Test lead {quote.is_test && <span className="test-pill">Practice</span>}
+                </summary>
+                <div className="jb-fold-body">
+                  <p className="crm-muted crm-sm">
+                    {quote.is_test
+                      ? "This lead is practice. Payments on it are real rows written by the real code, and none of them count on the Money page."
+                      : "Use this on a lead you are testing a feature or a payment with. Nothing about how it behaves changes; it just stops counting as money."}
+                  </p>
+                  <div className="crm-editor-foot">
+                    <form action={setTestFlag}>
+                      <input type="hidden" name="id" value={quote.id} />
+                      <input type="hidden" name="isTest" value={quote.is_test ? "0" : "1"} />
+                      <button type="submit" className="crm-btn crm-btn-ghost">
+                        {quote.is_test ? "This is a real job" : "Mark as a test lead"}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </details>
             )}
           </div>
-
-          {/* Three logs, narrowing as you go down: what the customer was
-              quoted, whether the texts about it left the building, then
-              everything that has ever happened to the job. */}
-          <QuoteSends
-            quoteId={quote.id}
-            customerName={quote.name}
-            sends={quoteSends(events, quote.quote_amount)}
-            canRetract={isOwner}
-            canAddOption={canAddOption}
-            currentAmount={quote.quote_amount}
-            service={quote.service}
-            options={packages.map((p) => ({ id: p.id, title: p.title, amount: Number(p.amount), recommended: p.recommended }))}
-            locale={locale}
-          />
-
-          {/* Above the activity log on purpose: the activity log says what
-              happened, this says whether anyone was told. */}
-          <MessageLog messages={messages} isOwner={isOwner} />
-
-          {events.length > 0 && (
-            <div className="crm-card">
-              <h2 className="crm-card-title">{t.job.activity}</h2>
-              <ul className="crm-timeline">
-                {events.map((e) => (
-                  <li key={e.id}>
-                    <span className="crm-timeline-dot" />
-                    <div>
-                      <strong>{eventText(e, nameMap)}</strong>
-                      <div className="crm-muted crm-sm">
-                        {eventActor(e, nameMap)} · {fmt(e.created_at)}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </section>
-
-        <section className="crm-col">
-          <QuoteEditor
-            id={quote.id}
-            isOwner={isOwner}
-            options={options.map((o) => ({
-              id: o.id,
-              title: o.title,
-              description: o.description,
-              // numeric(10,2) arrives as a string from PostgREST.
-              amount: Number(o.amount),
-              required: o.required,
-              customer_response: o.customer_response,
-            }))}
-            packages={packages.map((p) => ({
-              id: p.id,
-              title: p.title,
-              description: p.description,
-              amount: Number(p.amount),
-              recommended: p.recommended,
-              customer_response: p.customer_response,
-            }))}
-            customerName={quote.name}
-            awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
-            contractors={contractors.map((c) => ({ id: c.id, label: c.full_name || c.email || "Contractor" }))}
-            initial={{
-              status: quote.status,
-              name: quote.name,
-              assigned_to: quote.assigned_to,
-              quote_amount: quote.quote_amount,
-              quote_summary: quote.quote_summary,
-              internal_notes: quote.internal_notes,
-              customer_response: quote.customer_response,
-              quote_scope: quote.quote_scope,
-              quote_permits: quote.quote_permits,
-              quote_prep: quote.quote_prep,
-              quote_pour: quote.quote_pour,
-              quote_cleanup: quote.quote_cleanup,
-            }}
-          />
-
-          {showOfflineAccept && (
-            <AcceptOffline
-              id={quote.id}
-              customerName={quote.name}
-              amount={quote.quote_amount}
-              options={options.map((o) => ({
-                id: o.id,
-                title: o.title,
-                description: o.description,
-                amount: Number(o.amount),
-                required: o.required,
-              }))}
-              packages={packages.map((p) => ({
-                id: p.id,
-                title: p.title,
-                amount: Number(p.amount),
-                recommended: p.recommended,
-              }))}
-              minDate={minJobDate}
-              locale={locale}
-            />
-          )}
-
-          {showSchedule && (
-            <ScheduleCard
-              id={quote.id}
-              scheduledDate={quote.scheduled_date}
-              scheduledTime={quote.scheduled_time}
-              preferred={preferredSlots(quote.preferred_dates, quote.preferred_times)}
-              minDate={minJobDate}
-              locale={locale}
-            />
-          )}
-
-          {/* Calling one off, for the customer who rings the office rather than
-              the crew. One control per appointment this job actually has: a
-              booked work day and a quote visit are different days and different
-              texts, and a job can be carrying both. */}
-          {(quote.scheduled_date || visitDate) && quote.status !== "completed" && quote.status !== "paid" && (
-            <div className="crm-card">
-              <h2 className="crm-card-title">{t.calendar.cancelAppt}</h2>
-              {quote.scheduled_date && (
-                <CancelAppointment id={quote.id} kind="job" customerName={quote.name} locale={locale} />
-              )}
-              {visitDate && (
-                <CancelAppointment id={quote.id} kind="visit" customerName={quote.name} locale={locale} />
-              )}
-            </div>
-          )}
-
-          {quote.status === "scheduled" && (
-            <CompleteCard
-              id={quote.id}
-              title={t.finish.title}
-              hint={t.finish.hint}
-              // Not a warning. The customer accepted and the crew booked one of
-              // their own days: the job is on. The reminder two days out is a
-              // courtesy check-in, and a job that hasn't had one yet is not a
-              // job in trouble - which is what the amber here used to imply for
-              // the entire fortnight before the pour.
-              statusNote={quote.confirmed_at ? t.finish.confirmed : t.finish.scheduledNote}
-              statusIsWarning={false}
-              buttonLabel={t.finish.markCompleted}
-              beforeCount={quote.before_urls?.length ?? 0}
-              afterCount={quote.after_urls?.length ?? 0}
-            />
-          )}
-
-          {/* The money on this job, from the moment they approve rather than
-              only once the work is finished - a deposit is collected long
-              before that, and a card that appears at the end can't be where
-              deposits are recorded.
-
-              This replaced a "Get paid" card whose Mark paid button wrote a
-              timestamp and nothing else. With a real ledger underneath, a job
-              that reads as paid with no payment recorded against it is worse
-              than no button at all. */}
-          {money && (
-            <QuotePayments
-              id={quote.id}
-              locale={locale}
-              isOwner={isOwner}
-              cardReady={cardReady}
-              totalCents={money.ledger.totalCents}
-              paidCents={money.ledger.paidCents}
-              dueCents={money.ledger.dueCents}
-              feeTotalCents={money.ledger.feeTotalCents}
-              feeCollectedCents={money.ledger.feeCollectedCents}
-              feeDueCents={money.ledger.feeDueNowCents}
-              rows={money.rows.map((r) => ({
-                id: r.id,
-                method: r.method,
-                amount_cents: r.amount_cents,
-                refunded_cents: r.refunded_cents,
-                status: r.status,
-                paid_at: r.paid_at,
-                created_at: r.created_at,
-                // Cash goes back the way it came; only a settled card payment
-                // has anything on Stripe's side to reverse.
-                refundable:
-                  r.method === "card" && r.status !== "pending" && Boolean(r.payment_intent_id && r.stripe_account_id),
-              }))}
-            />
-          )}
-
-          <div className="crm-card">
-            <h2 className="crm-card-title">{t.links.title}</h2>
-            <p className="crm-muted crm-sm">
-              {t.links.hint}
-            </p>
-            <CopyField label={t.links.customerLink} value={customerLink} />
-            <CopyField label={t.links.jobLink} value={jobLink} />
-            <div className="crm-editor-foot">
-              <form action={rotateTokens}>
-                <input type="hidden" name="id" value={quote.id} />
-                <button type="submit" className="crm-btn crm-btn-ghost">
-                  {t.links.regenerate}
-                </button>
-              </form>
-              <span className="crm-muted crm-sm">{t.links.regenerateHint}</span>
-            </div>
-          </div>
-
-          {/* Owner only, and last on the page: it is the least-used control
-              here and the only one that changes what the business thinks it
-              earned. A practice lead behaves exactly like a real one - quote
-              it, approve it, take a card payment on it - and stays out of
-              every figure on the Money page while it does. */}
-          {isOwner && (
-            <div className={`crm-card${quote.is_test ? " test-card-on" : ""}`}>
-              <h2 className="crm-card-title">
-                Test lead
-                {quote.is_test && <span className="test-pill">Practice</span>}
-              </h2>
-              <p className="crm-muted crm-sm">
-                {quote.is_test
-                  ? "This lead is practice. Payments on it are real rows written by the real code, and none of them count on the Money page."
-                  : "Use this on a lead you are testing a feature or a payment with. Nothing about how it behaves changes; it just stops counting as money."}
-              </p>
-              <div className="crm-editor-foot">
-                <form action={setTestFlag}>
-                  <input type="hidden" name="id" value={quote.id} />
-                  <input type="hidden" name="isTest" value={quote.is_test ? "0" : "1"} />
-                  <button type="submit" className="crm-btn crm-btn-ghost">
-                    {quote.is_test ? "This is a real job" : "Mark as a test lead"}
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-        </section>
+        </aside>
       </div>
     </main>
   );

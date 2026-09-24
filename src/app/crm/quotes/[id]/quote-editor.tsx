@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { dict } from "@/lib/crm/i18n";
-import { dollars, packageLetter, QUOTE_SECTION_FIELDS, QUOTE_SECTION_HINTS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, STATUS_LABELS, STATUSES, type QuoteSectionField } from "@/lib/crm/constants";
+import { dollars, packageLetter, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, type QuoteSectionField } from "@/lib/crm/constants";
 import { saveQuote } from "./actions";
 import {
   OptionBuilder,
@@ -29,17 +29,21 @@ import {
 } from "./package-builder";
 import type { SaveState } from "./types";
 import { AutoTextarea } from "@/components/auto-textarea";
+import {
+  blankSections as blanksOf,
+  CustomerPreview,
+  emptySections,
+  PriceCard,
+  SectionsEditor,
+  type Sections,
+} from "@/components/quote-form-parts";
 
-type ContractorOption = { id: string; label: string };
-
-type Sections = Record<QuoteSectionField, string>;
-
-const emptySections = (): Sections =>
-  Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, ""])) as Sections;
-
+// The quote itself: what the customer is sent and reads back. Name, status,
+// crew and private notes are the job's, not the quote's, and live in
+// JobSettings beside it - saveQuote only touches the fields a form posts, so
+// the two save independently.
 type Props = {
   id: string;
-  isOwner: boolean;
   // Line items, if this quote was written as a list of choices rather than one
   // price. Empty is the normal case and changes nothing.
   options: StoredOption[];
@@ -52,22 +56,15 @@ type Props = {
   // act on it - but it becomes a deliberate second send rather than a repeat
   // of the same click.
   awaitingReply: boolean;
-  contractors: ContractorOption[];
   initial: {
-    status: string;
-    name: string;
-    assigned_to: string | null;
     quote_amount: number | null;
     quote_summary: string | null;
-    internal_notes: string | null;
     customer_response: "accepted" | "declined" | null;
   } & Partial<Record<QuoteSectionField, string | null>>;
 };
 
-export function QuoteEditor({ id, isOwner, options, packages, customerName, awaitingReply, contractors, initial }: Props) {
+export function QuoteEditor({ id, options, packages, customerName, awaitingReply, initial }: Props) {
   const router = useRouter();
-  // Owner-facing screen, so English. The builders take their words as a prop
-  // because the crew's copy of them renders in whichever language they chose.
   const owner = dict("en");
   const optionLabels = owner.quoteOptions;
   const packageLabels = owner.quotePackages;
@@ -76,16 +73,12 @@ export function QuoteEditor({ id, isOwner, options, packages, customerName, awai
   // Everything is controlled so the form always shows the saved truth. When the
   // server data changes (after a save, or a customer action elsewhere) we resync
   // the fields to it - that's the "stateful" behaviour the board needs.
-  const [status, setStatus] = useState(initial.status);
-  const [name, setName] = useState(initial.name);
-  const [assigned, setAssigned] = useState(initial.assigned_to ?? "");
   const [amount, setAmount] = useState(initial.quote_amount != null ? String(initial.quote_amount) : "");
   const [summary, setSummary] = useState(initial.quote_summary ?? "");
   const [sections, setSections] = useState<Sections>(() => ({
     ...emptySections(),
     ...Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, initial[f] ?? ""])),
   }));
-  const [notes, setNotes] = useState(initial.internal_notes ?? "");
   const [rows, setRows] = useState<OptionRow[]>(() => rowsFromOptions(options));
   const [pkgRows, setPkgRows] = useState<PackageRow[]>(() => rowsFromPackages(packages));
   const [confirming, setConfirming] = useState(false);
@@ -131,27 +124,19 @@ export function QuoteEditor({ id, isOwner, options, packages, customerName, awai
   const initialSig = useMemo(
     () =>
       [
-        initial.status,
-        initial.name,
-        initial.assigned_to ?? "",
         initial.quote_amount ?? "",
         initial.quote_summary ?? "",
-        initial.internal_notes ?? "",
         ...QUOTE_SECTION_FIELDS.map((f) => initial[f] ?? ""),
       ].join("|"),
     [initial],
   );
   useEffect(() => {
-    setStatus(initial.status);
-    setName(initial.name);
-    setAssigned(initial.assigned_to ?? "");
     setAmount(initial.quote_amount != null ? String(initial.quote_amount) : "");
     setSummary(initial.quote_summary ?? "");
     setSections({
       ...emptySections(),
       ...Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, initial[f] ?? ""])),
     });
-    setNotes(initial.internal_notes ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSig]);
 
@@ -188,7 +173,7 @@ export function QuoteEditor({ id, isOwner, options, packages, customerName, awai
 
   // Which of the five are still blank. A quote written before the sections
   // existed is allowed out on its old summary instead, matching the server.
-  const blankSections = QUOTE_SECTION_FIELDS.filter((f) => !sections[f].trim());
+  const blankSections = blanksOf(sections);
   const hasLegacySummary = summary.trim().length > 0;
   const sectionsValid = blankSections.length === 0 || hasLegacySummary;
 
@@ -233,7 +218,7 @@ export function QuoteEditor({ id, isOwner, options, packages, customerName, awai
   }
 
   return (
-    <form action={formAction} className="crm-card crm-editor">
+    <form action={formAction} className="crm-card crm-editor crm-paper" id="quote">
       <input type="hidden" name="id" value={id} />
       {/* The intent rides on a hidden field rather than the submit button's
           name/value. Relying on the submitter meant that if it didn't reach the
@@ -253,155 +238,50 @@ export function QuoteEditor({ id, isOwner, options, packages, customerName, awai
       {!locked && <input type="hidden" name="options_json" value={rowsToJson(rows)} />}
       {!locked && <input type="hidden" name="packages_json" value={packagesToJson(pkgRows)} />}
 
-      {/* The name every later text opens with. Arrives from a web form or a
-          phone call, so it is wrong often enough to need fixing here. */}
-      <label className="crm-field">
-        <span>Customer name</span>
-        <input
-          name="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="crm-input"
-          maxLength={120}
-        />
-      </label>
-
-      <div className="crm-editor-row">
-        <label className="crm-field">
-          <span>Status</span>
-          <select name="status" value={status} onChange={(e) => setStatus(e.target.value)} className="crm-input">
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {isOwner && (
-          <label className="crm-field">
-            <span>Assigned contractor</span>
-            <select name="assigned_to" value={assigned} onChange={(e) => setAssigned(e.target.value)} className="crm-input">
-              <option value="">Unassigned</option>
-              {contractors.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <label className="crm-field">
-          <span>
-            {choice
-              ? "Quote amount ($) - the option you'd recommend"
-              : itemised
-                ? "Quote amount ($) - from the line items"
-                : "Quote amount ($) *"}
-          </span>
-          <input
-            type="number"
-            name="quote_amount"
-            min={0}
-            step="0.01"
-            value={derived ? String(derivedTotal) : amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="crm-input"
-            placeholder="e.g. 6500"
-            readOnly={derived}
-            title={
-              choice
-                ? "A quote with options has no single price. This is the one you'd recommend, so the board has a figure to show."
-                : itemised
-                  ? "Edit the line items below to change this."
-                  : undefined
-            }
-          />
-        </label>
+      <div className="crm-paper-head">
+        <h2 className="crm-card-title">Quote</h2>
+        <span className="crm-paper-sub">
+          {locked
+            ? `${customerName.split(" ")[0]} has answered. The line items are their record now.`
+            : "What the customer gets, laid out the way they read it."}
+        </span>
       </div>
 
-      {/* Between the price and the five sections, which is the order it gets
-          written in: what the job is made of, then how all of it is done. */}
-      <OptionBuilder
-        rows={rows}
-        onChange={setRows}
-        labels={optionLabels}
-        locked={locked}
-        answers={answers}
+      {/* The same price card and section timeline as the crew's form and the
+          customer's own page (components/quote-form-parts). */}
+      <PriceCard
+        value={derived ? String(derivedTotal) : amount}
+        onChange={setAmount}
+        derived={derived}
+        derivedLabel={
+          choice ? "Headline price: the option you'd recommend plus extras" : "Total, from the line items below"
+        }
       />
 
-      {/* Under the line items, because that is the order it gets thought
-          about: what the job is, then - occasionally - the second way of doing
-          it. Almost every quote leaves this closed. */}
-      <PackageBuilder
-        rows={pkgRows}
-        onChange={setPkgRows}
-        labels={packageLabels}
-        locked={locked}
-        answers={packageAnswers}
-      />
+      <SectionsEditor sections={sections} onChange={setSection} idPrefix="qe" />
 
-      {/* The five sections the customer reads, in the order they read them.
-          Separate boxes rather than one, because a single box is how permits
-          and cleanup quietly go unmentioned. */}
-      <fieldset className="crm-sections">
-        <legend>What the customer sees</legend>
-        <p className="crm-muted crm-sm">
-          All five are required to send. Put &quot;Not applicable&quot; where a section doesn&apos;t apply to this job.
-        </p>
-        {QUOTE_SECTION_FIELDS.map((field) => (
-          <label key={field} className="crm-field">
-            <span>
-              {QUOTE_SECTION_LABELS[field]} *
-              {!sections[field].trim() && (
-                <button
-                  type="button"
-                  className="crm-na-btn"
-                  onClick={() => setSection(field, "Not applicable")}
-                >
-                  Not applicable
-                </button>
-              )}
-            </span>
-            <AutoTextarea
-              name={field}
-              rows={2}
-              value={sections[field]}
-              onChange={(e) => setSection(field, e.target.value)}
-              className="crm-input"
-              placeholder={QUOTE_SECTION_HINTS[field]}
-            />
-          </label>
-        ))}
-      </fieldset>
+      {/* The extras, after the everyday path: most quotes are one price and
+          five sections. Adding a line item turns the price card into a total. */}
+      <OptionBuilder rows={rows} onChange={setRows} labels={optionLabels} locked={locked} answers={answers} />
+      <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={packageLabels} locked={locked} answers={packageAnswers} />
 
       {/* Only for quotes written before the sections existed. Hidden entirely
           on new ones so nobody fills in a sixth box that nothing displays. */}
       {hasLegacySummary && (
-        <label className="crm-field">
+        <label className="jq-field">
           <span>Older quote summary (shown only while the sections above are blank)</span>
-          <AutoTextarea
-            name="quote_summary"
-            rows={3}
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-            className="crm-input"
-          />
+          <AutoTextarea name="quote_summary" rows={3} value={summary} onChange={(e) => setSummary(e.target.value)} />
         </label>
       )}
 
-      <label className="crm-field">
-        <span>Internal notes (never shown to the customer)</span>
-        <AutoTextarea
-          name="internal_notes"
-          rows={3}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          className="crm-input"
-          placeholder="Notes for you and the crew."
+      {!confirming && (
+        <CustomerPreview
+          firstName={customerName.split(" ")[0]}
+          price={amountValid ? amountNum : null}
+          derived={derived}
+          sections={sections}
         />
-      </label>
+      )}
 
       {confirming ? (
         <div className="crm-confirm">
@@ -449,16 +329,18 @@ export function QuoteEditor({ id, isOwner, options, packages, customerName, awai
                 ))}
             </ul>
           )}
-          {/* Exactly what they'll read, in the order they'll read it. */}
-          <div className="crm-confirm-summary">
-            {blankSections.length === 0
-              ? QUOTE_SECTION_FIELDS.map((f) => (
-                  <p key={f}>
-                    <strong>{QUOTE_SECTION_LABELS[f]}:</strong> {sections[f]}
-                  </p>
-                ))
-              : summary}
-          </div>
+          {/* Exactly what they'll read, drawn by the component their page uses. */}
+          {blankSections.length === 0 ? (
+            <CustomerPreview
+              firstName={customerName.split(" ")[0]}
+              price={amountValid ? amountNum : null}
+              derived={derived}
+              sections={sections}
+              startOpen
+            />
+          ) : (
+            <div className="crm-confirm-summary">{summary}</div>
+          )}
           <div className="crm-editor-foot">
             <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setConfirming(false)} disabled={pending}>
               Cancel
@@ -519,8 +401,8 @@ export function QuoteEditor({ id, isOwner, options, packages, customerName, awai
             </div>
           )}
           <p className="crm-muted crm-sm crm-editor-hint">
-            Price and all five sections are required to send. Send Quote texts the customer their link, good for{" "}
-            {QUOTE_TTL_DAYS} days, and marks this Sent. The price itself is never in the text.
+            Send texts {customerName.split(" ")[0]} their link, good for {QUOTE_TTL_DAYS} days. The price is never in
+            the text.
             {itemised
               ? " This quote has line items, so the customer answers each one and their total follows what they picked."
               : ""}

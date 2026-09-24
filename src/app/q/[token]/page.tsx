@@ -9,6 +9,7 @@ import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, getWorkHours, isQuoteExpired, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
 import { QuoteActions } from "./quote-actions";
+import { QuoteSections } from "@/components/quote-sections";
 import { ViewBeacon } from "./view-beacon";
 
 export const dynamic = "force-dynamic";
@@ -107,7 +108,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           <h1 className="cq-confirm-title">Hi {firstName}, this quote has expired.</h1>
           <p className="cq-confirm-note">
             Quotes are good for {QUOTE_TTL_DAYS} days so our pricing stays accurate. Give us a call or send a text and
-            we&apos;ll get an updated one out to you the same day.
+            we&apos;ll send you an updated one.
           </p>
           <ContactButtons />
         </div>
@@ -333,14 +334,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
         {sections.length > 0 ? (
           <div className="cq-summary">
             <h2>What&apos;s included</h2>
-            <dl className="cq-sections">
-              {sections.map(([field, value]) => (
-                <div key={field} className="cq-section">
-                  <dt>{QUOTE_SECTION_LABELS[field]}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ))}
-            </dl>
+            <QuoteSections sections={sections.map(([field, value]) => [QUOTE_SECTION_LABELS[field], value] as const)} />
           </div>
         ) : (
           quote.quote_summary && (

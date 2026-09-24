@@ -106,7 +106,7 @@ export function ServicePage({ service }: { service: Service }) {
                   <p className="stat-label">Google Rated</p>
                 </div>
                 <div className="stat-card text-center">
-                  <p className="stat-value">Same Day</p>
+                  <p className="stat-value">Free</p>
                   <p className="stat-label">Quotes</p>
                 </div>
                 <div className="stat-card text-center">
@@ -224,7 +224,7 @@ export function ServicePage({ service }: { service: Service }) {
               Get Your Free {service.name} Quote
             </h2>
             <p className="mx-auto mb-7 max-w-2xl text-[#2b1a12]/80">
-              Tell us a little about your project and we&apos;ll get you a price, usually the same day.
+              Tell us a little about your project and we&apos;ll get you a free, written price.
               For driveways and slabs we can often quote without coming out. Just add your address.
             </p>
             <div className="flex flex-wrap justify-center gap-3">

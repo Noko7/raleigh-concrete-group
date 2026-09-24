@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { dict, LOCALES, LOCALE_LABELS, type Locale } from "@/lib/crm/i18n";
+import { dict, type Locale } from "@/lib/crm/i18n";
 
 // Pre-fills with the number the owner invited, but the contractor can change it:
 // the owner often only has the number they were given, not the phone the crew
@@ -34,9 +34,7 @@ export function JoinForm({
   defaultName: string;
   phone: string;
 }) {
-  // Chosen before the account exists, then saved as their CRM language - so a
-  // Spanish-speaking contractor never sees an English screen, not even this one.
-  const [locale, setLocale] = useState<Locale>("en");
+  const locale: Locale = "en";
   const t = dict(locale);
   const [fullName, setFullName] = useState(defaultName);
   const [alertPhone, setAlertPhone] = useState(prettyPhone(phone));
@@ -92,17 +90,6 @@ export function JoinForm({
 
   return (
     <form className="join-form" onSubmit={onSubmit}>
-      <label className="join-field">
-        <span>{t.join.language}</span>
-        <select value={locale} onChange={(e) => setLocale(e.target.value as Locale)}>
-          {LOCALES.map((l) => (
-            <option key={l} value={l}>
-              {LOCALE_LABELS[l]}
-            </option>
-          ))}
-        </select>
-      </label>
-
       <label className="join-field">
         <span>{t.join.fullName}</span>
         <input value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" required />

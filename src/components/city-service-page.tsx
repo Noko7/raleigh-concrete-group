@@ -174,7 +174,7 @@ export function CityServicePage({
               Free {service.name} Quote in {city}
             </h2>
             <p className="mx-auto mb-7 max-w-2xl text-[#2b1a12]/80">
-              Tell us a little about your project and we&apos;ll get you a price, usually the same day.
+              Tell us a little about your project and we&apos;ll get you a free, written price.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <a href="#quote" className="rounded-full bg-[#2b1a12] px-7 py-3.5 text-base font-bold text-white transition hover:bg-[#3a241a]">

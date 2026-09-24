@@ -30,10 +30,14 @@ import {
 } from "@/app/crm/quotes/[id]/package-builder";
 import type { SaveState } from "@/app/crm/quotes/[id]/types";
 import { AutoTextarea } from "@/components/auto-textarea";
-
-type Sections = Record<QuoteSectionField, string>;
-const emptySections = (): Sections =>
-  Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, ""])) as Sections;
+import {
+  blankSections,
+  CustomerPreview,
+  emptySections,
+  PriceCard,
+  SectionsEditor,
+  type Sections,
+} from "@/components/quote-form-parts";
 
 // Quoting from the crew's own job page. Same server action as the CRM, so the
 // validation, the customer text and the activity log are identical - this is a
@@ -136,6 +140,11 @@ export function JobQuote({
     what.trim() !== (summary ?? "").trim() ||
     QUOTE_SECTION_FIELDS.some((f) => sections[f].trim() !== (initialSections?.[f] ?? "").trim());
 
+  // What still stands between them and Send, said in words under the button
+  // rather than left as a grey button with no reason.
+  const sectionsLeft = hasLegacySummary ? 0 : blankSections(sections).length;
+  const priceOk = (derived || price.trim() !== "") && Number.isFinite(priceNum) && priceNum > 0;
+
   const ready =
     (derived || price.trim() !== "") &&
     Number.isFinite(priceNum) &&
@@ -188,7 +197,7 @@ export function JobQuote({
   // "nothing has happened yet" is still to wait.
   if (awaitingReply && !open) {
     const when = sentAt
-      ? new Date(sentAt).toLocaleString(locale === "es" ? "es-US" : "en-US", {
+      ? new Date(sentAt).toLocaleString("en-US", {
           dateStyle: "medium",
           timeStyle: "short",
           timeZone: BUSINESS_TZ,
@@ -247,53 +256,23 @@ export function JobQuote({
         <input type="hidden" name="options_json" value={rowsToJson(rows)} />
         <input type="hidden" name="packages_json" value={packagesToJson(pkgRows)} />
 
-        <label className="jq-field">
-          <span>{t.contractorJob.quoteAmount}</span>
-          <input
-            type="number"
-            name="quote_amount"
-            inputMode="decimal"
-            min={0}
-            step="0.01"
-            value={derived ? String(derivedTotal) : price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="6500"
-            readOnly={derived}
-          />
-        </label>
+        {/* Same price card and section timeline as the owner's editor and the
+            customer's page (components/quote-form-parts), so the crew fills in
+            the page the customer gets rather than a form that becomes it. */}
+        <PriceCard value={derived ? String(derivedTotal) : price} onChange={setPrice} derived={derived} />
+        <SectionsEditor sections={sections} onChange={setSection} />
 
-        {/* Priced first, then described. A crew standing in somebody's back
-            yard being asked "and what about the sidewalk?" can answer it here
-            instead of over the phone a day later. */}
+        {/* The extras, after the everyday path rather than in front of it:
+            most quotes are one price and five sections, and these two boxes
+            are a paragraph each of reading to scroll past on the way there.
+            Still here for the back yard that asks "and what about the
+            sidewalk?" - adding one turns the price card above into the total. */}
         <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} />
 
         {/* And the other question the same back yard produces: "what would it
             cost in asphalt instead?" Two prices on one quote, answered here
             rather than as a second quote on a second link. */}
         <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={t.quotePackages} />
-
-        {/* The same five sections the CRM asks for, so a quote written from a
-            truck covers exactly what one written at a desk does. */}
-        <p className="js-hint jq-sections-hint">{t.contractorJob.quoteSectionsHint}</p>
-        {QUOTE_SECTION_FIELDS.map((field) => (
-          <label key={field} className="jq-field">
-            <span>
-              {t.contractorJob.sections[field]}
-              {!sections[field].trim() && (
-                <button type="button" className="crm-na-btn" onClick={() => setSection(field, t.contractorJob.notApplicable)}>
-                  {t.contractorJob.notApplicable}
-                </button>
-              )}
-            </span>
-            <AutoTextarea
-              name={field}
-              rows={2}
-              value={sections[field]}
-              onChange={(e) => setSection(field, e.target.value)}
-              placeholder={t.contractorJob.sectionHints[field]}
-            />
-          </label>
-        ))}
 
         {/* Only for a quote written before the sections existed. */}
         {hasLegacySummary && (
@@ -302,6 +281,13 @@ export function JobQuote({
             <AutoTextarea name="quote_summary" rows={3} value={what} onChange={(e) => setWhat(e.target.value)} />
           </label>
         )}
+
+        <CustomerPreview
+          firstName={customerFirstName}
+          price={priceOk ? priceNum : null}
+          derived={derived}
+          sections={sections}
+        />
 
         <p className="js-hint">
           {awaitingReply
@@ -313,8 +299,15 @@ export function JobQuote({
             reason: a correction that changes nothing is the duplicate text the
             whole rule exists to stop. */}
         {awaitingReply && !changed && <p className="js-hint">{t.contractorJob.quoteFixUnchanged}</p>}
+        {!priceOk ? (
+          <p className="jq-todo">{t.contractorJob.quoteNeedPrice}</p>
+        ) : (
+          sectionsLeft > 0 && (
+            <p className="jq-todo">{fill(t.contractorJob.quoteNeedSections, { n: String(sectionsLeft) })}</p>
+          )
+        )}
 
-        <button type="submit" className="js-confirm" disabled={!ready || pending}>
+        <button type="submit" className="js-confirm jq-send" disabled={!ready || pending}>
           {pending
             ? t.contractorJob.quoteSending
             : awaitingReply

@@ -21,7 +21,7 @@ import { DateField } from "./date-field";
 //
 // Either way it ends in confirmVisit, which is what texts the customer.
 function pretty(s: string, locale: Locale): string {
-  return new Date(`${s}T00:00:00`).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
+  return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 
-import { dict, isLocale, LOCALES, LOCALE_LABELS } from "@/lib/crm/i18n";
+import { dict } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { LoginForm } from "./login-form";
 
@@ -25,9 +25,7 @@ export default async function CrmLoginPage({
   const base = await crmBase();
   const sp = await searchParams;
   const next = safeNext(sp.next);
-  // No session yet, so the language comes from the URL. The links below let a
-  // Spanish-speaking contractor switch before signing in.
-  const locale = isLocale(sp.lang) ? sp.lang : "en";
+  const locale = "en" as const;
   const t = dict(locale);
   return (
     <main className="crm-auth">
@@ -36,13 +34,6 @@ export default async function CrmLoginPage({
         <h1 className="crm-auth-title">{t.login.title}</h1>
         <p className="crm-auth-sub">{t.login.subtitle}</p>
         <LoginForm base={base} next={next} locale={locale} />
-        <p className="crm-auth-langs">
-          {LOCALES.map((l) => (
-            <a key={l} href={`?lang=${l}${next ? `&next=${encodeURIComponent(next)}` : ""}`} className={l === locale ? "on" : ""}>
-              {LOCALE_LABELS[l]}
-            </a>
-          ))}
-        </p>
       </div>
     </main>
   );

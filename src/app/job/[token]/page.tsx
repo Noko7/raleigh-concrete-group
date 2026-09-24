@@ -155,7 +155,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
 
   // Dates read in the contractor's own language, same as the rest of the page.
   const fmtDay = (ymd: string) =>
-    new Date(`${ymd}T00:00:00`).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
+    new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", {
       weekday: "long",
       month: "long",
       day: "numeric",
@@ -165,7 +165,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // trusting. Time included, because "this morning" and "last Tuesday" are
   // different answers to "have they seen the quote yet?"
   const fmtStamp = (iso: string) =>
-    new Date(iso).toLocaleString(locale === "es" ? "es-US" : "en-US", {
+    new Date(iso).toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       hour: "numeric",

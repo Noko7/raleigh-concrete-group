@@ -82,7 +82,7 @@ const kindLabel = (t: Dict, k: CalKind) =>
 // Month names and weekday initials come from the browser rather than a hand
 // written list, so Spanish gets "enero" and "L M X J V S D" without a second
 // table to keep in sync.
-const intlLocale = (l: Locale) => (l === "es" ? "es-US" : "en-US");
+const intlLocale = (_l: Locale) => "en-US";
 
 function monthNames(locale: Locale): string[] {
   const f = new Intl.DateTimeFormat(intlLocale(locale), { month: "long", timeZone: "UTC" });

@@ -61,7 +61,7 @@ export const services: Service[] = [
       "Fresh installs or full tear-out and re-pour",
       "Proper base prep so it won't crack early",
       "Broom, smooth or stamped finishes",
-      "Free same-day quote, often from satellite",
+      "Free quote, often from satellite",
     ],
     image: "/images/residential_driveway_raleigh_concrete.png",
     beforeAfter: {
@@ -124,7 +124,7 @@ export const services: Service[] = [
       "Broom, smooth or stamped finishes",
       "Colors that match your home",
       "Flat, square and built to drain",
-      "Free same-day quote",
+      "Free written quote",
     ],
     image: "/images/decorative_stampted_back_patio.png",
     showcaseImage: "/images/stamped_patio.png",
@@ -180,7 +180,7 @@ export const services: Service[] = [
       "Garage and shed pads",
       "AC and equipment pads",
       "Foundations and footings",
-      "Free same-day quote",
+      "Free written quote",
     ],
     image: "/images/residential_driveway_raleigh_concrete_2.png",
     showcaseImage: "/images/workers_pouring_driveway_live_action.png",
@@ -463,7 +463,7 @@ export type FaqItem = { q: string; a: string };
 const universalServiceFaqs: FaqItem[] = [
   {
     q: "Do you offer free estimates in Raleigh?",
-    a: "Yes. Every estimate is free, and we can usually get you a number the same day. For many projects we can scope it from satellite imagery and confirm details on a quick visit.",
+    a: "Yes. Every estimate is free and in writing. For many projects we can scope it from satellite imagery and confirm details on a quick visit.",
   },
   {
     q: "What areas around Raleigh do you serve?",
@@ -652,7 +652,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
     faqs: [
       {
         q: "How much does a concrete driveway cost in Raleigh?",
-        a: "It depends on the size, whether we're removing an old slab, site access and the finish you choose. Rather than guess, we give you a free written quote, usually the same day, so you know the number before anything starts.",
+        a: "It depends on the size, whether we're removing an old slab, site access and the finish you choose. Rather than guess, we give you a free written quote, so you know the number before anything starts.",
       },
       {
         q: "Do I need a permit to replace a driveway in Raleigh?",
@@ -785,7 +785,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
     faqs: [
       {
         q: "How much does a driveway cost in Apex?",
-        a: "Pricing comes down to size, removal of the old slab, access and finish. We give you a free, written quote, usually the same day, so there are no surprises.",
+        a: "Pricing comes down to size, removal of the old slab, access and finish. We give you a free, written quote, so there are no surprises.",
       },
       {
         q: "Do you handle Apex HOA driveway rules?",
@@ -854,7 +854,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
   },
   "morrisville/stamped-decorative-concrete": {
     metaDescription:
-      "Stamped and exposed aggregate concrete in Morrisville, NC. Patios, walkways, pool decks and front entries in stone, slate and brick patterns, sealed for NC sun. Free same-day quotes.",
+      "Stamped and exposed aggregate concrete in Morrisville, NC. Patios, walkways, pool decks and front entries in stone, slate and brick patterns, sealed for NC sun. Free written quotes.",
     intro: [
       "Stamped and exposed aggregate concrete gives a Morrisville home the texture of stone, slate or brick without paying stone prices to install it. We pour, stamp and finish decorative concrete across Morrisville, on back patios in Breckenridge and Savannah, front entries and walkways in Carpenter Village, and pool decks throughout the newer sections of town.",
       "Exposed aggregate in particular comes up a lot around here, and it's a good fit for Morrisville: it hides dirt better than a smooth finish, it grips underfoot when it's wet, and it doesn't show the surface scuffing that a broom finish picks up over time. Whichever finish you go with, we seal it, and on pool decks and walkways we work a non-slip additive into the sealer so traction doesn't drop off the moment it rains.",
@@ -864,7 +864,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
     faqs: [
       {
         q: "How much does exposed aggregate cost in Morrisville?",
-        a: "It runs above a plain broom finish and below natural stone or pavers, and the real drivers are square footage, whether we're removing existing concrete, and site access. We put a written number in front of you, usually the same day, so you're comparing an actual price rather than a range off a website.",
+        a: "It runs above a plain broom finish and below natural stone or pavers, and the real drivers are square footage, whether we're removing existing concrete, and site access. We put a written number in front of you, so you're comparing an actual price rather than a range off a website.",
       },
       {
         q: "How often does stamped concrete need resealing here?",
@@ -878,7 +878,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
   },
   "morrisville/concrete-driveways": {
     metaDescription:
-      "Concrete driveway installation and replacement in Morrisville, NC. Proper base prep for Wake County clay, HOA-friendly finishes, and free written quotes usually the same day.",
+      "Concrete driveway installation and replacement in Morrisville, NC. Proper base prep for Wake County clay, HOA-friendly finishes, and free written quotes.",
     intro: [
       "A driveway is the largest single piece of concrete on most Morrisville properties and the first thing anyone sees. We pour and replace concrete driveways across Morrisville, from the established streets near Town Hall Commons to Breckenridge, Savannah, Kitts Creek and Carpenter Village.",
       "Morrisville's housing stock skews newer than most of the Triangle, which changes what we usually find. Instead of a fifty-year-old slab that has simply run out of life, we're more often looking at a fifteen-to-twenty-year-old driveway that was poured thin, on a base that was never properly compacted, and is now cracking along predictable lines. Fixing that means fixing the base, not just replacing the concrete on top of it, which is why we dig into what caused the failure before we quote the replacement.",
@@ -926,7 +926,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
   },
   "morrisville/concrete-patios": {
     metaDescription:
-      "Concrete patio installation in Morrisville, NC. Broom, smooth, exposed aggregate and stamped finishes, graded to drain away from the house. Free same-day quotes.",
+      "Concrete patio installation in Morrisville, NC. Broom, smooth, exposed aggregate and stamped finishes, graded to drain away from the house. Free written quotes.",
     intro: [
       "A poured concrete patio is the most cost-effective way to turn unused Morrisville backyard into space you'll actually sit in. We pour patios across Morrisville, in Breckenridge, Savannah, Kitts Creek and Carpenter Village, in broom, smooth, exposed aggregate and stamped finishes.",
       "Drainage is the thing to get right on a Morrisville patio. Many of the newer lots here are tight, with the house sitting relatively high and the yard falling away, and a patio poured flat against that grade will either pond or push water back toward your foundation. We set the pad with deliberate fall away from the house and cut control joints on a proper spacing so the slab cracks where we tell it to instead of where it wants to.",
@@ -955,7 +955,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
   // driveway page answers that head-on rather than letting the visitor bounce.
   "chapel-hill/concrete-driveways": {
     metaDescription:
-      "Concrete driveway installation and replacement in Chapel Hill, NC. Built for hilly lots, mature tree roots and Chapel Hill's stormwater rules. Free written quotes, usually same day.",
+      "Concrete driveway installation and replacement in Chapel Hill, NC. Built for hilly lots, mature tree roots and Chapel Hill's stormwater rules. Free written quotes.",
     intro: [
       "Chapel Hill driveways are harder than most in the Triangle, and it comes down to terrain and trees. The lots here are hilly, a lot of the older housing stock near town sits under mature hardwoods, and a driveway that runs up a grade under fifty-year-old oaks has to deal with both root heave and water moving down the slope. We pour and replace concrete driveways across Chapel Hill, from Glen Lennox and the older streets near downtown to Southern Village, Meadowmont, Chapel Hill North and Briar Chapel.",
       "Chapel Hill also regulates land disturbance and impervious surface more tightly than most towns around here, and there are tree protection rules that can affect what you're allowed to do near a mature trunk. None of that stops a driveway replacement, but it does mean widening or changing your footprint is worth checking before you plan around it. We'll look at what applies to your lot and tell you straight rather than pouring first and finding out after.",
@@ -1049,7 +1049,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
       },
       {
         q: "How much does a concrete driveway cost in Durham?",
-        a: "Size, removal of the old slab, site access and finish are what move the number, and on older Durham lots access is a bigger factor than people expect. We give you a free written quote, usually the same day, rather than a range you can't plan around.",
+        a: "Size, removal of the old slab, site access and finish are what move the number, and on older Durham lots access is a bigger factor than people expect. We give you a free written quote, rather than a range you can't plan around.",
       },
     ],
   },
@@ -1122,7 +1122,7 @@ export function getCityServiceContent(
     metaTitle: `${service.name} in ${city}, NC`,
     metaDescription:
       local.metaDescription ??
-      `${service.name} in ${city}, NC. ${service.blurb} Free same-day quotes from a local Triangle crew.`,
+      `${service.name} in ${city}, NC. ${service.blurb} Free written quotes from a local Triangle crew.`,
     heading: `${service.name} in ${city}, NC`,
     paragraphs: local.intro,
     projectExample: local.projectExample,
@@ -1137,7 +1137,7 @@ export function getLocationFaqs(city: string): FaqItem[] {
   return [
     {
       q: `Do you offer free concrete estimates in ${city}?`,
-      a: `Yes. Estimates in ${city} are always free and usually same-day. For driveways and slabs we can often quote from satellite imagery and confirm the details on a short visit.`,
+      a: `Yes. Estimates in ${city} are always free and in writing. For driveways and slabs we can often quote from satellite imagery and confirm the details on a short visit.`,
     },
     {
       q: `How soon can you start a concrete project in ${city}?`,
@@ -1220,7 +1220,7 @@ export const homeStats: Stat[] = [
   { value: "5.0★", label: "Rated on Google" },
   { value: "20+ Yrs", label: "Combined Crew Experience" },
   { value: "Local", label: "Raleigh-Based Team" },
-  { value: "Same-Day", label: "Free Quotes" },
+  { value: "Free", label: "Written Quotes" },
 ];
 
 // ── About / welcome copy ──
@@ -1323,7 +1323,7 @@ export const locations: Record<LocationKey, LocationContent> = {
     title: "Concrete & Hardscaping in Raleigh, NC",
     seoTitle: "Concrete Raleigh NC | Driveways, Patios & Pavers",
     description:
-      "We build concrete driveways, patios, walkways and retaining walls for homeowners all over Raleigh. We show up when we say we will and keep communication clear from quote to finish. Quotes are free, usually the same day.",
+      "We build concrete driveways, patios, walkways and retaining walls for homeowners all over Raleigh. We show up when we say we will and keep communication clear from quote to finish. Quotes are free.",
     heroImage: "/images/after_driveway.png",
     beforeAfterPairs: sharedBeforeAfter,
     neighborhoods: ["North Hills", "Five Points", "Brier Creek", "Midtown", "North Raleigh"],
@@ -1411,7 +1411,7 @@ export const locations: Record<LocationKey, LocationContent> = {
     title: "Concrete & Hardscaping in Holly Springs, NC",
     seoTitle: "Concrete Holly Springs NC | Driveways, Patios & Pavers",
     description:
-      "Driveways, patios, walkways and paver work for Holly Springs homeowners. Free same-day quotes and a crew that treats your property like its own.",
+      "Driveways, patios, walkways and paver work for Holly Springs homeowners. Free written quotes and a crew that treats your property like its own.",
     heroImage: "/images/patio_pavers.png",
     beforeAfterPairs: sharedBeforeAfter,
     neighborhoods: ["Sunset Ridge", "12 Oaks", "Holly Glen", "Bass Lake", "Forest Springs"],
@@ -1440,7 +1440,7 @@ export const testimonials = [
     name: "Jasmine R.",
     city: "Cary",
     quote:
-      "I got a quote the same day, the crew built our paver patio in two days, and now it's the best part of our backyard.",
+      "The crew built our paver patio in two days, and now it's the best part of our backyard.",
   },
   {
     name: "Chris D.",

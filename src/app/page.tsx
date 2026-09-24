@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   // Lead with the money keyword instead of the brand on the homepage.
   title: { absolute: "Raleigh Concrete Contractors | Driveways, Patios & Stamped Concrete" },
   description:
-    "Top-rated concrete contractors in Raleigh, NC. We pour driveways, patios, walkways, retaining walls, stamped concrete and pavers across the Triangle. Free same-day quotes.",
+    "Top-rated concrete contractors in Raleigh, NC. We pour driveways, patios, walkways, retaining walls, stamped concrete and pavers across the Triangle. Free written quotes.",
   alternates: { canonical: "/" },
 };
 
@@ -285,7 +285,7 @@ export default function Home() {
               Get Your Free Concrete Estimate
             </h2>
             <p className="mx-auto mb-7 max-w-2xl text-[#2b1a12]/80">
-              Tell us a little about your project and we&apos;ll get you a price, usually the same day.
+              Tell us a little about your project and we&apos;ll get you a free, written price.
               For driveways and slabs we can often quote without coming out. Just add your address.
             </p>
             <div className="flex flex-wrap justify-center gap-3">

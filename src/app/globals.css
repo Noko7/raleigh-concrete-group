@@ -17,6 +17,12 @@
 
 html, body {
   min-height: 100%;
+  /* Nothing may push the page sideways on a phone. clip, not hidden: hidden
+     turns body into a scroll container, which breaks every position: sticky
+     header and bar on the site. This is the backstop; the elements that were
+     overflowing are fixed where they are styled. */
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 body {
@@ -811,13 +817,19 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 }
 
 /* ─── Mobile sticky bar ──────────────────────────────── */
+.mobile-bar > a { min-width: 0; padding-left: 0.6rem; padding-right: 0.6rem; }
 .mobile-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 40;
-  display: flex;
+  /* Grid, not three flex-1 buttons: the buttons are nowrap with 1.5rem of
+     side padding each, which added up to wider than a 360px phone and pushed
+     Text off the right edge. The main CTA gets the room it needs, the other
+     two share the rest. */
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
   padding: 0.75rem 1rem;
   background: rgba(28, 31, 36, 0.95);
@@ -940,61 +952,57 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   margin-bottom: 0.65rem;
 }
 
-.qm-step-head {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  margin-bottom: 0.5rem;
+/* "Step 2 of 3", then the question. The count is plain text rather than a
+   numbered badge: it answers "how much longer is this", which is the thing a
+   hesitant customer actually wants to know. */
+.qm-step-head { margin-bottom: 1.1rem; }
+.qm-step-count {
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--amber-dark);
 }
-.qm-step-head .qm-title {
-  margin: 0;
-}
-.qm-step-num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 9999px;
-  background: var(--amber-accent, #c2682a);
-  color: #fff;
-  font-weight: 800;
-  font-size: 1rem;
-}
+.qm-step-head .qm-sub { margin-bottom: 0; }
 
 .qm-title {
   font-family: var(--font-headline), sans-serif;
-  font-size: 2rem;
-  line-height: 1.04;
+  font-size: 2.2rem;
+  line-height: 1.02;
   letter-spacing: 0.01em;
   color: #2b1a12;
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.4rem;
+  padding-right: 2.5rem; /* clear of the close button */
 }
-.qm-sub { color: rgba(43, 26, 18, 0.72); font-size: 0.96rem; margin: 0 0 1.2rem; }
+.qm-sub { color: rgba(43, 26, 18, 0.78); font-size: 1rem; line-height: 1.45; margin: 0 0 1.2rem; }
 
+/* Sentence case, full size. Small uppercase labels are harder to read at a
+   glance, and a glance is all most people give a form on their phone. */
 .qm-label {
   display: block;
-  font-size: 0.8rem;
+  font-size: 0.98rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: #2b1a12;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
 }
+.qm-optional { font-weight: 500; font-size: 0.85rem; color: rgba(43, 26, 18, 0.62); margin-left: 0.2rem; }
 .qm-mt { margin-top: 1rem; }
 
+/* 17px text: iOS zooms the page into any field under 16px, and a zoomed form
+   is one where the Next button has scrolled away. */
 .qm-input {
   width: 100%;
-  border-radius: 0.7rem;
-  border: 1.5px solid rgba(43, 26, 18, 0.2);
+  min-height: 3.25rem;
+  border-radius: 0.8rem;
+  border: 1.5px solid rgba(43, 26, 18, 0.22);
   background: #fff;
-  padding: 0.8rem 0.9rem;
-  font-size: 1rem;
+  padding: 0.85rem 1rem;
+  font-size: 1.0625rem;
   color: #2b1a12;
   font-family: inherit;
   color-scheme: light;
 }
+.qm-input::placeholder, .qm-autocomplete > input::placeholder { color: rgba(43, 26, 18, 0.45); }
+textarea.qm-input { min-height: 0; resize: vertical; }
 .qm-input option { background-color: #fff; color: #2b1a12; }
 .qm-input:focus {
   outline: none;
@@ -1002,57 +1010,94 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   box-shadow: 0 0 0 3px rgba(194, 104, 42, 0.16);
 }
 
-/* Choice cards */
-.qm-choices { display: grid; gap: 0.85rem; margin-bottom: 0.5rem; }
+/* Choice cards: icon, one line of what it is, one line of what happens, and
+   an arrow. The first is the one we want most people on, so it is tinted. */
+.qm-choices { display: grid; gap: 0.75rem; margin-bottom: 1rem; }
 .qm-choice {
   position: relative;
   text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  padding: 1.15rem 1.2rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.1rem 1rem 1.1rem 1.1rem;
   border-radius: 1rem;
   border: 2px solid rgba(43, 26, 18, 0.14);
   background: #fff;
   cursor: pointer;
+  font: inherit;
+  color: #2b1a12;
   transition: border-color 140ms, transform 120ms, box-shadow 140ms;
 }
 .qm-choice:hover {
   border-color: var(--amber);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(194, 104, 42, 0.18);
+  box-shadow: 0 10px 26px rgba(194, 104, 42, 0.16);
 }
-.qm-choice-badge {
-  position: absolute;
-  top: 0.9rem;
-  right: 1rem;
-  background: var(--amber);
-  color: #fff;
-  font-size: 0.62rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
+.qm-choice:active { transform: scale(0.985); }
+.qm-choice--main { border-color: var(--amber); background: #fff7f0; }
+.qm-choice-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 3rem; height: 3rem; border-radius: 0.8rem;
+  background: rgba(194, 104, 42, 0.12); color: var(--amber-dark);
 }
-.qm-choice-icon { display: inline-flex; color: var(--amber); }
-.qm-choice-icon svg { width: 30px; height: 30px; }
+.qm-choice--main .qm-choice-icon { background: var(--amber); color: #fff; }
+.qm-choice-icon svg { width: 26px; height: 26px; }
+.qm-choice-text { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
 .qm-choice-title {
   font-family: var(--font-headline), sans-serif;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
+  line-height: 1;
   color: #2b1a12;
 }
-.qm-choice-desc { font-size: 0.9rem; color: rgba(43, 26, 18, 0.72); line-height: 1.4; }
+.qm-choice-desc { font-size: 0.95rem; color: rgba(43, 26, 18, 0.75); line-height: 1.35; }
+.qm-choice-badge {
+  position: absolute;
+  top: -0.7rem;
+  left: 1rem;
+  background: #2b1a12;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+}
+.qm-choice-arrow { width: 22px; height: 22px; color: var(--amber-dark); }
+.qm-choice-foot { text-align: center; font-size: 0.95rem; color: rgba(43, 26, 18, 0.75); margin: 0.25rem 0 1rem; }
+.qm-choice-foot a { color: #2b1a12; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Service tiles: every option visible, one tap each. */
+.qm-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+.qm-tile {
+  position: relative;
+  min-height: 3.4rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.8rem;
+  border: 1.5px solid rgba(43, 26, 18, 0.2);
+  background: #fff;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #2b1a12;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 130ms, background 130ms;
+}
+.qm-tile:hover { border-color: var(--amber); }
+.qm-tile:active { transform: scale(0.98); }
+.qm-tile--on { border-color: var(--amber); background: var(--amber); color: #fff; padding-right: 2rem; }
+.qm-tile-check { position: absolute; right: 0.6rem; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); }
 
 /* Address autocomplete */
 .qm-autocomplete { position: relative; }
 .qm-autocomplete > input {
   width: 100%;
-  border-radius: 0.7rem;
-  border: 1.5px solid rgba(43, 26, 18, 0.2);
+  min-height: 3.25rem;
+  border-radius: 0.8rem;
+  border: 1.5px solid rgba(43, 26, 18, 0.22);
   background: #fff;
-  padding: 0.8rem 0.9rem;
-  font-size: 1rem;
+  padding: 0.85rem 1rem;
+  font-size: 1.0625rem;
   color: #2b1a12;
   font-family: inherit;
 }
@@ -1082,14 +1127,14 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   text-align: left;
   background: none;
   border: none;
-  padding: 0.6rem 0.7rem;
+  padding: 0.75rem 0.8rem;
   border-radius: 0.5rem;
-  font-size: 0.92rem;
+  font-size: 1rem;
   color: #2b1a12;
   cursor: pointer;
 }
 .qm-suggestions button:hover { background: rgba(194, 104, 42, 0.1); }
-.qm-ac-status { display: block; margin-top: 0.4rem; font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); }
+.qm-ac-status { display: block; margin-top: 0.4rem; font-size: 0.85rem; color: rgba(43, 26, 18, 0.7); }
 .qm-ac-ok { display: flex; align-items: center; gap: 0.3rem; color: #2f6b46; font-weight: 700; }
 .qm-ac-full { color: #b91c1c; font-weight: 700; }
 .qm-ac-check { width: 14px; height: 14px; }
@@ -1111,8 +1156,11 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-dropzone:hover { border-color: var(--amber); background: rgba(194, 104, 42, 0.06); }
 .qm-dropzone-icon { display: inline-flex; color: var(--amber); }
 .qm-dropzone-icon svg { width: 32px; height: 32px; }
-.qm-dropzone-title { font-weight: 700; color: #2b1a12; }
-.qm-dropzone-hint { font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); }
+.qm-dropzone-title { font-weight: 700; font-size: 1.05rem; color: #2b1a12; }
+.qm-dropzone-hint { font-size: 0.85rem; color: rgba(43, 26, 18, 0.7); }
+/* Photo quotes live or die on the photo, so on that path it is the loudest
+   thing after the tiles. */
+.qm-dropzone--main { border-color: var(--amber); background: #fff7f0; }
 
 .qm-filelist { list-style: none; margin: 0.7rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .qm-filelist li {
@@ -1130,13 +1178,15 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-filelist button svg { width: 16px; height: 16px; }
 
 /* Schedule chips */
-.qm-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+/* Even columns so a list of start times reads as a grid, not a ragged row. */
+.qm-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.25rem, 1fr)); gap: 0.5rem; }
 .qm-chip {
   border-radius: 999px;
   border: 1.5px solid rgba(43, 26, 18, 0.22);
   background: #fff;
-  padding: 0.55rem 1rem;
-  font-size: 0.9rem;
+  min-height: 2.9rem;
+  padding: 0.6rem 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #2b1a12;
   cursor: pointer;
@@ -1157,9 +1207,9 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-consent {
   padding: 0 1.5rem;
   margin: 0.5rem 0 0;
-  font-size: 0.72rem;
-  line-height: 1.45;
-  color: rgba(43, 26, 18, 0.6);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: rgba(43, 26, 18, 0.68);
 }
 @media (min-width: 768px) { .qm-consent { padding: 0 2rem; } }
 .qm-consent-link { color: #8a5a2b; text-decoration: underline; font-weight: 600; }
@@ -1184,6 +1234,11 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   border-radius: 0.4rem;
 }
 
+.qm-card button:focus-visible, .qm-card a:focus-visible {
+  outline: 3px solid rgba(194, 104, 42, 0.55);
+  outline-offset: 2px;
+}
+
 /* Footer nav */
 .qm-footer {
   /* Pinned by the card's flex column rather than by position:sticky. Sticky
@@ -1205,17 +1260,25 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   }
 }
 .qm-consent { flex: 0 0 auto; }
+/* Back is small and round; Next takes the rest of the row. One obvious button. */
 .qm-back {
-  background: none;
-  border: none;
-  font-weight: 700;
-  font-size: 0.92rem;
-  color: rgba(43, 26, 18, 0.7);
+  flex: 0 0 auto;
+  width: 3.4rem;
+  height: 3.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid rgba(43, 26, 18, 0.2);
+  color: #2b1a12;
   cursor: pointer;
 }
-.qm-back:hover { color: #2b1a12; }
+.qm-back svg { width: 22px; height: 22px; }
+.qm-back:hover { border-color: #2b1a12; }
 .qm-back:disabled { opacity: 0.4; cursor: default; }
-.qm-next { padding: 0.8rem 1.6rem; }
+.qm-next { flex: 1 1 auto; justify-content: center; min-height: 3.4rem; font-size: 1.08rem; padding: 0.8rem 1.4rem; }
+.qm-next:active:not(:disabled) { transform: scale(0.98); }
 .qm-next:disabled { opacity: 0.5; cursor: default; box-shadow: none; transform: none; }
 
 /* Success */
@@ -1239,7 +1302,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .qm-skip { display: block; margin: 0.8rem auto 0; padding: 0.4rem; text-decoration: underline; text-underline-offset: 3px; font-size: 0.9rem; text-align: center; }
 .qm-fallback { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; margin-top: 0.8rem; }
 .qm-fallback .qm-text-btn { text-decoration: none; }
-.qm-hint { font-size: 0.78rem; color: rgba(43, 26, 18, 0.55); margin: 0.2rem 0 0; }
+.qm-hint { font-size: 0.82rem; color: rgba(43, 26, 18, 0.68); margin: 0.2rem 0 0; }
 .qm-ref { font-size: 0.85rem; color: rgba(43, 26, 18, 0.65); margin: 0.2rem 0 0.9rem; letter-spacing: 0.02em; }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -1423,7 +1486,7 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .crm-btn-send:disabled { opacity: 0.6; cursor: default; }
 .crm-editor-hint { margin-top: 0.6rem; }
 .crm-confirm { border-top: 1px solid var(--crm-border); margin-top: 0.4rem; padding-top: 1rem; }
-.crm-confirm h3 { font-family: var(--font-headline), sans-serif; font-size: 1.25rem; margin-bottom: 0.2rem; }
+.crm-confirm > h3 { font-family: var(--font-headline), sans-serif; font-size: 1.25rem; margin-bottom: 0.2rem; }
 .crm-confirm-row { display: flex; align-items: baseline; justify-content: space-between; margin: 0.8rem 0 0.4rem; padding: 0.6rem 0.8rem; background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.5rem; }
 .crm-confirm-row strong { font-size: 1.3rem; color: var(--amber); }
 .crm-confirm-summary { white-space: pre-wrap; background: var(--crm-surface-solid); border: 1px solid var(--crm-border); border-radius: 0.5rem; padding: 0.6rem 0.8rem; font-size: 0.9rem; color: var(--crm-text); margin-bottom: 0.9rem; max-height: 160px; overflow-y: auto; }
@@ -1524,6 +1587,128 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   cursor: pointer; font-family: inherit;
 }
 .crm-na-btn:hover { border-color: var(--amber); color: var(--amber); }
+/* ── Owner job page (/crm/quotes/[id]) ─────────────────────────────────────
+   Built for the question the owner opens it with: where is this job and what
+   do I do about it. Top to bottom: who it is and a way to reach them, where
+   the job sits, the one next step, then the work (left) and the facts (right).
+   Everything looked at now and then folds away under "More" at the bottom of
+   the side column. One column on a phone, in that same order. */
+.jb { max-width: 1180px; margin: 0 auto; }
+.jb-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.jb-id { min-width: 0; }
+.jb-name { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.jb-name h1 { font-family: var(--font-headline), sans-serif; font-size: 2.5rem; line-height: 1; letter-spacing: 0.01em; margin: 0; overflow-wrap: anywhere; }
+.jb-what { margin: 0.35rem 0 0; color: var(--crm-muted); font-size: 0.95rem; overflow-wrap: anywhere; }
+.jb-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.jb-actions .crm-btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+
+/* The stage line. Past stages are quiet, the current one is amber, the rest
+   are outlines - readable at a glance without a legend. */
+.jb-stages { list-style: none; margin: 0 0 0.9rem; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.35rem; }
+.jb-stage {
+  position: relative; text-align: center; font-size: 0.8rem; font-weight: 700; color: var(--crm-muted);
+  padding: 0.5rem 0.25rem 0.45rem; border-radius: 0.5rem; border: 1px solid var(--crm-border);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.jb-stage-past { color: var(--crm-text); background: rgba(194, 104, 42, 0.14); border-color: transparent; }
+.jb-stage-now { color: #fff; background: var(--crm-accent); border-color: var(--crm-accent); }
+
+/* The next step: one sentence and one button. Tone only changes the edge
+   colour, so it reads as the same component in every state. */
+.jb-next {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.9rem 1.25rem; flex-wrap: wrap;
+  background: var(--crm-surface); border: 1px solid var(--crm-border); border-left: 4px solid var(--crm-accent);
+  border-radius: 0.9rem; padding: 1rem 1.15rem; margin-bottom: 1.1rem;
+}
+.jb-next-wait { border-left-color: #a78bfa; }
+.jb-next-done { border-left-color: #22c55e; }
+.jb-next-lost { border-left-color: #6b7280; }
+.jb-next-title { font-family: var(--font-headline), sans-serif; font-size: 1.6rem; line-height: 1.05; letter-spacing: 0.01em; margin: 0; }
+.jb-next-body { margin: 0.25rem 0 0; color: var(--crm-muted); font-size: 0.95rem; max-width: 60ch; }
+.jb-next-btn { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; padding-left: 1.4rem; padding-right: 1.4rem; }
+
+.jb-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 1.1rem; align-items: start; }
+.jb-main, .jb-side { min-width: 0; }
+.jb-main > [id] { scroll-margin-top: 5rem; }
+#quote { scroll-margin-top: 5rem; }
+.jb-dl > div { grid-template-columns: 110px minmax(0, 1fr); }
+.jb-dl dd { overflow-wrap: anywhere; }
+.jb-settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+
+/* More: native <details>, so it works with no script and remembers nothing it
+   shouldn't. The count says whether a fold is worth opening. */
+.jb-more { border: 1px solid var(--crm-border); border-radius: 0.9rem; background: var(--crm-surface); overflow: hidden; }
+.jb-fold + .jb-fold { border-top: 1px solid var(--crm-border); }
+.jb-fold > summary {
+  display: flex; align-items: center; gap: 0.5rem; min-height: 52px; padding: 0 1.15rem;
+  font-weight: 700; cursor: pointer; list-style: none;
+}
+.jb-fold > summary::-webkit-details-marker { display: none; }
+.jb-fold > summary::after { content: "+"; margin-left: auto; font-size: 1.2rem; color: var(--crm-muted); }
+.jb-fold[open] > summary::after { content: "\2212"; }
+.jb-fold > summary:hover { background: rgba(255, 255, 255, 0.04); }
+.jb-count { font-size: 0.75rem; font-weight: 800; color: var(--crm-muted); background: rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 0.1rem 0.5rem; }
+.jb-fold-body { padding: 0 1.15rem 1.1rem; }
+/* A component that brings its own card, flattened into the fold. */
+.jb-fold-flat .crm-card { background: none; border: none; padding: 0; margin: 0; }
+.jb-fold-flat .crm-card-title { display: none; }
+
+/* The quote, on paper: the one part of this page the customer will read, so
+   it is drawn in their page's colours rather than the CRM's. */
+.crm-paper { background: #fff; color: #1f2328; border-color: transparent; display: flex; flex-direction: column; gap: 0.9rem; }
+.crm-paper .crm-card-title { color: #2b1a12; margin-bottom: 0; }
+.crm-paper-head { display: flex; flex-direction: column; gap: 0.2rem; }
+.crm-paper-sub { font-size: 0.9rem; color: #4b5563; }
+.crm-paper .crm-muted { color: #4b5563; }
+.crm-paper .crm-btn-ghost { background: #fff; color: #1f2328; border-color: #d1d5db; }
+.crm-paper .crm-btn-ghost:hover { background: #f3f4f6; }
+.crm-paper .crm-editor-foot { flex-wrap: wrap; margin-top: 0; }
+.crm-paper .crm-editor-foot .crm-btn { min-height: 48px; }
+.crm-paper .crm-btn-send { flex: 1 1 12rem; }
+.crm-paper .crm-saved { color: #15803d; }
+.crm-paper .crm-auth-error { color: #b91c1c; }
+.crm-paper .crm-confirm { border-top-color: #e5e7eb; display: flex; flex-direction: column; gap: 0.6rem; }
+.crm-paper .crm-confirm > h3 { color: #2b1a12; font-size: 1.5rem; }
+.crm-paper .crm-confirm-row { background: #faf8f4; border-color: #e5e7eb; color: #1f2328; }
+.crm-paper .crm-confirm-row strong { color: var(--amber-dark); }
+.crm-paper .crm-confirm-summary { background: #faf8f4; border-color: #e5e7eb; color: #1f2328; }
+.crm-paper .jq-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; font-weight: 800; color: #374151; }
+.crm-paper .jq-field textarea { padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; font-weight: 500; }
+
+/* One column. The two columns dissolve into a single list so it can be put in
+   the order a phone is read in: the live step, then what the customer asked
+   for and sent, then the quote, then the job's settings and the rest. Without
+   this the photos a new lead is priced from sat below the whole quote form. */
+@media (max-width: 900px) {
+  .jb-grid { display: flex; flex-direction: column; gap: 0; }
+  .jb-main, .jb-side { display: contents; }
+  /* Flex items floor at their content's width; a row of date controls was
+     enough to push a card past the screen edge. */
+  .jb-main > *, .jb-side > * { min-width: 0; max-width: 100%; }
+  .jb-o-step { order: 1; }
+  .jb-o-customer { order: 2; }
+  .jb-o-photos { order: 3; }
+  #quote { order: 4; }
+  .jb-grid .qs { order: 5; }
+  .jb-settings { order: 6; }
+  .jb-more { order: 7; }
+}
+@media (max-width: 640px) {
+  .jb-name h1 { font-size: 2.1rem; }
+  /* Call, Text, Map in one thumb row; the quote page link on its own below. */
+  .jb-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .jb-actions .crm-btn:last-child { grid-column: 1 / -1; }
+  /* Six stages do not fit six-across on a phone: only the ones either side of
+     now are shown, which is the part of the line that matters. */
+  .jb-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .jb-stage { display: none; }
+  .jb-stage-now, .jb-stage-now + .jb-stage, .jb-stage:has(+ .jb-stage-now) { display: block; }
+  .jb-next { flex-direction: column; align-items: stretch; }
+  .jb-next-btn { width: 100%; }
+  .jb-settings-row { grid-template-columns: 1fr; }
+  .jb-dl > div { grid-template-columns: 96px minmax(0, 1fr); }
+}
+
 /* ── Staff photo upload ── */
 .pu { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0.5rem 0 0.9rem; }
 .pu-btn {
@@ -1617,26 +1802,56 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
    query below masks this by switching to a column layout, but the base (i.e.
    desktop) row needs its own escape hatch. */
 .cq-price { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; background: #fff; border-radius: 0.9rem; padding: 1.1rem 1.25rem; margin-bottom: 1.25rem; border: 2px solid var(--amber); }
-.cq-price-label { font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.06em; color: rgba(43, 26, 18, 0.6); }
+.cq-price-label { font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.06em; color: rgba(43, 26, 18, 0.68); }
 .cq-price-value { font-family: var(--font-headline), sans-serif; font-size: 2.2rem; color: #2b1a12; }
 .cq-meta { display: grid; gap: 0.5rem; margin-bottom: 1.25rem; }
 .cq-meta > div { display: grid; grid-template-columns: 90px 1fr; font-size: 0.9rem; }
 .cq-meta dt { color: rgba(43, 26, 18, 0.55); font-weight: 700; }
 .cq-meta dd { margin: 0; }
 .cq-summary { background: #fff; border-radius: 0.9rem; padding: 1.1rem 1.25rem; margin-bottom: 1.25rem; }
-.cq-summary h2 { font-weight: 800; font-size: 0.95rem; margin-bottom: 0.4rem; }
+.cq-summary h2 { font-family: var(--font-headline), sans-serif; font-size: 1.6rem; line-height: 1; letter-spacing: 0.01em; margin-bottom: 0.4rem; }
 .cq-summary p { white-space: pre-wrap; color: rgba(43, 26, 18, 0.85); }
-/* The five sections. Each is a labelled block rather than a table row: the
-   answers run to a few lines each, and a label sitting in its own column
-   beside a paragraph leaves the label stranded at the top of a tall cell. */
-.cq-sections { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.75rem; }
-.cq-section { display: block; }
-.cq-section + .cq-section { border-top: 1px solid rgba(43, 26, 18, 0.1); padding-top: 0.9rem; }
-.cq-section dt {
-  font-size: 0.72rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--amber-dark); margin-bottom: 0.2rem;
+/* The five sections, as the job happens: one rail down the left, a stop on it
+   for each section. Answers run from two words to a paragraph, and a rail is
+   what keeps a "Not applicable" and a paragraph looking like the same list
+   rather than a row of mismatched boxes.
+     short  label and answer share a row
+     long   label above, answer below, folded past a few lines (section-text)
+     nothing  "Not applicable" and friends, quieter than the real work */
+.cq-steps { list-style: none; margin: 0.9rem 0 0; padding: 0; }
+.cq-step { position: relative; padding: 0 0 1.1rem 1.6rem; }
+.cq-step:last-child { padding-bottom: 0.1rem; }
+/* The rail: from this stop to the next. The last stop has none. */
+.cq-step::before {
+  content: ""; position: absolute; left: 0.34rem; top: 1.1rem; bottom: 0;
+  width: 2px; background: rgba(194, 104, 42, 0.28);
 }
-.cq-section dd { margin: 0; white-space: pre-wrap; color: rgba(43, 26, 18, 0.85); line-height: 1.5; }
+.cq-step:last-child::before { display: none; }
+/* The stop. */
+.cq-step::after {
+  content: ""; position: absolute; left: 0; top: 0.3rem;
+  width: 0.8rem; height: 0.8rem; border-radius: 999px;
+  background: var(--amber); box-shadow: 0 0 0 3px #fff;
+}
+.cq-step-label { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 800; line-height: 1.35; color: #2b1a12; }
+.cq-step-text { margin: 0; white-space: pre-wrap; font-size: 0.98rem; line-height: 1.55; color: rgba(43, 26, 18, 0.85); overflow-wrap: anywhere; }
+/* Grid, not a wrapping flex row: when the pair doesn't fit, the answer wraps
+   inside its own column instead of dropping to a line of its own and hanging
+   off the right edge under nothing. */
+.cq-step-short { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: 1rem; }
+.cq-step-short .cq-step-label { margin: 0; }
+.cq-step-short .cq-step-text { text-align: right; font-weight: 600; }
+.cq-step-nothing::after { background: #fff; box-shadow: inset 0 0 0 2px rgba(43, 26, 18, 0.3), 0 0 0 3px #fff; }
+.cq-step-nothing .cq-step-label, .cq-step-nothing .cq-step-text { color: rgba(43, 26, 18, 0.62); font-weight: 600; }
+.cq-step-text-folded {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden;
+}
+/* Tall enough for a thumb, and it looks like a link, not a second Approve. */
+.cq-step-more {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 0.1rem;
+  background: none; border: none; font: inherit; font-size: 0.95rem; font-weight: 700;
+  color: var(--amber-dark); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
 /* How long the price is good for, under the number it applies to. */
 .cq-expiry { margin-top: 0.5rem; font-size: 0.82rem; font-weight: 700; color: rgba(43, 26, 18, 0.6); }
 .cq-cta { display: flex; gap: 0.7rem; flex-wrap: wrap; }
@@ -1647,8 +1862,8 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .cq-btn-primary { background: #2b1a12; color: #fff; }
 .cq-btn-secondary { background: var(--amber); color: #fff; border: 2px solid var(--amber); }
 .cq-btn-secondary:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
-.cq-fine { margin-top: 1rem; font-size: 0.8rem; color: rgba(43, 26, 18, 0.6); text-align: center; }
-.cq-price-sub { display: block; width: 100%; font-size: 0.78rem; color: rgba(43, 26, 18, 0.6); }
+.cq-fine { margin-top: 1rem; font-size: 0.85rem; color: rgba(43, 26, 18, 0.7); text-align: center; }
+.cq-price-sub { display: block; width: 100%; font-size: 0.85rem; color: rgba(43, 26, 18, 0.7); }
 /* Column, not a wrapping row: at a row width wide enough to fit two items but
    not three, one pair shares a flex line while the third sits alone. Flex's
    default cross-axis stretch then pads the shorter item in that pair up to
@@ -1855,7 +2070,6 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
    offered slot, or the day-choice buttons) - close enough to read as part of
    that element instead of its own, separate option. */
 .js-other { margin-top: 1rem; }
-.jq-sections-hint { margin-bottom: 0.7rem; }
 /* On the job page the Not applicable chip sits on a light card, so it needs
    its own colours rather than the dark CRM ones. */
 .jq-field > span { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
@@ -1981,6 +2195,86 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
    screen, and this is the way out of the one case where it isn't. */
 .jq-fix-open { display: block; margin-top: 0.4rem; text-align: left; }
 .jf-done { background: #f0fdf4; border-color: #86efac; }
+
+/* ── The quote form, shaped like the quote it sends ──────────────────────────
+   The crew fills in the customer's page rather than a form that becomes it:
+   the price sits in the same outlined card, the five sections on the same
+   timeline (.cq-steps), in the same order. Read in a truck or a back yard, so
+   everything is thumb-sized and nothing is smaller than 15px. */
+.jq-price {
+  display: flex; flex-direction: column; gap: 0.2rem;
+  border: 2px solid var(--amber); border-radius: 0.9rem; background: #fff;
+  padding: 0.85rem 1rem 0.9rem;
+}
+.jq-price:focus-within { box-shadow: 0 0 0 3px rgba(194, 104, 42, 0.18); }
+.jq-price-label { font-size: 0.8rem; font-weight: 800; color: #4b5563; }
+.jq-price-row { display: flex; align-items: baseline; gap: 0.15rem; }
+.jq-price-sign { font-family: var(--font-headline), sans-serif; font-size: 2.2rem; line-height: 1; color: #2b1a12; }
+.jq-price-row input {
+  flex: 1 1 auto; min-width: 0; width: 100%; border: none; background: transparent; padding: 0;
+  font-family: var(--font-headline), sans-serif; font-size: 2.6rem; line-height: 1.05; letter-spacing: 0.01em;
+  color: #2b1a12; font-variant-numeric: tabular-nums;
+}
+.jq-price-row input:focus { outline: none; }
+.jq-price-row input::placeholder { color: rgba(43, 26, 18, 0.28); }
+.jq-price-row input[readonly] { color: #2b1a12; }
+/* No spinner arrows: nobody prices a driveway a dollar at a time. */
+.jq-price-row input::-webkit-outer-spin-button,
+.jq-price-row input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.jq-price-row input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+.jq-included { background: var(--ivory); border-radius: 0.9rem; padding: 0.95rem 0.9rem 0.3rem; }
+.jq-included-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.85rem; }
+.jq-included-head h3 { font-family: var(--font-headline), sans-serif; font-size: 1.55rem; line-height: 1; letter-spacing: 0.01em; color: #2b1a12; margin: 0; }
+.jq-count { font-size: 0.85rem; font-weight: 800; color: #6b7280; white-space: nowrap; }
+.jq-count-done { color: #15803d; }
+
+.jq-steps { list-style: none; margin: 0; padding: 0; }
+/* Same rail and stops as the customer's timeline. A stop fills in amber once
+   its section has something in it, so "what's left" reads straight down. */
+.jq-step { position: relative; padding: 0 0 1rem 1.6rem; }
+.jq-step::before {
+  content: ""; position: absolute; left: 0.34rem; top: 1.1rem; bottom: 0;
+  width: 2px; background: rgba(194, 104, 42, 0.28);
+}
+.jq-step:last-child::before { display: none; }
+.jq-step::after {
+  content: ""; position: absolute; left: 0; top: 0.35rem;
+  width: 0.8rem; height: 0.8rem; border-radius: 999px;
+  background: var(--ivory); box-shadow: inset 0 0 0 2px rgba(43, 26, 18, 0.3);
+}
+.jq-step-done::after { background: var(--amber); box-shadow: none; }
+.jq-step-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 1.6rem; margin-bottom: 0.35rem; }
+.jq-step-head label { font-size: 1rem; font-weight: 800; color: #2b1a12; }
+.jq-na {
+  flex: none; min-height: 36px; padding: 0 0.8rem; border-radius: 999px;
+  border: 1.5px solid #d1d5db; background: #fff; color: #4b5563;
+  font: inherit; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+}
+.jq-na:hover, .jq-na:active { border-color: var(--amber); color: var(--amber-dark); }
+.jq-step textarea {
+  width: 100%; min-height: 64px; padding: 0.7rem 0.75rem; resize: vertical;
+  border: 1px solid #d1d5db; border-radius: 0.6rem; background: #fff;
+  font: inherit; font-size: 1rem; line-height: 1.45; color: #1f2328;
+}
+.jq-step textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+
+.jq-preview-toggle {
+  align-self: flex-start; min-height: 44px; padding: 0; background: none; border: none;
+  font: inherit; font-size: 0.95rem; font-weight: 800; color: var(--amber-dark);
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+/* The customer's page in miniature: their ivory, their classes, their order. */
+.jq-preview {
+  background: var(--ivory); color: #2b1a12; border: 1px dashed rgba(43, 26, 18, 0.3);
+  border-radius: 0.9rem; padding: 0.9rem 0.9rem 0.2rem;
+}
+.jq-preview-note { font-size: 0.85rem; font-weight: 700; color: #4b5563; margin: 0 0 0.6rem; }
+.jq-preview .cq-title { font-size: 1.6rem; margin: 0 0 0.6rem; }
+.jq-preview .cq-price, .jq-preview .cq-summary { margin-bottom: 0.9rem; }
+
+.jq-todo { font-size: 0.9rem; font-weight: 700; color: var(--amber-dark); margin: 0; }
+.jq-send { width: 100%; min-height: 54px; font-size: 1.05rem; }
 
 /* Scheduling the on-site visit. Same white card and grey border as the quote
    card below it, so the page reads as one stack of cards rather than a set of
@@ -2244,8 +2538,13 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 /* Mobile: the quote page is used almost exclusively on a phone. Full-bleed
    card, thumb-sized targets, and the price impossible to miss. */
 @media (max-width: 640px) {
-  .cq-wrap { padding: 0.75rem; align-items: flex-start; }
-  .cq-card, .cq-confirm { padding: 1.35rem 1.1rem; border-radius: 1rem; }
+  /* Edge to edge. The link arrives by text, so this is nearly always a phone,
+     and the dark margin around a floating card was 24px of every line the
+     customer never got back. */
+  .cq-wrap { padding: 0; align-items: stretch; background: var(--ivory); }
+  .cq-card, .cq-confirm { max-width: none; min-height: 100dvh; padding: 1.25rem 1.1rem 2rem; border-radius: 0; }
+  .cq-summary, .cq-opts { padding: 1rem 1rem 1.1rem; }
+  .cq-lead { font-size: 1.02rem; line-height: 1.5; }
   .cq-title { font-size: 1.7rem; }
   .cq-price { flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 1rem 1.1rem; }
   .cq-price-value { font-size: 2.6rem; }
@@ -2789,8 +3088,11 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .ag-badge-void     { background: rgba(255, 255, 255, 0.06); color: var(--crm-muted); }
 
 /* ── Photo grid + lightbox ── */
-.pg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.6rem; }
-.pg-thumb { padding: 0; border: 1px solid var(--crm-border); border-radius: 0.6rem; overflow: hidden; aspect-ratio: 1; background: #1a1f24; cursor: pointer; position: relative; }
+.pg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(110px, 100%), 1fr)); gap: 0.6rem; }
+/* min-width 0: a grid item's floor is otherwise its content's natural size,
+   and a phone photo is thousands of pixels wide - one thumbnail pushed the
+   whole job page sideways. */
+.pg-thumb { min-width: 0; padding: 0; border: 1px solid var(--crm-border); border-radius: 0.6rem; overflow: hidden; aspect-ratio: 1; background: #1a1f24; cursor: pointer; position: relative; }
 .pg-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pg-video-tag { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; color: var(--crm-muted); }
 .pg-lightbox { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.88); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 1rem; }

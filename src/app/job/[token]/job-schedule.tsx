@@ -16,7 +16,7 @@ import { DateField } from "./date-field";
 // Only ever shown on a job with no date yet. Moving a date that already exists
 // is JobReschedule, under the date itself at the top of the page.
 function pretty(s: string, locale: Locale): string {
-  return new Date(`${s}T00:00:00`).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
+  return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",

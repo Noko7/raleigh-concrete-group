@@ -10,7 +10,7 @@ import { AgreementStatusBadge } from "./agreement-list";
 export const dynamic = "force-dynamic";
 
 function fmt(iso: string, locale: string) {
-  return new Date(iso).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
+  return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
