@@ -1653,32 +1653,74 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .jb-fold-flat .crm-card { background: none; border: none; padding: 0; margin: 0; }
 .jb-fold-flat .crm-card-title { display: none; }
 
-/* The quote, on paper: the one part of this page the customer will read, so
-   it is drawn in their page's colours rather than the CRM's. */
-.crm-paper { background: #fff; color: #1f2328; border-color: transparent; display: flex; flex-direction: column; gap: 0.9rem; }
-.crm-paper .crm-card-title { color: #2b1a12; margin-bottom: 0; }
+/* The quote editor, on the CRM's own dark surfaces. It is built from the same
+   parts as the crew's form (jq-*) and the customer preview (cq-*), which are
+   light on the pages they were drawn for; here they are re-inked so the whole
+   job page reads as one dark screen. Same layout, same order, CRM colours. */
+.crm-paper { display: flex; flex-direction: column; gap: 0.9rem; }
+.crm-paper .crm-card-title { margin-bottom: 0; }
 .crm-paper-head { display: flex; flex-direction: column; gap: 0.2rem; }
-.crm-paper-sub { font-size: 0.9rem; color: #4b5563; }
-.crm-paper .crm-muted { color: #4b5563; }
-.crm-paper .crm-btn-ghost { background: #fff; color: #1f2328; border-color: #d1d5db; }
-.crm-paper .crm-btn-ghost:hover { background: #f3f4f6; }
+.crm-paper-sub { font-size: 0.9rem; color: var(--crm-muted); }
 .crm-paper .crm-editor-foot { flex-wrap: wrap; margin-top: 0; }
 .crm-paper .crm-editor-foot .crm-btn { min-height: 48px; }
 .crm-paper .crm-btn-send { flex: 1 1 12rem; }
-.crm-paper .crm-saved { color: #15803d; }
-.crm-paper .crm-auth-error { color: #b91c1c; }
-.crm-paper .crm-confirm { border-top-color: #e5e7eb; display: flex; flex-direction: column; gap: 0.6rem; }
-.crm-paper .crm-confirm > h3 { color: #2b1a12; font-size: 1.5rem; }
-.crm-paper .crm-confirm-row { background: #faf8f4; border-color: #e5e7eb; color: #1f2328; }
-.crm-paper .crm-confirm-row strong { color: var(--amber-dark); }
-.crm-paper .crm-confirm-summary { background: #faf8f4; border-color: #e5e7eb; color: #1f2328; }
-.crm-paper .jq-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; font-weight: 800; color: #374151; }
-.crm-paper .jq-field textarea { padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 0.6rem; font: inherit; font-weight: 500; }
+.crm-paper .crm-confirm { display: flex; flex-direction: column; gap: 0.6rem; }
 
-/* One column. The two columns dissolve into a single list so it can be put in
-   the order a phone is read in: the live step, then what the customer asked
-   for and sent, then the quote, then the job's settings and the rest. Without
-   this the photos a new lead is priced from sat below the whole quote form. */
+.crm-paper .jq-price { background: var(--crm-surface-solid); border-color: var(--crm-accent); }
+.crm-paper .jq-price-label { color: var(--crm-muted); }
+.crm-paper .jq-price-sign, .crm-paper .jq-price-row input, .crm-paper .jq-price-row input[readonly] { color: var(--crm-text); }
+.crm-paper .jq-price-row input::placeholder { color: rgba(247, 245, 241, 0.3); }
+
+.crm-paper .jq-included { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--crm-border); }
+.crm-paper .jq-included-head h3, .crm-paper .jq-step-head label { color: var(--crm-text); }
+.crm-paper .jq-count { color: var(--crm-muted); }
+.crm-paper .jq-count-done { color: #4ade80; }
+.crm-paper .jq-step::before { background: rgba(194, 104, 42, 0.4); }
+.crm-paper .jq-step::after { background: var(--crm-surface); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35); }
+.crm-paper .jq-step-done::after { background: var(--crm-accent); box-shadow: none; }
+.crm-paper .jq-na { background: transparent; border-color: var(--crm-border); color: var(--crm-muted); }
+.crm-paper .jq-na:hover { border-color: var(--crm-accent); color: #f0a36b; }
+.crm-paper .jq-step textarea, .crm-paper .jq-field textarea {
+  background: #20262e; border: 1px solid var(--crm-border); color: var(--crm-text);
+}
+.crm-paper .jq-step textarea::placeholder { color: rgba(173, 182, 192, 0.7); }
+.crm-paper .jq-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; font-weight: 800; color: var(--crm-muted); }
+.crm-paper .jq-field textarea { padding: 0.7rem; border-radius: 0.6rem; font: inherit; font-weight: 500; }
+.crm-paper .jq-preview-toggle, .crm-paper .cq-step-more { color: #f0a36b; }
+
+/* The line-item and choice builders. Their rows are forced light on the
+   crew's white card; on the owner's page they take the CRM's surfaces. */
+.crm-paper .qo-box, .crm-paper .qc-box { border-color: var(--crm-border); }
+.crm-paper .qo-row, .crm-paper .qo-row-required, .crm-paper .qc-card {
+  background: var(--crm-surface-solid); border-color: var(--crm-border); color: var(--crm-text);
+}
+.crm-paper .qo-row-required, .crm-paper .qc-card-rec { border-left-color: var(--crm-accent); }
+.crm-paper .qo-field, .crm-paper .qo-toggle, .crm-paper .qc-rec { color: var(--crm-muted); }
+.crm-paper .qo-field input, .crm-paper .qo-field textarea {
+  background: #20262e; border-color: var(--crm-border); color: var(--crm-text);
+}
+.crm-paper .qo-field input[readonly] { background: rgba(255, 255, 255, 0.04); color: var(--crm-muted); }
+.crm-paper .qo-row-tools button, .crm-paper .qc-card-tools button,
+.crm-paper .qo-add-btn, .crm-paper .qc-start {
+  background: transparent; border-color: var(--crm-border); color: var(--crm-text);
+}
+.crm-paper .qo-add-btn:hover, .crm-paper .qc-start:hover { border-color: var(--crm-accent); color: #f0a36b; }
+.crm-paper .qo-remove, .crm-paper .qc-remove { color: #f87171 !important; }
+.crm-paper .qo-kind-optional, .crm-paper .qc-letter { background: rgba(255, 255, 255, 0.08); color: var(--crm-muted); }
+.crm-paper .qo-kind-required, .crm-paper .qc-card-rec .qc-letter { background: rgba(194, 104, 42, 0.22); color: #f0a36b; }
+
+/* The preview: the customer's layout, in the CRM's colours. */
+.crm-paper .jq-preview { background: rgba(255, 255, 255, 0.03); border-color: var(--crm-border); color: var(--crm-text); }
+.crm-paper .jq-preview-note { color: var(--crm-muted); }
+.crm-paper .cq-title, .crm-paper .cq-price-value, .crm-paper .cq-summary h2, .crm-paper .cq-step-label { color: var(--crm-text); }
+.crm-paper .cq-price { background: var(--crm-surface-solid); border-color: var(--crm-accent); }
+.crm-paper .cq-price-label, .crm-paper .cq-price-sub { color: var(--crm-muted); }
+.crm-paper .cq-summary { background: var(--crm-surface-solid); }
+.crm-paper .cq-step-text { color: #d5dbe1; }
+.crm-paper .cq-step::after { box-shadow: 0 0 0 3px var(--crm-surface-solid); }
+.crm-paper .cq-step-nothing::after { background: var(--crm-surface-solid); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35), 0 0 0 3px var(--crm-surface-solid); }
+.crm-paper .cq-step-nothing .cq-step-label, .crm-paper .cq-step-nothing .cq-step-text { color: var(--crm-muted); }
+
 @media (max-width: 900px) {
   .jb-grid { display: flex; flex-direction: column; gap: 0; }
   .jb-main, .jb-side { display: contents; }
@@ -1843,9 +1885,25 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cq-step-short .cq-step-text { text-align: right; font-weight: 600; }
 .cq-step-nothing::after { background: #fff; box-shadow: inset 0 0 0 2px rgba(43, 26, 18, 0.3), 0 0 0 3px #fff; }
 .cq-step-nothing .cq-step-label, .cq-step-nothing .cq-step-text { color: rgba(43, 26, 18, 0.62); font-weight: 600; }
-.cq-step-text-folded {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden;
+/* The job details on a quote with options: folded under the decision. A real
+   <details>, so it opens with no script and a screen reader says what it is. */
+.cq-details { margin: 0 0 1.25rem; border-radius: 0.9rem; background: #fff; }
+.cq-details > summary {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 0.75rem;
+  min-height: 56px; padding: 0.7rem 1.1rem; cursor: pointer; list-style: none;
 }
+.cq-details > summary::-webkit-details-marker { display: none; }
+.cq-details > summary > span:first-child { font-weight: 800; font-size: 1rem; color: #2b1a12; }
+.cq-details > summary::after {
+  content: "+"; grid-column: 2; grid-row: 1 / span 2; font-size: 1.4rem; font-weight: 700; color: var(--amber-dark);
+}
+.cq-details[open] > summary::after { content: "\2212"; }
+.cq-details-sub { grid-column: 1; font-size: 0.85rem; color: rgba(43, 26, 18, 0.65); }
+.cq-details > .cq-summary { margin: 0; padding-top: 0.2rem; }
+.cq-details > .cq-summary > h2 { display: none; }
+
+/* Folded text. How many lines is set on the element by SectionText. */
+.cq-folded { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 /* Tall enough for a thumb, and it looks like a link, not a second Approve. */
 .cq-step-more {
   display: inline-flex; align-items: center; min-height: 44px; padding: 0 0.1rem;
@@ -3502,22 +3560,31 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cq-alts { margin-bottom: 1.4rem; }
 .cq-alts-lead { margin: 0 0 0.75rem; }
 .cq-alt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
-.cq-alt {
-  display: flex; flex-direction: column; gap: 0.35rem; width: 100%; text-align: left;
+/* The card is the <li>; the button inside it carries the label, letter and
+   price and fills the card's width, so the tap target is the whole thing. */
+.cq-alt-card {
+  display: flex; flex-direction: column; gap: 0.35rem;
   border: 2px solid rgba(43, 26, 18, 0.14); border-radius: 0.8rem; background: #fff;
-  padding: 0.95rem 1rem; font: inherit; color: #2b1a12; cursor: pointer;
+  padding: 0.95rem 1rem; color: #2b1a12; cursor: pointer;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
-.cq-alt:hover { border-color: rgba(43, 26, 18, 0.4); }
+.cq-alt-card:hover { border-color: rgba(43, 26, 18, 0.4); }
+.cq-alt-card:active { transform: scale(0.99); }
+.cq-alt {
+  display: flex; flex-direction: column; gap: 0.35rem; width: 100%; text-align: left;
+  border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer;
+}
+.cq-alt:focus-visible { outline: 3px solid rgba(194, 104, 42, 0.5); outline-offset: 6px; border-radius: 0.4rem; }
 .cq-alt-on { border-color: var(--amber); background: rgba(194, 104, 42, 0.07); box-shadow: 0 2px 14px rgba(194, 104, 42, 0.14); }
+.cq-alt-card .cq-step-more, .cq-opt .cq-step-more { min-height: 40px; font-size: 0.9rem; align-self: flex-start; }
 .cq-alt-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .cq-alt-letter { font-size: 0.68rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(43, 26, 18, 0.55); }
 .cq-alt-flag { font-size: 0.66rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: #fff; background: var(--amber); border-radius: 999px; padding: 0.18rem 0.55rem; }
 .cq-alt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; }
 .cq-alt-title { font-weight: 800; font-size: 1.05rem; }
 .cq-alt-price { font-family: var(--font-headline), sans-serif; font-size: 1.5rem; white-space: nowrap; }
-.cq-alt-desc { font-size: 0.88rem; color: rgba(43, 26, 18, 0.75); white-space: pre-wrap; }
-.cq-alt-mark { margin-top: 0.35rem; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(43, 26, 18, 0.45); }
+.cq-alt-desc { margin: 0; font-size: 0.92rem; line-height: 1.45; color: rgba(43, 26, 18, 0.78); white-space: pre-wrap; }
+.cq-alt-mark { margin-top: 0.2rem; font-size: 0.85rem; font-weight: 800; color: rgba(43, 26, 18, 0.62); }
 .cq-alt-on .cq-alt-mark { color: var(--amber-dark); }
 .cq-confirm-item-pick { font-weight: 800; }
 

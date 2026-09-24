@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { ymdInDays } from "@/lib/crm/clock";
 import { DECLINE_CREDIT, DEFAULT_VISIT_SLOTS, dollars, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, packageLetter, quoteTotal } from "@/lib/crm/constants";
+import { SectionText } from "@/components/section-text";
 import { DEFAULT_DEPOSIT_PERCENT, depositCents, usd as money } from "@/lib/crm/fees";
 
 // One day the customer says works, and the time they'd like the crew to start.
@@ -503,16 +504,18 @@ export function QuoteActions({
                 {packages.map((pkg, i) => {
                   const on = picked === pkg.id;
                   return (
-                    <li key={pkg.id}>
-                      {/* The whole card is the control. A radio dot beside a
-                          price is a target the size of a pea on the phone most
-                          of these are read on. */}
-                      <button
-                        type="button"
-                        className={`cq-alt${on ? " cq-alt-on" : ""}${pkg.recommended ? " cq-alt-rec" : ""}`}
-                        aria-pressed={on}
-                        onClick={() => setPicked(pkg.id)}
-                      >
+                    // The whole card picks it: a radio dot beside a price is a
+                    // target the size of a pea on the phone most of these are
+                    // read on. The button is the accessible control; a tap
+                    // anywhere else on the card bubbles up to the same answer.
+                    // A long description folds to two lines with its own
+                    // "Show details", which reads more without picking.
+                    <li
+                      key={pkg.id}
+                      className={`cq-alt-card${on ? " cq-alt-on" : ""}${pkg.recommended ? " cq-alt-rec" : ""}`}
+                      onClick={() => setPicked(pkg.id)}
+                    >
+                      <button type="button" className="cq-alt" aria-pressed={on}>
                         <span className="cq-alt-top">
                           <span className="cq-alt-letter">{`Option ${packageLetter(i)}`}</span>
                           {pkg.recommended && <span className="cq-alt-flag">What we&apos;d pick</span>}
@@ -521,9 +524,18 @@ export function QuoteActions({
                           <span className="cq-alt-title">{pkg.title}</span>
                           <span className="cq-alt-price">{usd(pkg.amount)}</span>
                         </span>
-                        {pkg.description && <span className="cq-alt-desc">{pkg.description}</span>}
-                        <span className="cq-alt-mark">{on ? "Selected" : "Choose this one"}</span>
                       </button>
+                      {pkg.description && (
+                        <SectionText
+                          text={pkg.description}
+                          className="cq-alt-desc"
+                          chars={110}
+                          lines={2}
+                          more="Show details"
+                          less="Hide details"
+                        />
+                      )}
+                      <span className="cq-alt-mark">{on ? "Selected" : "Tap to choose"}</span>
                     </li>
                   );
                 })}
@@ -556,7 +568,16 @@ export function QuoteActions({
                         <span className="cq-opt-title">{o.title}</span>
                         <span className="cq-opt-price">{usd(o.amount)}</span>
                       </div>
-                      {o.description && <p className="cq-opt-desc">{o.description}</p>}
+                      {o.description && (
+                        <SectionText
+                          text={o.description}
+                          className="cq-opt-desc"
+                          chars={110}
+                          lines={2}
+                          more="Show details"
+                          less="Hide details"
+                        />
+                      )}
                       {o.required ? (
                         <span className="cq-opt-included">Included in your project</span>
                       ) : (
