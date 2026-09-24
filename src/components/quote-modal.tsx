@@ -957,7 +957,7 @@ function Modal({ onClose }: { onClose: () => void }) {
             <p className="qm-sub">
               {mode === "inperson" && !visitBooked
                 ? "We got your request. We'll call or text you shortly to set a time for your visit."
-                : "We got your request and we'll reach out the same day with your quote. Want to talk now? Give us a call."}
+                : "We got your request and we'll reach out soon with your quote. Want to talk now? Give us a call."}
             </p>
             {mode === "inperson" && visitBooked && data.visitDate && (
               <p className="qm-sub">
@@ -1010,7 +1010,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                     </span>
                     <span className="qm-choice-text">
                       <span className="qm-choice-title">Online quote</span>
-                      <span className="qm-choice-desc">Send a photo. Get your price, usually the same day.</span>
+                      <span className="qm-choice-desc">Send a photo. We text you the price.</span>
                     </span>
                     <span className="qm-choice-badge">Fastest</span>
                     <IconArrow />

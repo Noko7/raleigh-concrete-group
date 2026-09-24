@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { BUSINESS_TZ } from "@/lib/crm/clock";
-import { dollars, QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm/constants";
+import { dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, type QuoteSectionField } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/actions";
 import {
@@ -30,6 +30,13 @@ import {
 } from "@/app/crm/quotes/[id]/package-builder";
 import type { SaveState } from "@/app/crm/quotes/[id]/types";
 import { AutoTextarea } from "@/components/auto-textarea";
+import { QuoteSections } from "@/components/quote-sections";
+
+// What the Not applicable button writes. English whatever the crew's own
+// language is: the customer reads this text, and the customer's page is in
+// English. It used to write the crew's translation, which put "No aplica" on
+// a customer's quote.
+const NOT_APPLICABLE = "Not applicable";
 
 type Sections = Record<QuoteSectionField, string>;
 const emptySections = (): Sections =>
@@ -75,6 +82,7 @@ export function JobQuote({
   const [state, formAction, pending] = useActionState<SaveState, FormData>(saveQuote, { ok: false });
 
   const [open, setOpen] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [price, setPrice] = useState(amount != null ? String(amount) : "");
   const [what, setWhat] = useState(summary ?? "");
   const [sections, setSections] = useState<Sections>(() => ({
@@ -135,6 +143,12 @@ export function JobQuote({
     !packagesMatch(storedPkgRows, pkgRows) ||
     what.trim() !== (summary ?? "").trim() ||
     QUOTE_SECTION_FIELDS.some((f) => sections[f].trim() !== (initialSections?.[f] ?? "").trim());
+
+  // What still stands between them and Send, said in words under the button
+  // rather than left as a grey button with no reason.
+  const sectionsLeft = hasLegacySummary ? 0 : QUOTE_SECTION_FIELDS.filter((f) => !sections[f].trim()).length;
+  const sectionsDone = QUOTE_SECTION_FIELDS.length - QUOTE_SECTION_FIELDS.filter((f) => !sections[f].trim()).length;
+  const priceOk = (derived || price.trim() !== "") && Number.isFinite(priceNum) && priceNum > 0;
 
   const ready =
     (derived || price.trim() !== "") &&
@@ -247,24 +261,72 @@ export function JobQuote({
         <input type="hidden" name="options_json" value={rowsToJson(rows)} />
         <input type="hidden" name="packages_json" value={packagesToJson(pkgRows)} />
 
-        <label className="jq-field">
-          <span>{t.contractorJob.quoteAmount}</span>
-          <input
-            type="number"
-            name="quote_amount"
-            inputMode="decimal"
-            min={0}
-            step="0.01"
-            value={derived ? String(derivedTotal) : price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="6500"
-            readOnly={derived}
-          />
+        {/* The price, set the way the customer will see it: one big number
+            in the same card their quote page opens on. */}
+        <label className="jq-price">
+          <span className="jq-price-label">
+            {derived ? t.contractorJob.quoteTotalLabel : t.contractorJob.quotePriceLabel}
+          </span>
+          <span className="jq-price-row">
+            <span className="jq-price-sign" aria-hidden="true">$</span>
+            <input
+              type="number"
+              name="quote_amount"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              value={derived ? String(derivedTotal) : price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="6500"
+              readOnly={derived}
+              aria-label={t.contractorJob.quoteAmount}
+            />
+          </span>
         </label>
 
-        {/* Priced first, then described. A crew standing in somebody's back
-            yard being asked "and what about the sidewalk?" can answer it here
-            instead of over the phone a day later. */}
+        {/* The same five sections the CRM asks for, so a quote written from a
+            truck covers exactly what one written at a desk does - and on the
+            same timeline the customer reads them on, so the crew is filling in
+            the page the customer gets rather than a form that becomes it. */}
+        <div className="jq-included">
+          <div className="jq-included-head">
+            <h3>{t.contractorJob.quoteIncluded}</h3>
+            <span className={sectionsLeft === 0 ? "jq-count jq-count-done" : "jq-count"}>
+              {fill(t.contractorJob.quoteDone, { n: String(sectionsDone) })}
+            </span>
+          </div>
+          <ol className="jq-steps">
+            {QUOTE_SECTION_FIELDS.map((field) => {
+              const filled = sections[field].trim() !== "";
+              return (
+                <li key={field} className={filled ? "jq-step jq-step-done" : "jq-step"}>
+                  <div className="jq-step-head">
+                    <label htmlFor={`jq-${field}`}>{t.contractorJob.sections[field]}</label>
+                    {!filled && (
+                      <button type="button" className="jq-na" onClick={() => setSection(field, NOT_APPLICABLE)}>
+                        {t.contractorJob.notApplicable}
+                      </button>
+                    )}
+                  </div>
+                  <AutoTextarea
+                    id={`jq-${field}`}
+                    name={field}
+                    rows={2}
+                    value={sections[field]}
+                    onChange={(e) => setSection(field, e.target.value)}
+                    placeholder={t.contractorJob.sectionHints[field]}
+                  />
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+
+        {/* The extras, after the everyday path rather than in front of it:
+            most quotes are one price and five sections, and these two boxes
+            are a paragraph each of reading to scroll past on the way there.
+            Still here for the back yard that asks "and what about the
+            sidewalk?" - adding one turns the price card above into the total. */}
         <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} />
 
         {/* And the other question the same back yard produces: "what would it
@@ -272,35 +334,47 @@ export function JobQuote({
             rather than as a second quote on a second link. */}
         <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={t.quotePackages} />
 
-        {/* The same five sections the CRM asks for, so a quote written from a
-            truck covers exactly what one written at a desk does. */}
-        <p className="js-hint jq-sections-hint">{t.contractorJob.quoteSectionsHint}</p>
-        {QUOTE_SECTION_FIELDS.map((field) => (
-          <label key={field} className="jq-field">
-            <span>
-              {t.contractorJob.sections[field]}
-              {!sections[field].trim() && (
-                <button type="button" className="crm-na-btn" onClick={() => setSection(field, t.contractorJob.notApplicable)}>
-                  {t.contractorJob.notApplicable}
-                </button>
-              )}
-            </span>
-            <AutoTextarea
-              name={field}
-              rows={2}
-              value={sections[field]}
-              onChange={(e) => setSection(field, e.target.value)}
-              placeholder={t.contractorJob.sectionHints[field]}
-            />
-          </label>
-        ))}
-
         {/* Only for a quote written before the sections existed. */}
         {hasLegacySummary && (
           <label className="jq-field">
             <span>{t.contractorJob.quoteSummary}</span>
             <AutoTextarea name="quote_summary" rows={3} value={what} onChange={(e) => setWhat(e.target.value)} />
           </label>
+        )}
+
+        {/* The customer's page, built from what is in the fields right now,
+            with the same component that page uses. Closed by default: the
+            form above already reads like it, this is the final check. */}
+        <button
+          type="button"
+          className="jq-preview-toggle"
+          aria-expanded={preview}
+          onClick={() => setPreview((p) => !p)}
+        >
+          {preview
+            ? t.contractorJob.quotePreviewClose
+            : fill(t.contractorJob.quotePreviewOpen, { name: customerFirstName })}
+        </button>
+        {preview && (
+          <div className="jq-preview">
+            <p className="jq-preview-note">{fill(t.contractorJob.quotePreviewNote, { name: customerFirstName })}</p>
+            <h4 className="cq-title">Hi {customerFirstName},</h4>
+            <div className="cq-price">
+              <span className="cq-price-label">{derived ? "Your total" : "Your price, all in"}</span>
+              <span className="cq-price-value">{priceOk ? dollars(priceNum) : "-"}</span>
+              <span className="cq-price-sub">Free quote · no obligation until you approve</span>
+            </div>
+            {sectionsDone > 0 && (
+              <div className="cq-summary">
+                <h2>What&apos;s included</h2>
+                <QuoteSections
+                  sections={QUOTE_SECTION_FIELDS.filter((f) => sections[f].trim()).map(
+                    (f) => [QUOTE_SECTION_LABELS[f], sections[f]] as const,
+                  )}
+                />
+              </div>
+            )}
+          </div>
         )}
 
         <p className="js-hint">
@@ -313,8 +387,15 @@ export function JobQuote({
             reason: a correction that changes nothing is the duplicate text the
             whole rule exists to stop. */}
         {awaitingReply && !changed && <p className="js-hint">{t.contractorJob.quoteFixUnchanged}</p>}
+        {!priceOk ? (
+          <p className="jq-todo">{t.contractorJob.quoteNeedPrice}</p>
+        ) : (
+          sectionsLeft > 0 && (
+            <p className="jq-todo">{fill(t.contractorJob.quoteNeedSections, { n: String(sectionsLeft) })}</p>
+          )
+        )}
 
-        <button type="submit" className="js-confirm" disabled={!ready || pending}>
+        <button type="submit" className="js-confirm jq-send" disabled={!ready || pending}>
           {pending
             ? t.contractorJob.quoteSending
             : awaitingReply

@@ -28,7 +28,7 @@ type LocationPageProps = {
 const processSteps = [
   {
     label: "Get Your Quote",
-    body: "Give us a call or send over your address. For driveways and slabs, we can measure from satellite and text you a ballpark the same day.",
+    body: "Give us a call or send over your address. For driveways and slabs, we can measure from satellite and text you a ballpark without a visit.",
   },
   {
     label: "We Confirm On-Site",
