@@ -51,6 +51,7 @@ import {
   countJobsOn,
   findJobConflict,
   findVisitConflict,
+  clearQuoteResponses,
   getMessage,
   isHeld,
   getQuote,
@@ -112,6 +113,25 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     events.push({ type: "status_changed", meta: { from: current.status, to: status } });
   }
 
+  // Reopening a declined quote: moved off Lost, or sent again. The customer's
+  // "no" was an answer to the offer as it stood; putting it back on the table
+  // means forgetting that answer, or their link keeps opening on the
+  // "thanks for letting us know" page and the quote they were just texted is
+  // nowhere to be seen. It also unlocks the line items so the price can be
+  // changed before it goes back out. An accepted quote is never reopened this
+  // way: it has a booked day and a ledger behind it.
+  // Includes a quote already moved off Lost before this rule existed: declined
+  // but no longer lost is somebody who meant to reopen it.
+  const reopening = current.customer_response === "declined" && (sending || (patch.status ?? current.status) !== "lost");
+  if (reopening) {
+    patch.customer_response = null;
+    patch.customer_responded_at = null;
+    patch.discount_accepted = false;
+    events.push({ type: "quote_reopened" });
+  }
+  // The customer's answer as it will stand after this save.
+  const response = reopening ? null : current.customer_response;
+
   // Assignment (owner only)
   if (isOwner && formData.has("assigned_to")) {
     const raw = String(formData.get("assigned_to") ?? "").trim();
@@ -147,7 +167,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   // them would quietly change what a finished job says it included.
   const existingOptions = await listQuoteOptions(session, id);
   let optionRows: QuoteOptionDraft[] | null = null;
-  if (formData.has("options_json") && !current.customer_response) {
+  if (formData.has("options_json") && !response) {
     let raw: unknown = [];
     try {
       raw = JSON.parse(String(formData.get("options_json") ?? "[]"));
@@ -175,7 +195,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   // so a quote can never go out asking the customer to pick from a list of one.
   const existingPackages = await listQuotePackages(session, id);
   let packageRows: QuotePackageDraft[] | null = null;
-  if (formData.has("packages_json") && !current.customer_response) {
+  if (formData.has("packages_json") && !response) {
     let raw: unknown = [];
     try {
       raw = JSON.parse(String(formData.get("packages_json") ?? "[]"));
@@ -213,7 +233,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   // them for the sidewalk they turned down.
   const effectiveOptions = optionRows ?? optionsAsDrafts(existingOptions);
   const effectivePackages = packageRows ?? packagesAsDrafts(existingPackages);
-  const answered = Boolean(current.customer_response);
+  const answered = Boolean(response);
   const itemised = effectiveOptions.length > 0 && !answered;
   const offersChoice = isChoice(effectivePackages) && !answered;
 
@@ -352,7 +372,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     //
     //   a duplicate   the same quote again, which carries nothing the first
     //                 didn't. That's what the block below is for.
-    revising = Boolean(current.quote_sent_at) && !current.customer_response && contentChanged;
+    revising = Boolean(current.quote_sent_at) && !response && contentChanged;
 
     // One quote text, then wait for an answer.
     //
@@ -367,7 +387,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     //   - the quote itself changed, so this is the correction described above
     //   - the last text never left the building, so nothing was delivered
     //   - an owner deliberately asked to send it again
-    if (current.quote_sent_at && !current.customer_response && !revising) {
+    if (current.quote_sent_at && !response && !reopening && !revising) {
       const last = await lastMessageOf(session, id, "quote_ready");
       // No log row (or the table isn't there yet) is treated as delivered: the
       // safe default when we can't tell is not to text them twice.
@@ -425,6 +445,9 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       const updated = await updateQuote(session, id, patch);
       if (!updated) return { ok: false, error: "Could not save. Check your access and try again." };
     }
+    // After the row, and only for the rows not just rewritten above: a fresh
+    // set of line items carries no answers already.
+    if (reopening) await clearQuoteResponses(id);
 
     for (const e of events) await addEvent(session, id, e.type, e.meta);
 

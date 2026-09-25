@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 import { DECLINE_CREDIT, dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, slotsFor } from "@/lib/crm/constants";
 import { usd } from "@/lib/crm/fees";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
-import { getQuoteByToken, getWorkHours, isQuoteExpired, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
+import { getQuoteByToken, getWorkHours, isOpenAgain, isQuoteExpired, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
 import { QuoteActions } from "./quote-actions";
 import { QuoteSections } from "@/components/quote-sections";
@@ -83,7 +83,9 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
 
   const hasPrice = quote.quote_amount != null;
   const amount = hasPrice ? dollars(quote.quote_amount) : null;
-  const responded = quote.customer_response;
+  // A declined quote the office has moved off Lost is back on offer, so it
+  // shows as the quote rather than as "thanks for letting us know".
+  const responded = isOpenAgain(quote) ? null : quote.customer_response;
   const firstName = quote.name.split(" ")[0];
 
   // Only the sections that were actually filled in. An owner can't send a

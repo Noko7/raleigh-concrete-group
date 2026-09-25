@@ -18,6 +18,7 @@ import {
 } from "@/app/crm/quotes/[id]/option-builder";
 import {
   PackageBuilder,
+  packagesFromOptionRows,
   filledPackages,
   leadPackageAmount,
   offersChoice,
@@ -34,6 +35,7 @@ import {
   blankSections,
   CustomerPreview,
   emptySections,
+  PickOneSuggestion,
   PriceCard,
   SectionsEditor,
   type Sections,
@@ -268,6 +270,16 @@ export function JobQuote({
             Still here for the back yard that asks "and what about the
             sidewalk?" - adding one turns the price card above into the total. */}
         <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} />
+        {/* Optional extras the customer was meant to pick ONE of add up to
+            every price at once. Offered here, where the mistake gets made. */}
+        <PickOneSuggestion
+          rows={rows}
+          hasChoice={filledPackages(pkgRows).length > 0}
+          onConvert={() => {
+            setPkgRows(packagesFromOptionRows(rows));
+            setRows([]);
+          }}
+        />
 
         {/* And the other question the same back yard produces: "what would it
             cost in asphalt instead?" Two prices on one quote, answered here

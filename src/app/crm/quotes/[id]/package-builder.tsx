@@ -64,6 +64,16 @@ export function blankPackage(): PackageRow {
   return { key: nextKey(), id: undefined, title: "", description: "", amount: "", recommended: false };
 }
 
+// Line items the customer was meant to pick ONE of, rewritten as the choice
+// they always were. "Section 1 / Section 2 / Section 3 / All sections" set up
+// as optional extras let a customer say yes to all four and be priced for
+// every section twice. As a choice they pick one, and the total is that one.
+export function packagesFromOptionRows(rows: { title: string; description: string; amount: string }[]): PackageRow[] {
+  return rows
+    .filter((r) => r.title.trim() !== "")
+    .map((r) => ({ ...blankPackage(), title: r.title, description: r.description, amount: r.amount }));
+}
+
 export const packageAmountOf = (r: PackageRow): number => {
   const n = Number(r.amount);
   return Number.isFinite(n) ? n : 0;

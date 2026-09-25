@@ -125,6 +125,37 @@ export function SectionsEditor({
 }
 
 /**
+ * Shown when every line item is optional and no choice is set up yet: the
+ * shape a "Section 1 / Section 2 / All sections" quote comes out in. As
+ * optional extras the customer can say yes to all of them and the page adds
+ * them up; if they are meant to pick one, one tap rewrites them as a choice.
+ */
+export function PickOneSuggestion({
+  rows,
+  hasChoice,
+  onConvert,
+}: {
+  rows: { title: string; amount: string; required: boolean }[];
+  hasChoice: boolean;
+  onConvert: () => void;
+}) {
+  const filled = rows.filter((r) => r.title.trim());
+  if (hasChoice || filled.length < 2 || filled.some((r) => r.required)) return null;
+  const sum = filled.reduce((n, r) => n + (Number(r.amount) || 0), 0);
+  return (
+    <div className="jq-pickone" role="note">
+      <p>
+        <strong>Should they pick just one of these?</strong> Right now the customer can say yes to every line, and
+        their total adds them all up ({dollars(sum)} if they take everything).
+      </p>
+      <button type="button" className="jq-pickone-btn" onClick={onConvert}>
+        Make it pick one
+      </button>
+    </div>
+  );
+}
+
+/**
  * The customer's page, built from what is in the fields right now with the
  * component that page itself uses. Closed until asked for: the form already
  * reads like it, this is the final check.
@@ -155,8 +186,12 @@ export function CustomerPreview({
           <p className="cq-title">Hi {firstName},</p>
           <div className="cq-price">
             <span className="cq-price-label">{derived ? "Your total" : "Your price, all in"}</span>
-            <span className="cq-price-value">{price != null && price > 0 ? dollars(price) : "-"}</span>
-            <span className="cq-price-sub">Free quote · no obligation until you approve</span>
+            {/* A quote with options shows no total until the customer picks,
+                so neither does the preview of it. */}
+            <span className="cq-price-value">{!derived && price != null && price > 0 ? dollars(price) : "-"}</span>
+            <span className="cq-price-sub">
+              {derived ? "Shown once they pick their options" : "Free quote · no obligation until you approve"}
+            </span>
           </div>
           {filled.length > 0 && (
             <div className="cq-summary">
