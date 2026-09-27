@@ -17,6 +17,7 @@ import {
 } from "./option-builder";
 import {
   PackageBuilder,
+  packagesFromOptionRows,
   filledPackages,
   leadPackageAmount,
   offersChoice,
@@ -33,6 +34,7 @@ import {
   blankSections as blanksOf,
   CustomerPreview,
   emptySections,
+  PickOneSuggestion,
   PriceCard,
   SectionsEditor,
   type Sections,
@@ -60,6 +62,9 @@ type Props = {
     quote_amount: number | null;
     quote_summary: string | null;
     customer_response: "accepted" | "declined" | null;
+    // Where the job sits. A declined quote is locked only while it is still
+    // marked Lost; moved off Lost, the next save reopens it (saveQuote).
+    status: string;
   } & Partial<Record<QuoteSectionField, string | null>>;
 };
 
@@ -153,7 +158,9 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
   // Once they have answered, the price on the row is what they actually bought,
   // not the sum of everything they were offered - so the box goes back to
   // showing (and editing) that figure.
-  const locked = Boolean(initial.customer_response);
+  const locked =
+    initial.customer_response === "accepted" ||
+    (initial.customer_response === "declined" && initial.status === "lost");
   const itemised = rows.length > 0 && !locked;
   // A choice of ways to do the job. There is no single price on such a quote -
   // the customer settles it when they pick - so the row carries the lead option
@@ -241,9 +248,13 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
       <div className="crm-paper-head">
         <h2 className="crm-card-title">Quote</h2>
         <span className="crm-paper-sub">
-          {locked
-            ? `${customerName.split(" ")[0]} has answered. The line items are their record now.`
-            : "What the customer gets, laid out the way they read it."}
+          {initial.customer_response === "declined"
+            ? initial.status === "lost"
+              ? `${customerName.split(" ")[0]} declined this quote. Sending it again reopens it, and so does moving the job off Lost.`
+              : `${customerName.split(" ")[0]} declined, and the job has been moved off Lost. Saving or sending reopens the quote.`
+            : locked
+              ? `${customerName.split(" ")[0]} has answered. The line items are their record now.`
+              : "What the customer gets, laid out the way they read it."}
         </span>
       </div>
 
@@ -263,6 +274,18 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
       {/* The extras, after the everyday path: most quotes are one price and
           five sections. Adding a line item turns the price card into a total. */}
       <OptionBuilder rows={rows} onChange={setRows} labels={optionLabels} locked={locked} answers={answers} />
+      {/* Optional extras the customer was meant to pick ONE of add up to
+          every price at once. Offered here, where the mistake gets made. */}
+      {!locked && (
+        <PickOneSuggestion
+          rows={rows}
+          hasChoice={filledPackages(pkgRows).length > 0}
+          onConvert={() => {
+            setPkgRows(packagesFromOptionRows(rows));
+            setRows([]);
+          }}
+        />
+      )}
       <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={packageLabels} locked={locked} answers={packageAnswers} />
 
       {/* Only for quotes written before the sections existed. Hidden entirely

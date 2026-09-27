@@ -140,6 +140,12 @@ export function QuoteActions({
   // list rather than the raw total: a customer holding a credit should not see
   // two different prices depending on where they are looking.
   const discountedTotal = discount && total > 0 ? Math.max(0, total - DECLINE_CREDIT) : total;
+  // No figure at all until they have picked something. Before that the only
+  // numbers available are $0 or the sum of everything on offer, and the sum is
+  // the one that does damage: a quote written as "Section 1 / Section 2 / All
+  // sections" read as $24,984 to a customer who wanted one of them. Once they
+  // have answered every extra, $0 is a real answer (they said no to it all).
+  const nothingPicked = choice ? !chosen : running === 0 && !allAnswered;
 
   // Both Approve buttons do exactly this, so there is one path into scheduling
   // rather than two that can drift.
@@ -189,10 +195,12 @@ export function QuoteActions({
     setPicks((p) => p.map((x) => (x.date === d ? { ...x, time: t } : x)));
   }
 
-  // What the save offer is quoted against. On an itemised quote somebody can
-  // reach it having answered nothing, and striking through $0 is not an offer -
-  // so it falls back to the all-in figure until they have picked something.
-  const offerBase = built && running === 0 ? (amount ?? 0) : total;
+  // What the save offer is quoted against: what they have picked so far. On a
+  // quote with options somebody can reach it having picked nothing, and then
+  // there is no figure to strike through - the all-in number is every option
+  // added together, which is no price anybody was ever going to pay - so the
+  // offer is made in words instead (see mode "save").
+  const offerBase = total;
   const discounted = Math.max(0, Math.round((offerBase - DECLINE_CREDIT) * 100) / 100);
 
   async function submit(action: "accept" | "decline", pay?: PayChoice) {
@@ -302,9 +310,13 @@ export function QuoteActions({
       <div className="cq-offer">
         <p className="cq-offer-eyebrow">Wait, before you go</p>
         <h3>Here&apos;s a ${DECLINE_CREDIT} credit to earn your business.</h3>
-        <p className="cq-offer-price">
-          <s>{usd(offerBase)}</s> <strong>{usd(discounted)}</strong>
-        </p>
+        {built && running === 0 ? (
+          <p className="cq-offer-price">It comes off whichever option you pick.</p>
+        ) : (
+          <p className="cq-offer-price">
+            <s>{usd(offerBase)}</s> <strong>{usd(discounted)}</strong>
+          </p>
+        )}
         <button
           type="button"
           className="cq-btn cq-btn-accept"
@@ -614,7 +626,7 @@ export function QuoteActions({
                 at somebody who simply hasn't chosen yet is the page telling
                 them their driveway is free. */}
             <strong>
-              {choice && !chosen ? "-" : usd(discount && running > 0 ? Math.max(0, running - DECLINE_CREDIT) : running)}
+              {nothingPicked ? "-" : usd(discount && running > 0 ? Math.max(0, running - DECLINE_CREDIT) : running)}
             </strong>
           </div>
           {/* One outstanding thing at a time, in the order they meet them.
@@ -665,7 +677,7 @@ export function QuoteActions({
         <div className="cq-sticky">
           <span className="cq-sticky-price">
             <span>{built ? "Your total" : "Your price"}</span>
-            <strong>{choice && !chosen ? "-" : usd(discountedTotal)}</strong>
+            <strong>{nothingPicked ? "-" : usd(discountedTotal)}</strong>
           </span>
           <button type="button" className="cq-btn cq-btn-accept" disabled={!canApprove} onClick={approve}>
             Approve

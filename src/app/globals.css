@@ -1714,6 +1714,8 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .crm-paper .qo-kind-optional, .crm-paper .qc-letter { background: rgba(255, 255, 255, 0.08); color: var(--crm-muted); }
 .crm-paper .qo-kind-required, .crm-paper .qc-card-rec .qc-letter { background: rgba(194, 104, 42, 0.22); color: #f0a36b; }
 
+.crm-paper .jq-pickone p { color: var(--crm-text); }
+
 /* The preview: the customer's layout, in the CRM's colours. */
 .crm-paper .jq-preview { background: rgba(255, 255, 255, 0.03); border-color: var(--crm-border); color: var(--crm-text); }
 .crm-paper .jq-preview-note { color: var(--crm-muted); }
@@ -2321,6 +2323,20 @@ textarea.qm-input { min-height: 0; resize: vertical; }
   font: inherit; font-size: 1rem; line-height: 1.45; color: #1f2328;
 }
 .jq-step textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+
+/* "Should they pick just one?" Offered under line items that are all
+   optional, which is the shape a pick-one quote comes out in by mistake. */
+.jq-pickone {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1rem;
+  border: 1px solid rgba(194, 104, 42, 0.45); border-left: 4px solid var(--amber);
+  background: rgba(194, 104, 42, 0.08); border-radius: 0.7rem; padding: 0.8rem 0.95rem;
+}
+.jq-pickone p { margin: 0; flex: 1 1 18rem; font-size: 0.92rem; line-height: 1.45; color: #374151; }
+.jq-pickone-btn {
+  flex: none; min-height: 44px; padding: 0 1.1rem; border-radius: 999px; border: none;
+  background: var(--amber); color: #fff; font: inherit; font-weight: 800; cursor: pointer;
+}
+.jq-pickone-btn:hover { background: var(--amber-dark); }
 
 .jq-preview-toggle {
   align-self: flex-start; min-height: 44px; padding: 0; background: none; border: none;

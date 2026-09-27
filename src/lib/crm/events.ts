@@ -153,6 +153,8 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "Customer description updated";
     case "notes_changed":
       return "Internal notes updated";
+    case "quote_reopened":
+      return "Declined quote reopened";
     case "quote_sent":
       return "Quote sent to the customer";
     // A corrected quote sent to a customer who hadn't answered the first one.

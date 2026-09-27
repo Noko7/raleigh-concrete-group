@@ -196,7 +196,13 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   cta: "Schedule it",
                 }
               : quote.customer_response === "declined"
-                ? { tone: "wait", title: `${firstName} declined`, body: "Send a new price if you want another go at it.", href: "#quote", cta: "Edit quote" }
+                ? {
+                    tone: "wait",
+                    title: `${firstName} declined, now reopened`,
+                    body: "Their link shows the quote again. Change the price or split it into a pick-one choice, then send it.",
+                    href: "#quote",
+                    cta: "Edit and send",
+                  }
                 : quote.quote_sent_at
                   ? {
                       tone: "wait",
@@ -394,6 +400,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               quote_amount: quote.quote_amount,
               quote_summary: quote.quote_summary,
               customer_response: quote.customer_response,
+              status: quote.status,
               quote_scope: quote.quote_scope,
               quote_permits: quote.quote_permits,
               quote_prep: quote.quote_prep,

@@ -1581,6 +1581,31 @@ export type CustomerResponseResult = {
   package?: QuotePackage | null;
 };
 
+/**
+ * A quote the customer declined and the office has since reopened by moving
+ * the job off Lost. Read as unanswered everywhere the customer is: their page
+ * shows the quote again and their Approve goes through. The next save or send
+ * from the CRM clears the old answer for good (saveQuote).
+ */
+export function isOpenAgain(q: Pick<Quote, "customer_response" | "status">): boolean {
+  return q.customer_response === "declined" && q.status !== "lost";
+}
+
+/**
+ * Forget the customer's per-item answers on a quote that is being reopened.
+ * A decline stamps every line item and option "declined"; left in place, the
+ * reopened quote would carry answers to an offer that has been put back on
+ * the table. The caller has already checked the reader may edit this quote.
+ */
+export async function clearQuoteResponses(quoteId: string): Promise<void> {
+  const body = JSON.stringify({ customer_response: null, responded_at: null });
+  const q = `quote_id=eq.${encodeURIComponent(quoteId)}`;
+  await Promise.all([
+    pgAdmin(`quote_options?${q}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body }),
+    pgAdmin(`quote_packages?${q}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body }),
+  ]);
+}
+
 export async function recordCustomerResponse(
   token: string,
   input: {
@@ -1603,12 +1628,12 @@ export async function recordCustomerResponse(
   if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
   const res = await pgAdmin(
     `quote_requests?public_token=eq.${token}` +
-      `&select=id,quote_amount,customer_response,discount_accepted,quote_expires_at&limit=1`,
+      `&select=id,quote_amount,customer_response,discount_accepted,quote_expires_at,status&limit=1`,
   );
   if (!res.ok) return { ok: false, error: "Could not load your quote." };
   const rows = (await res.json()) as Pick<
     Quote,
-    "id" | "quote_amount" | "customer_response" | "discount_accepted" | "quote_expires_at"
+    "id" | "quote_amount" | "customer_response" | "discount_accepted" | "quote_expires_at" | "status"
   >[];
   const q = rows[0];
   if (!q) return { ok: false, error: "Quote not found." };
@@ -1631,7 +1656,11 @@ export async function recordCustomerResponse(
   // written. A DIFFERENT answer is refused rather than quietly applied: flipping
   // an accepted quote to declined from a stale tab would strand a booked day and
   // a crew who had already been told to turn up.
-  const already = q.customer_response;
+  //
+  // A decline on a job the office has since moved off Lost is not an answer
+  // any more: the quote was put back in front of them, and saying yes to it
+  // now is the whole point of reopening it. See isOpenAgain.
+  const already = isOpenAgain(q) ? null : q.customer_response;
   if (already) {
     const want = input.action === "accept" ? "accepted" : "declined";
     if (already === want) return { ok: true, duplicate: true };
