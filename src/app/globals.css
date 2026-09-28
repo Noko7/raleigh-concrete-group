@@ -2065,7 +2065,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .job-details p { white-space: pre-wrap; color: #374151; }
 .job-muted { color: #6b7280; }
 .job-photos-title { font-weight: 800; font-size: 1rem; margin-bottom: 0.7rem; }
-.job-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.7rem; }
 
 /* What's happened. A rail with dots rather than a hairline under every row: a
    rule per line reads as a table, and this is a sequence. Same neutrals as
@@ -2090,8 +2089,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 }
 .job-log-more > summary:hover { color: var(--amber-dark); }
 .job-log-more .job-log-list { margin-top: 0.7rem; }
-.job-photo { display: block; border-radius: 0.6rem; overflow: hidden; border: 1px solid #e2e5ea; aspect-ratio: 1; }
-.job-photo img { width: 100%; height: 100%; object-fit: cover; }
 
 /* Mobile: read on a phone at the job site. Tap-to-call sized targets, and
    values set bigger than their labels so the eye lands on the answer. */
@@ -2111,7 +2108,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
      outdoors, usually one-handed. */
   .job-log-list strong { font-size: 1.02rem; }
   .job-log-more > summary { padding: 0.6rem 0; }
-  .job-photos { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 }
 
 /* ── Contractor job page: schedule confirm (light card, phone-first) ── */
@@ -3173,6 +3169,10 @@ textarea.qm-input { min-height: 0; resize: vertical; }
    whole job page sideways. */
 .pg-thumb { min-width: 0; padding: 0; border: 1px solid var(--crm-border); border-radius: 0.6rem; overflow: hidden; aspect-ratio: 1; background: #1a1f24; cursor: pointer; position: relative; }
 .pg-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* On the crew's white job card: same grid, light frame, bigger squares. */
+.pg-light { grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 0.7rem; }
+.pg-light .pg-thumb { border-color: #e2e5ea; background: #f3f4f6; }
+@media (max-width: 640px) { .pg-light { grid-template-columns: repeat(auto-fill, minmax(min(110px, 100%), 1fr)); } }
 .pg-video-tag { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; color: var(--crm-muted); }
 .pg-lightbox { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.88); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 1rem; }
 .pg-close { position: absolute; top: 1rem; right: 1rem; background: rgba(255, 255, 255, 0.12); border: none; color: #fff; width: 40px; height: 40px; border-radius: 50%; font-size: 1rem; cursor: pointer; }

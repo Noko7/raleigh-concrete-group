@@ -17,6 +17,7 @@ import { AcceptOffline } from "@/app/crm/quotes/[id]/accept-offline";
 import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
 import { QuoteSends } from "@/app/crm/quotes/[id]/quote-sends";
 import { preferredSlots } from "@/app/crm/quotes/[id]/types";
+import { PhotoGrid } from "@/app/crm/photo-grid";
 import { JobFinish } from "./job-finish";
 import { JobHeldTexts } from "./job-held-texts";
 import { JobPayments } from "./job-payments";
@@ -511,14 +512,9 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         {photos.length === 0 ? (
           <p className="job-muted">{t.contractorJob.noFiles}</p>
         ) : (
-          <div className="job-photos">
-            {photos.map((path) => (
-              <a key={path} href={fileUrl(path)} target="_blank" rel="noreferrer" className="job-photo">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={fileUrl(path, 640)} alt="Job upload" loading="lazy" decoding="async" width={640} height={640} />
-              </a>
-            ))}
-          </div>
+          // Opens over the page rather than in a new tab: on a phone every photo
+          // was another tab to close on the way back to the job.
+          <PhotoGrid urls={photos.map((path) => fileUrl(path))} light />
         )}
 
         {/* Photos the crew has put on this job themselves, so they can see
@@ -526,14 +522,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         {ourPhotos.length > 0 && (
           <>
             <h2 className="job-photos-title">{t.contractorJob.ourPhotos} ({ourPhotos.length})</h2>
-            <div className="job-photos">
-              {ourPhotos.map((path) => (
-                <a key={path} href={fileUrl(path)} target="_blank" rel="noreferrer" className="job-photo">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={fileUrl(path, 640)} alt="Job photo" loading="lazy" decoding="async" width={640} height={640} />
-                </a>
-              ))}
-            </div>
+            <PhotoGrid urls={ourPhotos.map((path) => fileUrl(path))} light />
           </>
         )}
 
