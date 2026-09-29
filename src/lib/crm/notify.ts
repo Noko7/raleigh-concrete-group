@@ -27,6 +27,7 @@ import {
   logMessage,
   MAX_SEND_ATTEMPTS,
   recentlySent,
+  rewriteHeldCustomerTexts,
   type QuoteMessage,
   type SmsLog,
 } from "./queries";
@@ -1517,11 +1518,26 @@ export async function notifyVisitMoved(
     : [`your free quote visit with ${BUSINESS} has been moved to:`, "", now];
 
   if (crew?.tellCustomer !== false) {
-    await sendSms(
-      q.phone,
-      text([`Hi ${firstName(q.name)},`, ...body, "", "Sorry for the change, call or text us if that time doesn't work."]),
-      { quoteId: q.id, kind: "visit_moved", role: "customer" },
-    ).catch(() => {});
+    // A visit text still waiting for 8am has not reached them yet, so it is
+    // corrected in place and nothing new goes out: one text with the new time,
+    // not the old time followed by a "moved from" that contradicts it.
+    const corrected =
+      was && q.id
+      ? await rewriteHeldCustomerTexts(
+          q.id,
+          ["visit_confirmed", "visit_booked", "visit_moved"],
+          was,
+          now,
+          new Date().toISOString(),
+        )
+      : 0;
+    if (corrected === 0) {
+      await sendSms(
+        q.phone,
+        text([`Hi ${firstName(q.name)},`, ...body, "", "Sorry for the change, call or text us if that time doesn't work."]),
+        { quoteId: q.id, kind: "visit_moved", role: "customer" },
+      ).catch(() => {});
+    }
   }
 
   if (!crew) return;

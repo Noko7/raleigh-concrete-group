@@ -1,8 +1,14 @@
 import { clockLabel } from "@/lib/crm/clock";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
-import { isHeld, type QuoteMessage } from "@/lib/crm/queries";
+import { isCancellable, isHeld, type QuoteMessage } from "@/lib/crm/queries";
 
+import { CancelHeldText } from "@/app/crm/quotes/[id]/cancel-held-text";
+import { EditHeldText } from "@/app/crm/quotes/[id]/edit-held-text";
 import { SendHeldNow } from "@/app/crm/quotes/[id]/send-held-now";
+
+// The texts that carry the quote itself. Kept in step with QUOTE_TEXT_KINDS in
+// the job page's actions: cancelling one of these retracts the quote.
+const QUOTE_KINDS = new Set(["quote_ready", "quote_updated"]);
 
 // The crew's view of anything this job has written but not yet sent.
 //
@@ -21,11 +27,13 @@ export function JobHeldTexts({
   messages,
   quiet,
   locale,
+  isOwner,
 }: {
   quoteId: string;
   messages: QuoteMessage[];
   quiet: boolean;
   locale: Locale;
+  isOwner: boolean;
 }) {
   const held = messages.filter(isHeld);
   if (held.length === 0) return null;
@@ -45,8 +53,21 @@ export function JobHeldTexts({
                 when: clockLabel(new Date(m.send_after as string)),
               })}
             </span>
-            {m.body && <p className="jh-body">{m.body}</p>}
+            {/* Changed or stopped before it goes: a confirmed visit whose time
+                was wrong, or a text that no longer needs sending. Both only
+                while it is safely in the queue (isCancellable). */}
+            {m.body && (
+              <EditHeldText
+                quoteId={quoteId}
+                messageId={m.id}
+                body={m.body}
+                canEdit={isCancellable(m) && (isOwner || !QUOTE_KINDS.has(m.kind))}
+              />
+            )}
             <SendHeldNow quoteId={quoteId} messageId={m.id} quiet={quiet} locale={locale} />
+            {isCancellable(m) && (
+              <CancelHeldText quoteId={quoteId} messageId={m.id} isQuote={QUOTE_KINDS.has(m.kind)} isOwner={isOwner} />
+            )}
           </li>
         ))}
       </ul>

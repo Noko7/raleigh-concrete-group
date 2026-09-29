@@ -321,7 +321,13 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             outranks every decision below it: a text that has not gone out is
             the customer not knowing something we think they know. It renders
             nothing at all when the queue is empty, which is nearly always. */}
-        <JobHeldTexts quoteId={quote.id} messages={messages} quiet={inQuietHours()} locale={locale} />
+        <JobHeldTexts
+          quoteId={quote.id}
+          messages={messages}
+          quiet={inQuietHours()}
+          locale={locale}
+          isOwner={session.staff.role === "owner"}
+        />
 
         {/* Appointments go at the top: they're the time-critical decisions and
             they need nothing from further down the page. Pricing is the one

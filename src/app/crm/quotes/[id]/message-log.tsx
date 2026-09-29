@@ -3,6 +3,7 @@ import { messageLabel, roleLabel } from "@/lib/crm/messages";
 import { isCancellable, isCancelled, isHeld, type QuoteMessage } from "@/lib/crm/queries";
 
 import { CancelHeldText } from "./cancel-held-text";
+import { EditHeldText } from "./edit-held-text";
 import { SendHeldNow } from "./send-held-now";
 
 // The texts that carry the quote itself. Kept in step with QUOTE_TEXT_KINDS in
@@ -128,7 +129,14 @@ export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; is
                   />
                 )}
 
-                {m.body && (
+                {/* Still waiting, and this person may change it: the words are
+                    open on the row with an Edit. Anything else keeps the folded
+                    "What we sent". */}
+                {isCancellable(m) && m.quote_id && m.body && (isOwner || !QUOTE_KINDS.has(m.kind)) ? (
+                  <div className="msg-edit">
+                    <EditHeldText quoteId={m.quote_id} messageId={m.id} body={m.body} canEdit className="msg-edit-body" />
+                  </div>
+                ) : m.body && (
                   <details className="msg-body">
                     <summary>What we sent</summary>
                     <pre>{m.body}</pre>

@@ -980,6 +980,67 @@ export async function cancelQueuedFor(quoteId: string, nowIso: string): Promise<
   }
 }
 
+/**
+ * Reword a text that is still waiting to go out. Same eligibility rule as
+ * cancelMessage, enforced by the database: only while its hour has not come
+ * round, because after that the flush may already be holding the row and an
+ * edit could land a second behind the old wording reaching the phone. The
+ * flush sends whatever `body` says when it gets there, so this is all it takes.
+ */
+export async function editHeldMessage(
+  id: string,
+  quoteId: string,
+  body: string,
+  nowIso: string,
+): Promise<QuoteMessage | null> {
+  try {
+    const res = await pgAdmin(
+      `quote_messages?id=eq.${encodeURIComponent(id)}&quote_id=eq.${encodeURIComponent(quoteId)}` +
+        `&sent_at=is.null&cancelled_at=is.null&send_after=gt.${encodeURIComponent(nowIso)}`,
+      { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ body }) },
+    );
+    if (!res.ok) return null;
+    return ((await res.json()) as QuoteMessage[])[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Bring still-queued customer texts up to date with a changed appointment:
+ * every waiting text of these kinds that names `from` gets `to` instead.
+ * Returns how many were rewritten.
+ *
+ * For a visit moved while its confirmation is still waiting for 8am: the
+ * customer has not been told the first time yet, so the right result is one
+ * confirmation with the new time - not the old confirmation followed by a
+ * "moved from" text that contradicts it the moment they read both.
+ */
+export async function rewriteHeldCustomerTexts(
+  quoteId: string,
+  kinds: string[],
+  from: string,
+  to: string,
+  nowIso: string,
+): Promise<number> {
+  if (!from || from === to) return 0;
+  try {
+    const q = `quote_id=eq.${encodeURIComponent(quoteId)}&role=eq.customer&sent_at=is.null&cancelled_at=is.null&send_after=gt.${encodeURIComponent(nowIso)}`;
+    const res = await pgAdmin(`quote_messages?${q}&kind=in.(${kinds.join(",")})&select=id,body`);
+    if (!res.ok) return 0;
+    const rows = (await res.json()) as { id: string; body: string | null }[];
+    let n = 0;
+    for (const r of rows) {
+      if (!r.body || !r.body.includes(from)) continue;
+      const done = await editHeldMessage(r.id, quoteId, r.body.split(from).join(to), nowIso);
+      if (done) n += 1;
+    }
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
 // One message, scoped to the job it belongs to. Service-role like the rest of
 // the queue helpers, and the caller has already proved it can open that job.
 export async function getMessage(id: string, quoteId: string): Promise<QuoteMessage | null> {

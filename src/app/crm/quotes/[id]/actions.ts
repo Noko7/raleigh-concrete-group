@@ -52,6 +52,7 @@ import {
   findJobConflict,
   findVisitConflict,
   clearQuoteResponses,
+  editHeldMessage,
   getMessage,
   isHeld,
   getQuote,
@@ -1274,6 +1275,51 @@ export async function cancelHeldMessage(_prev: ScheduleState, formData: FormData
 // The texts that carry the quote itself. Cancelling one of these is cancelling
 // the quote; cancelling a reminder or a receipt is just cancelling a text.
 const QUOTE_TEXT_KINDS = new Set(["quote_ready", "quote_updated"]);
+
+/**
+ * Reword a text that is still waiting to go out.
+ *
+ * For the text that is right in substance and wrong in a detail: a time typed
+ * wrong, a sentence the customer will misread. Cancelling it and sending
+ * another means a second text; this changes the one they have not had yet.
+ *
+ * A link in the original has to survive the edit. The quote texts carry the
+ * customer's link to their price, and a reworded quote text without it is a
+ * message about a quote they cannot open.
+ */
+export async function editHeldText(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+  const id = String(formData.get("id") ?? "");
+  const messageId = String(formData.get("messageId") ?? "");
+  const body = String(formData.get("body") ?? "").replace(/\r\n/g, "\n").trim();
+  if (!id || !messageId) return { ok: false, error: "Missing message." };
+  if (!body) return { ok: false, error: "The text can't be empty. Use Cancel this text to stop it instead." };
+  if (body.length > 1000) return { ok: false, error: "That's too long for a text. Keep it under 1,000 characters." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+  const held = await getMessage(messageId, id);
+  if (!held || !isHeld(held)) return { ok: false, error: "That text is no longer in the queue." };
+
+  if (QUOTE_TEXT_KINDS.has(held.kind) && session.staff.role !== "owner") {
+    return { ok: false, error: "Only the owner can change the quote text. Send a corrected quote instead." };
+  }
+  const links = (held.body ?? "").match(/https?:\/\/\S+/g) ?? [];
+  const lost = links.find((l) => !body.includes(l));
+  if (lost) return { ok: false, error: `Keep the link in the text: ${lost}` };
+  if (body === (held.body ?? "").trim()) return { ok: true, message: "No changes to save." };
+
+  const edited = await editHeldMessage(messageId, id, body, new Date().toISOString());
+  if (!edited) {
+    return { ok: false, error: "Too late: that text has already gone out or is being sent right now." };
+  }
+  await addEvent(session, id, "message_edited", { kind: edited.kind, role: edited.role });
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/job/[token]", "page");
+  return { ok: true, message: "Saved. The new wording is what goes out." };
+}
 
 /**
  * The wipe itself, shared by the two ways a quote gets taken back.
