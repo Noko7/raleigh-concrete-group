@@ -213,6 +213,65 @@ test("the deposit is half the job, to the cent", () => {
   assert.equal(depositCents(1000000, 25), 250000);
 });
 
+// ── Change orders: the deposit has to keep counting ─────────────────────────
+// A change order moves the price of a job that is already agreed, and the only
+// thing it writes is quote_amount - no payment is touched, no fee is restated.
+// That works solely because of what readLedger means, so these tests are here to
+// hold that meaning still. If one of them ever fails, a customer who has paid a
+// deposit is being asked for the wrong money.
+
+test("a change order that raises the total leaves the deposit where it is", () => {
+  // The real case this was built for: $8,250 job, half paid by card, then the
+  // customer widens the patio a week before the pour and it becomes $9,400.
+  const agreed = toCents(8250);
+  const rate = INTRO_FEE_RATE;
+  const deposit = depositCents(agreed); // 412500
+  // A card deposit carries as much of the office's cut as it can.
+  const paid = row({ amount_cents: deposit, fee_cents: feeTotalCents(agreed, rate) });
+
+  const before = readLedger(agreed, feeTotalCents(agreed, rate), [paid], rate);
+  assert.equal(before.paidCents, 412500);
+  assert.equal(before.dueCents, 412500);
+
+  // The ONE thing approving a change writes.
+  const after = readLedger(toCents(9400), feeTotalCents(agreed, rate), [paid], rate);
+  assert.equal(after.totalCents, 940000);
+  assert.equal(after.paidCents, 412500, "the deposit is untouched by a change order");
+  assert.equal(after.dueCents, 527500, "the balance grew by exactly the difference");
+  assert.equal(after.settled, false);
+});
+
+test("the office's cut on a changed job follows the frozen rate, not the old total", () => {
+  // The rate is the promise and the total is a fact, so a job that grows tops
+  // the office up rather than under-charging. The stored fee_total_cents is the
+  // stale figure from before the change and must be ignored while a rate exists.
+  const rate = INTRO_FEE_RATE;
+  const staleFee = feeTotalCents(toCents(8250), rate); // 123750
+  const paid = row({ amount_cents: 412500, fee_cents: staleFee });
+
+  const l = readLedger(toCents(9400), staleFee, [paid], rate);
+  assert.equal(l.feeTotalCents, 141000, "15% of the job as it now stands");
+  assert.equal(l.feeOwedCents, 17250, "the extra cut the bigger job earns");
+  // Still bounded by what the customer has actually handed over.
+  assert.ok(l.feeDueNowCents <= l.paidCents);
+});
+
+test("a change order that drops below the deposit reads as money owed back", () => {
+  // Scope cut to less than they have already paid. The balance clamps at zero -
+  // a negative "due" would show up as a credit the crew could try to collect -
+  // and the overpayment is visible as paid above total, which is what both the
+  // crew's card and the customer's panel show as a refund.
+  const paid = row({ amount_cents: 412500 });
+  const l = readLedger(toCents(4000), null, [paid], INTRO_FEE_RATE);
+
+  assert.equal(l.dueCents, 0, "never negative");
+  assert.equal(l.paidCents, 412500);
+  assert.equal(l.paidCents - l.totalCents, 12500, "$125 back to the customer");
+  // Nothing left to collect, so the job is settled and settleJobIfPaid will
+  // stamp it - which is why the customer's answer calls that too.
+  assert.equal(l.settled, true);
+});
+
 // ── What the crew may record by hand ────────────────────────────────────────
 
 test("card is never a method somebody can type in", () => {
