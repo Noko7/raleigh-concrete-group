@@ -115,6 +115,17 @@ export function crewEventText(e: QuoteEvent, t: Dict): string | null {
       return l.visitMoved;
     case "visit_cancelled":
       return l.visitCancelled;
+    // A change order is one of the few things on this log that changes what the
+    // crew are being paid to do, so all four states are on it rather than just
+    // the outcome: "sent, still waiting" is the one they come to the page for.
+    case "change_requested":
+      return l.changeSent;
+    case "change_accepted":
+      return l.changeAccepted;
+    case "change_declined":
+      return l.changeDeclined;
+    case "change_withdrawn":
+      return l.changeWithdrawn;
     case "date_confirmed":
       return l.dateConfirmed;
     case "date_changed":
@@ -221,6 +232,31 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
         return `Approval recorded over the phone by ${by}${chose}${agreed}`;
       }
       return `Customer approved the quote${chose}${wanted}${m.discount ? " ($150 credit)" : ""}`;
+    }
+    // ── Change orders ──
+    // The figures are the point of every one of these rows: a change order is
+    // the only thing that moves the price of an agreed job, so the log has to
+    // answer "from what, to what" without anybody opening anything else.
+    case "change_requested": {
+      const money = (v: unknown) => dollars(v as number) ?? "no price";
+      const paid = m.paid_cents != null ? `, ${centsUsd(m.paid_cents)} already paid` : "";
+      return `Change sent for approval: ${money(m.from)} → ${money(m.to)}${paid}${m.note ? ` - "${String(m.note)}"` : ""}`;
+    }
+    case "change_delivery":
+      if (m.delivered) return `Change request texted to ${String(m.to ?? "the customer")}`;
+      if (m.held_until) return `Change request queued for ${String(m.to ?? "the customer")} (quiet hours, goes out ${heldWhen(m.held_until)})`;
+      return `Change request text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` - ${String(m.error)}` : ""}`;
+    case "change_accepted": {
+      const money = (v: unknown) => dollars(v as number) ?? "no price";
+      return `Customer approved the change: ${money(m.from)} → ${money(m.to)}`;
+    }
+    case "change_declined": {
+      const money = (v: unknown) => dollars(v as number) ?? "no price";
+      return `Customer turned down the change, price stays ${money(m.from)}`;
+    }
+    case "change_withdrawn": {
+      const money = (v: unknown) => dollars(v as number) ?? "no price";
+      return `Change withdrawn before the customer answered${m.to != null ? ` (would have been ${money(m.to)})` : ""}`;
     }
     case "date_confirmed":
       return `Work day confirmed for ${String(m.to ?? "a date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;

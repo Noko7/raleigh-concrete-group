@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/crm/auth";
 import { dollars, requestedVisitOf, STATUS_LABELS, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, inQuietHours, todayYmd } from "@/lib/crm/clock";
+import { toCents } from "@/lib/crm/fees";
 import { crewEventText, quoteSends } from "@/lib/crm/events";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
@@ -14,6 +15,7 @@ import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, listEvents, listMessages, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { AcceptOffline } from "@/app/crm/quotes/[id]/accept-offline";
+import { ChangeOrder } from "@/app/crm/quotes/[id]/change-order";
 import { CancelAppointment } from "@/app/crm/quotes/[id]/cancel-appointment";
 import { QuoteSends } from "@/app/crm/quotes/[id]/quote-sends";
 import { preferredSlots } from "@/app/crm/quotes/[id]/types";
@@ -68,6 +70,21 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // when it is the crew filling the day in.
   const showOfflineAccept = showQuote && Boolean(quote.quote_sent_at) && quote.quote_amount != null;
   const isDone = quote.status === "completed" || quote.status === "paid";
+  // The customer rang about a change to a job that is already agreed - usually
+  // days before the pour, with a deposit already in. Offered on any live agreed
+  // job, booked or not: a change that arrives before the day is settled is the
+  // same conversation, and making the crew wait for a date to exist before they
+  // can write it down is how it gets written on the back of a hand instead.
+  // `accepted` already excludes a lost job, and a closed-out one is an invoice
+  // dispute rather than a change order.
+  //
+  // A pending change keeps the card on screen in its waiting state, so the one
+  // place the crew look for "did we send that" is the place they sent it from.
+  const showChange = accepted && !isDone;
+  const pendingChange =
+    quote.change_requested_at && quote.change_amount != null
+      ? { note: quote.change_note ?? "", amountCents: toCents(quote.change_amount) }
+      : null;
 
   // The same column read two ways: a booked appointment on an in-person request,
   // or the slot an online customer offered in case photos aren't enough.
@@ -366,6 +383,22 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               recommended: p.recommended,
             }))}
             minDate={minJobDate}
+            locale={locale}
+            tone="light"
+          />
+        )}
+
+        {/* Changes sit with the other appointment-level decisions rather than down
+            by the pricing form: on a booked job this is the thing most likely to
+            have brought the crew to the page, and it has to be findable without
+            scrolling past the photos. */}
+        {showChange && money && (
+          <ChangeOrder
+            id={quote.id}
+            customerName={quote.name}
+            totalCents={money.ledger.totalCents}
+            paidCents={money.ledger.paidCents}
+            pending={pendingChange}
             locale={locale}
             tone="light"
           />

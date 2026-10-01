@@ -154,6 +154,40 @@ job (see ⑥). Customers are not reminded more than once.
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
+│ ⑤b THE JOB CHANGES (any time after ③, before it's closed out)       │
+│    "Customer wants a change?" on either job page. They rang about    │
+│    something different - usually days before the pour, with a        │
+│    deposit already in. The crew write what's changing and the new    │
+│    total; the price does NOT move until the customer approves.       │
+├─────────────────────────────────────────────────────────────────────┤
+│ CUSTOMER  What's changing, in the crew's words, that their date      │
+│            hasn't moved, and their quote link to answer on. NO       │
+│            figures - the rule above holds hardest here, so the       │
+│            totals live on the page beside the words.                 │
+│ OWNER     nothing yet - they're the one who sent it, or the crew are │
+│ CREW      nothing yet - same                                        │
+│ CALENDAR  untouched. A change order never moves the day.            │
+│                                                                      │
+│ Then the customer answers, on the same link they approved the job on:│
+│                                                                      │
+│ APPROVED   quote_amount becomes the new total, and that's the whole  │
+│            money change. The balance is total-minus-collected, so    │
+│            the deposit keeps counting on its own.                    │
+│   OWNER    "CHANGE APPROVED" + new total, was, difference,           │
+│             already collected, still to collect                      │
+│   CREW     same                                                      │
+│                                                                      │
+│ TURNED DOWN  price stays exactly as approved                         │
+│   OWNER/CREW  "CHANGE TURNED DOWN" + the price it stays at           │
+│                                                                      │
+│ WITHDRAWN by the crew before they answer → no customer text at all.  │
+│   They were asked a question and it's been taken away; a second text │
+│   about a change that isn't happening is noise, and whoever pulled   │
+│   it is the person who just spoke to them.                           │
+└─────────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
 │ ⑥ THE RUN-UP (daily cron, ~10am ET)                                 │
 ├─────────────────────────────────────────────────────────────────────┤
 │ CREW  3 days out │ full brief + "call Noah ASAP if you can't make   │
@@ -457,8 +491,8 @@ into a ten-part text.
 ## Owner alerts
 
 **You are texted for:** new lead · customer approved · **approval recorded from a
-phone call** · customer declined · date confirmed · date moved · customer
-couldn't confirm · job completed · paid.
+phone call** · customer declined · date confirmed · date moved · **change
+approved or turned down** · customer couldn't confirm · job completed · paid.
 
 The phone-call one is its own alert rather than a copy of "customer approved",
 and it names whoever wrote it down. An approval nobody watched the customer give
@@ -484,6 +518,7 @@ minus whoever performed the action.
 | Assigned a job | Full brief: customer, phone, service, address, timing, job link, "sign in to open" |
 | Customer approves | Same brief + the customer's preferred days + "confirm the day that works" |
 | Approval recorded on a call | APPROVED BY PHONE + amount + what they took + the day agreed, and who recorded it. Not sent to the person who recorded it |
+| Customer answers a change order | CHANGE APPROVED or CHANGE TURNED DOWN + the new total, what was already collected and what's left |
 | Date confirmed / moved | JOB BOOKED or DATE CHANGED + brief |
 | **3 days / 1 day / morning of** | **JOB REMINDER + brief + "call Noah right away if you can't make it"** |
 | Customer declines | Declined |
@@ -502,8 +537,9 @@ back to the main business line.
 
 A contractor has exactly one screen per job: **`/job/<token>`**, the same URL
 their texts link to. It carries everything they can do — quote it, record an
-approval the customer gave on the phone, confirm the day and time, mark it done
-— in their own language, built for a phone.
+approval the customer gave on the phone, confirm the day and time, send a change
+for the customer to re-approve, mark it done — in their own language, built for a
+phone.
 
 A contractor who lands on `/crm/quotes/<id>` is redirected there, and pipeline
 cards link there for them. `/crm/quotes/<id>` is the owner's view. Previously

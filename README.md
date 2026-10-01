@@ -141,7 +141,7 @@ All of it runs over Supabase's REST/Auth APIs (no extra packages).
 **What's included**
 - **Login + roles** (`/crm/login`): owners see everything; contractors see only jobs assigned to them (enforced by Postgres Row-Level Security).
 - **Quotes dashboard** (`/crm`): filter by status / assignee / search; pipeline `New → Quoted → Booked → Confirmed → Complete` (plus `Lost`).
-- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos, signed to whoever is looking** (the URL carries an HMAC over the path, the viewer's staff id and an expiry, so a link copied out of one person's page is refused on anybody else's), status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, copyable share links, **record an approval the customer gave on the phone** (and book the day agreed on that call), and a **Mark complete + paid** button.
+- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos, signed to whoever is looking** (the URL carries an HMAC over the path, the viewer's staff id and an expiry, so a link copied out of one person's page is refused on anybody else's), status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, copyable share links, **record an approval the customer gave on the phone** (and book the day agreed on that call), **send a change order on an agreed job** for the customer to re-approve, and a **Mark complete + paid** button.
 - **Contractors** (`/crm/contractors`, owner only): **text an invite** and let them set up their own login, edit their details, reset a password, deactivate/reactivate, or delete.
 - **Settings** (`/crm/settings`): your name + alert number; owners also pick the **primary contractor** that new quotes auto-assign to.
 - **Customers** (`/crm/customers`): quotes auto-grouped by phone/email with won-value totals.
@@ -161,6 +161,7 @@ status drags - ever texts the customer.
    - **Or they say yes on the phone and never open the link.** "Approved over the phone?" on either job page records it: which optional lines they took, and the day agreed on that same call. Owner + crew get an **APPROVED BY PHONE** alert naming whoever wrote it down, and the customer gets the written version unless you turn that off. See "Approved on a call" below.
 4. The assigned contractor (or an owner) confirms one of those days on the job page → **this is what books it**: the customer is texted their date, the crew gets the brief, and it lands on Google Calendar (**Scheduled**).
 5. Changing that date later texts the customer that it moved, re-notifies the crew, and updates the calendar. The 2-day reminder resets so they still get one.
+   - **If the job itself changes** - they want the patio two feet wider, a week before the pour - that's a **change order**: the crew describe it, set the new total, and the customer approves it on the same link. The deposit keeps counting. See "Changes after a job is agreed" below.
 6. Two days before, a daily cron texts the customer a confirm link. "Need to reschedule" pings owner + contractor.
 7. **Mark completed** → customer gets a thank-you + Google review link. **Request payment** → payment instructions. **Mark paid** closes it out.
 
@@ -198,6 +199,44 @@ recorded from a phone call" on the crew's, the owner alert says who recorded it,
 and a quote that has already been answered - either way - is refused rather than
 overwritten.
 
+**Changes after a job is agreed**
+A customer rings a week before the pour: can the patio be two feet wider? The
+job is approved, the day is booked and half the money is in the bank, so there
+was nowhere good to put that. The only lever was an owner editing the price in
+the quote editor, which changes what the customer owes without the customer
+agreeing to it and leaves nothing on the job saying they did.
+
+**"Customer wants a change?"** on either job page is a small quote of its own:
+
+- **What's changing** - free text, and it goes to the customer word for word.
+- **The new total for the whole job** - not the difference. The box opens on
+  today's figure so it is an edit, not a number typed from scratch, and the card
+  works out the difference, the new balance and anything owed back as you type.
+- Send it, and the customer gets a text with the change and their usual quote
+  link. **The price does not move until they approve it.** One change at a time,
+  and it can be withdrawn while it's out.
+
+The customer sees it at the top of their own quote page, above the booking
+confirmation: what's changing, that **their date hasn't moved**, then the sums -
+price they approved, what this adds or takes off, the new total, what they have
+already paid, and what's left. Approve, or keep it as it was. Either answer texts
+the office and the crew.
+
+**The deposit needs no special handling, and that is by design.** A job's balance
+has always been *what the job is worth now, minus what has been collected* (see
+`readLedger` in `src/lib/crm/fees.ts`), and the office's cut is re-derived from
+the **frozen rate** against the current total. So on an $8,250 job with a $4,125
+deposit paid, approving a change to $9,400 leaves $5,275 to collect and the
+deposit sits exactly where it was - the only thing the change order writes is
+`quote_amount`. A change that drops the total *below* what has been paid reads as
+a refund owed, on both the crew's card and the customer's panel, rather than a
+negative balance.
+
+Not offered on a completed or paid job: re-opening the price on finished,
+settled work is an invoice dispute, and that belongs on the phone. Every change -
+sent, approved, turned down, withdrawn - is a row in the activity log with both
+figures on it, so "how did this job get to $9,400" is answerable from the log.
+
 **Owner alerts** are limited to the moments worth interrupting you: new lead,
 approved, declined, date confirmed or moved, can't-confirm, completed, and paid.
 
@@ -228,7 +267,7 @@ there. So:
   clicking, which used to mean the office texting itself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/quote-packages.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql` and `supabase/appointments.sql` in the SQL Editor. Once
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/quote-packages.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql`, `supabase/appointments.sql` and `supabase/change-orders.sql` in the SQL Editor. Once
    `supabase/payments.sql` is in (see **Getting paid** below), run
    `supabase/least-privilege.sql` last - it is what stops a contractor rewriting
    the money columns on their own jobs.

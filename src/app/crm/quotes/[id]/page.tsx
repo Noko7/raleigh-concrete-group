@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireSession } from "@/lib/crm/auth";
 import { requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
+import { toCents } from "@/lib/crm/fees";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
@@ -27,6 +28,7 @@ import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
 import { PhotoUpload } from "../../photo-upload";
 import { AcceptOffline } from "./accept-offline";
+import { ChangeOrder } from "./change-order";
 import { CompleteCard } from "./complete-card";
 import { MessageLog } from "./message-log";
 import { JobSettings } from "./job-settings";
@@ -152,6 +154,16 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
     showSchedule ? payeeState(quote) : Promise.resolve(null),
   ]);
   const cardReady = money ? (payee?.ok ?? false) : false;
+
+  // A change to a job that is already agreed. The crew usually take the call,
+  // but the office takes it as often as not, so the same card is on both pages.
+  // Not on a closed-out job: re-opening the price on finished, settled work is
+  // an invoice dispute and belongs on the phone.
+  const showChange = showSchedule && quote.status !== "completed" && quote.status !== "paid";
+  const pendingChange =
+    quote.change_requested_at && quote.change_amount != null
+      ? { note: quote.change_note ?? "", amountCents: toCents(quote.change_amount) }
+      : null;
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
   const jobLink = `${SITE_ORIGIN}/job/${quote.job_token}`;
@@ -320,6 +332,21 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 scheduledTime={quote.scheduled_time}
                 preferred={preferredSlots(quote.preferred_dates, quote.preferred_times)}
                 minDate={minJobDate}
+                locale={locale}
+              />
+            </div>
+          )}
+
+          {/* A change to a job that is already agreed - usually booked, often
+              with a deposit in. Straight after the day it would change. */}
+          {showChange && money && (
+            <div className="jb-o-step" id="change">
+              <ChangeOrder
+                id={quote.id}
+                customerName={quote.name}
+                totalCents={money.ledger.totalCents}
+                paidCents={money.ledger.paidCents}
+                pending={pendingChange}
                 locale={locale}
               />
             </div>

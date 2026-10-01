@@ -4,10 +4,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DECLINE_CREDIT, dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, slotsFor } from "@/lib/crm/constants";
-import { usd } from "@/lib/crm/fees";
+import { toCents, usd } from "@/lib/crm/fees";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, getWorkHours, isOpenAgain, isQuoteExpired, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
+import { ChangeReview } from "./change-review";
 import { QuoteActions } from "./quote-actions";
 import { QuoteSections } from "@/components/quote-sections";
 import { ViewBeacon } from "./view-beacon";
@@ -139,9 +140,37 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
     // opens their old quote expecting to pay should not have to ring for a new
     // one.
     const { ledger } = await jobLedger(quote);
+    // A change the crew has sent and the customer hasn't answered. It goes
+    // ABOVE the confirmation rather than inside it: the rest of this panel is a
+    // receipt for a decision already made, and an unanswered question buried
+    // under a receipt is a question nobody answers. The totals shown to them
+    // come off the row and the ledger, so the deposit on screen is the deposit
+    // in the bank.
+    const pendingChange =
+      quote.change_requested_at && quote.change_amount != null
+        ? {
+            note: quote.change_note ?? "",
+            fromCents: toCents(quote.quote_amount),
+            toCents: toCents(quote.change_amount),
+            paidCents: ledger.paidCents,
+          }
+        : null;
+    const bookedFor = quote.scheduled_date
+      ? `${prettyDate(quote.scheduled_date)}${quote.scheduled_time ? ` at ${quote.scheduled_time}` : ""}`
+      : null;
     return (
       <main className="cq-wrap">
         <ViewBeacon token={token} />
+        {pendingChange && (
+          <ChangeReview
+            token={token}
+            note={pendingChange.note}
+            fromCents={pendingChange.fromCents}
+            toCents={pendingChange.toCents}
+            paidCents={pendingChange.paidCents}
+            when={bookedFor}
+          />
+        )}
         <div className="cq-confirm cq-confirm-ok">
           <div className="cq-confirm-badge">
             <CheckMark />

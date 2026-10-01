@@ -3,6 +3,7 @@
 // lookups, view tracking and signed URLs use pgAdmin (no user context).
 import { todayYmd, ymdInDays } from "./clock";
 import {
+  CHANGE_NOTE_MAX,
   DECLINE_CREDIT,
   DEFAULT_WORK_HOURS,
   LEAD_TIME_DAYS,
@@ -29,6 +30,9 @@ import {
   type WorkHours,
 } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
+// Cents, for the two places a change order has to compare money to money.
+// fees.ts imports nothing of ours, so this edge only ever points one way.
+import { toCents } from "./fees";
 import { pgUser, pgAdmin } from "./rest";
 import { MAX_SEND_ATTEMPTS, RETRY_BACKOFF_MINUTES, planRetry } from "./send-retry";
 
@@ -2022,6 +2026,209 @@ export async function recordOfflineAcceptance(
   }
 
   return { ok: true, accepted, declined, package: chosenPackage };
+}
+
+
+// ── Change orders ───────────────────────────────────────────────────────────
+// The price moving on a job that is already agreed, and usually already booked.
+//
+// Before this there was one way to change the price of an accepted job: an
+// owner editing quote_amount in the editor. That works, in that the number
+// changes - but it changes what the customer owes without the customer having
+// agreed to it, and leaves nothing on the job saying they did. A week before a
+// pour, with a deposit already banked, that is the wrong shape entirely.
+//
+// So a change is a small quote of its own: what is changing, what the job is
+// worth now, out to the customer, and the price only actually moves when they
+// say yes. Three functions, matching the three things that can happen to one:
+// it is sent, it is withdrawn, it is answered.
+//
+// Money needs nothing special here, which is worth saying plainly because it is
+// the part everyone expects to be hard. The ledger has always read "what the
+// job is worth now, minus what has been collected" (readLedger in fees.ts), and
+// the office's cut is re-derived from the frozen RATE against the current total.
+// So a deposit keeps counting by itself: a $4,125 deposit on an $8,250 job that
+// becomes $9,400 leaves $5,275 to collect, and nobody has to tell it to.
+
+// Written as one object so every path that ends a change clears all four
+// columns. A pending change that is half cleared is a job the customer page
+// thinks is waiting on them forever.
+const CLEAR_CHANGE: Partial<Quote> = {
+  change_note: null,
+  change_amount: null,
+  change_requested_at: null,
+  change_requested_by: null,
+};
+
+export type ChangeRequestResult = { ok: boolean; error?: string; quote?: Quote };
+
+/**
+ * Send a change for the customer to approve.
+ *
+ * Runs as the logged-in user, so RLS keeps a contractor to their own assigned
+ * jobs - the crew take these calls, so the crew have to be able to act on them.
+ */
+export async function requestChange(
+  session: Session,
+  id: string,
+  input: { note: string; newAmount: number },
+): Promise<ChangeRequestResult> {
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+
+  // Only on a job the customer has actually agreed to. Before that there is
+  // nothing to change - the quote itself is still editable, and sending a
+  // "change" against a price nobody accepted would be two offers in flight at
+  // once with the customer deciding between them.
+  if (current.customer_response !== "accepted" || current.status === "lost") {
+    return { ok: false, error: "This job isn't approved yet. Change the quote itself instead." };
+  }
+  // A closed-out job is history. Re-opening the price on work that is finished
+  // and settled is an invoice dispute, not a change order, and it is the
+  // office's to sort out rather than this form's.
+  if (current.status === "completed" || current.status === "paid") {
+    return { ok: false, error: "This job is already closed out. Give the office a call to sort out the price." };
+  }
+  if (current.change_requested_at) {
+    return { ok: false, error: "There's already a change waiting on the customer. Withdraw it first." };
+  }
+
+  const note = noEmDash(input.note.trim()).slice(0, CHANGE_NOTE_MAX);
+  if (note.length < 3) return { ok: false, error: "Say what's changing, so the customer knows what they're approving." };
+
+  const amount = Math.round(Number(input.newAmount) * 100) / 100;
+  if (!Number.isFinite(amount) || amount < 0 || amount > 99_999_999) {
+    return { ok: false, error: "Enter a valid new total for the job." };
+  }
+  if (toCents(amount) === toCents(current.quote_amount)) {
+    return { ok: false, error: "That's the same total they already agreed to. Change the figure, or just call them." };
+  }
+
+  const { quote, error } = await updateQuoteResult(session, id, {
+    change_note: note,
+    change_amount: amount,
+    change_requested_at: new Date().toISOString(),
+    change_requested_by: session.staff.id,
+  });
+  if (!quote) {
+    return {
+      ok: false,
+      error: error ?? "Could not send that change. Run the SQL in supabase/change-orders.sql and try again.",
+    };
+  }
+  return { ok: true, quote };
+}
+
+/**
+ * Take a change back before the customer answers it.
+ *
+ * The crew got the figure wrong, or rang the customer and settled it another
+ * way. Clears the four columns together; the quote's price never moved, so
+ * there is nothing to undo.
+ */
+export async function cancelChange(session: Session, id: string): Promise<ChangeRequestResult> {
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+  if (!current.change_requested_at) return { ok: false, error: "There's no change waiting on this job." };
+
+  const { quote, error } = await updateQuoteResult(session, id, CLEAR_CHANGE);
+  if (!quote) return { ok: false, error: error ?? "Could not withdraw that change." };
+  return { ok: true, quote };
+}
+
+export type ChangeResponseResult = {
+  ok: boolean;
+  error?: string;
+  /** Nothing was written because their answer was already on file. */
+  duplicate?: boolean;
+  quote?: Quote;
+  /** What the job was worth before, and what it is worth now. */
+  from?: number | null;
+  to?: number | null;
+  note?: string | null;
+};
+
+/**
+ * The customer's answer, from behind their own quote link.
+ *
+ * Service role, like recordCustomerResponse: there is no session on the
+ * customer's page and the unguessable token is what authorises this.
+ *
+ * Accepting is the only thing in the app that moves the price of an agreed job,
+ * and it does exactly one thing to the money: sets quote_amount. Everything
+ * downstream re-reads itself from there - the balance, the office's cut, the
+ * payment page, the deposit that is already in the bank.
+ */
+export async function recordChangeResponse(
+  token: string,
+  action: "accept" | "decline",
+): Promise<ChangeResponseResult> {
+  if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
+
+  const q = await getQuoteByToken("public_token", token);
+  if (!q) return { ok: false, error: "Quote not found." };
+
+  // No change waiting. Reported as success rather than an error: the usual way
+  // to get here is a second tap, or a tab left open while the crew withdrew it,
+  // and from the customer's side their button worked and there is nothing left
+  // for them to do - which is the truth.
+  if (!q.change_requested_at || q.change_amount == null) return { ok: true, duplicate: true };
+
+  const from = q.quote_amount;
+  const to = Number(q.change_amount);
+  const note = q.change_note;
+
+  const patch: Partial<Quote> = { ...CLEAR_CHANGE };
+  if (action === "accept") {
+    patch.quote_amount = to;
+    // A job stamped paid that has just grown is not paid any more. Clearing the
+    // stamp is what lets settleJobIfPaid stamp it again when the extra arrives,
+    // and keeps "paid" off a job with a balance on it. The status comes back
+    // from paid to the stage the work is actually at.
+    if (q.paid_at && toCents(to) > (await collectedCents(q.id))) {
+      patch.paid_at = null;
+      if (q.status === "paid") patch.status = q.completed_at ? "completed" : "scheduled";
+    }
+  }
+
+  const res = await pgAdmin(`quote_requests?id=eq.${q.id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) return { ok: false, error: "Could not save your answer. Please call us." };
+  const rows = (await res.json()) as Quote[];
+
+  await pgAdmin("quote_events", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      quote_id: q.id,
+      type: action === "accept" ? "change_accepted" : "change_declined",
+      meta: { from, to, note },
+    }),
+  }).catch(() => {});
+
+  return { ok: true, quote: rows[0], from, to, note };
+}
+
+/**
+ * What the customer has actually handed over on this job, in cents.
+ *
+ * Only used to decide whether a grown total has outrun the money already in,
+ * so it counts the same rows the ledger counts: settled ones, net of refunds.
+ * Lives here rather than in payments.ts to keep that module's import of this
+ * one going in a single direction.
+ */
+async function collectedCents(quoteId: string): Promise<number> {
+  const res = await pgAdmin(
+    `quote_payments?quote_id=eq.${quoteId}&select=amount_cents,refunded_cents,status`,
+  );
+  if (!res.ok) return 0;
+  const rows = (await res.json()) as { amount_cents: number; refunded_cents: number; status: string }[];
+  return rows
+    .filter((r) => r.status === "paid" || r.status === "refunded")
+    .reduce((sum, r) => sum + r.amount_cents - r.refunded_cents, 0);
 }
 
 // Confirm (or move) the work day. Runs as the logged-in user so RLS keeps a

@@ -3948,3 +3948,152 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .fn-bar { height: 10px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); overflow: hidden; margin-bottom: 0.3rem; }
 .fn-bar-fill { display: block; height: 100%; border-radius: 4px; background: var(--crm-accent); }
 .fn-bar-label { font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+
+/* ── Change orders: the crew's card ──────────────────────────────────────────
+   Same two-tone arrangement as the approval card above it (.ao): dark values
+   are the base, `-light` flips the handful that differ on the crew's white
+   page. */
+.co {
+  background: var(--crm-surface); border: 1px solid var(--crm-border);
+  border-radius: 0.9rem; padding: 1.25rem; margin-bottom: 1.1rem;
+}
+.co-light {
+  background: #fff; border: 2px solid #e2e5ea; border-radius: 0.9rem;
+  padding: 1.1rem 1.15rem; margin-bottom: 1.4rem;
+}
+.co-title { font-family: var(--font-headline), sans-serif; font-size: 1.3rem; letter-spacing: 0.01em; margin-bottom: 0.35rem; }
+.co-light .co-title { font-family: inherit; font-weight: 800; font-size: 1.05rem; }
+.co-lead { color: var(--crm-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 0.8rem; }
+.co-light .co-lead { color: #4b5563; }
+.co-open {
+  background: none; border: 1px solid var(--crm-border); border-radius: 999px;
+  color: var(--crm-text); font: inherit; font-weight: 700; font-size: 0.88rem;
+  padding: 0.55rem 1.1rem; cursor: pointer; min-height: 44px;
+}
+.co-open:hover { border-color: var(--crm-accent); color: var(--crm-accent); }
+.co-light .co-open { border-color: #d1d5db; color: #374151; }
+.co-light .co-open:hover { border-color: var(--amber); color: var(--amber-dark); }
+
+.co-form { display: flex; flex-direction: column; gap: 0.9rem; }
+.co-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.co-field > span { font-size: 0.8rem; font-weight: 800; color: var(--crm-muted); }
+.co-light .co-field > span { color: #374151; font-size: 0.85rem; }
+.co-field em { font-style: normal; font-size: 0.78rem; color: var(--crm-muted); line-height: 1.4; }
+.co-light .co-field em { color: #6b7280; }
+.co-field textarea, .co-field input {
+  padding: 0.7rem; border: 1px solid var(--crm-border); border-radius: 0.6rem;
+  font: inherit; background: var(--crm-surface-solid); color: var(--crm-text); min-height: 48px;
+  resize: vertical; width: 100%; box-sizing: border-box;
+}
+.co-light .co-field textarea, .co-light .co-field input { border-color: #d1d5db; background: #fff; color: #1f2328; }
+.co-field-amount input { font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* What the customer will see, worked out live. The deposit row is why this
+   panel exists, so it is never collapsed into a single "balance" figure. */
+.co-sums { display: flex; flex-direction: column; gap: 0.3rem; margin: 0; padding: 0.7rem 0.8rem; border-radius: 0.6rem; background: var(--crm-surface-solid); }
+.co-light .co-sums { background: #faf8f4; }
+.co-sums > div { display: flex; justify-content: space-between; align-items: baseline; gap: 0.8rem; font-size: 0.9rem; }
+.co-sums dt { color: var(--crm-muted); }
+.co-light .co-sums dt { color: #6b7280; }
+.co-sums dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.co-sums-strong { border-top: 1px solid var(--crm-border); margin-top: 0.3rem; padding-top: 0.45rem; }
+.co-light .co-sums-strong { border-top-color: #e2e5ea; }
+.co-sums-strong dt { font-weight: 800; color: inherit !important; }
+.co-sums-strong dd { font-size: 1.05rem; font-weight: 800; }
+.co-up { color: #f59e0b; }
+.co-down { color: #4ade80; }
+.co-light .co-up { color: var(--amber-dark); }
+.co-light .co-down { color: #15803d; }
+
+/* The change already out with the customer, read back in their words. */
+.co-note-back {
+  font-size: 0.92rem; line-height: 1.55; padding: 0.7rem 0.8rem; border-radius: 0.6rem;
+  border-left: 3px solid var(--crm-accent); background: var(--crm-surface-solid); margin-bottom: 0.8rem;
+}
+.co-light .co-note-back { background: #faf8f4; border-left-color: var(--amber); }
+
+.co-warn {
+  font-size: 0.85rem; line-height: 1.5; padding: 0.6rem 0.7rem; border-radius: 0.5rem;
+  border: 1px solid rgba(220, 38, 38, 0.45); background: rgba(220, 38, 38, 0.1);
+}
+.co-light .co-warn { background: #fef2f2; border-color: #fecaca; color: #7f1d1d; }
+.co-hint { font-size: 0.82rem; color: var(--crm-muted); line-height: 1.45; }
+.co-light .co-hint { color: #6b7280; }
+.co-acts { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.co-go {
+  flex: 1; background: var(--crm-accent); color: #fff; border: none; border-radius: 999px;
+  padding: 0.7rem 1.2rem; font: inherit; font-weight: 800; cursor: pointer; min-height: 48px;
+}
+.co-go:hover { background: var(--amber-dark); }
+.co-go:disabled { opacity: 0.5; cursor: default; }
+.co-cancel { background: none; border: none; padding: 0.4rem 0.2rem; font: inherit; font-weight: 700; font-size: 0.88rem; color: var(--crm-muted); cursor: pointer; }
+.co-light .co-cancel { color: #6b7280; }
+.co-pull { margin-top: 0.9rem; }
+.co-pull-btn { background: none; border: none; padding: 0.4rem 0; font: inherit; font-weight: 700; font-size: 0.85rem; color: var(--crm-muted); text-decoration: underline; cursor: pointer; }
+.co-pull-btn:hover { color: #f87171; }
+.co-err, .co-ok { margin-top: 0.6rem; font-weight: 700; font-size: 0.9rem; line-height: 1.45; }
+.co-err { color: #f87171; }
+.co-ok { color: #4ade80; }
+.co-light .co-err { color: #b91c1c; }
+.co-light .co-ok { color: #15803d; }
+
+/* ── Change orders: the customer's panel ─────────────────────────────────────
+   Sits above their booking confirmation on /q/<token>. Its own block, in the
+   customer page's light palette, because nothing else on that page is a
+   question - everything else there is a receipt. */
+.cr {
+  background: #fff; border: 2px solid var(--amber); border-radius: 1rem;
+  padding: 1.4rem 1.3rem; margin-bottom: 1.2rem; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+.cr-ok { border-color: #16a34a; }
+.cr-eyebrow {
+  font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--amber-dark); margin-bottom: 0.35rem;
+}
+.cr-ok .cr-eyebrow { color: #15803d; }
+.cr-eyebrow-muted { color: #6b7280; }
+.cr-title { font-family: var(--font-headline), sans-serif; font-size: 1.6rem; line-height: 1.2; margin-bottom: 0.7rem; color: #0f172a; }
+/* Their words, set as the most readable thing in the block - the number below
+   means nothing without it. */
+.cr-note-body {
+  font-size: 1.02rem; line-height: 1.6; color: #1f2328; padding: 0.85rem 0.95rem;
+  background: #faf8f4; border-radius: 0.7rem; margin-bottom: 0.9rem;
+}
+.cr-date { font-size: 0.95rem; color: #374151; margin-bottom: 0.9rem; }
+.cr-note { font-size: 0.95rem; line-height: 1.55; color: #374151; margin-bottom: 0.5rem; }
+
+.cr-sums { display: flex; flex-direction: column; gap: 0.4rem; margin: 0 0 1.1rem; }
+.cr-sums > div { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-size: 0.95rem; }
+.cr-sums dt { color: #6b7280; }
+.cr-sums dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; color: #1f2328; }
+.cr-sums-total { border-top: 1px solid #e2e5ea; margin-top: 0.25rem; padding-top: 0.5rem; }
+.cr-sums-total dt { color: #1f2328; font-weight: 700; }
+.cr-sums-total dd { font-size: 1.1rem; font-weight: 800; }
+/* The balance, set largest of all. On a job with a deposit this is the only
+   figure the customer has to act on. */
+.cr-sums-strong { border-top: 2px solid #1f2328; margin-top: 0.3rem; padding-top: 0.55rem; }
+.cr-sums-strong dt { color: #1f2328; font-weight: 800; }
+.cr-sums-strong dd { font-size: 1.35rem; font-weight: 800; }
+.cr-up { color: var(--amber-dark); }
+.cr-down, .cr-paid { color: #15803d; }
+
+.cr-acts { display: flex; flex-direction: column; gap: 0.6rem; }
+.cr-yes {
+  background: #16a34a; color: #fff; border: none; border-radius: 999px;
+  padding: 0.95rem 1.4rem; font: inherit; font-size: 1.02rem; font-weight: 800; cursor: pointer; min-height: 54px;
+}
+.cr-yes:hover { background: #15803d; }
+.cr-yes:disabled { opacity: 0.6; cursor: default; }
+.cr-no {
+  background: none; border: 1px solid #d1d5db; border-radius: 999px; color: #4b5563;
+  padding: 0.8rem 1.4rem; font: inherit; font-weight: 700; cursor: pointer; min-height: 48px;
+}
+.cr-no:hover { border-color: #9ca3af; color: #1f2328; }
+.cr-no:disabled { opacity: 0.6; cursor: default; }
+.cr-err { margin-top: 0.7rem; color: #b91c1c; font-weight: 700; font-size: 0.9rem; }
+.cr-fine { margin-top: 0.9rem; font-size: 0.82rem; color: #6b7280; line-height: 1.5; }
+
+@media (max-width: 640px) {
+  .cr { padding: 1.15rem 1rem; }
+  .cr-title { font-size: 1.4rem; }
+}

@@ -3,6 +3,12 @@
 // Flat "stay with us" credit offered when a customer goes to decline a quote.
 export const DECLINE_CREDIT = 150;
 
+// The most a change-order note can carry. Long enough to describe widening a
+// patio and what it means for the sub-base, short enough that the customer's
+// text stays a text. Lives here rather than in queries.ts because the crew's
+// card counts against it as they type, and that card is a client component.
+export const CHANGE_NOTE_MAX = 600;
+
 // Pipeline a job moves through, lead -> money:
 //   New       a fresh lead, no quote sent yet
 //   Quoted    price + summary sent, waiting on the customer
