@@ -40,6 +40,7 @@ export const MESSAGE_LABELS: Record<string, string> = {
   crew_reminder_0: "Crew reminder - morning of",
   complete: "Job complete thank-you",
   payment_request: "Payment instructions",
+  payment_corrected: "Recorded payment corrected",
   assignment: "Assigned to crew",
 };
 

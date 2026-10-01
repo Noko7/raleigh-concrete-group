@@ -141,7 +141,7 @@ All of it runs over Supabase's REST/Auth APIs (no extra packages).
 **What's included**
 - **Login + roles** (`/crm/login`): owners see everything; contractors see only jobs assigned to them (enforced by Postgres Row-Level Security).
 - **Quotes dashboard** (`/crm`): filter by status / assignee / search; pipeline `New → Quoted → Booked → Confirmed → Complete` (plus `Lost`).
-- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos, signed to whoever is looking** (the URL carries an HMAC over the path, the viewer's staff id and an expiry, so a link copied out of one person's page is refused on anybody else's), status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, copyable share links, **record an approval the customer gave on the phone** (and book the day agreed on that call), **send a change order on an agreed job** for the customer to re-approve, and a **Mark complete + paid** button.
+- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos, signed to whoever is looking** (the URL carries an HMAC over the path, the viewer's staff id and an expiry, so a link copied out of one person's page is refused on anybody else's), status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, copyable share links, **record an approval the customer gave on the phone** (and book the day agreed on that call), **send a change order on an agreed job** for the customer to re-approve, **correct or void a payment the crew recorded wrong**, and a **Mark complete + paid** button.
 - **Contractors** (`/crm/contractors`, owner only): **text an invite** and let them set up their own login, edit their details, reset a password, deactivate/reactivate, or delete.
 - **Settings** (`/crm/settings`): your name + alert number; owners also pick the **primary contractor** that new quotes auto-assign to.
 - **Customers** (`/crm/customers`): quotes auto-grouped by phone/email with won-value totals.
@@ -212,9 +212,13 @@ agreeing to it and leaves nothing on the job saying they did.
 - **The new total for the whole job** - not the difference. The box opens on
   today's figure so it is an edit, not a number typed from scratch, and the card
   works out the difference, the new balance and anything owed back as you type.
-- Send it, and the customer gets a text with the change and their usual quote
-  link. **The price does not move until they approve it.** One change at a time,
-  and it can be withdrawn while it's out.
+- **Review it before sending.** Sending is two steps, not one. The second shows
+  the change exactly as the customer will read it *and* every payment recorded on
+  the job, with a tick - "I've checked the payments above are right" - that has
+  to be ticked before it will send. See "Why the review step exists" below.
+- Then the customer gets a text with the change and their usual quote link. **The
+  price does not move until they approve it.** One change at a time, and it can
+  be withdrawn while it's out.
 
 The customer sees it at the top of their own quote page, above the booking
 confirmation: what's changing, that **their date hasn't moved**, then the sums -
@@ -236,6 +240,65 @@ Not offered on a completed or paid job: re-opening the price on finished,
 settled work is an invoice dispute, and that belongs on the phone. Every change -
 sent, approved, turned down, withdrawn - is a row in the activity log with both
 figures on it, so "how did this job get to $9,400" is answerable from the log.
+
+**Why the review step exists**
+A change order is not really about a total, it is about a **balance**: what the
+customer reads is *new total, less what you've paid, leaves this*. The second
+half of that comes from whatever the crew recorded as paid - so if a 50% deposit
+went in as the whole job, every figure the customer is about to approve is wrong
+while the total itself looks perfectly fine.
+
+So the step before sending shows:
+- the change as the customer will read it, with their date confirmed as unmoved;
+- the same five lines they will see (price approved → what this adds → new total →
+  already paid → left to pay);
+- **every payment recorded on the job**, with voided and incomplete ones struck
+  through so it is obvious which figures the balance was actually built from;
+- a warning when the job already reads as paid in full and the work isn't
+  finished - the exact shape of a deposit entered as the whole job;
+- a tick confirming the payments are right, which the **server** requires, not
+  just a disabled button. Whoever ticked it is recorded on the activity log row.
+
+It also refuses to send if the job was repriced in another tab while the change
+was being written, rather than sending a difference nobody reviewed.
+
+**Fixing a payment the crew recorded wrong** (owner only)
+A contractor takes a 50% deposit and records the whole job as paid. Nothing
+stopped them: the amount box on "Record a payment" is pre-filled with the
+outstanding balance, and on an untouched job that is the full total, so the
+mistake is one tap. Both the app check and the database trigger only guard
+against recording *more* than is owed.
+
+**CRM → job page → Money on this job → Correct** (on the row itself) fixes it:
+- **Correct** changes the amount, the method and the note. It changes the
+  **record only** - no money moves in either direction. If money actually needs
+  to go *back* to the customer, that is the Refund button instead, and the card
+  says so before you type a figure.
+- **Take this off the books** voids a row that should never have existed - a
+  duplicate, or a payment recorded against the wrong job. It needs a reason,
+  which is written onto the row. The row is **not deleted**: it stays visible as
+  voided so "what happened to that $8,250" is still answerable six months later,
+  and every total in the business ignores it because they all sum `paid` and
+  `refunded` only.
+- **Card payments are read-only here.** A card row is Stripe's word for money
+  that really moved; editing our copy would leave the two disagreeing with no way
+  to tell which is right. Refund it instead.
+- Correcting a payment **re-syncs whether the job counts as paid**, in both
+  directions. This is the part that matters: the wrong figure had stamped the job
+  `paid_at`, which would have kept it out of "customers still owe" on the Money
+  page forever. Lowering the figure takes that stamp off and drops the status
+  back to whatever stage the *work* is at; a correction upward can finish paying
+  a job off.
+- The crew get a text, because two numbers they act on have just moved: what is
+  left to collect, and what they owe the office. Whoever made the correction
+  isn't texted their own click. Both figures land on the activity log.
+
+Owner only, enforced on the server. `least-privilege.sql` revokes `UPDATE` on
+`quote_payments` from every signed-in user precisely so a contractor cannot
+restate their own entry - the cash board is settled from these rows - so
+corrections go through the service role after the role check. Needs
+`supabase/payment-corrections.sql`, which only widens one check constraint to
+allow the `voided` status.
 
 **Owner alerts** are limited to the moments worth interrupting you: new lead,
 approved, declined, date confirmed or moved, can't-confirm, completed, and paid.
@@ -267,7 +330,7 @@ there. So:
   clicking, which used to mean the office texting itself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/quote-packages.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql`, `supabase/appointments.sql` and `supabase/change-orders.sql` in the SQL Editor. Once
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/quote-packages.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql`, `supabase/appointments.sql`, `supabase/change-orders.sql` and `supabase/payment-corrections.sql` in the SQL Editor. Once
    `supabase/payments.sql` is in (see **Getting paid** below), run
    `supabase/least-privilege.sql` last - it is what stops a contractor rewriting
    the money columns on their own jobs.

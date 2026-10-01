@@ -20,6 +20,7 @@ import {
   visitDateOf,
 } from "@/lib/crm/constants";
 import { STATUSES, type Status } from "@/lib/crm/env";
+import { toCents } from "@/lib/crm/fees";
 import { removeQuoteFromCalendar, syncQuoteToCalendar } from "@/lib/crm/gcal";
 import {
   alertOwner,
@@ -842,6 +843,32 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   const raw = String(formData.get("amount") ?? "").trim();
   if (raw === "") return { ok: false, error: "Enter the new total for the job." };
 
+  // The review step's tick, enforced here and not only by a disabled button.
+  //
+  // What the customer approves is a BALANCE - new total, less what they have
+  // paid - and the second half of that comes from whatever the crew recorded.
+  // A deposit entered as the whole job makes every figure on their screen wrong
+  // while the total itself looks perfectly fine, so somebody has to have looked
+  // at the payments. This is the record that they did.
+  if (String(formData.get("payments_checked") ?? "") !== "yes") {
+    return { ok: false, error: "Open the review step and confirm the recorded payments before sending this." };
+  }
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+
+  // The total the preview was drawn against. If the job has been repriced since
+  // - an owner editing the quote in another tab - then the difference the sender
+  // just reviewed is not the difference the customer would be shown, so this
+  // refuses rather than sending a figure nobody has actually looked at.
+  const shown = String(formData.get("shown_total") ?? "").trim();
+  if (shown !== "" && Number(shown) !== toCents(current.quote_amount)) {
+    return {
+      ok: false,
+      error: "The price on this job changed while you were writing. Close this and start the change again.",
+    };
+  }
+
   const result = await requestChange(session, id, { note, newAmount: Number(raw) });
   if (!result.ok || !result.quote) return { ok: false, error: result.error ?? "Could not send that change." };
   const quote = result.quote;
@@ -855,6 +882,10 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     from: quote.quote_amount,
     to: quote.change_amount,
     paid_cents: ledger.paidCents,
+    // Who stood behind the figures. The balance the customer is being asked to
+    // approve rests on the recorded payments, and this is the record that
+    // somebody confirmed them before it went out.
+    payments_checked_by: session.staff.full_name || session.staff.email || "Staff",
   });
 
   // The customer's text carries the change and the link, never the figures -

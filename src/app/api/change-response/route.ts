@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { toCents } from "@/lib/crm/fees";
 import { notifyChangeAnswered } from "@/lib/crm/notify";
-import { listPaymentsAdmin, settleJobIfPaid } from "@/lib/crm/payments";
+import { listPaymentsAdmin, resyncJobPaidState } from "@/lib/crm/payments";
 import { getStaffPhoneById, recordChangeResponse } from "@/lib/crm/queries";
 
 // The customer answering a change order, from behind their own quote link.
@@ -54,12 +54,14 @@ export async function POST(request: Request) {
         contractorPhone,
       );
 
-      // A change that LOWERS the total can finish paying a job off on its own: a
-      // customer who had paid $4,125 of $8,250 and drops the scope to $4,000 has
-      // now paid for all of it, and nothing else on this path would notice. Same
-      // call the Stripe webhook makes, so the two can't disagree about when a
-      // job is settled.
-      if (action === "accept") await settleJobIfPaid(q.id);
+      // Whether the job still counts as paid, in whichever direction the change
+      // pushed it. Both are real: dropping the scope to below what they have
+      // paid finishes the job off, and raising the total on a job already
+      // stamped paid puts it back into owing money - and leaving that stamp on
+      // would keep it out of "customers still owe" on the Money page for good.
+      //
+      // One function owns that question so the two directions cannot disagree.
+      if (action === "accept") await resyncJobPaidState(q.id);
     }
   } catch {
     // ignore - texting must never fail the customer's answer

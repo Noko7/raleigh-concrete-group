@@ -4097,3 +4097,82 @@ textarea.qm-input { min-height: 0; resize: vertical; }
   .cr { padding: 1.15rem 1rem; }
   .cr-title { font-size: 1.4rem; }
 }
+
+/* ── The change-order review step ────────────────────────────────────────────
+   What the customer will actually read, then the payments the balance was built
+   from. Boxed so it is visibly a preview of somebody else's screen rather than
+   more of this form. */
+.co-preview {
+  padding: 0.9rem 0.95rem; border-radius: 0.7rem; margin-bottom: 0.9rem;
+  border: 1px dashed var(--crm-border); background: var(--crm-surface-solid);
+}
+.co-light .co-preview { border-color: #d1d5db; background: #faf8f4; }
+.co-preview .co-sums { background: none; padding: 0; }
+.co-light .co-preview .co-sums { background: none; }
+.co-held { font-size: 0.88rem; color: var(--crm-muted); margin-bottom: 0.6rem; }
+.co-light .co-held { color: #4b5563; }
+
+.co-ledger { margin-bottom: 0.3rem; }
+.co-ledger-rows { list-style: none; margin: 0 0 0.5rem; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.co-ledger-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 0.7rem; align-items: baseline;
+  padding: 0.45rem 0.65rem; border-radius: 0.45rem; background: var(--crm-surface-solid); font-size: 0.88rem;
+}
+.co-light .co-ledger-row { background: #faf8f4; }
+/* A row the balance does not count - voided, pending, failed. Struck through so
+   it reads as history rather than as money. */
+.co-ledger-out { opacity: 0.55; }
+.co-ledger-out .co-ledger-amount { text-decoration: line-through; }
+.co-ledger-how { font-weight: 700; text-transform: capitalize; min-width: 0; }
+.co-ledger-how em { font-style: normal; font-weight: 400; text-transform: none; opacity: 0.75; }
+.co-ledger-when { color: var(--crm-muted); font-size: 0.8rem; white-space: nowrap; }
+.co-light .co-ledger-when { color: #6b7280; }
+.co-ledger-amount { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The tick that gates sending. Given room, because it is the one control on
+   this screen that is a statement rather than a setting. */
+.co-check {
+  display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.92rem; font-weight: 700;
+  cursor: pointer; padding: 0.7rem 0.8rem; border-radius: 0.6rem;
+  border: 1px solid var(--crm-border); background: var(--crm-surface-solid);
+}
+.co-light .co-check { border-color: #d1d5db; background: #fff; }
+.co-check input { margin-top: 0.15rem; width: 20px; height: 20px; flex: none; }
+
+/* ── Correcting a recorded payment (owner only) ──────────────────────────────
+   Sits under the row it is about, inside the ledger, so there is never a
+   question of which payment is being restated. */
+.qp-fix {
+  background: none; border: none; padding: 0; font: inherit; font-size: 0.8rem; font-weight: 700;
+  color: var(--crm-muted); text-decoration: underline; cursor: pointer;
+}
+.qp-fix:hover { color: var(--crm-accent); }
+.qp-row-void { opacity: 0.6; }
+.qp-row-void .qp-row-amount { text-decoration: line-through; }
+.qp-row-note { margin: 0.2rem 0 0 0.7rem; font-size: 0.8rem; color: var(--crm-muted); line-height: 1.4; }
+.qp-fix-box {
+  margin-top: 0.5rem; padding: 0.85rem 0.9rem; border-radius: 0.6rem;
+  border: 1px solid var(--crm-accent); background: var(--crm-surface-solid);
+}
+.qp-fix-title { font-size: 0.95rem; font-weight: 800; margin-bottom: 0.3rem; }
+.qp-fix-lead { font-size: 0.84rem; color: var(--crm-muted); line-height: 1.5; margin-bottom: 0.6rem; }
+.qp-fix-was { font-size: 0.86rem; margin-bottom: 0.7rem; }
+.qp-fix-acts { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.qp-void { margin-top: 0.9rem; padding-top: 0.8rem; border-top: 1px solid var(--crm-border); }
+.qp-void-ask { font-size: 0.84rem; line-height: 1.5; margin-bottom: 0.6rem; color: #fca5a5; }
+.qp-void-hint { display: block; font-style: normal; font-size: 0.78rem; color: var(--crm-muted); margin-top: 0.25rem; }
+.qp-void-open {
+  margin-top: 0.9rem; background: none; border: none; padding: 0; font: inherit; font-size: 0.82rem;
+  font-weight: 700; color: var(--crm-muted); text-decoration: underline; cursor: pointer;
+}
+.qp-void-open:hover { color: #f87171; }
+
+@media (max-width: 640px) {
+  .co-ledger-row { grid-template-columns: 1fr auto; row-gap: 0.15rem; }
+  .co-ledger-when { grid-column: 1; }
+}
+/* A payment the office voided, on the crew's own card. Struck through for the
+   same reason it is on the office's: the crew recorded it, and two screens
+   counting one row differently is how a settled balance gets chased. */
+.jp-row-void { opacity: 0.6; }
+.jp-row-void .jp-row-amount { text-decoration: line-through; }

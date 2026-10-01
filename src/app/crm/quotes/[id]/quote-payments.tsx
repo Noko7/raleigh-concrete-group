@@ -4,7 +4,14 @@ import { useActionState, useState } from "react";
 
 import { RECORDED_METHODS, fromCents, usd, type PaymentMethod } from "@/lib/crm/fees";
 import { dict, type Locale } from "@/lib/crm/i18n";
-import { recordManualPayment, refundJobPayment, sendPayLink, type PaymentState } from "./payment-actions";
+import {
+  correctRecordedPayment,
+  recordManualPayment,
+  refundJobPayment,
+  sendPayLink,
+  voidRecordedPayment,
+  type PaymentState,
+} from "./payment-actions";
 
 const initial: PaymentState = { ok: false };
 
@@ -18,6 +25,16 @@ export type QuotePaymentRow = {
   created_at: string;
   /** Only a card payment that reached Stripe can be sent back from here. */
   refundable: boolean;
+  /**
+   * Whether an owner may restate this row. Hand-recorded rows only: a card
+   * payment is Stripe's word for money that really moved, and editing our copy
+   * would leave the two disagreeing with no way to tell which is right.
+   *
+   * Computed on the server from the row itself (correctableReason), so the
+   * button is never offered for something the action would refuse.
+   */
+  correctable: boolean;
+  note: string | null;
 };
 
 /**
@@ -64,8 +81,15 @@ export function QuotePayments({
   const [linkState, linkAction, linking] = useActionState(sendPayLink, initial);
   const [cashState, cashAction, saving] = useActionState(recordManualPayment, initial);
   const [refundState, refundAction, refunding] = useActionState(refundJobPayment, initial);
+  const [fixState, fixAction, fixing] = useActionState(correctRecordedPayment, initial);
+  const [voidState, voidAction, voiding] = useActionState(voidRecordedPayment, initial);
   const [openCash, setOpenCash] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("cash");
+  // Which row is being corrected, and whether its void branch is showing. One
+  // row at a time: two open correction forms on one ledger is how the wrong one
+  // gets saved.
+  const [fixingRow, setFixingRow] = useState<string | null>(null);
+  const [voidingRow, setVoidingRow] = useState<string | null>(null);
   // Which row is asking "are you sure". A disclosure rather than a browser
   // confirm(): the amount going back has to be on screen, in words, next to
   // the button that sends it.
@@ -73,9 +97,11 @@ export function QuotePayments({
 
   const settled = dueCents <= 0 && totalCents > 0;
   const feedback =
-    linkState.error || cashState.error || refundState.error ||
-    linkState.message || cashState.message || refundState.message;
-  const isError = Boolean(linkState.error || cashState.error || refundState.error);
+    linkState.error || cashState.error || refundState.error || fixState.error || voidState.error ||
+    linkState.message || cashState.message || refundState.message || fixState.message || voidState.message;
+  const isError = Boolean(
+    linkState.error || cashState.error || refundState.error || fixState.error || voidState.error,
+  );
 
   if (totalCents <= 0) {
     return (
@@ -178,12 +204,14 @@ export function QuotePayments({
         <ul className="qp-rows">
           {rows.map((r) => {
             const back = r.amount_cents - r.refunded_cents;
+            const isVoided = r.status === "voided";
             return (
               <li key={r.id}>
-                <div className="qp-row">
+                <div className={isVoided ? "qp-row qp-row-void" : "qp-row"}>
                   <span className="qp-row-how">
                     {t.methods[r.method as PaymentMethod] ?? r.method}
                     {r.status === "pending" && <em> · {t.waiting}</em>}
+                    {isVoided && <em> · {t.voided}</em>}
                     {r.refunded_cents > 0 && <em> · {usd(r.refunded_cents)} {t.refunded}</em>}
                   </span>
                   <span className="qp-row-when">
@@ -202,7 +230,29 @@ export function QuotePayments({
                       {t.refund}
                     </button>
                   )}
+                  {/* Correcting and refunding are two different answers and sit
+                      side by side so the difference is visible at the point of
+                      choosing: a refund sends money back, a correction says the
+                      money never arrived in the first place. */}
+                  {isOwner && r.correctable && (
+                    <button
+                      type="button"
+                      className="qp-fix"
+                      onClick={() => {
+                        setFixingRow(fixingRow === r.id ? null : r.id);
+                        setVoidingRow(null);
+                      }}
+                    >
+                      {t.fixOpen}
+                    </button>
+                  )}
                 </div>
+
+                {/* The note, where there is one. On a voided row it carries the
+                    reason, which is the only thing that makes a zero-value row
+                    on the books readable six months later. */}
+                {r.note && <p className="qp-row-note">{r.note}</p>}
+
                 {confirming === r.id && (
                   <form action={refundAction} className="qp-confirm">
                     <input type="hidden" name="id" value={id} />
@@ -212,6 +262,113 @@ export function QuotePayments({
                       {refunding ? t.refunding : `${t.refund} ${usd(back)}`}
                     </button>
                   </form>
+                )}
+
+                {fixingRow === r.id && (
+                  <div className="qp-fix-box">
+                    <h3 className="qp-fix-title">{t.fixTitle}</h3>
+                    {/* Says what this is NOT, first. An owner reaching for
+                        Correct when the customer is actually owed money needs
+                        to be sent to the refund instead, and the moment to say
+                        so is before they have typed a figure. */}
+                    <p className="qp-fix-lead">{t.fixLead}</p>
+                    <p className="qp-fix-was">
+                      {t.fixWas} <strong>{usd(r.amount_cents)}</strong> ·{" "}
+                      {t.methods[r.method as PaymentMethod] ?? r.method}
+                    </p>
+
+                    <form action={fixAction} className="qp-form">
+                      <input type="hidden" name="id" value={id} />
+                      <input type="hidden" name="payment_id" value={r.id} />
+                      <label className="crm-field">
+                        <span>{t.fixAmount}</span>
+                        <input
+                          className="crm-input"
+                          name="amount"
+                          type="text"
+                          inputMode="decimal"
+                          defaultValue={String(fromCents(r.amount_cents))}
+                          autoComplete="off"
+                          disabled={fixing}
+                        />
+                      </label>
+                      <label className="crm-field">
+                        <span>{t.fixMethod}</span>
+                        <select className="crm-input" name="method" defaultValue={r.method} disabled={fixing}>
+                          {RECORDED_METHODS.map((m) => (
+                            <option key={m} value={m}>
+                              {t.methods[m]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="crm-field qp-note">
+                        <span>{t.fixNote}</span>
+                        <input
+                          className="crm-input"
+                          name="note"
+                          type="text"
+                          maxLength={500}
+                          defaultValue={r.note ?? ""}
+                          disabled={fixing}
+                        />
+                      </label>
+                      <div className="qp-fix-acts">
+                        <button type="submit" className="crm-btn crm-btn-primary" disabled={fixing}>
+                          {fixing ? t.fixSaving : t.fixSave}
+                        </button>
+                        <button
+                          type="button"
+                          className="qp-refund"
+                          onClick={() => setFixingRow(null)}
+                          disabled={fixing}
+                        >
+                          {t.fixCancel}
+                        </button>
+                      </div>
+                    </form>
+
+                    {/* Voiding lives inside the correction box rather than next
+                        to it: it is the same decision taken further, and keeping
+                        it one level down stops it being a button anybody taps by
+                        accident on a ledger. */}
+                    {voidingRow === r.id ? (
+                      <form action={voidAction} className="qp-void">
+                        <input type="hidden" name="id" value={id} />
+                        <input type="hidden" name="payment_id" value={r.id} />
+                        <p className="qp-void-ask">{t.voidAsk.replace("{amount}", usd(r.amount_cents))}</p>
+                        <label className="crm-field">
+                          <span>{t.voidReason}</span>
+                          <input
+                            className="crm-input"
+                            name="reason"
+                            type="text"
+                            maxLength={300}
+                            required
+                            disabled={voiding}
+                          />
+                          <em className="qp-void-hint">{t.voidReasonHint}</em>
+                        </label>
+                        <div className="qp-fix-acts">
+                          <button type="submit" className="crm-btn crm-btn-danger" disabled={voiding}>
+                            {voiding ? t.voiding : t.voidGo}
+                          </button>
+                          <button
+                            type="button"
+                            className="qp-refund"
+                            onClick={() => setVoidingRow(null)}
+                            disabled={voiding}
+                          >
+                            {t.fixCancel}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button type="button" className="qp-void-open" onClick={() => setVoidingRow(r.id)}>
+                        {t.voidOpen}
+                      </button>
+                    )}
+                  </div>
                 )}
               </li>
             );

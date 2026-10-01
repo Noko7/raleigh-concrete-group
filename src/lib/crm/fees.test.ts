@@ -272,6 +272,92 @@ test("a change order that drops below the deposit reads as money owed back", () 
   assert.equal(l.settled, true);
 });
 
+// ── Correcting what the crew recorded ───────────────────────────────────────
+// A contractor took a 50% deposit and recorded the whole job as paid. The owner
+// corrects the row. Nothing about the fee engine changes for that - it is one
+// amount_cents being rewritten - so these tests are here to prove the three
+// things that follow from it, because all three are what the Money page reports.
+
+test("correcting a deposit recorded as the whole job restores the real balance", () => {
+  const total = toCents(8250);
+  const rate = INTRO_FEE_RATE;
+
+  // What the contractor keyed in: the entire job, as cash, carrying no fee.
+  const wrong = readLedger(total, null, [row({ amount_cents: total, method: "cash" })], rate);
+  assert.equal(wrong.dueCents, 0, "reads as nothing left to collect");
+  assert.equal(wrong.settled, true, "which is why the job got stamped paid");
+  // And the office thinks the whole cut is already due from the contractor.
+  assert.equal(wrong.feeDueNowCents, feeTotalCents(total, rate));
+
+  // The owner corrects the amount to the deposit that actually arrived.
+  const fixed = readLedger(total, null, [row({ amount_cents: 412500, method: "cash" })], rate);
+  assert.equal(fixed.paidCents, 412500);
+  assert.equal(fixed.dueCents, 412500, "the other half is owed again");
+  assert.equal(fixed.settled, false, "so the job must stop claiming to be paid");
+
+  // What the contractor owes the office does NOT move, and that is correct
+  // rather than a miss. feeDueNowCents is capped by cash COLLECTED, not scaled
+  // by it - the office is owed its whole cut as soon as enough has come in to
+  // cover it, and $4,125 covers $1,237.50 just as well as $8,250 did. The
+  // correction changes what the CUSTOMER owes; the crew's debt was already
+  // fully earned by the deposit.
+  assert.equal(fixed.feeDueNowCents, feeTotalCents(total, rate));
+  assert.equal(fixed.feeDueNowCents, wrong.feeDueNowCents);
+
+  // Where the correction does reach the fee is on a job whose deposit is
+  // smaller than the cut itself.
+  const small = readLedger(total, null, [row({ amount_cents: 50000, method: "cash" })], rate);
+  assert.equal(small.feeDueNowCents, 50000, "never more than the crew have actually been handed");
+});
+
+test("a voided payment counts for nothing, everywhere", () => {
+  // Voided is not refunded. No money moved, so there is no outgoing to record -
+  // the honest ledger is simply the one without the row in it. Every total in
+  // the business sums 'paid' and 'refunded' only, so this one line is what makes
+  // that true for the fee engine.
+  const total = toCents(8250);
+  const live = row({ amount_cents: 412500, method: "cash" });
+  const dead = row({ amount_cents: 412500, method: "cash", status: "voided" });
+
+  const l = readLedger(total, null, [live, dead], INTRO_FEE_RATE);
+  assert.equal(l.paidCents, 412500, "only the live row is money");
+  assert.equal(l.dueCents, 412500);
+  assert.equal(l.offStripeCents, 412500, "and the cash board agrees");
+  assert.equal(l.settled, false);
+
+  // A job whose ONLY payment was voided is back to untouched.
+  const none = readLedger(total, null, [dead], INTRO_FEE_RATE);
+  assert.equal(none.paidCents, 0);
+  assert.equal(none.dueCents, total);
+  assert.equal(none.feeDueNowCents, 0, "nothing collected, so nothing owed to the office yet");
+});
+
+test("a corrected deposit and a change order compose correctly", () => {
+  // Both halves of what was asked for, in the order they happen: the owner fixes
+  // the 50% that was recorded as 100%, THEN the crew send a change order. This
+  // is the case the review step exists to protect - sending the change first
+  // would have shown the customer a $0 balance on a job they owe half of.
+  const agreed = toCents(8250);
+  const rate = INTRO_FEE_RATE;
+  const deposit = row({ amount_cents: 412500, method: "cash" });
+
+  // After the correction, before the change.
+  const corrected = readLedger(agreed, null, [deposit], rate);
+  assert.equal(corrected.dueCents, 412500);
+
+  // The customer approves the patio going two feet wider: $9,400.
+  const after = readLedger(toCents(9400), null, [deposit], rate);
+  assert.equal(after.totalCents, 940000);
+  assert.equal(after.paidCents, 412500, "the real deposit, still counted");
+  assert.equal(after.dueCents, 527500, "$5,275 - the half they owed plus the $1,150 change");
+  assert.equal(after.feeTotalCents, 141000, "15% of the job as it now stands");
+
+  // Had the wrong figure stood, the customer would have been shown this instead.
+  const uncorrected = readLedger(toCents(9400), null, [row({ amount_cents: agreed, method: "cash" })], rate);
+  assert.equal(uncorrected.dueCents, 115000, "only the change itself - the deposit swallowed the rest");
+  assert.notEqual(uncorrected.dueCents, after.dueCents);
+});
+
 // ── What the crew may record by hand ────────────────────────────────────────
 
 test("card is never a method somebody can type in", () => {

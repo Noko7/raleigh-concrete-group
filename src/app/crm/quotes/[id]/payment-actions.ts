@@ -3,18 +3,23 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import { isRecordedMethod, usd } from "@/lib/crm/fees";
-import { notifyCashRecorded, notifyPayLink } from "@/lib/crm/notify";
+import { isRecordedMethod, toCents, usd } from "@/lib/crm/fees";
+import { notifyCashRecorded, notifyPaymentCorrected, notifyPayLink } from "@/lib/crm/notify";
 import {
   applyRefund,
+  correctableReason,
+  correctRecordedPaymentAdmin,
   jobLedger,
+  listPaymentsAdmin,
   paymentById,
   payeeState,
   recordPayment,
+  resyncJobPaidState,
   settleJobIfPaid,
+  voidRecordedPaymentAdmin,
 } from "@/lib/crm/payments";
 import { refundPayment } from "@/lib/crm/stripe";
-import { addEvent, getQuote, updateQuote } from "@/lib/crm/queries";
+import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 
 export type PaymentState = { ok: boolean; error?: string; message?: string };
 
@@ -235,4 +240,178 @@ export async function refundJobPayment(_prev: PaymentState, formData: FormData):
 
   refreshMoneyViews(id);
   return { ok: true, message: `${usd(amountCents)} refunded to the customer.` };
+}
+
+// ── Fixing a payment somebody keyed in wrong ────────────────────────────────
+// Owner only, both of these. A contractor restating their own entry is exactly
+// what least-privilege.sql exists to prevent - the cash board is settled from
+// these rows - so the office does the correcting and the crew get told.
+//
+// Neither of these is a refund. No money moved wrongly: the figure on the row
+// is not what happened. A refund would put an imaginary outgoing on a ledger
+// that gets reconciled against a bank statement.
+
+/**
+ * Correct the amount, method or note on a hand-recorded payment.
+ *
+ * The case this was built for: a 50% deposit recorded as the whole job. Nothing
+ * refused it - the form's amount box is pre-filled with the outstanding balance,
+ * and on an untouched job that is the full total - and until now nothing could
+ * put it right without opening the Supabase console.
+ */
+export async function correctRecordedPayment(_prev: PaymentState, formData: FormData): Promise<PaymentState> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
+
+  const id = String(formData.get("id") ?? "");
+  const paymentId = String(formData.get("payment_id") ?? "");
+  if (!id || !paymentId) return { ok: false, error: "Missing payment." };
+
+  const quote = await getQuote(session, id);
+  if (!quote) return { ok: false, error: "You don't have access to this job." };
+
+  const row = await paymentById(paymentId);
+  if (!row || row.quote_id !== id) return { ok: false, error: "That payment isn't on this job." };
+  const blocked = correctableReason(row);
+  if (blocked) return { ok: false, error: blocked };
+
+  const amountCents = parseAmount(formData.get("amount"));
+  if (amountCents === null) return { ok: false, error: "Enter what they actually paid." };
+
+  const method = String(formData.get("method") ?? row.method);
+  if (!isRecordedMethod(method)) return { ok: false, error: "Pick how the customer paid." };
+
+  const note = String(formData.get("note") ?? "").trim().slice(0, 500);
+
+  // Same ceiling a new payment has: never more than the job is worth. Measured
+  // against the job's OTHER rows, so this one is not weighed against itself -
+  // without that, correcting $8,250 down to $4,125 would be refused for
+  // exceeding a balance that the $8,250 itself was filling.
+  const rows = await listPaymentsAdmin(id);
+  const elsewhere = rows
+    .filter((r) => r.id !== row.id && (r.status === "paid" || r.status === "refunded"))
+    .reduce((sum, r) => sum + r.amount_cents - r.refunded_cents, 0);
+  const totalCents = toCents(quote.quote_amount);
+  if (totalCents > 0 && elsewhere + amountCents > totalCents) {
+    const room = Math.max(0, totalCents - elsewhere);
+    return {
+      ok: false,
+      error: `That would collect more than the job is worth. The most this payment can be is ${usd(room)}.`,
+    };
+  }
+
+  const unchanged =
+    amountCents === row.amount_cents && method === row.method && note === (row.note ?? "").trim();
+  if (unchanged) return { ok: true, message: "Nothing changed on that payment." };
+
+  const saved = await correctRecordedPaymentAdmin(row, { amountCents, method, note: note || null });
+  if (!saved.ok) return { ok: false, error: saved.error ?? "Could not save that correction." };
+
+  // Both figures on the row, because "corrected a payment" tells nobody whether
+  // the books moved by five dollars or four thousand.
+  await addEvent(session, id, "payment_corrected", {
+    payment_id: row.id,
+    from_cents: row.amount_cents,
+    to_cents: amountCents,
+    from_method: row.method,
+    to_method: method,
+    note: note || null,
+  });
+
+  // The stamp the wrong figure earned has to come off, or the job stays out of
+  // "customers still owe" on the Money page forever. Goes both ways - a
+  // correction upward can finish paying a job off.
+  await resyncJobPaidState(id).catch(() => {});
+
+  const after = await jobLedger(quote);
+  // The crew are told because it changes two numbers they act on: what is left
+  // to collect, and what they owe the office. The owner did it, so they are not
+  // texted their own click.
+  const contractor = quote.assigned_to ? await getStaffById(session, quote.assigned_to) : null;
+  await notifyPaymentCorrected({
+    q: { id, name: quote.name, phone: quote.phone, job_token: quote.job_token },
+    contractorPhone: contractor?.phone,
+    actorPhone: session.staff.phone,
+    fromCents: row.amount_cents,
+    toCents: amountCents,
+    method,
+    who: session.staff.full_name || "the office",
+    dueCents: after.ledger.dueCents,
+    feeOwedCents: after.ledger.feeDueNowCents,
+  }).catch(() => {});
+
+  refreshMoneyViews(id);
+  return {
+    ok: true,
+    message:
+      after.ledger.dueCents > 0
+        ? `Corrected to ${usd(amountCents)}. ${usd(after.ledger.dueCents)} still to collect.`
+        : `Corrected to ${usd(amountCents)}. This job is paid in full.`,
+  };
+}
+
+/**
+ * Take a payment off the books entirely - a duplicate, or one recorded against
+ * the wrong job.
+ *
+ * The row is not deleted. It stays visible as voided with the reason on it,
+ * because "what happened to that $8,250" gets asked exactly when somebody is
+ * reconciling a month, and a deleted row cannot answer it. Every total in the
+ * business sums rows that are 'paid' or 'refunded', so a voided one stops
+ * counting everywhere at once.
+ */
+export async function voidRecordedPayment(_prev: PaymentState, formData: FormData): Promise<PaymentState> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
+
+  const id = String(formData.get("id") ?? "");
+  const paymentId = String(formData.get("payment_id") ?? "");
+  if (!id || !paymentId) return { ok: false, error: "Missing payment." };
+
+  const quote = await getQuote(session, id);
+  if (!quote) return { ok: false, error: "You don't have access to this job." };
+
+  const row = await paymentById(paymentId);
+  if (!row || row.quote_id !== id) return { ok: false, error: "That payment isn't on this job." };
+  const blocked = correctableReason(row);
+  if (blocked) return { ok: false, error: blocked };
+
+  // Required, and it rides on the row. A voided payment with no reason is a
+  // hole in the books that somebody will have to come back and ask about.
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 300);
+  if (reason.length < 3) return { ok: false, error: "Say why it's being voided - it goes on the record." };
+
+  const done = await voidRecordedPaymentAdmin(row, reason);
+  if (!done.ok) return { ok: false, error: done.error ?? "Could not void that payment." };
+
+  await addEvent(session, id, "payment_voided", {
+    payment_id: row.id,
+    amount_cents: row.amount_cents,
+    method: row.method,
+    reason,
+    from_note: row.note ?? null,
+  });
+
+  await resyncJobPaidState(id).catch(() => {});
+
+  const after = await jobLedger(quote);
+  const contractor = quote.assigned_to ? await getStaffById(session, quote.assigned_to) : null;
+  await notifyPaymentCorrected({
+    q: { id, name: quote.name, phone: quote.phone, job_token: quote.job_token },
+    contractorPhone: contractor?.phone,
+    actorPhone: session.staff.phone,
+    fromCents: row.amount_cents,
+    // Voided, not reduced. The text says so rather than claiming it became zero.
+    toCents: null,
+    method: row.method,
+    who: session.staff.full_name || "the office",
+    dueCents: after.ledger.dueCents,
+    feeOwedCents: after.ledger.feeDueNowCents,
+  }).catch(() => {});
+
+  refreshMoneyViews(id);
+  return {
+    ok: true,
+    message: `${usd(row.amount_cents)} taken off the books. ${usd(after.ledger.dueCents)} still to collect.`,
+  };
 }

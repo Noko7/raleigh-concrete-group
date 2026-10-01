@@ -10,7 +10,7 @@ import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText, quoteSends } from "@/lib/crm/events";
 import { signMediaPath } from "@/lib/crm/media-token";
-import { jobLedger, payeeState } from "@/lib/crm/payments";
+import { correctableReason, jobLedger, payeeState } from "@/lib/crm/payments";
 import { usd } from "@/lib/crm/fees";
 import {
   getQuote,
@@ -346,6 +346,23 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 customerName={quote.name}
                 totalCents={money.ledger.totalCents}
                 paidCents={money.ledger.paidCents}
+                // The rows the balance is worked out from, so the review step can
+                // show them rather than ask anyone to trust the total.
+                payments={money.rows.map((r) => ({
+                  id: r.id,
+                  method: r.method,
+                  amountCents: r.amount_cents,
+                  netCents: r.amount_cents - r.refunded_cents,
+                  status: r.status,
+                  when: r.paid_at ?? r.created_at,
+                  note: r.note,
+                }))}
+                bookedFor={
+                  quote.scheduled_date
+                    ? `${prettyDate(quote.scheduled_date)}${quote.scheduled_time ? ` at ${quote.scheduled_time}` : ""}`
+                    : null
+                }
+                workCompleted={Boolean(quote.completed_at)}
                 pending={pendingChange}
                 locale={locale}
               />
@@ -397,6 +414,11 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   // to reverse.
                   refundable:
                     r.method === "card" && r.status !== "pending" && Boolean(r.payment_intent_id && r.stripe_account_id),
+                  // The mirror image: only a HAND-recorded row can be restated,
+                  // and the same function the action uses decides it - so the
+                  // button is never offered for something the server would refuse.
+                  correctable: correctableReason(r) === null,
+                  note: r.note,
                 }))}
               />
             </div>

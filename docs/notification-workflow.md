@@ -160,6 +160,13 @@ job (see ⑥). Customers are not reminded more than once.
 │    deposit already in. The crew write what's changing and the new    │
 │    total; the price does NOT move until the customer approves.       │
 ├─────────────────────────────────────────────────────────────────────┤
+│    Sending is TWO steps. The second shows the change as the customer  │
+│    will read it, every payment recorded on the job, and a tick -      │
+│    "I've checked the payments above are right" - that the server      │
+│    requires. A deposit entered as the whole job makes the balance     │
+│    the customer approves wrong while the total looks fine, and this   │
+│    is the last moment to catch it.                                   │
+├─────────────────────────────────────────────────────────────────────┤
 │ CUSTOMER  What's changing, in the crew's words, that their date      │
 │            hasn't moved, and their quote link to answer on. NO       │
 │            figures - the rule above holds hardest here, so the       │
@@ -488,11 +495,36 @@ into a ten-part text.
 
 ---
 
+## Correcting a payment the crew recorded wrong
+
+Owner only, from the job's money card. A contractor took a 50% deposit and
+recorded the whole job; the figure is wrong, but no money moved wrongly, so this
+is **not** a refund — a refund would put an imaginary outgoing on a ledger that
+gets reconciled against a bank statement.
+
+| | What happens |
+|---|---|
+| CUSTOMER | nothing. They were never told the payment was recorded, so there is nothing to correct with them. |
+| CREW | "PAYMENT CORRECTED" + what it was, what it is now, what's still to collect, what they now owe the office, and who corrected it. Not sent to whoever did it. |
+| OWNER | the same text, minus whoever clicked. |
+| LOG | both figures on the row, so the first one is still on the record. |
+
+A **voided** payment is the other shape: the row should never have existed at
+all. It needs a reason, keeps its place in the ledger marked voided, and counts
+toward nothing — every total in the business sums `paid` and `refunded` only.
+
+Correcting or voiding re-syncs whether the job counts as paid, **in both
+directions**. The wrong figure had stamped the job paid; leaving that stamp on
+would keep it out of "customers still owe" on the Money page for good.
+
+---
+
 ## Owner alerts
 
 **You are texted for:** new lead · customer approved · **approval recorded from a
 phone call** · customer declined · date confirmed · date moved · **change
-approved or turned down** · customer couldn't confirm · job completed · paid.
+approved or turned down** · **a recorded payment corrected or voided** ·
+customer couldn't confirm · job completed · paid.
 
 The phone-call one is its own alert rather than a copy of "customer approved",
 and it names whoever wrote it down. An approval nobody watched the customer give
@@ -519,6 +551,7 @@ minus whoever performed the action.
 | Customer approves | Same brief + the customer's preferred days + "confirm the day that works" |
 | Approval recorded on a call | APPROVED BY PHONE + amount + what they took + the day agreed, and who recorded it. Not sent to the person who recorded it |
 | Customer answers a change order | CHANGE APPROVED or CHANGE TURNED DOWN + the new total, what was already collected and what's left |
+| The office corrects a payment they recorded | PAYMENT CORRECTED + the old and new figure, what's left to collect, what they now owe the office, and who corrected it |
 | Date confirmed / moved | JOB BOOKED or DATE CHANGED + brief |
 | **3 days / 1 day / morning of** | **JOB REMINDER + brief + "call Noah right away if you can't make it"** |
 | Customer declines | Declined |

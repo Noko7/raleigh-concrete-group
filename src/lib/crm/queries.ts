@@ -2179,17 +2179,12 @@ export async function recordChangeResponse(
   const note = q.change_note;
 
   const patch: Partial<Quote> = { ...CLEAR_CHANGE };
-  if (action === "accept") {
-    patch.quote_amount = to;
-    // A job stamped paid that has just grown is not paid any more. Clearing the
-    // stamp is what lets settleJobIfPaid stamp it again when the extra arrives,
-    // and keeps "paid" off a job with a balance on it. The status comes back
-    // from paid to the stage the work is actually at.
-    if (q.paid_at && toCents(to) > (await collectedCents(q.id))) {
-      patch.paid_at = null;
-      if (q.status === "paid") patch.status = q.completed_at ? "completed" : "scheduled";
-    }
-  }
+  // The price, and only the price. Whether the job still counts as paid
+  // afterwards is resyncJobPaidState's call, made by the caller once this has
+  // landed: a change can push a paid job back into owing money OR finish paying
+  // one off, and both directions have to come from the same function or they
+  // drift. See /api/change-response.
+  if (action === "accept") patch.quote_amount = to;
 
   const res = await pgAdmin(`quote_requests?id=eq.${q.id}`, {
     method: "PATCH",
@@ -2210,25 +2205,6 @@ export async function recordChangeResponse(
   }).catch(() => {});
 
   return { ok: true, quote: rows[0], from, to, note };
-}
-
-/**
- * What the customer has actually handed over on this job, in cents.
- *
- * Only used to decide whether a grown total has outrun the money already in,
- * so it counts the same rows the ledger counts: settled ones, net of refunds.
- * Lives here rather than in payments.ts to keep that module's import of this
- * one going in a single direction.
- */
-async function collectedCents(quoteId: string): Promise<number> {
-  const res = await pgAdmin(
-    `quote_payments?quote_id=eq.${quoteId}&select=amount_cents,refunded_cents,status`,
-  );
-  if (!res.ok) return 0;
-  const rows = (await res.json()) as { amount_cents: number; refunded_cents: number; status: string }[];
-  return rows
-    .filter((r) => r.status === "paid" || r.status === "refunded")
-    .reduce((sum, r) => sum + r.amount_cents - r.refunded_cents, 0);
 }
 
 // Confirm (or move) the work day. Runs as the logged-in user so RLS keeps a

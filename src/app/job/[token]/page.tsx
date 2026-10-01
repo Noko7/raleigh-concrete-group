@@ -398,6 +398,20 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             customerName={quote.name}
             totalCents={money.ledger.totalCents}
             paidCents={money.ledger.paidCents}
+            // The rows the balance is worked out from. The crew are the ones who
+            // recorded them, which is exactly why they are the ones who should be
+            // looking at them before a customer is asked to approve a balance.
+            payments={money.rows.map((r) => ({
+              id: r.id,
+              method: r.method,
+              amountCents: r.amount_cents,
+              netCents: r.amount_cents - r.refunded_cents,
+              status: r.status,
+              when: r.paid_at ?? r.created_at,
+              note: r.note,
+            }))}
+            bookedFor={prettyJob ? `${prettyJob}${quote.scheduled_time ? ` ${t.contractorJob.at} ${quote.scheduled_time}` : ""}` : null}
+            workCompleted={Boolean(quote.completed_at)}
             pending={pendingChange}
             locale={locale}
             tone="light"

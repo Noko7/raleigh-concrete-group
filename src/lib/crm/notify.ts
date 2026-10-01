@@ -2196,6 +2196,56 @@ export function assignmentMessage(q: QuoteInfo, contractorName?: string | null):
   ]);
 }
 
+// ── A payment the office had to correct ─────────────────────────────────────
+// The crew recorded one figure and it was not what happened. They are told
+// because two numbers they act on have just moved: what is left to collect from
+// the customer, and what they owe the office.
+//
+// Never sent to whoever did it. The office corrects these from a screen that
+// already shows them the result.
+export async function notifyPaymentCorrected(input: {
+  q: QuoteInfo;
+  contractorPhone?: string | null;
+  actorPhone?: string | null;
+  fromCents: number;
+  /** Null means the row was voided rather than re-figured. */
+  toCents: number | null;
+  method: string;
+  who: string;
+  dueCents: number;
+  feeOwedCents: number;
+}): Promise<void> {
+  const { q, fromCents, toCents, method, who } = input;
+  const what =
+    toCents === null
+      ? `${money(fromCents)} recorded as ${method} has been taken off this job - it should not have been there.`
+      : `The ${money(fromCents)} recorded as ${method} was wrong. It is now ${money(toCents)}.`;
+
+  const msg = text([
+    "PAYMENT CORRECTED",
+    "",
+    ...block("Customer:", q.name),
+    what,
+    "",
+    ...block("Still to collect:", money(input.dueCents)),
+    // The reason the crew care beyond curiosity: their own balance with the
+    // office is a percentage of what the customer has actually handed over.
+    ...block("You owe the office:", money(input.feeOwedCents)),
+    `Corrected by ${who}.`,
+    "",
+    q.job_token ? jobLink(q.job_token) : null,
+  ]);
+
+  await alertOwner(msg, input.actorPhone, { quoteId: q.id, kind: "payment_corrected" });
+  if (input.contractorPhone && !samePhone(input.contractorPhone, input.actorPhone)) {
+    await sendSms(input.contractorPhone, msg, {
+      quoteId: q.id,
+      kind: "payment_corrected",
+      role: "crew",
+    }).catch(() => {});
+  }
+}
+
 export async function notifyAssignment(
   contractorPhone: string | null | undefined,
   q: QuoteInfo,

@@ -46,7 +46,13 @@ export type QuotePayment = {
   // The office's cut taken out of this payment. Only ever non-zero on a card
   // row, where Stripe moved it as the application fee.
   fee_cents: number;
-  status: "pending" | "paid" | "failed" | "refunded";
+  // 'voided' is a row that should never have existed - a typo, a duplicate, a
+  // payment against the wrong job. Deliberately NOT 'refunded': that one means
+  // money really went back to the customer and belongs on the ledger on the day
+  // it moved. A voided row counted nothing and is summed nowhere, because every
+  // total in the business filters on 'paid' or 'refunded'. See
+  // supabase/payment-corrections.sql.
+  status: "pending" | "paid" | "failed" | "refunded" | "voided";
   // Whose account received it. Stored per payment because a job can be
   // reassigned after money has moved.
   stripe_account_id: string | null;

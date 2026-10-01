@@ -487,6 +487,32 @@ const en = {
     sameTotal: "That's the total they already agreed to.",
     refundWarn: "That's less than they've already paid, so we'd owe them {amount} back. Worth a call before you send it.",
     sendHint: "{name} gets a text with the change and a link. Their date doesn't move.",
+    // ── The preview, between composing a change and sending it ──
+    // A change order is built on the job's balance, and the balance is built on
+    // whatever the crew recorded as paid. If a deposit went in as the whole job,
+    // every figure the customer is about to read is wrong - so the step before
+    // sending shows the payments it was all worked from.
+    review: "Review it before sending",
+    reviewTitle: "This is what {name} will see",
+    reviewBack: "Back to the change",
+    reviewDateHeld: "Their date doesn't move: {when}",
+    reviewApproved: "Price they approved",
+    reviewAdds: "This change adds",
+    reviewTakesOff: "This change takes off",
+    reviewNewTotal: "New total",
+    reviewPaid: "They've already paid",
+    reviewLeft: "Left to pay",
+    reviewBack2You: "Back to them",
+    ledgerTitle: "Payments recorded on this job",
+    ledgerNone: "Nothing has been recorded as paid on this job yet.",
+    ledgerHint:
+      "The balance above is worked out from these. If one of them is wrong, ask the office to correct it before you send this - the customer approves a balance, not just a total.",
+    ledgerVoided: "voided, not counted",
+    // The exact shape of the bug this preview exists to catch.
+    paidInFullWarn:
+      "Careful: this job already reads as paid in full and the work isn't finished. If only a deposit actually came in, the balance above is wrong. Ask the office to correct the payment before you send this.",
+    confirmTick: "I've checked the payments above are right",
+    sendTo: "Send it to {name}",
     send: "Send it for approval",
     sending: "Sending…",
     cancel: "Never mind",
@@ -575,6 +601,8 @@ const en = {
       customerConfirmed: "Customer confirmed the day",
       jobCompleted: "Work marked completed",
       paymentReceived: "Payment received",
+      paymentCorrected: "The office corrected a recorded payment",
+      paymentVoided: "The office took a recorded payment off this job",
     },
     visitTitle: "Need to see it in person?",
     visitLead:
@@ -721,6 +749,32 @@ const en = {
     refunding: "Refunding…",
     // {amount} is the sum going back to the customer.
     refundAsk: "Send {amount} back to the customer? The office fee goes back with it.",
+    // ── Correcting a recorded payment (owner only) ──
+    // The crew took a deposit and recorded the whole job. Nothing refused it,
+    // and until now nothing could put it right outside the Supabase console.
+    fixOpen: "Correct",
+    fixTitle: "Correct what was recorded",
+    // Deliberately says what this is NOT. An owner reaching for this button
+    // while a customer is owed money needs to be sent to the refund instead.
+    fixLead:
+      "Use this when the figure keyed in isn't what the customer actually handed over. It changes the record only - no money moves either way. If money needs to go BACK to the customer, refund it instead.",
+    fixWas: "Recorded as",
+    fixAmount: "What they actually paid",
+    fixMethod: "How they actually paid",
+    fixNote: "Note (what was wrong)",
+    fixSave: "Save the correction",
+    fixSaving: "Saving…",
+    fixCancel: "Leave it",
+    fixCardOnly: "Card payments come from Stripe and can't be edited here.",
+    voidOpen: "Take this off the books",
+    // {amount} is the figure coming off.
+    voidAsk:
+      "Void {amount}? Use this when the payment never happened at all - a duplicate, or money recorded against the wrong job. The row stays visible as voided so the books can still be reconciled.",
+    voidReason: "Why is it coming off?",
+    voidReasonHint: "Goes on the record, and the crew are told.",
+    voidGo: "Void this payment",
+    voiding: "Voiding…",
+    voided: "voided",
     methods: {
       card: "Card",
       cash: "Cash",
