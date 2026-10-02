@@ -561,7 +561,9 @@ export function QuoteActions({
               built. */}
           {itemised && (
             <>
-              <h2 className="cq-opts-title">{choice ? "Anything to add?" : "Choose what you'd like"}</h2>
+              <h2 className="cq-opts-title">
+                {choice ? "Anything to add?" : optional.length === 0 ? "What's included" : "Choose what you'd like"}
+              </h2>
               {choice && (
                 <p className="cq-fine cq-alts-lead">These are priced the same whichever option you picked above.</p>
               )}

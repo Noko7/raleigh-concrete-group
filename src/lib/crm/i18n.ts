@@ -327,10 +327,13 @@ const en = {
   // customer answers one at a time - "yes to the patio, no to the sidewalk" -
   // and these are the words on the crew's own screen while they write it.
   quoteOptions: {
-    title: "Line items (optional)",
+    title: "Break the price into line items (optional)",
+    // Leads with the breakdown, because that is what most customers who ask for
+    // "line items" mean: show me what I'm paying for. Optional extras are the
+    // second use, not the first.
     emptyHint:
-      "Leave this empty for a normal one-price quote. Add line items when the customer should be able to say yes to part of it - a patio now, the sidewalk maybe.",
-    hint: "The customer answers each optional item yes or no, and the total follows their answers.",
+      "Leave this empty for one price. Add a line for each part of the job to show the customer exactly what they're paying for - the total adds itself up. You can also add optional extras they can say yes or no to.",
+    hint: "Every line is part of the job unless you let the customer say no to it. They only answer yes or no to the extras.",
     kindRequired: "Part of the job",
     kindOptional: "Their choice",
     itemTitle: "Item",
@@ -342,11 +345,14 @@ const en = {
     requiredHint: "Always included. The customer sees the price but cannot drop it.",
     optionalHint: "The customer chooses. Say no and it comes off their total.",
     addOptional: "+ Add an optional extra",
-    addRequired: "+ Add to the base job",
+    addRequired: "+ Add a line",
     remove: "Remove",
     moveUp: "Move up",
     moveDown: "Move down",
     allInTotal: "All in, if they take everything",
+    // When every line is part of the job there is nothing to "take" - it is
+    // just the total.
+    total: "Total",
     acceptedTotal: "What they approved",
     lockedNote: "The customer has answered, so this is the record of what they bought. It cannot be changed.",
     answerYes: "Approved",

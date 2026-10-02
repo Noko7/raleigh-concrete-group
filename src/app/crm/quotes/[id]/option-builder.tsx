@@ -231,18 +231,20 @@ export function OptionBuilder({
 
       {rows.length < MAX_QUOTE_OPTIONS && (
         <div className="qo-add">
-          <button type="button" className="qo-add-btn" onClick={() => add(rows.length === 0)}>
-            {t.addOptional}
-          </button>
+          {/* A line of the job first: breaking the price down is the common
+              ask, and an extra the customer can refuse is the special case. */}
           <button type="button" className="qo-add-btn" onClick={() => add(true)}>
             {t.addRequired}
+          </button>
+          <button type="button" className="qo-add-btn" onClick={() => add(rows.length === 0)}>
+            {t.addOptional}
           </button>
         </div>
       )}
 
       {rows.length > 0 && (
         <p className="qo-total">
-          <span>{t.allInTotal}</span>
+          <span>{rows.some((r) => !r.required) ? t.allInTotal : t.total}</span>
           <strong>{usd(total)}</strong>
         </p>
       )}
