@@ -402,6 +402,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 feeTotalCents={money.ledger.feeTotalCents}
                 feeCollectedCents={money.ledger.feeCollectedCents}
                 feeDueCents={money.ledger.feeDueNowCents}
+                feeSettledCents={money.ledger.feeSettledCents}
                 rows={money.rows.map((r) => ({
                   id: r.id,
                   method: r.method,

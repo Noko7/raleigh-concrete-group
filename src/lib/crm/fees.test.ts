@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 
 import {
   applicationFeeFor,
+  applySettlements,
   depositCents,
   feeRateFor,
   feeTotalCents,
@@ -396,6 +397,51 @@ test("a payment recorded when nothing came in is voided, leaving the job untouch
   // to the office yet because nothing has been collected.
   assert.equal(voided.feeTotalCents, 75000);
   assert.equal(voided.feeDueNowCents, 0, "and the crew owe the office nothing until it does");
+});
+
+// ── A fee the contractor has already sent the office ────────────────────────
+// Rafa's first job: Brandon Robinson, $5,000, paid in full in cash. The office's
+// 15% is $750, and Rafa Zelled it over two days later. The Money page always
+// knew; the job pages didn't, and kept telling him to send it.
+
+test("a settled cash fee reads as nothing owed on the job", () => {
+  const total = toCents(5000);
+  const ledger = readLedger(total, null, [row({ amount_cents: total, method: "cash" })], INTRO_FEE_RATE);
+  assert.equal(ledger.feeTotalCents, 75000);
+  assert.equal(ledger.feeDueNowCents, 75000, "before the Zelle: $750 owed");
+  assert.equal(ledger.feeSettledCents, 0, "readLedger never counts settlements itself");
+
+  const after = applySettlements(ledger, 75000);
+  assert.equal(after.feeSettledCents, 75000);
+  assert.equal(after.feeDueNowCents, 0, "nothing left to send over");
+  assert.equal(after.feeOwedCents, 0);
+  // What the customer owes is a different question and must not move.
+  assert.equal(after.dueCents, ledger.dueCents);
+  assert.equal(after.paidCents, ledger.paidCents);
+  assert.equal(after.settled, true);
+});
+
+test("a card payment after a settled fee does not take the office's cut again", () => {
+  // Half paid in cash, the crew Zelled the WHOLE $750 cut, then the customer
+  // pays the balance by card. That card payment must carry no fee - the office
+  // already has every cent of it.
+  const total = toCents(5000);
+  const cashHalf = row({ amount_cents: 250000, method: "cash" });
+  const settled = applySettlements(readLedger(total, null, [cashHalf], INTRO_FEE_RATE), 75000);
+  assert.equal(settled.feeChargeableCents, 0);
+  assert.equal(applicationFeeFor(250000, settled.feeChargeableCents), 0);
+});
+
+test("a partial settlement leaves exactly the remainder owed", () => {
+  const total = toCents(5000);
+  const ledger = readLedger(total, null, [row({ amount_cents: total, method: "cash" })], INTRO_FEE_RATE);
+  const after = applySettlements(ledger, 50000);
+  assert.equal(after.feeDueNowCents, 25000);
+  assert.equal(after.feeChargeableCents, 25000);
+  // Over-settling never reads as the office owing the crew on the job page;
+  // the Money page is where that conversation happens.
+  assert.equal(applySettlements(ledger, 90000).feeDueNowCents, 0);
+  assert.equal(applySettlements(ledger, 0), ledger, "no settlement, no change");
 });
 
 // ── What the crew may record by hand ────────────────────────────────────────

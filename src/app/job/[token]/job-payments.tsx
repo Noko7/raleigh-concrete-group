@@ -41,6 +41,7 @@ export function JobPayments({
   paidCents,
   dueCents,
   feeDueCents,
+  feeSettledCents = 0,
   rows,
 }: {
   id: string;
@@ -50,6 +51,8 @@ export function JobPayments({
   paidCents: number;
   dueCents: number;
   feeDueCents: number;
+  /** What they have already sent the office for this job. */
+  feeSettledCents?: number;
   rows: PaymentRow[];
 }) {
   const t = dict(locale).payments;
@@ -96,7 +99,13 @@ export function JobPayments({
         <span className="jp-fee-label">{t.owedTitle}</span>
         <strong>{usd(feeDueCents)}</strong>
         <span className="jp-fee-note">
-          {feeDueCents <= 0 ? t.owedNone : cardReady && dueCents > 0 ? t.owedCard : t.owedCash}
+          {feeDueCents <= 0
+            ? feeSettledCents > 0
+              ? t.owedSettled
+              : t.owedNone
+            : cardReady && dueCents > 0
+              ? t.owedCard
+              : t.owedCash}
         </span>
       </div>
 

@@ -729,7 +729,11 @@ const en = {
     officeCut: "Office cut",
     feeTaken: "taken by card",
     feeLeft: "still owed",
+    feeSettledLabel: "sent over by hand",
     owedNone: "Nothing owed - it came out of the card payment.",
+    // The fee was paid, by the crew, after the fact. Not "it came out of the
+    // card payment", which on a cash job is simply untrue.
+    owedSettled: "Paid - you sent the office its cut. Nothing owed on this job.",
     owedCard: "Comes out of card payments automatically.",
     owedCash: "Send this over by Zelle or Venmo when you get a chance.",
     cardTitle: "Text them a card link",

@@ -62,6 +62,7 @@ export function QuotePayments({
   feeTotalCents,
   feeCollectedCents,
   feeDueCents,
+  feeSettledCents = 0,
   rows,
 }: {
   id: string;
@@ -74,6 +75,8 @@ export function QuotePayments({
   feeTotalCents: number;
   feeCollectedCents: number;
   feeDueCents: number;
+  /** What the contractor has already sent over by hand for this job. */
+  feeSettledCents?: number;
   rows: QuotePaymentRow[];
 }) {
   const d = dict(locale);
@@ -137,6 +140,13 @@ export function QuotePayments({
           the same fact from the other side of the table. */}
       <p className="crm-muted crm-sm qp-fee">
         {t.officeCut}: <strong>{usd(feeTotalCents)}</strong> · {usd(feeCollectedCents)} {t.feeTaken} ·{" "}
+        {/* Without this the three figures stop adding up the moment a crew
+            settles by Zelle: $750 cut, $0 taken by card, $0 still owed. */}
+        {feeSettledCents > 0 && (
+          <>
+            {usd(feeSettledCents)} {t.feeSettledLabel} ·{" "}
+          </>
+        )}
         <strong className={feeDueCents > 0 ? "qp-owed" : ""}>{usd(feeDueCents)}</strong> {t.feeLeft}
       </p>
 

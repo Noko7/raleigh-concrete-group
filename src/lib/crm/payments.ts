@@ -5,6 +5,7 @@
 import { SITE_ORIGIN } from "./env";
 import {
   applicationFeeFor,
+  applySettlements,
   feeRateFor,
   feeTotalCents,
   readLedger,
@@ -371,12 +372,25 @@ export async function jobLedger(
 ): Promise<{ ledger: Ledger; rows: QuotePayment[]; rate: number }> {
   await expireStalePending(quote.id);
   const fee = opts.freeze ? await ensureFeeOnJob(quote) : await previewFee(quote);
-  const rows = await listPaymentsAdmin(quote.id);
+  const [rows, settledCents] = await Promise.all([listPaymentsAdmin(quote.id), settledOnJob(quote.id)]);
   return {
-    ledger: readLedger(toCents(quote.quote_amount), fee.feeTotalCents, rows),
+    // Net of any fee the contractor has already sent the office for this job -
+    // see applySettlements for why that has to happen here and not in readLedger.
+    ledger: applySettlements(readLedger(toCents(quote.quote_amount), fee.feeTotalCents, rows), settledCents),
     rows,
     rate: fee.rate,
   };
+}
+
+/** Fee the contractor has already sent the office against this one job, in cents. */
+async function settledOnJob(quoteId: string): Promise<number> {
+  if (!UUID_RE.test(quoteId)) return 0;
+  const res = await pgAdmin(`fee_settlements?quote_id=eq.${quoteId}&select=amount_cents`);
+  // A database without the table, or any read failure, reads as nothing settled
+  // - the old behaviour - rather than taking the job page down with it.
+  if (!res.ok) return 0;
+  const rows = (await res.json()) as { amount_cents: number }[];
+  return rows.reduce((sum, r) => sum + (Number(r.amount_cents) || 0), 0);
 }
 
 // ── Can this job take a card at all? ────────────────────────────────────────
