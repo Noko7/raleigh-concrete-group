@@ -512,6 +512,10 @@ const en = {
     paidInFullWarn:
       "Careful: this job already reads as paid in full and the work isn't finished. If only a deposit actually came in, the balance above is wrong. Ask the office to correct the payment before you send this.",
     confirmTick: "I've checked the payments above are right",
+    // No deposit. The tick is now a statement that nothing has been taken.
+    confirmTickNone: "I've checked - they haven't paid anything yet",
+    ledgerHintNone:
+      "So they'll be asked for the whole new total. If they did hand over a deposit that was never recorded, record it first.",
     sendTo: "Send it to {name}",
     send: "Send it for approval",
     sending: "Sending…",
@@ -766,6 +770,7 @@ const en = {
     fixSaving: "Saving…",
     fixCancel: "Leave it",
     fixCardOnly: "Card payments come from Stripe and can't be edited here.",
+    fixZeroHint: "Nothing came in at all? Don't enter $0 - take it off the books below.",
     voidOpen: "Take this off the books",
     // {amount} is the figure coming off.
     voidAsk:

@@ -275,6 +275,20 @@ export async function correctRecordedPayment(_prev: PaymentState, formData: Form
   const blocked = correctableReason(row);
   if (blocked) return { ok: false, error: blocked };
 
+  // Nothing came in at all - no deposit, the crew recorded money that was never
+  // handed over. Typing 0 here is the obvious move and it cannot work: a payment
+  // row is never $0 (the database refuses it, and a $0 payment would be a row
+  // that says money arrived when none did). The honest answer is that the row
+  // should not exist, which is what voiding is for - so say so, rather than
+  // refusing with "enter what they paid" to somebody who just did.
+  const typed = String(formData.get("amount") ?? "").replace(/[$,\s]/g, "");
+  if (typed !== "" && Number(typed) === 0) {
+    return {
+      ok: false,
+      error: 'If nothing came in at all, don\'t correct it to $0 - use "Take this off the books" below. A payment can\'t be zero.',
+    };
+  }
+
   const amountCents = parseAmount(formData.get("amount"));
   if (amountCents === null) return { ok: false, error: "Enter what they actually paid." };
 

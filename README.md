@@ -258,6 +258,9 @@ So the step before sending shows:
   finished - the exact shape of a deposit entered as the whole job;
 - a tick confirming the payments are right, which the **server** requires, not
   just a disabled button. Whoever ticked it is recorded on the activity log row.
+  On a job with **no deposit** the tick says the opposite thing - *they haven't
+  paid anything yet* - because the risk turns round: a deposit that was taken
+  but never recorded means the customer gets asked for the whole new total.
 
 It also refuses to send if the job was repriced in another tab while the change
 was being written, rather than sending a difference nobody reviewed.
@@ -280,6 +283,11 @@ against recording *more* than is owed.
   voided so "what happened to that $8,250" is still answerable six months later,
   and every total in the business ignores it because they all sum `paid` and
   `refunded` only.
+- **No deposit at all?** If the crew recorded a payment and *nothing* was
+  actually handed over, don't correct it to $0 - a payment can't be zero, and the
+  form says so before you try. Take it off the books instead: the job goes back
+  to owing its whole total, and the crew stop owing the office a cut of money
+  they never took.
 - **Card payments are read-only here.** A card row is Stripe's word for money
   that really moved; editing our copy would leave the two disagreeing with no way
   to tell which is right. Refund it instead.

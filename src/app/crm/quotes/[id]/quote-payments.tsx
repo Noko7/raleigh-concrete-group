@@ -291,6 +291,10 @@ export function QuotePayments({
                           autoComplete="off"
                           disabled={fixing}
                         />
+                        {/* Said before they type, not after the server refuses
+                            it: "no deposit came in" is a common enough answer
+                            that the way to record it should be on screen. */}
+                        <em className="qp-void-hint">{t.fixZeroHint}</em>
                       </label>
                       <label className="crm-field">
                         <span>{t.fixMethod}</span>

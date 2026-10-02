@@ -1516,8 +1516,9 @@ export async function notifyChangeAnswered(
           ),
           // The deposit, spelled out, because "still to collect" on a job with
           // money already in it is the figure most likely to be misread as the
-          // whole total.
-          ...block("Already collected:", money(change.paidCents)),
+          // whole total. Left out when nothing has been paid: "$0.00 collected"
+          // is a line to read past, and "still to collect" already says it.
+          ...(change.paidCents > 0 ? block("Already collected:", money(change.paidCents)) : []),
           ...block("Still to collect:", money(dueCents)),
         ]
       : block("Price unchanged:", money(change.fromCents))),

@@ -358,6 +358,46 @@ test("a corrected deposit and a change order compose correctly", () => {
   assert.notEqual(uncorrected.dueCents, after.dueCents);
 });
 
+// ── No deposit ──────────────────────────────────────────────────────────────
+// Not every job takes one. These hold the two no-deposit paths still: a change
+// order on a job nobody has paid anything on, and a payment that was recorded
+// when no money came in at all - which is voided, never corrected to $0.
+
+test("a change order on a job with no deposit asks for the whole new total", () => {
+  // Nothing paid, so no rate has been frozen either - the office earns nothing
+  // until money actually moves, and that holds through a change.
+  const before = readLedger(toCents(5000), null, [], null);
+  assert.equal(before.dueCents, 500000);
+
+  const after = readLedger(toCents(5800), null, [], null);
+  assert.equal(after.paidCents, 0);
+  assert.equal(after.dueCents, 580000, "the full new total, nothing taken off it");
+  assert.equal(after.feeTotalCents, 0, "no rate is frozen until money moves");
+  assert.equal(after.feeDueNowCents, 0);
+  assert.equal(after.settled, false);
+});
+
+test("a payment recorded when nothing came in is voided, leaving the job untouched", () => {
+  // The crew recorded the whole $5,000 job; no money was handed over at all.
+  // The fix is to void the row - a payment is never $0 - and the ledger must
+  // then read exactly like a job nobody has paid on.
+  const total = toCents(5000);
+  const rate = INTRO_FEE_RATE; // frozen when the wrong row went in
+
+  const wrong = readLedger(total, null, [row({ amount_cents: total, method: "cash" })], rate);
+  assert.equal(wrong.settled, true);
+  assert.equal(wrong.feeDueNowCents, 75000, "the crew were billed $750 on money they never took");
+
+  const voided = readLedger(total, null, [row({ amount_cents: total, method: "cash", status: "voided" })], rate);
+  assert.equal(voided.paidCents, 0);
+  assert.equal(voided.dueCents, total, "the whole job is owed again");
+  assert.equal(voided.settled, false);
+  // The rate stays frozen (that is a promise, not a payment), but nothing is due
+  // to the office yet because nothing has been collected.
+  assert.equal(voided.feeTotalCents, 75000);
+  assert.equal(voided.feeDueNowCents, 0, "and the crew owe the office nothing until it does");
+});
+
 // ── What the crew may record by hand ────────────────────────────────────────
 
 test("card is never a method somebody can type in", () => {

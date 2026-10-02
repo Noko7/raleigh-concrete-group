@@ -290,7 +290,11 @@ export function ChangeOrder({
               })}
             </ul>
           )}
-          <p className="co-hint">{t.changeOrder.ledgerHint}</p>
+          {/* With nothing recorded the risk turns round. It is no longer a
+              deposit counted as the whole job, it is a deposit that WAS taken
+              and never written down - and then the customer gets asked for the
+              full amount. Same tick, saying the opposite thing. */}
+          <p className="co-hint">{counted.length === 0 ? t.changeOrder.ledgerHintNone : t.changeOrder.ledgerHint}</p>
         </div>
 
         <form
@@ -311,7 +315,7 @@ export function ChangeOrder({
         >
           <label className="co-check">
             <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
-            <span>{t.changeOrder.confirmTick}</span>
+            <span>{counted.length === 0 ? t.changeOrder.confirmTickNone : t.changeOrder.confirmTick}</span>
           </label>
 
           <div className="co-acts">
