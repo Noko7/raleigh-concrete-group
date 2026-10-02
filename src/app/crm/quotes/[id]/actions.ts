@@ -20,6 +20,7 @@ import {
   visitDateOf,
 } from "@/lib/crm/constants";
 import { STATUSES, type Status } from "@/lib/crm/env";
+import { toCents } from "@/lib/crm/fees";
 import { removeQuoteFromCalendar, syncQuoteToCalendar } from "@/lib/crm/gcal";
 import {
   alertOwner,
@@ -29,6 +30,7 @@ import {
   notifyBookingCancelled,
   notifyComplete,
   notifyCustomerRescheduled,
+  notifyChangeRequested,
   notifyCustomerScheduled,
   notifyOfflineApproval,
   notifyQuoteOptionAdded,
@@ -46,6 +48,7 @@ import {
   cancelMessage,
   cancelQueuedFor,
   clearAppointment,
+  cancelChange,
   confirmSchedule,
   conflictMessage,
   countJobsOn,
@@ -65,6 +68,7 @@ import {
   parseQuoteOptions,
   parseQuotePackages,
   recordOfflineAcceptance,
+  requestChange,
   sameOptions,
   samePackages,
   saveQuoteOptions,
@@ -73,10 +77,10 @@ import {
   updateQuoteResult,
   type OptionChoice,
 } from "@/lib/crm/queries";
-import { settleJobIfPaid } from "@/lib/crm/payments";
+import { jobLedger, settleJobIfPaid } from "@/lib/crm/payments";
 import type { Quote } from "@/lib/crm/types";
 import type { QuoteOptionDraft, QuotePackageDraft } from "@/lib/crm/constants";
-import type { FinishState, SaveState, ScheduleState } from "./types";
+import type { ChangeState, FinishState, SaveState, ScheduleState } from "./types";
 
 export async function saveQuote(_prev: SaveState, formData: FormData): Promise<SaveState> {
   const session = await getSession();
@@ -813,6 +817,142 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
       ? `Approval recorded and the day is booked.${texted}`
       : `Approval recorded and the job is ready to schedule.${texted}`,
   };
+}
+
+
+// The customer rang a week before the pour wanting the patio two feet wider.
+//
+// The job is agreed, the day is booked and half the money is in the bank, so
+// none of the existing paths fit: the quote editor is for a price nobody has
+// accepted, and an owner typing a new figure into it changes what the customer
+// owes without the customer having agreed to it. A change order is the price
+// moving WITH their say-so - described, sent, and answered on the same link
+// they approved the job on.
+//
+// The deposit needs nothing from this action, which is the part worth knowing:
+// the ledger is "what the job is worth now, minus what has been collected", so
+// the moment the customer approves a new total the balance is the difference and
+// the money already in stays exactly where it is.
+export async function sendChangeOrder(_prev: ChangeState, formData: FormData): Promise<ChangeState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { ok: false, error: "Missing job id." };
+  const note = String(formData.get("note") ?? "");
+  const raw = String(formData.get("amount") ?? "").trim();
+  if (raw === "") return { ok: false, error: "Enter the new total for the job." };
+
+  // The review step's tick, enforced here and not only by a disabled button.
+  //
+  // What the customer approves is a BALANCE - new total, less what they have
+  // paid - and the second half of that comes from whatever the crew recorded.
+  // A deposit entered as the whole job makes every figure on their screen wrong
+  // while the total itself looks perfectly fine, so somebody has to have looked
+  // at the payments. This is the record that they did.
+  if (String(formData.get("payments_checked") ?? "") !== "yes") {
+    return { ok: false, error: "Open the review step and confirm the recorded payments before sending this." };
+  }
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+
+  // The total the preview was drawn against. If the job has been repriced since
+  // - an owner editing the quote in another tab - then the difference the sender
+  // just reviewed is not the difference the customer would be shown, so this
+  // refuses rather than sending a figure nobody has actually looked at.
+  const shown = String(formData.get("shown_total") ?? "").trim();
+  if (shown !== "" && Number(shown) !== toCents(current.quote_amount)) {
+    return {
+      ok: false,
+      error: "The price on this job changed while you were writing. Close this and start the change again.",
+    };
+  }
+
+  const result = await requestChange(session, id, { note, newAmount: Number(raw) });
+  if (!result.ok || !result.quote) return { ok: false, error: result.error ?? "Could not send that change." };
+  const quote = result.quote;
+
+  // What they have actually handed over, read off the same ledger every other
+  // screen reads, so the figure in the log is the figure on the money card.
+  const { ledger } = await jobLedger(quote);
+
+  await addEvent(session, id, "change_requested", {
+    note: quote.change_note,
+    from: quote.quote_amount,
+    to: quote.change_amount,
+    paid_cents: ledger.paidCents,
+    // Who stood behind the figures. The balance the customer is being asked to
+    // approve rests on the recorded payments, and this is the record that
+    // somebody confirmed them before it went out.
+    payments_checked_by: session.staff.full_name || session.staff.email || "Staff",
+  });
+
+  // The customer's text carries the change and the link, never the figures -
+  // see notifyChangeRequested for why. Their answer comes back through
+  // /api/change-response.
+  const sent = await notifyChangeRequested(
+    {
+      id,
+      name: quote.name,
+      phone: quote.phone,
+      service: quote.service,
+      address: quote.address,
+      scheduled_date: quote.scheduled_date,
+      scheduled_time: quote.scheduled_time,
+      public_token: quote.public_token,
+      job_token: quote.job_token,
+    },
+    quote.change_note ?? "",
+  ).catch((): SendResult => ({ ok: false, provider: "unknown", detail: "Send failed" }));
+
+  await addEvent(session, id, "change_delivery", {
+    delivered: sent.ok,
+    to: sent.to ?? quote.phone,
+    held_until: sent.sendAfter ?? null,
+    error: sent.ok ? null : (sent.detail ?? null),
+  });
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+  revalidatePath("/job/[token]", "page");
+
+  return {
+    ok: true,
+    sent: sent.ok,
+    smsError: sent.ok ? undefined : sent.detail,
+    smsHeldUntil: sent.held ? sent.sendAfterLabel : undefined,
+    smsTo: sent.to ?? quote.phone,
+    message: `Change sent to ${quote.name.trim().split(/\s+/)[0] || quote.name} to approve. Nothing moves until they do.`,
+  };
+}
+
+// Took the figure back, or settled it on the phone instead. The price never
+// moved, so there is nothing to undo - this just takes the question off the
+// customer's page.
+export async function withdrawChangeOrder(_prev: ChangeState, formData: FormData): Promise<ChangeState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { ok: false, error: "Missing job id." };
+
+  const before = await getQuote(session, id);
+  const result = await cancelChange(session, id);
+  if (!result.ok) return { ok: false, error: result.error ?? "Could not withdraw that change." };
+
+  await addEvent(session, id, "change_withdrawn", {
+    note: before?.change_note ?? null,
+    to: before?.change_amount ?? null,
+  });
+  // Deliberately no customer text. They were asked a question and it has been
+  // taken away; a second text about a change that is no longer happening is
+  // noise, and whoever withdrew it is the person who just spoke to them.
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+  revalidatePath("/job/[token]", "page");
+  return { ok: true, message: "Change withdrawn. The price is unchanged." };
 }
 
 // An online request arrives with a slot the customer offered in case their job

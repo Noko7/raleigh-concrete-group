@@ -4,12 +4,13 @@ import { notFound, redirect } from "next/navigation";
 import { requireSession } from "@/lib/crm/auth";
 import { requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
+import { toCents } from "@/lib/crm/fees";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText, quoteSends } from "@/lib/crm/events";
 import { signMediaPath } from "@/lib/crm/media-token";
-import { jobLedger, payeeState } from "@/lib/crm/payments";
+import { correctableReason, jobLedger, payeeState } from "@/lib/crm/payments";
 import { usd } from "@/lib/crm/fees";
 import {
   getQuote,
@@ -27,6 +28,7 @@ import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
 import { PhotoUpload } from "../../photo-upload";
 import { AcceptOffline } from "./accept-offline";
+import { ChangeOrder } from "./change-order";
 import { CompleteCard } from "./complete-card";
 import { MessageLog } from "./message-log";
 import { JobSettings } from "./job-settings";
@@ -152,6 +154,16 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
     showSchedule ? payeeState(quote) : Promise.resolve(null),
   ]);
   const cardReady = money ? (payee?.ok ?? false) : false;
+
+  // A change to a job that is already agreed. The crew usually take the call,
+  // but the office takes it as often as not, so the same card is on both pages.
+  // Not on a closed-out job: re-opening the price on finished, settled work is
+  // an invoice dispute and belongs on the phone.
+  const showChange = showSchedule && quote.status !== "completed" && quote.status !== "paid";
+  const pendingChange =
+    quote.change_requested_at && quote.change_amount != null
+      ? { note: quote.change_note ?? "", amountCents: toCents(quote.change_amount) }
+      : null;
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
   const jobLink = `${SITE_ORIGIN}/job/${quote.job_token}`;
@@ -325,6 +337,38 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             </div>
           )}
 
+          {/* A change to a job that is already agreed - usually booked, often
+              with a deposit in. Straight after the day it would change. */}
+          {showChange && money && (
+            <div className="jb-o-step" id="change">
+              <ChangeOrder
+                id={quote.id}
+                customerName={quote.name}
+                totalCents={money.ledger.totalCents}
+                paidCents={money.ledger.paidCents}
+                // The rows the balance is worked out from, so the review step can
+                // show them rather than ask anyone to trust the total.
+                payments={money.rows.map((r) => ({
+                  id: r.id,
+                  method: r.method,
+                  amountCents: r.amount_cents,
+                  netCents: r.amount_cents - r.refunded_cents,
+                  status: r.status,
+                  when: r.paid_at ?? r.created_at,
+                  note: r.note,
+                }))}
+                bookedFor={
+                  quote.scheduled_date
+                    ? `${prettyDate(quote.scheduled_date)}${quote.scheduled_time ? ` at ${quote.scheduled_time}` : ""}`
+                    : null
+                }
+                workCompleted={Boolean(quote.completed_at)}
+                pending={pendingChange}
+                locale={locale}
+              />
+            </div>
+          )}
+
           {quote.status === "scheduled" && (
             <div className="jb-o-step" id="finish">
               <CompleteCard
@@ -358,6 +402,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 feeTotalCents={money.ledger.feeTotalCents}
                 feeCollectedCents={money.ledger.feeCollectedCents}
                 feeDueCents={money.ledger.feeDueNowCents}
+                feeSettledCents={money.ledger.feeSettledCents}
                 rows={money.rows.map((r) => ({
                   id: r.id,
                   method: r.method,
@@ -370,6 +415,11 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   // to reverse.
                   refundable:
                     r.method === "card" && r.status !== "pending" && Boolean(r.payment_intent_id && r.stripe_account_id),
+                  // The mirror image: only a HAND-recorded row can be restated,
+                  // and the same function the action uses decides it - so the
+                  // button is never offered for something the server would refuse.
+                  correctable: correctableReason(r) === null,
+                  note: r.note,
                 }))}
               />
             </div>

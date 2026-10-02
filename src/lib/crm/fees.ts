@@ -152,6 +152,14 @@ export type Ledger = {
   feeReservedCents: number;
   /** What a NEW payment may carry. Owed, less anything already reserved. */
   feeChargeableCents: number;
+  /**
+   * Of the fee, how much the contractor has already sent the office by hand
+   * against THIS job (fee_settlements with this job's quote_id). Always 0 from
+   * readLedger itself - settlements are applied on top by applySettlements, so
+   * the Money page, which subtracts settlements per contractor, never counts
+   * one twice.
+   */
+  feeSettledCents: number;
   /** Nothing left to collect from the customer. */
   settled: boolean;
   /** Of what has been collected, how much never touched Stripe. */
@@ -219,8 +227,39 @@ export function readLedger(
     feeDueNowCents: Math.max(0, Math.min(total, paidCents) - feeCollectedCents),
     feeReservedCents,
     feeChargeableCents: Math.max(0, feeOwedCents - feeReservedCents),
+    feeSettledCents: 0,
     settled: paidCents >= jobTotalCents && jobTotalCents > 0,
     offStripeCents,
+  };
+}
+
+/**
+ * Net a job's ledger of the fee the contractor has already handed the office.
+ *
+ * A contractor on a cash job owes the office its cut, and pays it by Zelle or
+ * Venmo; the owner writes that down as a settlement. The Money page always knew
+ * - it subtracts settlements from each contractor's balance - but the job pages
+ * read the ledger alone, so a crew who had paid up were still told "send this
+ * over" on the job itself, and the office's view of that job still said owed.
+ *
+ * Applied only to settlements recorded against this job, and only for the job
+ * screens and checkout (jobLedger). The Money page keeps calling readLedger
+ * directly and subtracting per contractor, so nothing is counted twice.
+ *
+ * It also has to reach feeChargeableCents, and that is the part with money on
+ * it: without this a card payment arriving after a settled cash fee would take
+ * the office's cut a second time.
+ */
+export function applySettlements(ledger: Ledger, settledCents: number): Ledger {
+  const settled = Math.max(0, Math.round(settledCents));
+  if (settled === 0) return ledger;
+  const feeOwedCents = Math.max(0, ledger.feeOwedCents - settled);
+  return {
+    ...ledger,
+    feeSettledCents: settled,
+    feeOwedCents,
+    feeDueNowCents: Math.max(0, ledger.feeDueNowCents - settled),
+    feeChargeableCents: Math.max(0, feeOwedCents - ledger.feeReservedCents),
   };
 }
 

@@ -115,6 +115,17 @@ export function crewEventText(e: QuoteEvent, t: Dict): string | null {
       return l.visitMoved;
     case "visit_cancelled":
       return l.visitCancelled;
+    // A change order is one of the few things on this log that changes what the
+    // crew are being paid to do, so all four states are on it rather than just
+    // the outcome: "sent, still waiting" is the one they come to the page for.
+    case "change_requested":
+      return l.changeSent;
+    case "change_accepted":
+      return l.changeAccepted;
+    case "change_declined":
+      return l.changeDeclined;
+    case "change_withdrawn":
+      return l.changeWithdrawn;
     case "date_confirmed":
       return l.dateConfirmed;
     case "date_changed":
@@ -127,6 +138,13 @@ export function crewEventText(e: QuoteEvent, t: Dict): string | null {
       return l.jobCompleted;
     case "payment_received":
       return l.paymentReceived;
+    // On the crew's log too, and not as a courtesy: a corrected payment changes
+    // what is left to collect and what they owe the office, so it is one of the
+    // few rows here that changes what they do next.
+    case "payment_corrected":
+      return l.paymentCorrected;
+    case "payment_voided":
+      return l.paymentVoided;
     default:
       return null;
   }
@@ -222,6 +240,35 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       }
       return `Customer approved the quote${chose}${wanted}${m.discount ? " ($150 credit)" : ""}`;
     }
+    // ── Change orders ──
+    // The figures are the point of every one of these rows: a change order is
+    // the only thing that moves the price of an agreed job, so the log has to
+    // answer "from what, to what" without anybody opening anything else.
+    case "change_requested": {
+      const money = (v: unknown) => dollars(v as number) ?? "no price";
+      const paid = m.paid_cents != null ? `, ${centsUsd(m.paid_cents)} already paid` : "";
+      // Who confirmed the recorded payments at the review step. The customer is
+      // approving a balance, so the row has to say who stood behind the half of
+      // it that came from the ledger.
+      const by = m.payments_checked_by ? `, payments checked by ${String(m.payments_checked_by)}` : "";
+      return `Change sent for approval: ${money(m.from)} → ${money(m.to)}${paid}${by}${m.note ? ` - "${String(m.note)}"` : ""}`;
+    }
+    case "change_delivery":
+      if (m.delivered) return `Change request texted to ${String(m.to ?? "the customer")}`;
+      if (m.held_until) return `Change request queued for ${String(m.to ?? "the customer")} (quiet hours, goes out ${heldWhen(m.held_until)})`;
+      return `Change request text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` - ${String(m.error)}` : ""}`;
+    case "change_accepted": {
+      const money = (v: unknown) => dollars(v as number) ?? "no price";
+      return `Customer approved the change: ${money(m.from)} → ${money(m.to)}`;
+    }
+    case "change_declined": {
+      const money = (v: unknown) => dollars(v as number) ?? "no price";
+      return `Customer turned down the change, price stays ${money(m.from)}`;
+    }
+    case "change_withdrawn": {
+      const money = (v: unknown) => dollars(v as number) ?? "no price";
+      return `Change withdrawn before the customer answered${m.to != null ? ` (would have been ${money(m.to)})` : ""}`;
+    }
     case "date_confirmed":
       return `Work day confirmed for ${String(m.to ?? "a date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
     case "date_changed":
@@ -308,6 +355,21 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     }
     case "payment_refunded":
       return `Refunded ${centsUsd(m.amount_cents)}`;
+    // ── Corrections to the ledger ──
+    // Both figures, always. "A payment was corrected" tells nobody whether the
+    // books moved by five dollars or by four thousand, and this row is the only
+    // record that the first figure was ever there.
+    case "payment_corrected": {
+      const moved =
+        m.from_method && m.to_method && m.from_method !== m.to_method
+          ? `, ${String(m.from_method)} → ${String(m.to_method)}`
+          : "";
+      return `Recorded payment corrected: ${centsUsd(m.from_cents)} → ${centsUsd(m.to_cents)}${moved}`;
+    }
+    case "payment_voided":
+      return `Recorded payment voided: ${centsUsd(m.amount_cents)}${
+        m.method ? ` (${String(m.method)})` : ""
+      }${m.reason ? ` - "${String(m.reason)}"` : ""}`;
     case "job_paid":
       return `Marked paid${
         m.amount_cents != null

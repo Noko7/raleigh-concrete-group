@@ -465,7 +465,12 @@ export async function moneyBoard(
     // does not. Jobs closed out before the payments ledger existed carry a
     // paid_at and a status of Paid, and no payment rows at all - so every
     // penny of them counts as still outstanding, forever.
-    if ((j.status === "paid" || j.paidAt) && j.payments.length === 0 && total > 0) {
+    // "No payment rows" has to mean no rows that COUNT, not no rows at all. A job
+    // whose only payment was voided (or never completed) is in exactly the state
+    // this alert is for - marked paid with nothing behind it - and counting the
+    // dead row would hide it.
+    const countedRows = j.payments.filter((p) => p.status === "paid" || p.status === "refunded");
+    if ((j.status === "paid" || j.paidAt) && countedRows.length === 0 && total > 0) {
       attention.push({
         kind: "paid_no_payments",
         jobId: j.id,

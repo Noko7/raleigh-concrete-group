@@ -141,7 +141,7 @@ All of it runs over Supabase's REST/Auth APIs (no extra packages).
 **What's included**
 - **Login + roles** (`/crm/login`): owners see everything; contractors see only jobs assigned to them (enforced by Postgres Row-Level Security).
 - **Quotes dashboard** (`/crm`): filter by status / assignee / search; pipeline `New → Quoted → Booked → Confirmed → Complete` (plus `Lost`).
-- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos, signed to whoever is looking** (the URL carries an HMAC over the path, the viewer's staff id and an expiry, so a link copied out of one person's page is refused on anybody else's), status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, copyable share links, **record an approval the customer gave on the phone** (and book the day agreed on that call), and a **Mark complete + paid** button.
+- **Quote detail** (`/crm/quotes/[id]`): customer info, **private photos, signed to whoever is looking** (the URL carries an HMAC over the path, the viewer's staff id and an expiry, so a link copied out of one person's page is refused on anybody else's), status + contractor assignment, quote amount + customer-facing summary, internal notes, activity log, copyable share links, **record an approval the customer gave on the phone** (and book the day agreed on that call), **send a change order on an agreed job** for the customer to re-approve, **correct or void a payment the crew recorded wrong**, and a **Mark complete + paid** button.
 - **Contractors** (`/crm/contractors`, owner only): **text an invite** and let them set up their own login, edit their details, reset a password, deactivate/reactivate, or delete.
 - **Settings** (`/crm/settings`): your name + alert number; owners also pick the **primary contractor** that new quotes auto-assign to.
 - **Customers** (`/crm/customers`): quotes auto-grouped by phone/email with won-value totals.
@@ -161,6 +161,7 @@ status drags - ever texts the customer.
    - **Or they say yes on the phone and never open the link.** "Approved over the phone?" on either job page records it: which optional lines they took, and the day agreed on that same call. Owner + crew get an **APPROVED BY PHONE** alert naming whoever wrote it down, and the customer gets the written version unless you turn that off. See "Approved on a call" below.
 4. The assigned contractor (or an owner) confirms one of those days on the job page → **this is what books it**: the customer is texted their date, the crew gets the brief, and it lands on Google Calendar (**Scheduled**).
 5. Changing that date later texts the customer that it moved, re-notifies the crew, and updates the calendar. The 2-day reminder resets so they still get one.
+   - **If the job itself changes** - they want the patio two feet wider, a week before the pour - that's a **change order**: the crew describe it, set the new total, and the customer approves it on the same link. The deposit keeps counting. See "Changes after a job is agreed" below.
 6. Two days before, a daily cron texts the customer a confirm link. "Need to reschedule" pings owner + contractor.
 7. **Mark completed** → customer gets a thank-you + Google review link. **Request payment** → payment instructions. **Mark paid** closes it out.
 
@@ -198,6 +199,115 @@ recorded from a phone call" on the crew's, the owner alert says who recorded it,
 and a quote that has already been answered - either way - is refused rather than
 overwritten.
 
+**Changes after a job is agreed**
+A customer rings a week before the pour: can the patio be two feet wider? The
+job is approved, the day is booked and half the money is in the bank, so there
+was nowhere good to put that. The only lever was an owner editing the price in
+the quote editor, which changes what the customer owes without the customer
+agreeing to it and leaves nothing on the job saying they did.
+
+**"Customer wants a change?"** on either job page is a small quote of its own:
+
+- **What's changing** - free text, and it goes to the customer word for word.
+- **The new total for the whole job** - not the difference. The box opens on
+  today's figure so it is an edit, not a number typed from scratch, and the card
+  works out the difference, the new balance and anything owed back as you type.
+- **Review it before sending.** Sending is two steps, not one. The second shows
+  the change exactly as the customer will read it *and* every payment recorded on
+  the job, with a tick - "I've checked the payments above are right" - that has
+  to be ticked before it will send. See "Why the review step exists" below.
+- Then the customer gets a text with the change and their usual quote link. **The
+  price does not move until they approve it.** One change at a time, and it can
+  be withdrawn while it's out.
+
+The customer sees it at the top of their own quote page, above the booking
+confirmation: what's changing, that **their date hasn't moved**, then the sums -
+price they approved, what this adds or takes off, the new total, what they have
+already paid, and what's left. Approve, or keep it as it was. Either answer texts
+the office and the crew.
+
+**The deposit needs no special handling, and that is by design.** A job's balance
+has always been *what the job is worth now, minus what has been collected* (see
+`readLedger` in `src/lib/crm/fees.ts`), and the office's cut is re-derived from
+the **frozen rate** against the current total. So on an $8,250 job with a $4,125
+deposit paid, approving a change to $9,400 leaves $5,275 to collect and the
+deposit sits exactly where it was - the only thing the change order writes is
+`quote_amount`. A change that drops the total *below* what has been paid reads as
+a refund owed, on both the crew's card and the customer's panel, rather than a
+negative balance.
+
+Not offered on a completed or paid job: re-opening the price on finished,
+settled work is an invoice dispute, and that belongs on the phone. Every change -
+sent, approved, turned down, withdrawn - is a row in the activity log with both
+figures on it, so "how did this job get to $9,400" is answerable from the log.
+
+**Why the review step exists**
+A change order is not really about a total, it is about a **balance**: what the
+customer reads is *new total, less what you've paid, leaves this*. The second
+half of that comes from whatever the crew recorded as paid - so if a 50% deposit
+went in as the whole job, every figure the customer is about to approve is wrong
+while the total itself looks perfectly fine.
+
+So the step before sending shows:
+- the change as the customer will read it, with their date confirmed as unmoved;
+- the same five lines they will see (price approved → what this adds → new total →
+  already paid → left to pay);
+- **every payment recorded on the job**, with voided and incomplete ones struck
+  through so it is obvious which figures the balance was actually built from;
+- a warning when the job already reads as paid in full and the work isn't
+  finished - the exact shape of a deposit entered as the whole job;
+- a tick confirming the payments are right, which the **server** requires, not
+  just a disabled button. Whoever ticked it is recorded on the activity log row.
+  On a job with **no deposit** the tick says the opposite thing - *they haven't
+  paid anything yet* - because the risk turns round: a deposit that was taken
+  but never recorded means the customer gets asked for the whole new total.
+
+It also refuses to send if the job was repriced in another tab while the change
+was being written, rather than sending a difference nobody reviewed.
+
+**Fixing a payment the crew recorded wrong** (owner only)
+A contractor takes a 50% deposit and records the whole job as paid. Nothing
+stopped them: the amount box on "Record a payment" is pre-filled with the
+outstanding balance, and on an untouched job that is the full total, so the
+mistake is one tap. Both the app check and the database trigger only guard
+against recording *more* than is owed.
+
+**CRM → job page → Money on this job → Correct** (on the row itself) fixes it:
+- **Correct** changes the amount, the method and the note. It changes the
+  **record only** - no money moves in either direction. If money actually needs
+  to go *back* to the customer, that is the Refund button instead, and the card
+  says so before you type a figure.
+- **Take this off the books** voids a row that should never have existed - a
+  duplicate, or a payment recorded against the wrong job. It needs a reason,
+  which is written onto the row. The row is **not deleted**: it stays visible as
+  voided so "what happened to that $8,250" is still answerable six months later,
+  and every total in the business ignores it because they all sum `paid` and
+  `refunded` only.
+- **No deposit at all?** If the crew recorded a payment and *nothing* was
+  actually handed over, don't correct it to $0 - a payment can't be zero, and the
+  form says so before you try. Take it off the books instead: the job goes back
+  to owing its whole total, and the crew stop owing the office a cut of money
+  they never took.
+- **Card payments are read-only here.** A card row is Stripe's word for money
+  that really moved; editing our copy would leave the two disagreeing with no way
+  to tell which is right. Refund it instead.
+- Correcting a payment **re-syncs whether the job counts as paid**, in both
+  directions. This is the part that matters: the wrong figure had stamped the job
+  `paid_at`, which would have kept it out of "customers still owe" on the Money
+  page forever. Lowering the figure takes that stamp off and drops the status
+  back to whatever stage the *work* is at; a correction upward can finish paying
+  a job off.
+- The crew get a text, because two numbers they act on have just moved: what is
+  left to collect, and what they owe the office. Whoever made the correction
+  isn't texted their own click. Both figures land on the activity log.
+
+Owner only, enforced on the server. `least-privilege.sql` revokes `UPDATE` on
+`quote_payments` from every signed-in user precisely so a contractor cannot
+restate their own entry - the cash board is settled from these rows - so
+corrections go through the service role after the role check. Needs
+`supabase/payment-corrections.sql`, which only widens one check constraint to
+allow the `voided` status.
+
 **Owner alerts** are limited to the moments worth interrupting you: new lead,
 approved, declined, date confirmed or moved, can't-confirm, completed, and paid.
 
@@ -228,7 +338,7 @@ there. So:
   clicking, which used to mean the office texting itself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/quote-packages.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql` and `supabase/appointments.sql` in the SQL Editor. Once
+1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/quote-packages.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql`, `supabase/appointments.sql`, `supabase/change-orders.sql` and `supabase/payment-corrections.sql` in the SQL Editor. Once
    `supabase/payments.sql` is in (see **Getting paid** below), run
    `supabase/least-privilege.sql` last - it is what stops a contractor rewriting
    the money columns on their own jobs.

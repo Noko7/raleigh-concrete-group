@@ -46,7 +46,13 @@ export type QuotePayment = {
   // The office's cut taken out of this payment. Only ever non-zero on a card
   // row, where Stripe moved it as the application fee.
   fee_cents: number;
-  status: "pending" | "paid" | "failed" | "refunded";
+  // 'voided' is a row that should never have existed - a typo, a duplicate, a
+  // payment against the wrong job. Deliberately NOT 'refunded': that one means
+  // money really went back to the customer and belongs on the ledger on the day
+  // it moved. A voided row counted nothing and is summed nowhere, because every
+  // total in the business filters on 'paid' or 'refunded'. See
+  // supabase/payment-corrections.sql.
+  status: "pending" | "paid" | "failed" | "refunded" | "voided";
   // Whose account received it. Stored per payment because a job can be
   // reassigned after money has moved.
   stripe_account_id: string | null;
@@ -159,6 +165,21 @@ export type Quote = {
   visit_crew_reminded_at: string | null;
   // 48h nudge: a sent quote nobody has accepted or declined.
   quote_followup_sent_at: string | null;
+  // ── A change order waiting on the customer ────────────────────────────────
+  // The job is already agreed and usually already booked, and the customer has
+  // asked for something different. These four are written together and cleared
+  // together, so "is a change waiting?" is just change_requested_at being set.
+  // Null on every row until supabase/change-orders.sql has been run.
+  //
+  // change_amount is the proposed NEW TOTAL for the whole job, never the
+  // difference - every screen derives the delta, so there is one stored number
+  // and no way for the two to disagree. The deposit needs nothing: the ledger
+  // is total-minus-collected, so raising the total raises the balance and
+  // leaves what has been paid exactly where it is.
+  change_note: string | null;
+  change_amount: number | null;
+  change_requested_at: string | null;
+  change_requested_by: string | null;
 };
 
 // One line item on a quote. A quote either has none of these (the original

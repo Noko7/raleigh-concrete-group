@@ -470,6 +470,66 @@ const en = {
     answerAll: "Mark every optional line took it or left it first.",
     tookNothing: "They left every line. That's a declined quote - ask the office to mark it lost.",
   },
+  // Moving the price on a job that is already agreed, with the customer's say-so.
+  // The crew take the call that starts this, so the card is on their page too.
+  changeOrder: {
+    title: "Customer wants a change?",
+    lead: "Say what's changing and what the job comes to now. They approve it on the same link they approved the job on, and nothing moves until they do.",
+    open: "Send a change for approval",
+    noteLabel: "What's changing",
+    notePlaceholder: "Widening the patio from 12ft to 14ft, which adds about a yard of concrete and an extra hour of prep.",
+    noteHint: "This goes to the customer word for word, so write it for them.",
+    amountLabel: "New total for the whole job",
+    amountHint: "Right now it's {now}. Change that figure to the new all-in price, not the difference.",
+    difference: "Difference",
+    alreadyPaid: "Already paid",
+    newBalance: "New balance",
+    sameTotal: "That's the total they already agreed to.",
+    refundWarn: "That's less than they've already paid, so we'd owe them {amount} back. Worth a call before you send it.",
+    sendHint: "{name} gets a text with the change and a link. Their date doesn't move.",
+    // ── The preview, between composing a change and sending it ──
+    // A change order is built on the job's balance, and the balance is built on
+    // whatever the crew recorded as paid. If a deposit went in as the whole job,
+    // every figure the customer is about to read is wrong - so the step before
+    // sending shows the payments it was all worked from.
+    review: "Review it before sending",
+    reviewTitle: "This is what {name} will see",
+    reviewBack: "Back to the change",
+    reviewDateHeld: "Their date doesn't move: {when}",
+    reviewApproved: "Price they approved",
+    reviewAdds: "This change adds",
+    reviewTakesOff: "This change takes off",
+    reviewNewTotal: "New total",
+    reviewPaid: "They've already paid",
+    reviewLeft: "Left to pay",
+    reviewBack2You: "Back to them",
+    ledgerTitle: "Payments recorded on this job",
+    ledgerNone: "Nothing has been recorded as paid on this job yet.",
+    ledgerHint:
+      "The balance above is worked out from these. If one of them is wrong, ask the office to correct it before you send this - the customer approves a balance, not just a total.",
+    ledgerVoided: "voided, not counted",
+    // The exact shape of the bug this preview exists to catch.
+    paidInFullWarn:
+      "Careful: this job already reads as paid in full and the work isn't finished. If only a deposit actually came in, the balance above is wrong. Ask the office to correct the payment before you send this.",
+    confirmTick: "I've checked the payments above are right",
+    // No deposit. The tick is now a statement that nothing has been taken.
+    confirmTickNone: "I've checked - they haven't paid anything yet",
+    ledgerHintNone:
+      "So they'll be asked for the whole new total. If they did hand over a deposit that was never recorded, record it first.",
+    sendTo: "Send it to {name}",
+    send: "Send it for approval",
+    sending: "Sending…",
+    cancel: "Never mind",
+    waitingTitle: "Change waiting on the customer",
+    waitingLead: "{name} has the change and hasn't answered yet. The price is still the old one until they approve it.",
+    waitingHint: "You'll get a text the moment they answer. If they'd rather settle it on the phone, withdraw it and the price stays as it is.",
+    withdraw: "Withdraw this change",
+    withdrawing: "Withdrawing…",
+    nowTotal: "Agreed total",
+    proposed: "If they approve",
+    textFailed: "The text to {to} did NOT go out, so they have no link to answer. Give them a call.",
+    textHeld: "Quiet hours - their text goes out {when}.",
+  },
   contractorJob: {
     title: "Job Details",
     customer: "Customer",
@@ -535,12 +595,18 @@ const en = {
       visitConfirmed: "Quote visit confirmed",
       visitMoved: "Quote visit moved",
       visitCancelled: "Quote visit cancelled",
+      changeSent: "Change sent to the customer to approve",
+      changeAccepted: "Customer approved the change",
+      changeDeclined: "Customer turned down the change",
+      changeWithdrawn: "Change withdrawn",
       dateConfirmed: "Work day confirmed",
       dateChanged: "Work day moved",
       bookingCancelled: "Work day released",
       customerConfirmed: "Customer confirmed the day",
       jobCompleted: "Work marked completed",
       paymentReceived: "Payment received",
+      paymentCorrected: "The office corrected a recorded payment",
+      paymentVoided: "The office took a recorded payment off this job",
     },
     visitTitle: "Need to see it in person?",
     visitLead:
@@ -663,7 +729,11 @@ const en = {
     officeCut: "Office cut",
     feeTaken: "taken by card",
     feeLeft: "still owed",
+    feeSettledLabel: "sent over by hand",
     owedNone: "Nothing owed - it came out of the card payment.",
+    // The fee was paid, by the crew, after the fact. Not "it came out of the
+    // card payment", which on a cash job is simply untrue.
+    owedSettled: "Paid - you sent the office its cut. Nothing owed on this job.",
     owedCard: "Comes out of card payments automatically.",
     owedCash: "Send this over by Zelle or Venmo when you get a chance.",
     cardTitle: "Text them a card link",
@@ -687,6 +757,33 @@ const en = {
     refunding: "Refunding…",
     // {amount} is the sum going back to the customer.
     refundAsk: "Send {amount} back to the customer? The office fee goes back with it.",
+    // ── Correcting a recorded payment (owner only) ──
+    // The crew took a deposit and recorded the whole job. Nothing refused it,
+    // and until now nothing could put it right outside the Supabase console.
+    fixOpen: "Correct",
+    fixTitle: "Correct what was recorded",
+    // Deliberately says what this is NOT. An owner reaching for this button
+    // while a customer is owed money needs to be sent to the refund instead.
+    fixLead:
+      "Use this when the figure keyed in isn't what the customer actually handed over. It changes the record only - no money moves either way. If money needs to go BACK to the customer, refund it instead.",
+    fixWas: "Recorded as",
+    fixAmount: "What they actually paid",
+    fixMethod: "How they actually paid",
+    fixNote: "Note (what was wrong)",
+    fixSave: "Save the correction",
+    fixSaving: "Saving…",
+    fixCancel: "Leave it",
+    fixCardOnly: "Card payments come from Stripe and can't be edited here.",
+    fixZeroHint: "Nothing came in at all? Don't enter $0 - take it off the books below.",
+    voidOpen: "Take this off the books",
+    // {amount} is the figure coming off.
+    voidAsk:
+      "Void {amount}? Use this when the payment never happened at all - a duplicate, or money recorded against the wrong job. The row stays visible as voided so the books can still be reconciled.",
+    voidReason: "Why is it coming off?",
+    voidReasonHint: "Goes on the record, and the crew are told.",
+    voidGo: "Void this payment",
+    voiding: "Voiding…",
+    voided: "voided",
     methods: {
       card: "Card",
       cash: "Cash",

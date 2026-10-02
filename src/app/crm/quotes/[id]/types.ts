@@ -45,3 +45,18 @@ export function preferredSlots(
 // Closing a job out. Same shape as ScheduleState, named separately because the
 // one thing it reports that matters is the refusal: no before/after photos.
 export type FinishState = { ok: boolean; error?: string; message?: string };
+
+// Sending a change order, and withdrawing one. Shaped like ScheduleState plus
+// the delivery fields SaveState carries, because a change order IS a little
+// quote: the thing that can go wrong is the customer's text not arriving, and a
+// screen that says "sent" over a text that bounced leaves the crew waiting on an
+// answer to a question nobody was asked.
+export type ChangeState = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  sent?: boolean;
+  smsError?: string;
+  smsHeldUntil?: string;
+  smsTo?: string;
+};

@@ -41,6 +41,7 @@ export function JobPayments({
   paidCents,
   dueCents,
   feeDueCents,
+  feeSettledCents = 0,
   rows,
 }: {
   id: string;
@@ -50,6 +51,8 @@ export function JobPayments({
   paidCents: number;
   dueCents: number;
   feeDueCents: number;
+  /** What they have already sent the office for this job. */
+  feeSettledCents?: number;
   rows: PaymentRow[];
 }) {
   const t = dict(locale).payments;
@@ -96,7 +99,13 @@ export function JobPayments({
         <span className="jp-fee-label">{t.owedTitle}</span>
         <strong>{usd(feeDueCents)}</strong>
         <span className="jp-fee-note">
-          {feeDueCents <= 0 ? t.owedNone : cardReady && dueCents > 0 ? t.owedCard : t.owedCash}
+          {feeDueCents <= 0
+            ? feeSettledCents > 0
+              ? t.owedSettled
+              : t.owedNone
+            : cardReady && dueCents > 0
+              ? t.owedCard
+              : t.owedCash}
         </span>
       </div>
 
@@ -191,7 +200,16 @@ export function JobPayments({
           <h3 className="jp-history-title">{t.history}</h3>
           <ul className="jp-history">
             {rows.map((r) => (
-              <li key={r.id} className={r.status === "pending" ? "jp-row jp-row-pending" : "jp-row"}>
+              <li
+                key={r.id}
+                className={
+                  r.status === "voided"
+                    ? "jp-row jp-row-void"
+                    : r.status === "pending"
+                      ? "jp-row jp-row-pending"
+                      : "jp-row"
+                }
+              >
                 <span className="jp-row-how">{t.methods[r.method as PaymentMethod] ?? r.method}</span>
                 <span className="jp-row-when">
                   {new Date(r.paid_at ?? r.created_at).toLocaleDateString("en-US", {
@@ -199,6 +217,11 @@ export function JobPayments({
                     day: "numeric",
                   })}
                   {r.status === "pending" && ` · ${t.waiting}`}
+                  {/* The office took this one off the books. It has to say so
+                      here too: the crew recorded it, and a row the two screens
+                      count differently is how somebody ends up chasing a balance
+                      that is already settled - or not chasing one that isn't. */}
+                  {r.status === "voided" && ` · ${t.voided}`}
                   {r.refunded_cents > 0 && ` · ${usd(r.refunded_cents)} ${t.refunded}`}
                 </span>
                 <span className="jp-row-amount">{usd(r.amount_cents - r.refunded_cents)}</span>

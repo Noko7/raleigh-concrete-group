@@ -1447,6 +1447,98 @@ export async function notifyCustomerScheduled(q: QuoteInfo): Promise<void> {
   ).catch(() => {});
 }
 
+
+// ── 7b. Change orders ───────────────────────────────────────────────────────
+// The job is agreed, usually booked, and the customer has asked for something
+// different. These three cover the whole round trip: out to the customer, and
+// their answer back to the office and the crew.
+
+/**
+ * The customer's copy: what is changing, and the link to answer it on.
+ *
+ * No figures, which is worth a note because this is the message where the
+ * temptation is strongest. The rule above still holds, and holds hardest here: a
+ * price in a text is a price with no scope beside it, and a CHANGE in price with
+ * no scope beside it is the version of that mistake most likely to start an
+ * argument. The old total, the new one, the difference, what they have already
+ * paid and what is left are all on the quote page, one tap away, laid out next
+ * to the words describing the work - which is the only place a number like that
+ * can be read fairly.
+ *
+ * What does go in: that their date has not moved, and that nothing happens
+ * unless they say yes. Those are the two things a customer reading "the price of
+ * your job is changing" is actually frightened of.
+ */
+export async function notifyChangeRequested(q: QuoteInfo, note: string): Promise<SendResult> {
+  return sendSmsResult(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      "here's the change you asked about, ready for you to look over:",
+      "",
+      note,
+      "",
+      q.scheduled_date ? `Your date doesn't move: ${dayAndTime(q)}.` : null,
+      q.scheduled_date ? "" : null,
+      // The page it opens shows the new total beside what has already been paid
+      // and what that leaves - the deposit is counted there, not here.
+      "See what it changes and approve it here:",
+      quoteLink(q.public_token ?? ""),
+      "",
+      "Nothing changes until you approve it. Questions, just call.",
+      "",
+      BUSINESS,
+    ]),
+    { quoteId: q.id, kind: "change_requested", role: "customer" },
+  );
+}
+
+/** Their answer, to the office and the crew. */
+export async function notifyChangeAnswered(
+  q: QuoteInfo,
+  accepted: boolean,
+  change: { note: string; fromCents: number; toCents: number; paidCents: number },
+  contractorPhone?: string | null,
+): Promise<void> {
+  const diff = change.toCents - change.fromCents;
+  const dueCents = Math.max(0, change.toCents - change.paidCents);
+
+  const msg = text([
+    accepted ? "CHANGE APPROVED" : "CHANGE TURNED DOWN",
+    "",
+    ...block("Customer:", q.name),
+    ...block("They asked for:", change.note),
+    ...(accepted
+      ? [
+          ...block(
+            "New total:",
+            `${money(change.toCents)} (was ${money(change.fromCents)}, ${diff > 0 ? "+" : "-"}${money(Math.abs(diff))})`,
+          ),
+          // The deposit, spelled out, because "still to collect" on a job with
+          // money already in it is the figure most likely to be misread as the
+          // whole total. Left out when nothing has been paid: "$0.00 collected"
+          // is a line to read past, and "still to collect" already says it.
+          ...(change.paidCents > 0 ? block("Already collected:", money(change.paidCents)) : []),
+          ...block("Still to collect:", money(dueCents)),
+        ]
+      : block("Price unchanged:", money(change.fromCents))),
+    // The day is the thing a crew checks next, and a change order never moves
+    // it - so saying so here stops somebody going to look.
+    q.scheduled_date ? `Day is unchanged: ${dayAndTime(q)}.` : null,
+    "",
+    q.job_token ? jobLink(q.job_token) : null,
+  ]);
+
+  await alertOwner(msg, null, { quoteId: q.id, kind: accepted ? "change_accepted" : "change_declined" });
+  if (contractorPhone) {
+    await sendSms(contractorPhone, msg, {
+      quoteId: q.id,
+      kind: accepted ? "change_accepted" : "change_declined",
+      role: "crew",
+    }).catch(() => {});
+  }
+}
+
 // The date moved. Say so plainly rather than re-sending the "booked" text, which
 // reads as a mistake when the customer already had a different day. The old and
 // new times each get their own line: this is the message most likely to be
@@ -2103,6 +2195,56 @@ export function assignmentMessage(q: QuoteInfo, contractorName?: string | null):
     "",
     `Please give ${firstName(q.name)} a call to introduce yourself and confirm the details.`,
   ]);
+}
+
+// ── A payment the office had to correct ─────────────────────────────────────
+// The crew recorded one figure and it was not what happened. They are told
+// because two numbers they act on have just moved: what is left to collect from
+// the customer, and what they owe the office.
+//
+// Never sent to whoever did it. The office corrects these from a screen that
+// already shows them the result.
+export async function notifyPaymentCorrected(input: {
+  q: QuoteInfo;
+  contractorPhone?: string | null;
+  actorPhone?: string | null;
+  fromCents: number;
+  /** Null means the row was voided rather than re-figured. */
+  toCents: number | null;
+  method: string;
+  who: string;
+  dueCents: number;
+  feeOwedCents: number;
+}): Promise<void> {
+  const { q, fromCents, toCents, method, who } = input;
+  const what =
+    toCents === null
+      ? `${money(fromCents)} recorded as ${method} has been taken off this job - it should not have been there.`
+      : `The ${money(fromCents)} recorded as ${method} was wrong. It is now ${money(toCents)}.`;
+
+  const msg = text([
+    "PAYMENT CORRECTED",
+    "",
+    ...block("Customer:", q.name),
+    what,
+    "",
+    ...block("Still to collect:", money(input.dueCents)),
+    // The reason the crew care beyond curiosity: their own balance with the
+    // office is a percentage of what the customer has actually handed over.
+    ...block("You owe the office:", money(input.feeOwedCents)),
+    `Corrected by ${who}.`,
+    "",
+    q.job_token ? jobLink(q.job_token) : null,
+  ]);
+
+  await alertOwner(msg, input.actorPhone, { quoteId: q.id, kind: "payment_corrected" });
+  if (input.contractorPhone && !samePhone(input.contractorPhone, input.actorPhone)) {
+    await sendSms(input.contractorPhone, msg, {
+      quoteId: q.id,
+      kind: "payment_corrected",
+      role: "crew",
+    }).catch(() => {});
+  }
 }
 
 export async function notifyAssignment(

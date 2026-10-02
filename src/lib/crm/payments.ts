@@ -5,6 +5,7 @@
 import { SITE_ORIGIN } from "./env";
 import {
   applicationFeeFor,
+  applySettlements,
   feeRateFor,
   feeTotalCents,
   readLedger,
@@ -371,12 +372,25 @@ export async function jobLedger(
 ): Promise<{ ledger: Ledger; rows: QuotePayment[]; rate: number }> {
   await expireStalePending(quote.id);
   const fee = opts.freeze ? await ensureFeeOnJob(quote) : await previewFee(quote);
-  const rows = await listPaymentsAdmin(quote.id);
+  const [rows, settledCents] = await Promise.all([listPaymentsAdmin(quote.id), settledOnJob(quote.id)]);
   return {
-    ledger: readLedger(toCents(quote.quote_amount), fee.feeTotalCents, rows),
+    // Net of any fee the contractor has already sent the office for this job -
+    // see applySettlements for why that has to happen here and not in readLedger.
+    ledger: applySettlements(readLedger(toCents(quote.quote_amount), fee.feeTotalCents, rows), settledCents),
     rows,
     rate: fee.rate,
   };
+}
+
+/** Fee the contractor has already sent the office against this one job, in cents. */
+async function settledOnJob(quoteId: string): Promise<number> {
+  if (!UUID_RE.test(quoteId)) return 0;
+  const res = await pgAdmin(`fee_settlements?quote_id=eq.${quoteId}&select=amount_cents`);
+  // A database without the table, or any read failure, reads as nothing settled
+  // - the old behaviour - rather than taking the job page down with it.
+  if (!res.ok) return 0;
+  const rows = (await res.json()) as { amount_cents: number }[];
+  return rows.reduce((sum, r) => sum + (Number(r.amount_cents) || 0), 0);
 }
 
 // ── Can this job take a card at all? ────────────────────────────────────────
@@ -576,4 +590,157 @@ export async function settleJobIfPaid(quoteId: string): Promise<void> {
   // Logged once, when the money finished arriving - not again when the status
   // catches up weeks later.
   if (patch.paid_at) await addAdminEvent(quoteId, "job_paid", { amount_cents: paid });
+}
+
+// ── Correcting what somebody recorded ───────────────────────────────────────
+// A contractor took a 50% deposit and recorded the whole job as paid. No money
+// moved wrongly - the figure on the row is simply not what happened - so this
+// is not a refund, and treating it as one would put an imaginary outgoing on a
+// ledger that gets reconciled against a bank statement.
+//
+// Owner only, enforced in the action above the call. Service role on the write
+// for the reason least-privilege.sql spells out: UPDATE on this table is
+// revoked from authenticated precisely so a contractor cannot restate their own
+// entry, and the office's ability to fix one must not reopen that door.
+//
+// Only hand-recorded rows. A card row is Stripe's word for money that really
+// moved, and editing our copy of it would leave the two disagreeing with no way
+// to tell which is right.
+
+/** Can this row be corrected or voided at all, and if not, why not. */
+export function correctableReason(row: QuotePayment): string | null {
+  if (row.method === "card") {
+    return "Card payments come from Stripe and can't be edited here. Refund it instead if the money needs to go back.";
+  }
+  if (row.status === "voided") return "That payment is already voided.";
+  if (row.status !== "paid") {
+    return "Only a recorded payment can be corrected. This one never completed.";
+  }
+  if (row.refunded_cents > 0) {
+    return "Part of this payment has already been refunded, so the record has to stand. Call the office.";
+  }
+  return null;
+}
+
+/**
+ * Change the amount, method or note on a hand-recorded payment.
+ *
+ * `collectedElsewhereCents` is what the job has taken on its OTHER rows - the
+ * caller works it out, because the ceiling on a correction is the same ceiling
+ * recording has (never more than the job is worth) and this row has to be left
+ * out of that sum or it would be measured against itself.
+ */
+export async function correctRecordedPaymentAdmin(
+  row: QuotePayment,
+  patch: { amountCents: number; method: string; note: string | null },
+): Promise<{ ok: boolean; error?: string; payment?: QuotePayment }> {
+  // The database says fee_cents < amount_cents. Hand-recorded rows carry a zero
+  // fee so this cannot bite in practice, but a constraint violation surfacing as
+  // "could not save" would be a bad way to find that out.
+  if (patch.amountCents <= row.fee_cents) {
+    return { ok: false, error: "That's less than the office's cut already taken out of this payment." };
+  }
+
+  const res = await pgAdmin(`quote_payments?id=eq.${row.id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      amount_cents: patch.amountCents,
+      method: patch.method,
+      note: patch.note,
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    console.error("[payments] correction failed", row.id, detail);
+    return { ok: false, error: "Could not save that correction. Please try again." };
+  }
+  const rows = (await res.json()) as QuotePayment[];
+  return { ok: true, payment: rows[0] };
+}
+
+/**
+ * Take a payment off the books without pretending money went back.
+ *
+ * The row stays in the table with its reason written into the note, because
+ * deleting it would leave the office unable to answer "what happened to that
+ * $8,250" - and that question gets asked precisely when somebody is trying to
+ * reconcile the month.
+ */
+export async function voidRecordedPaymentAdmin(
+  row: QuotePayment,
+  reason: string,
+): Promise<{ ok: boolean; error?: string }> {
+  // The reason rides on the row, after whatever was already there. Capped to
+  // the column's 500, trimmed from the front of the ORIGINAL note rather than
+  // the reason, so the explanation is never the half that gets cut.
+  const tail = `Voided: ${reason}`;
+  const head = (row.note ?? "").trim();
+  const note = head ? `${head.slice(0, Math.max(0, 500 - tail.length - 3))} - ${tail}`.slice(0, 500) : tail.slice(0, 500);
+
+  const res = await pgAdmin(`quote_payments?id=eq.${row.id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ status: "voided", note }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    console.error("[payments] void failed", row.id, detail);
+    return { ok: false, error: "Could not void that payment. Please try again." };
+  }
+  return { ok: true };
+}
+
+/**
+ * Put a job's paid flag back in line with what has actually been collected.
+ *
+ * settleJobIfPaid only moves one way - it stamps a job that has finished being
+ * paid - because every caller it had could only ever increase what was
+ * collected. A correction can DECREASE it, and that direction has to exist too:
+ * the whole point of the deposit case is a job wearing a paid_at it never
+ * earned, and leaving that stamp on would keep it out of "customers still owe"
+ * on the Money page for good.
+ *
+ * Both directions in one function so they cannot disagree about where the line
+ * is. Status only falls back as far as the work has actually got to: a job whose
+ * concrete is poured stays `completed`, it just stops claiming to be paid for.
+ */
+export async function resyncJobPaidState(quoteId: string): Promise<void> {
+  if (!UUID_RE.test(quoteId)) return;
+  const res = await pgAdmin(
+    `quote_requests?id=eq.${quoteId}&select=quote_amount,status,paid_at,completed_at,scheduled_date&limit=1`,
+  );
+  if (!res.ok) return;
+  const quote = ((await res.json()) as {
+    quote_amount?: number | null;
+    status?: string;
+    paid_at?: string | null;
+    completed_at?: string | null;
+    scheduled_date?: string | null;
+  }[])[0];
+  if (!quote) return;
+
+  const totalCents = toCents(quote.quote_amount);
+  const rows = await listPaymentsAdmin(quoteId);
+  const paid = rows
+    .filter((r) => r.status === "paid" || r.status === "refunded")
+    .reduce((sum, r) => sum + r.amount_cents - r.refunded_cents, 0);
+  const settled = totalCents > 0 && paid >= totalCents;
+
+  const patch: Record<string, unknown> = {};
+  if (settled && !quote.paid_at) patch.paid_at = new Date().toISOString();
+  if (settled && quote.status === "completed") patch.status = "paid";
+  if (!settled && quote.paid_at) patch.paid_at = null;
+  if (!settled && quote.status === "paid") {
+    // Back to the stage the WORK is at, which is the only thing a payment
+    // correction has not changed.
+    patch.status = quote.completed_at ? "completed" : quote.scheduled_date ? "scheduled" : "approved";
+  }
+  if (Object.keys(patch).length === 0) return;
+
+  await pgAdmin(`quote_requests?id=eq.${quoteId}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(patch),
+  });
 }
