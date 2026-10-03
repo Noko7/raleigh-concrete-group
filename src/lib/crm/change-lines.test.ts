@@ -13,7 +13,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { boughtLines, optionsTotal, sameChangeLines } from "./constants.ts";
+import { boughtLines, changeStartLines, optionsTotal, sameChangeLines } from "./constants.ts";
 
 const opt = (
   title: string,
@@ -91,4 +91,32 @@ test("amounts compare as money whether they arrive as text or numbers", () => {
     ),
     true,
   );
+});
+
+// ── Where a change starts ───────────────────────────────────────────────────
+// The bug this guards: Dave's $8,000 patio needed $1,390 more materials. The
+// breakdown started empty, so one "Materials $1,390" line became the whole new
+// price and the screen offered to refund him $2,610.
+
+test("a one-price job starts from its agreed total, so a new line adds to it", () => {
+  const start = changeStartLines([], "8000.00", "Patio");
+  assert.deepEqual(start, [{ title: "Patio, as approved", description: null, amount: 8000 }]);
+  const withMaterials = [...start, { title: "Materials", description: null, amount: 1390 }];
+  assert.equal(optionsTotal(withMaterials), 9390);
+  // Untouched, it is the same job: not a change.
+  assert.equal(sameChangeLines(start, changeStartLines([], 8000, "Patio")), true);
+});
+
+test("a job with its own lines starts from those lines", () => {
+  const bought = [
+    { title: "Materials", description: null, amount: 4200 },
+    { title: "Labor", description: null, amount: 3800 },
+  ];
+  assert.deepEqual(changeStartLines(bought, 8000, "Patio"), bought);
+});
+
+test("no service name still reads as a sentence; no price starts empty", () => {
+  assert.equal(changeStartLines([], 500, null)[0].title, "Original job, as approved");
+  assert.equal(changeStartLines([], "  ", " ")[0]?.title ?? null, null);
+  assert.deepEqual(changeStartLines([], null, "Patio"), []);
 });

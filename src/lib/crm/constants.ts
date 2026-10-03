@@ -371,6 +371,25 @@ export function boughtLines(
     .map((o) => ({ title: o.title, description: o.description || null, amount: optionAmount(o) }));
 }
 
+// Where a change's breakdown starts: the job exactly as the customer agreed it.
+//
+// A change is nearly always "the same job, plus this", so the lines have to
+// start from the price already agreed. Starting empty was a trap: on a job
+// priced as one figure, typing "Materials $1,390" made $1,390 the whole new
+// price instead of $1,390 on top of it. So a one-price job starts with a single
+// line carrying its agreed total, and any line added after it adds money.
+export function changeStartLines(
+  bought: ChangeLineDraft[],
+  agreedTotal: number | string | null,
+  service: string | null,
+): ChangeLineDraft[] {
+  if (bought.length > 0) return bought;
+  const amount = optionAmount({ amount: agreedTotal });
+  if (amount <= 0) return [];
+  const what = (service ?? "").trim();
+  return [{ title: (what ? `${what}, as approved` : "Original job, as approved").slice(0, OPTION_TITLE_MAX), description: null, amount }];
+}
+
 // Two breakdowns say the same thing to the customer.
 export function sameChangeLines(a: ChangeLineDraft[], b: ChangeLineDraft[]): boolean {
   return (

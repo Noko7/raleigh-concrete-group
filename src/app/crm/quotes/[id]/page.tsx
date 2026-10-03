@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { boughtLines, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
+import { boughtLines, changeStartLines, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
 import { toCents } from "@/lib/crm/fees";
 import { SITE_ORIGIN } from "@/lib/crm/env";
@@ -364,7 +364,8 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 }
                 workCompleted={Boolean(quote.completed_at)}
                 pending={pendingChange}
-                lines={boughtLines(options)}
+                lines={changeStartLines(boughtLines(options), quote.quote_amount, quote.service)}
+                jobHasLines={boughtLines(options).length > 0}
                 canBreakDown={packages.length === 0}
                 locale={locale}
               />
