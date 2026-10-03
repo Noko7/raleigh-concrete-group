@@ -58,6 +58,7 @@ export function ChangeOrder({
   workCompleted,
   pending,
   lines = [],
+  jobHasLines = false,
   canBreakDown = true,
   locale,
   tone = "dark",
@@ -80,10 +81,14 @@ export function ChangeOrder({
   /** The change already waiting on the customer, if there is one. */
   pending: { note: string; amountCents: number; lines?: ChangeLineDraft[] | null } | null;
   /**
-   * The job's breakdown as it stands: what the customer bought. A change starts
-   * from these, so the crew edit lines the customer already agreed to.
+   * Where the breakdown starts: the job as the customer agreed it. Its own
+   * lines when it has them, otherwise one line carrying the agreed total - so
+   * a line the crew add is money ON TOP of the job, never the job's new price.
+   * See changeStartLines.
    */
   lines?: ChangeLineDraft[];
+  /** Whether the job itself has a breakdown today, as opposed to one price. */
+  jobHasLines?: boolean;
   /** False on a job priced as a choice of ways, which stays one figure. */
   canBreakDown?: boolean;
   locale: Locale;
@@ -149,8 +154,8 @@ export function ChangeOrder({
     : [];
   const hasLines = lineDrafts.length > 0;
   // The job had a breakdown and this change takes it away.
-  const dropsLines = canBreakDown && !hasLines && lines.length > 0;
-  const linesChanged = canBreakDown && (hasLines || lines.length > 0) && !sameChangeLines(lineDrafts, lines);
+  const dropsLines = canBreakDown && !hasLines && jobHasLines;
+  const linesChanged = canBreakDown && (hasLines || jobHasLines) && !sameChangeLines(lineDrafts, lines);
   const nextCents = hasLines
     ? lineDrafts.reduce((sum, l) => sum + Math.round(l.amount * 100), 0)
     : Math.round(Number(amount) * 100);

@@ -517,7 +517,8 @@ const en = {
     // ── The breakdown that can come with a change ──
     breakdownEmpty:
       "Optional. Break the new total into materials, labor and anything else, and the customer sees each line. Leave it empty to send one figure.",
-    breakdownHint: "The customer sees each line, and the new total is their sum.",
+    breakdownHint:
+      "Starts with what they already agreed to. Add a line for what's new, like extra materials, and the total goes up by that amount. The customer sees every line.",
     linesTitle: "New price breakdown",
     // The job had a breakdown and the change has none.
     linesGone: "The old breakdown comes off and the job goes back to one price.",

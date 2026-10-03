@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { boughtLines, dollars, requestedVisitOf, STATUS_LABELS, visitDateOf } from "@/lib/crm/constants";
+import { boughtLines, changeStartLines, dollars, requestedVisitOf, STATUS_LABELS, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, inQuietHours, todayYmd } from "@/lib/crm/clock";
 import { toCents } from "@/lib/crm/fees";
 import { crewEventText, quoteSends } from "@/lib/crm/events";
@@ -416,7 +416,8 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             // What the job is made of today, so a change starts from the lines
             // the customer already agreed to. A job priced as a choice of ways
             // carries its price outside the lines and stays one figure.
-            lines={boughtLines(options)}
+            lines={changeStartLines(boughtLines(options), quote.quote_amount, quote.service)}
+            jobHasLines={boughtLines(options).length > 0}
             canBreakDown={packages.length === 0}
             locale={locale}
             tone="light"

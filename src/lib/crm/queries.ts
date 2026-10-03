@@ -26,6 +26,7 @@ import {
   visitDateOf,
   worksOn,
   boughtLines,
+  changeStartLines,
   sameChangeLines,
   type QuoteOptionDraft,
   type QuotePackageDraft,
@@ -2128,7 +2129,12 @@ export async function requestChange(
   }
   // Same total is fine when the breakdown is what's changing: "the same price,
   // but show me where it goes" is a real change for the customer to approve.
-  const linesChanged = changeLines !== null && !sameChangeLines(changeLines, boughtLines(existing));
+  // Compared against where the crew's breakdown started (changeStartLines), so
+  // a one-price job sent back with just its own "as approved" line is not a
+  // change either.
+  const linesChanged =
+    changeLines !== null &&
+    !sameChangeLines(changeLines, changeStartLines(boughtLines(existing), current.quote_amount, current.service));
   if (toCents(amount) === toCents(current.quote_amount) && !linesChanged) {
     return { ok: false, error: "That's the same total they already agreed to. Change the figure, or just call them." };
   }
