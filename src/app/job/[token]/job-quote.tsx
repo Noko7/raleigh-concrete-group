@@ -8,7 +8,9 @@ import { dollars, QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/actions";
 import {
+  MoreWaysToPrice,
   OptionBuilder,
+  previewOf,
   rowsFromOptions,
   rowsMatch,
   rowsToJson,
@@ -261,30 +263,50 @@ export function JobQuote({
         {/* Same price card and section timeline as the owner's editor and the
             customer's page (components/quote-form-parts), so the crew fills in
             the page the customer gets rather than a form that becomes it. */}
-        <PriceCard value={derived ? String(derivedTotal) : price} onChange={setPrice} derived={derived} />
+        <PriceCard
+          value={derived ? String(derivedTotal) : price}
+          onChange={setPrice}
+          derived={derived}
+          derivedLabel={choice ? "Headline price: the option you'd recommend plus extras" : undefined}
+        />
         <SectionsEditor sections={sections} onChange={setSection} />
 
-        {/* The extras, after the everyday path rather than in front of it:
-            most quotes are one price and five sections, and these two boxes
-            are a paragraph each of reading to scroll past on the way there.
-            Still here for the back yard that asks "and what about the
-            sidewalk?" - adding one turns the price card above into the total. */}
-        <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} />
-        {/* Optional extras the customer was meant to pick ONE of add up to
-            every price at once. Offered here, where the mistake gets made. */}
-        <PickOneSuggestion
+        {/* The price, line by line: materials, labor and the rest. Always
+            open, because "what am I paying for" is the question a breakdown
+            answers and the one that wins jobs. Adding a line turns the price
+            card above into their sum. On a quote the customer already has,
+            the gap to that price is shown as the lines are typed. */}
+        <OptionBuilder
           rows={rows}
-          hasChoice={filledPackages(pkgRows).length > 0}
-          onConvert={() => {
-            setPkgRows(packagesFromOptionRows(rows));
-            setRows([]);
-          }}
+          onChange={setRows}
+          labels={t.quoteOptions}
+          mode="breakdown"
+          target={alreadySent ? amount : null}
+          choiceActive={choice}
         />
 
-        {/* And the other question the same back yard produces: "what would it
-            cost in asphalt instead?" Two prices on one quote, answered here
-            rather than as a second quote on a second link. */}
-        <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={t.quotePackages} />
+        {/* Everything that is not a straight breakdown, folded under one
+            heading so the everyday quote stays a price, the scope and the
+            lines. Opens by itself on a quote that already uses any of it. */}
+        <MoreWaysToPrice
+          labels={t.quoteOptions}
+          startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
+        >
+          {/* "And what about the sidewalk?" - an add-on they can say no to. */}
+          <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} mode="extras" />
+          {/* Optional extras the customer was meant to pick ONE of add up to
+              every price at once. Offered here, where the mistake gets made. */}
+          <PickOneSuggestion
+            rows={rows}
+            hasChoice={filledPackages(pkgRows).length > 0}
+            onConvert={() => {
+              setPkgRows(packagesFromOptionRows(rows));
+              setRows([]);
+            }}
+          />
+          {/* "What would it cost in asphalt instead?" Two prices on one quote. */}
+          <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={t.quotePackages} />
+        </MoreWaysToPrice>
 
         {/* Only for a quote written before the sections existed. */}
         {hasLegacySummary && (
@@ -299,6 +321,8 @@ export function JobQuote({
           price={priceOk ? priceNum : null}
           derived={derived}
           sections={sections}
+          {...previewOf(rows)}
+          choice={choice}
         />
 
         <p className="js-hint">

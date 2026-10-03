@@ -153,6 +153,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             fromCents: toCents(quote.quote_amount),
             toCents: toCents(quote.change_amount),
             paidCents: ledger.paidCents,
+            lines: quote.change_lines,
           }
         : null;
     const bookedFor = quote.scheduled_date
@@ -169,6 +170,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             toCents={pendingChange.toCents}
             paidCents={pendingChange.paidCents}
             when={bookedFor}
+            lines={pendingChange.lines}
           />
         )}
         <div className="cq-confirm cq-confirm-ok">

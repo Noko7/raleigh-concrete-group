@@ -356,6 +356,34 @@ export function selectedTotal(
   return optionsTotal(rows.filter((o) => o.required || answers[o.id] === "accepted"));
 }
 
+// ── A change order's breakdown ──────────────────────────────────────────────
+// The lines a job stands on today: everything the customer actually bought.
+// Required lines, plus the extras they said yes to. A change order starts from
+// these, so the crew edit the breakdown the customer already agreed to rather
+// than retyping it.
+export type ChangeLineDraft = { title: string; description: string | null; amount: number };
+
+export function boughtLines(
+  options: { title: string; description: string | null; amount: number | string; required: boolean; customer_response: string | null }[],
+): ChangeLineDraft[] {
+  return options
+    .filter((o) => o.required || o.customer_response === "accepted")
+    .map((o) => ({ title: o.title, description: o.description || null, amount: optionAmount(o) }));
+}
+
+// Two breakdowns say the same thing to the customer.
+export function sameChangeLines(a: ChangeLineDraft[], b: ChangeLineDraft[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (x, i) =>
+        x.title === b[i].title &&
+        (x.description || "") === (b[i].description || "") &&
+        Number(x.amount) === Number(b[i].amount),
+    )
+  );
+}
+
 // ── A choice of ways to do the job ──────────────────────────────────────────
 // Line items above answer "and also": a patio, and maybe the sidewalk too.
 // Packages answer the other question, which is "or instead" - a concrete

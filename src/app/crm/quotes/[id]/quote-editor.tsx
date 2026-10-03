@@ -7,7 +7,9 @@ import { dict } from "@/lib/crm/i18n";
 import { dollars, packageLetter, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, type QuoteSectionField } from "@/lib/crm/constants";
 import { saveQuote } from "./actions";
 import {
+  MoreWaysToPrice,
   OptionBuilder,
+  previewOf,
   rowsFromOptions,
   rowsMatch,
   rowsToJson,
@@ -265,28 +267,50 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
         onChange={setAmount}
         derived={derived}
         derivedLabel={
-          choice ? "Headline price: the option you'd recommend plus extras" : "Total, from the line items below"
+          choice ? "Headline price: the option you'd recommend plus extras" : "Total, from the price breakdown below"
         }
       />
 
       <SectionsEditor sections={sections} onChange={setSection} idPrefix="qe" />
 
-      {/* The extras, after the everyday path: most quotes are one price and
-          five sections. Adding a line item turns the price card into a total. */}
-      <OptionBuilder rows={rows} onChange={setRows} labels={optionLabels} locked={locked} answers={answers} />
-      {/* Optional extras the customer was meant to pick ONE of add up to
-          every price at once. Offered here, where the mistake gets made. */}
-      {!locked && (
-        <PickOneSuggestion
-          rows={rows}
-          hasChoice={filledPackages(pkgRows).length > 0}
-          onConvert={() => {
-            setPkgRows(packagesFromOptionRows(rows));
-            setRows([]);
-          }}
-        />
+      {locked ? (
+        <>
+          {/* Answered: one combined list, as the record of what they bought. */}
+          <OptionBuilder rows={rows} onChange={setRows} labels={optionLabels} locked answers={answers} />
+          <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={packageLabels} locked answers={packageAnswers} />
+        </>
+      ) : (
+        <>
+          {/* Same layout as the crew's form: the breakdown, always open, then
+              everything else folded under one heading. One rows array behind
+              both sections, so the total and the save never see two lists. */}
+          <OptionBuilder
+            rows={rows}
+            onChange={setRows}
+            labels={optionLabels}
+            mode="breakdown"
+            target={awaitingReply ? Number(initial.quote_amount ?? 0) || null : null}
+            choiceActive={choice}
+          />
+          <MoreWaysToPrice
+            labels={optionLabels}
+            startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
+          >
+            <OptionBuilder rows={rows} onChange={setRows} labels={optionLabels} mode="extras" />
+            {/* Optional extras the customer was meant to pick ONE of add up to
+                every price at once. Offered here, where the mistake gets made. */}
+            <PickOneSuggestion
+              rows={rows}
+              hasChoice={filledPackages(pkgRows).length > 0}
+              onConvert={() => {
+                setPkgRows(packagesFromOptionRows(rows));
+                setRows([]);
+              }}
+            />
+            <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={packageLabels} />
+          </MoreWaysToPrice>
+        </>
       )}
-      <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={packageLabels} locked={locked} answers={packageAnswers} />
 
       {/* Only for quotes written before the sections existed. Hidden entirely
           on new ones so nobody fills in a sixth box that nothing displays. */}
@@ -303,6 +327,8 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
           price={amountValid ? amountNum : null}
           derived={derived}
           sections={sections}
+          {...previewOf(rows)}
+          choice={choice}
         />
       )}
 
@@ -359,6 +385,8 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
               price={amountValid ? amountNum : null}
               derived={derived}
               sections={sections}
+              {...previewOf(rows)}
+              choice={choice}
               startOpen
             />
           ) : (
