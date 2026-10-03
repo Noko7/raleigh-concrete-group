@@ -25,6 +25,8 @@ import {
   slotsFor,
   visitDateOf,
   worksOn,
+  boughtLines,
+  sameChangeLines,
   type QuoteOptionDraft,
   type QuotePackageDraft,
   type WorkHours,
@@ -2058,6 +2060,7 @@ const CLEAR_CHANGE: Partial<Quote> = {
   change_amount: null,
   change_requested_at: null,
   change_requested_by: null,
+  change_lines: null,
 };
 
 export type ChangeRequestResult = { ok: boolean; error?: string; quote?: Quote };
@@ -2071,7 +2074,7 @@ export type ChangeRequestResult = { ok: boolean; error?: string; quote?: Quote }
 export async function requestChange(
   session: Session,
   id: string,
-  input: { note: string; newAmount: number },
+  input: { note: string; newAmount: number; lines?: QuoteOptionDraft[] },
 ): Promise<ChangeRequestResult> {
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
@@ -2096,11 +2099,37 @@ export async function requestChange(
   const note = noEmDash(input.note.trim()).slice(0, CHANGE_NOTE_MAX);
   if (note.length < 3) return { ok: false, error: "Say what's changing, so the customer knows what they're approving." };
 
-  const amount = Math.round(Number(input.newAmount) * 100) / 100;
+  // The breakdown that comes with it, if any. When there are lines they ARE the
+  // price: the new total is their sum, whatever was typed in the box, so the
+  // customer can never be shown lines that add up to something else.
+  const lines = (input.lines ?? []).map((l) => ({
+    title: l.title,
+    description: l.description || null,
+    amount: l.amount,
+  }));
+  const [existing, packages] = await Promise.all([listQuoteOptions(session, id), listQuotePackages(session, id)]);
+  // A job priced as a choice of ways to do it carries the chosen way's price
+  // outside the line items, so a breakdown here could not add up to the total.
+  // Rare enough to leave as one figure.
+  if (lines.length > 0 && packages.length > 0) {
+    return { ok: false, error: "This job was priced as a choice of options, so change the total as one figure." };
+  }
+  // Lines on the change replace the job's lines on approval. A job that already
+  // HAS lines always gets a list, even an empty one: leaving its old lines in
+  // place under a new total would show the customer sums that don't add up.
+  // Except a package job, whose lines are extras on top of the chosen way:
+  // those are left exactly as they are and only the figure moves.
+  const changeLines = packages.length > 0 ? null : lines.length > 0 || existing.length > 0 ? lines : null;
+
+  const amount =
+    lines.length > 0 ? optionsTotal(lines) : Math.round(Number(input.newAmount) * 100) / 100;
   if (!Number.isFinite(amount) || amount < 0 || amount > 99_999_999) {
     return { ok: false, error: "Enter a valid new total for the job." };
   }
-  if (toCents(amount) === toCents(current.quote_amount)) {
+  // Same total is fine when the breakdown is what's changing: "the same price,
+  // but show me where it goes" is a real change for the customer to approve.
+  const linesChanged = changeLines !== null && !sameChangeLines(changeLines, boughtLines(existing));
+  if (toCents(amount) === toCents(current.quote_amount) && !linesChanged) {
     return { ok: false, error: "That's the same total they already agreed to. Change the figure, or just call them." };
   }
 
@@ -2109,6 +2138,7 @@ export async function requestChange(
     change_amount: amount,
     change_requested_at: new Date().toISOString(),
     change_requested_by: session.staff.id,
+    change_lines: changeLines,
   });
   if (!quote) {
     return {
@@ -2174,25 +2204,34 @@ export async function recordChangeResponse(
   // for them to do - which is the truth.
   if (!q.change_requested_at || q.change_amount == null) return { ok: true, duplicate: true };
 
-  const from = q.quote_amount;
-  const to = Number(q.change_amount);
-  const note = q.change_note;
-
-  const patch: Partial<Quote> = { ...CLEAR_CHANGE };
-  // The price, and only the price. Whether the job still counts as paid
-  // afterwards is resyncJobPaidState's call, made by the caller once this has
-  // landed: a change can push a paid job back into owing money OR finish paying
-  // one off, and both directions have to come from the same function or they
-  // drift. See /api/change-response.
-  if (action === "accept") patch.quote_amount = to;
-
-  const res = await pgAdmin(`quote_requests?id=eq.${q.id}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify(patch),
+  // The price, the breakdown and the cleared change, in one transaction (see
+  // supabase/change-order-lines.sql). Two separate writes could leave a job
+  // showing the new lines against the old total if the second one failed.
+  //
+  // Whether the job still counts as paid afterwards is resyncJobPaidState's
+  // call, made by the caller once this has landed: a change can push a paid job
+  // back into owing money OR finish paying one off, and both directions have to
+  // come from the same function or they drift. See /api/change-response.
+  const res = await pgAdmin("rpc/apply_change_response", {
+    method: "POST",
+    body: JSON.stringify({ p_id: q.id, p_accept: action === "accept" }),
   });
   if (!res.ok) return { ok: false, error: "Could not save your answer. Please call us." };
-  const rows = (await res.json()) as Quote[];
+  const out = (await res.json()) as {
+    status: "ok" | "none";
+    quote?: Quote;
+    from?: number | null;
+    to?: number | null;
+    note?: string | null;
+    old_lines?: unknown;
+    new_lines?: unknown;
+  };
+  // Answered in another tab between the read above and the lock.
+  if (out.status !== "ok" || !out.quote) return { ok: true, duplicate: true };
+
+  const from = out.from ?? null;
+  const to = out.to == null ? null : Number(out.to);
+  const note = out.note ?? null;
 
   await pgAdmin("quote_events", {
     method: "POST",
@@ -2200,11 +2239,13 @@ export async function recordChangeResponse(
     body: JSON.stringify({
       quote_id: q.id,
       type: action === "accept" ? "change_accepted" : "change_declined",
-      meta: { from, to, note },
+      // The breakdown either side of the change, so "what did this job include
+      // before they asked for the bigger pad" is answerable from the log.
+      meta: { from, to, note, ...(out.new_lines != null ? { lines_before: out.old_lines, lines_after: out.new_lines } : {}) },
     }),
   }).catch(() => {});
 
-  return { ok: true, quote: rows[0], from, to, note };
+  return { ok: true, quote: out.quote, from, to, note };
 }
 
 // Confirm (or move) the work day. Runs as the logged-in user so RLS keeps a

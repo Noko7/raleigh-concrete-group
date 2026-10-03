@@ -4176,3 +4176,147 @@ textarea.qm-input { min-height: 0; resize: vertical; }
    counting one row differently is how a settled balance gets chased. */
 .jp-row-void { opacity: 0.6; }
 .jp-row-void .jp-row-amount { text-decoration: line-through; }
+
+/* ── Price breakdown: the split builder and the customer's list ──────────────
+   One accent (amber) and the builder's existing radii. Light by default, the
+   way the crew's job page renders it; `.crm-paper` flips the handful of
+   colours for the owner's dark editor, matching the rules above. */
+
+/* One-tap starters for a breakdown line. Same shape as the add button beside
+   them, quieter: they are suggestions, the dashed button is the action. */
+.qo-presets { display: flex; flex-wrap: wrap; gap: 0.4rem; width: 100%; }
+.qo-preset {
+  background: #fff; border: 1px solid #d1d5db; border-radius: 0.45rem;
+  padding: 0.4rem 0.65rem; font: inherit; font-size: 0.8rem; font-weight: 700;
+  color: #374151; cursor: pointer; min-height: 36px;
+}
+.qo-preset:hover { border-color: var(--amber); color: var(--amber-dark); }
+.qo-preset:active { transform: translateY(1px); }
+.crm-paper .qo-preset { background: transparent; border-color: var(--crm-border); color: var(--crm-text); }
+.crm-paper .qo-preset:hover { border-color: var(--crm-accent); color: #f0a36b; }
+
+/* The gap between the lines and the price the customer already has. */
+.qo-gap { margin: 0.45rem 0 0; font-size: 0.82rem; font-weight: 700; color: #92400e; }
+.qo-gap-over { color: #b91c1c; }
+.qo-gap-even { color: #15803d; }
+.crm-paper .qo-gap { color: #fbbf24; }
+.crm-paper .qo-gap-over { color: #f87171; }
+.crm-paper .qo-gap-even { color: #4ade80; }
+
+/* The extras' running figure is context, not the price - so it is quieter. */
+.qo-total-quiet { font-weight: 700; color: #6b7280; }
+.qo-total-quiet strong { font-size: 1rem; }
+.crm-paper .qo-total-quiet { color: var(--crm-muted); }
+
+/* "More ways to price it": one line, folded, until somebody needs it. */
+.qo-more { border: 1px solid #e2e5ea; border-radius: 0.6rem; margin-bottom: 1rem; }
+.qo-more > summary {
+  list-style: none; cursor: pointer; padding: 0.8rem 1rem;
+  display: flex; flex-direction: column; gap: 0.15rem;
+}
+.qo-more > summary::-webkit-details-marker { display: none; }
+.qo-more > summary::before { content: "+"; float: right; font-weight: 800; color: #6b7280; }
+.qo-more[open] > summary::before { content: "-"; }
+.qo-more-title { font-size: 0.85rem; font-weight: 800; color: #1f2328; }
+.qo-more-hint { font-size: 0.8rem; color: #6b7280; }
+.qo-more-body { padding: 0 1rem 0.2rem; }
+.qo-more-body .qo-box, .qo-more-body .qc-box { margin-bottom: 0.8rem; }
+.crm-paper .qo-more { border-color: var(--crm-border); }
+.crm-paper .qo-more-title { color: var(--crm-text); }
+.crm-paper .qo-more-hint, .crm-paper .qo-more > summary::before { color: var(--crm-muted); }
+
+/* The customer's breakdown: a list of prices, not a set of choices. No card
+   per line and no amber "selected" state, because nothing here is selected -
+   it is what the job costs. A hairline between lines, none around them. */
+.cq-breakdown { gap: 0; margin-bottom: 1rem; }
+.cq-breakdown .cq-opt, .cq-breakdown .cq-opt-on {
+  border: 0; border-radius: 0; background: none; padding: 0.7rem 0;
+}
+.cq-breakdown .cq-opt + .cq-opt { border-top: 1px solid rgba(43, 26, 18, 0.1); }
+.cq-breakdown .cq-opt-price { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.jq-preview-breakdown { margin-bottom: 0.9rem; }
+
+/* A change order's breakdown. In the crew's preview and waiting card: a plain
+   list of lines and prices, the same shape the customer reads it in. */
+.co-lines { margin: 0 0 0.8rem; }
+.co-lines .co-label { font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.3rem; color: var(--crm-muted); }
+.co-light .co-lines .co-label { color: #6b7280; }
+.co-lines-rows { list-style: none; margin: 0; padding: 0; }
+.co-lines-rows li {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 0.8rem;
+  padding: 0.45rem 0; font-size: 0.92rem;
+}
+.co-lines-rows li + li { border-top: 1px solid var(--crm-border); }
+.co-light .co-lines-rows li + li { border-top-color: #e2e5ea; }
+.co-lines-title { display: flex; flex-direction: column; gap: 0.1rem; font-weight: 700; }
+.co-lines-title em { font-style: normal; font-weight: 400; font-size: 0.8rem; color: var(--crm-muted); line-height: 1.4; }
+.co-light .co-lines-title em { color: #6b7280; }
+.co-lines-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.co .qo-box { margin-bottom: 0; }
+
+/* The same breakdown on the customer's change panel. */
+.cr-lines { margin: 0 0 0.4rem; }
+.cr-lines-title { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; margin-bottom: 0.1rem; }
+.cr-lines .cq-breakdown { margin-bottom: 0.6rem; }
+
+/* The change card on the crew's job page. That page is white cards on ivory,
+   and this card used to be white on white: the panels inside it, the fields
+   and the sums all blended into one pale sheet, and its main button took its
+   colour from a CRM token that does not exist outside the CRM - so on the job
+   page it rendered as white text on nothing.
+   So it carries its own tokens, sits on a warm tint, and everything the crew
+   types into or reads off is a white panel with a visible edge on top of it. */
+.co-light {
+  --crm-accent: var(--amber);
+  --crm-text: #1f2328;
+  --crm-muted: #5b6470;
+  --crm-border: #d8cfc1;
+  --crm-surface-solid: #fff;
+  background: #f6f1e9;
+  border: 1px solid #e0d5c4;
+  border-left: 4px solid var(--amber);
+  color: #1f2328;
+}
+.co-light .co-title { color: #1f2328; }
+.co-light .co-lead { color: #3f4650; }
+.co-light .co-field > span { color: #1f2328; font-weight: 700; }
+.co-light .co-field em, .co-light .co-hint, .co-light .co-held { color: #5b6470; }
+.co-light .co-field textarea, .co-light .co-field input { background: #fff; border: 1px solid #cbbfad; color: #1f2328; }
+.co-light .co-field textarea:focus, .co-light .co-field input:focus { outline: 2px solid var(--amber); outline-offset: 1px; border-color: var(--amber); }
+.co-light .co-open { background: #fff; border-color: #cbbfad; color: #1f2328; }
+.co-light .co-open:hover { border-color: var(--amber); color: var(--amber-dark); }
+.co-light .co-go { background: var(--amber); color: #fff; }
+.co-light .co-go:hover:not(:disabled) { background: var(--amber-dark); }
+.co-light .co-go:disabled { background: #d9cbb8; color: #fff; opacity: 1; }
+.co-light .co-cancel { color: #3f4650; }
+.co-light .co-sums { background: #fff; border: 1px solid #e0d5c4; }
+.co-light .co-sums dt { color: #4b5563; }
+.co-light .co-preview { background: #fff; border: 1px solid #e0d5c4; }
+.co-light .co-note-back { background: #fff; border-left-color: var(--amber); color: #1f2328; }
+.co-light .co-preview .co-note-back { background: #f6f1e9; }
+.co-light .co-ledger-row { background: #fff; border: 1px solid #e0d5c4; }
+.co-light .co-lines-rows li + li { border-top-color: #ece4d8; }
+.co-light .co-warn { border-width: 1px; }
+.co-light .co-check { color: #1f2328; }
+/* The breakdown editor inside the card: a white sheet on the tint, each line a
+   white row with the amber edge that marks it part of the job. */
+.co-light .qo-box { background: #fff; border-color: #e0d5c4; }
+.co-light .qo-box legend { color: #1f2328; background: #fff; border-radius: 0.3rem; }
+.co-light .qo-row { border-color: #e0d5c4; }
+.co-light .qo-row-required { background: #fdfbf8; }
+.co-light .qo-field input, .co-light .qo-field textarea { border-color: #cbbfad; }
+.co-light .co-preview .co-sums { border: 0; background: none; }
+.co-light .qo-row-required { border-left: 3px solid var(--amber); }
+
+/* The customer's change panel sits above their booking confirmation, inside
+   the same centring wrapper. That wrapper is a row, so the two used to sit side
+   by side - squeezed into half a phone each. Stacked instead, at the same width
+   as the card under it. And its own text colour: the page body is ivory text
+   for the dark site, which turned the breakdown lines white on white. */
+.cq-wrap:has(> .cr) { flex-direction: column; justify-content: flex-start; }
+.cq-wrap > .cr { width: 100%; max-width: 520px; box-sizing: border-box; color: #1f2328; }
+@media (max-width: 640px) {
+  .cq-wrap > .cr { max-width: none; margin: 0; border-radius: 0; border-width: 0 0 3px; box-shadow: none; }
+  .cq-wrap:has(> .cr) > .cq-confirm { min-height: 0; }
+}
+.cr { color: #1f2328; }

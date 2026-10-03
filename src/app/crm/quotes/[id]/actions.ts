@@ -869,7 +869,23 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     };
   }
 
-  const result = await requestChange(session, id, { note, newAmount: Number(raw) });
+  // The breakdown, when the crew wrote one. Same parser as the quote editors,
+  // so the caps and the price ceiling are the same; every line is part of the
+  // job, so "required" is not the sender's to choose here.
+  let lines: QuoteOptionDraft[] = [];
+  if (formData.has("lines_json")) {
+    let parsedJson: unknown = [];
+    try {
+      parsedJson = JSON.parse(String(formData.get("lines_json") ?? "[]"));
+    } catch {
+      return { ok: false, error: "Could not read the price breakdown. Please try again." };
+    }
+    const parsed = parseQuoteOptions(parsedJson);
+    if (parsed.error) return { ok: false, error: parsed.error };
+    lines = parsed.rows.map((r) => ({ ...r, id: undefined, required: true }));
+  }
+
+  const result = await requestChange(session, id, { note, newAmount: Number(raw), lines });
   if (!result.ok || !result.quote) return { ok: false, error: result.error ?? "Could not send that change." };
   const quote = result.quote;
 
@@ -881,6 +897,7 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     note: quote.change_note,
     from: quote.quote_amount,
     to: quote.change_amount,
+    lines: quote.change_lines,
     paid_cents: ledger.paidCents,
     // Who stood behind the figures. The balance the customer is being asked to
     // approve rests on the recorded payments, and this is the record that

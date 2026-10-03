@@ -180,7 +180,15 @@ export type Quote = {
   change_amount: number | null;
   change_requested_at: string | null;
   change_requested_by: string | null;
+  // The breakdown that comes with the change, if it has one (materials, labor
+  // and so on). Null leaves the job's line items as they are; a list, even an
+  // empty one, replaces them when the customer approves. When it has lines they
+  // add up to change_amount. Null until supabase/change-order-lines.sql is run.
+  change_lines: ChangeLine[] | null;
 };
+
+// One line of a change order's breakdown, as stored on the pending change.
+export type ChangeLine = { title: string; description: string | null; amount: number };
 
 // One line item on a quote. A quote either has none of these (the original
 // single-price quote) or a list of them, each of which the customer answers on

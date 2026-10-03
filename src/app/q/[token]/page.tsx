@@ -153,6 +153,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             fromCents: toCents(quote.quote_amount),
             toCents: toCents(quote.change_amount),
             paidCents: ledger.paidCents,
+            lines: quote.change_lines,
           }
         : null;
     const bookedFor = quote.scheduled_date
@@ -169,6 +170,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             toCents={pendingChange.toCents}
             paidCents={pendingChange.paidCents}
             when={bookedFor}
+            lines={pendingChange.lines}
           />
         )}
         <div className="cq-confirm cq-confirm-ok">
@@ -351,7 +353,11 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             <p className="cq-lead">
               {offersChoice
                 ? "Here's your quote, priced both ways. Pick the one you'd like below and your total is worked out for you."
-                : itemised
+                : itemised && options.every((o) => o.required)
+                  ? // A straight breakdown: every line is part of the job and
+                    // there is nothing to choose, so don't ask them to.
+                    `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}, broken down line by line.`
+                  : itemised
                   ? "Here's your quote. Some of it is up to you - say yes or no to each option below and your total updates as you go."
                   : `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We'd love to do the work for you.`}
             </p>

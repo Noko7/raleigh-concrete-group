@@ -327,10 +327,13 @@ const en = {
   // customer answers one at a time - "yes to the patio, no to the sidewalk" -
   // and these are the words on the crew's own screen while they write it.
   quoteOptions: {
-    title: "Line items (optional)",
+    title: "Break the price into line items (optional)",
+    // Leads with the breakdown, because that is what most customers who ask for
+    // "line items" mean: show me what I'm paying for. Optional extras are the
+    // second use, not the first.
     emptyHint:
-      "Leave this empty for a normal one-price quote. Add line items when the customer should be able to say yes to part of it - a patio now, the sidewalk maybe.",
-    hint: "The customer answers each optional item yes or no, and the total follows their answers.",
+      "Leave this empty for one price. Add a line for each part of the job to show the customer exactly what they're paying for - the total adds itself up. You can also add optional extras they can say yes or no to.",
+    hint: "Every line is part of the job unless you let the customer say no to it. They only answer yes or no to the extras.",
     kindRequired: "Part of the job",
     kindOptional: "Their choice",
     itemTitle: "Item",
@@ -342,11 +345,37 @@ const en = {
     requiredHint: "Always included. The customer sees the price but cannot drop it.",
     optionalHint: "The customer chooses. Say no and it comes off their total.",
     addOptional: "+ Add an optional extra",
-    addRequired: "+ Add to the base job",
+    addRequired: "+ Add a line",
     remove: "Remove",
     moveUp: "Move up",
     moveDown: "Move down",
     allInTotal: "All in, if they take everything",
+    // When every line is part of the job there is nothing to "take" - it is
+    // just the total.
+    total: "Total",
+    // ── Split view: the price breakdown, and the extras kept apart from it ──
+    // A customer who asks "how much is the concrete and how much is the labor"
+    // is asking for this section, so it is the one that is always open.
+    breakdownTitle: "Price breakdown",
+    breakdownEmpty:
+      "Show the customer what they're paying for: materials, labor and anything else, each with its own price. The total adds itself up. Leave it empty for a single price.",
+    breakdownHint: "Every line here is part of the job. The customer sees each one, and the total is their sum.",
+    breakdownLinePlaceholder: "e.g. Materials",
+    breakdownDescPlaceholder: "Optional. e.g. 4,000 psi concrete, rebar and forms",
+    // Against the price the customer is already holding. {quoted} is that
+    // price, {diff} the gap.
+    breakdownUnder: "Quoted price {quoted}. {diff} still to put on a line.",
+    breakdownOver: "Quoted price {quoted}. These lines come to {diff} more.",
+    breakdownMatches: "Adds up exactly to the quoted price of {quoted}.",
+    // With two prices on offer, a line here is added to whichever they pick -
+    // it is not a breakdown of either one, and the heading has to say so.
+    breakdownChoiceTitle: "Added to every option",
+    breakdownChoiceHint: "These lines are added to whichever option the customer picks.",
+    extrasTitle: "Optional extras",
+    extrasHint: "Add-ons the customer can say yes or no to. Each yes is added to their total.",
+    extrasTotal: "If they take every extra",
+    moreTitle: "More ways to price it",
+    moreHint: "Optional extras the customer can say yes or no to, or the same job priced two ways.",
     acceptedTotal: "What they approved",
     lockedNote: "The customer has answered, so this is the record of what they bought. It cannot be changed.",
     answerYes: "Approved",
@@ -474,7 +503,7 @@ const en = {
   // The crew take the call that starts this, so the card is on their page too.
   changeOrder: {
     title: "Customer wants a change?",
-    lead: "Say what's changing and what the job comes to now. They approve it on the same link they approved the job on, and nothing moves until they do.",
+    lead: "Say what's changing and what the job comes to now, as one figure or broken down into materials, labor and more. They approve it on the same link they approved the job on, and nothing moves until they do.",
     open: "Send a change for approval",
     noteLabel: "What's changing",
     notePlaceholder: "Widening the patio from 12ft to 14ft, which adds about a yard of concrete and an extra hour of prep.",
@@ -485,6 +514,14 @@ const en = {
     alreadyPaid: "Already paid",
     newBalance: "New balance",
     sameTotal: "That's the total they already agreed to.",
+    // ── The breakdown that can come with a change ──
+    breakdownEmpty:
+      "Optional. Break the new total into materials, labor and anything else, and the customer sees each line. Leave it empty to send one figure.",
+    breakdownHint: "The customer sees each line, and the new total is their sum.",
+    linesTitle: "New price breakdown",
+    // The job had a breakdown and the change has none.
+    linesGone: "The old breakdown comes off and the job goes back to one price.",
+    sameTotalNewLines: "Same total as before. They're approving the new breakdown.",
     refundWarn: "That's less than they've already paid, so we'd owe them {amount} back. Worth a call before you send it.",
     sendHint: "{name} gets a text with the change and a link. Their date doesn't move.",
     // ── The preview, between composing a change and sending it ──
@@ -499,6 +536,9 @@ const en = {
     reviewApproved: "Price they approved",
     reviewAdds: "This change adds",
     reviewTakesOff: "This change takes off",
+    // Same total, new breakdown. Matches the customer's own panel.
+    reviewNoChange: "Change to the price",
+    reviewNone: "None",
     reviewNewTotal: "New total",
     reviewPaid: "They've already paid",
     reviewLeft: "Left to pay",
@@ -626,15 +666,15 @@ const en = {
     quoteWaitingSent: "Texted {when}",
     quoteWaitingHint:
       "It won't send twice - a second copy would just be the same text again. You'll get a message the moment they approve or decline. If they say it never arrived, ask the office to send it again.",
-    quoteFixOpen: "Priced it wrong? Send a corrected quote",
-    quoteFixTitle: "Correct this quote",
+    quoteFixOpen: "Revise this quote or break down the price",
+    quoteFixTitle: "Revise this quote",
     quoteFixLead:
-      "Change the price or the wording and we'll text {name} that the quote was updated. The link they already have will show the corrected one.",
+      "Change the price or the wording, or break the price into materials, labor and more. We'll text {name} that the quote was updated, and the link they already have will show the new version.",
     quoteFixWho: "{name} gets a text saying the quote was updated, and it replaces the one they're holding.",
     quoteFixUnchanged:
-      "Nothing has changed yet - edit the price or a section, otherwise this is the same quote they already have.",
-    quoteFixSend: "Send the corrected quote",
-    quoteFixOk: "Corrected quote texted to the customer.",
+      "Nothing has changed yet. Edit the price, a section or the breakdown, otherwise this is the same quote they already have.",
+    quoteFixSend: "Send the revised quote",
+    quoteFixOk: "Revised quote texted to the customer.",
     // What the customer actually bought on a quote with line items. The crew
     // needs this before they load the truck: "approved" does not say whether
     // there is a sidewalk to pour.

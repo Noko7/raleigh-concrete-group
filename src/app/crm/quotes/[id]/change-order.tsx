@@ -2,10 +2,11 @@
 
 import { useActionState, useState } from "react";
 
-import { CHANGE_NOTE_MAX } from "@/lib/crm/constants";
+import { CHANGE_NOTE_MAX, sameChangeLines, type ChangeLineDraft } from "@/lib/crm/constants";
 import { usd as money, type PaymentMethod } from "@/lib/crm/fees";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { sendChangeOrder, withdrawChangeOrder } from "./actions";
+import { blankRow, filledRows, OptionBuilder, rowAmount, type OptionRow } from "./option-builder";
 import type { ChangeState } from "./types";
 
 // The customer rang a week before the pour wanting the patio two feet wider.
@@ -56,6 +57,8 @@ export function ChangeOrder({
   bookedFor,
   workCompleted,
   pending,
+  lines = [],
+  canBreakDown = true,
   locale,
   tone = "dark",
 }: {
@@ -75,7 +78,14 @@ export function ChangeOrder({
   /** Whether the work itself is finished - decides the paid-in-full warning. */
   workCompleted: boolean;
   /** The change already waiting on the customer, if there is one. */
-  pending: { note: string; amountCents: number } | null;
+  pending: { note: string; amountCents: number; lines?: ChangeLineDraft[] | null } | null;
+  /**
+   * The job's breakdown as it stands: what the customer bought. A change starts
+   * from these, so the crew edit lines the customer already agreed to.
+   */
+  lines?: ChangeLineDraft[];
+  /** False on a job priced as a choice of ways, which stays one figure. */
+  canBreakDown?: boolean;
   locale: Locale;
   tone?: "dark" | "light";
 }) {
@@ -93,6 +103,11 @@ export function ChangeOrder({
   // Ticked on the review step. Reset whenever they go back to edit, because a
   // tick that survives a changed figure is a tick against something else.
   const [checked, setChecked] = useState(false);
+  // The breakdown, when there is one. Seeded from the job's own lines for the
+  // same reason the total is seeded: a change is an edit to what was agreed.
+  const [rows, setRows] = useState<OptionRow[]>(() =>
+    lines.map((l) => ({ ...blankRow(true), title: l.title, description: l.description ?? "", amount: String(l.amount) })),
+  );
 
   const first = customerName.trim().split(/\s+/)[0] || customerName;
   const card = tone === "light" ? "co co-light" : "co";
@@ -121,15 +136,35 @@ export function ChangeOrder({
 
   // The numbers the crew are deciding between, worked out live so the
   // consequence of the figure they are typing is on screen beside it.
-  const nextCents = Math.round(Number(amount) * 100);
-  const valid = Number.isFinite(nextCents) && nextCents >= 0 && nextCents <= 9_999_999_900;
+  //
+  // With a breakdown the lines ARE the price: the new total is their sum, each
+  // rounded to the cent the same way the server rounds it, so the figure on
+  // this screen is the figure that gets saved.
+  const lineDrafts: ChangeLineDraft[] = canBreakDown
+    ? filledRows(rows).map((r) => ({
+        title: r.title.trim(),
+        description: r.description.trim() || null,
+        amount: Math.round(rowAmount(r) * 100) / 100,
+      }))
+    : [];
+  const hasLines = lineDrafts.length > 0;
+  // The job had a breakdown and this change takes it away.
+  const dropsLines = canBreakDown && !hasLines && lines.length > 0;
+  const linesChanged = canBreakDown && (hasLines || lines.length > 0) && !sameChangeLines(lineDrafts, lines);
+  const nextCents = hasLines
+    ? lineDrafts.reduce((sum, l) => sum + Math.round(l.amount * 100), 0)
+    : Math.round(Number(amount) * 100);
+  const valid =
+    (hasLines || amount.trim() !== "") && Number.isFinite(nextCents) && nextCents >= 0 && nextCents <= 9_999_999_900;
   const diffCents = valid ? nextCents - totalCents : 0;
   const dueCents = valid ? Math.max(0, nextCents - paidCents) : 0;
   // Dropping the scope below what they have already paid means we owe them,
   // which is a different conversation and has to be said out loud before the
   // change goes out rather than discovered afterwards.
   const refundCents = valid ? Math.max(0, paidCents - nextCents) : 0;
-  const composed = valid && note.trim().length >= 3 && diffCents !== 0;
+  // A new total, or the same total with a new breakdown: "same price, but show
+  // me where it goes" is a real change for the customer to approve.
+  const composed = valid && note.trim().length >= 3 && (diffCents !== 0 || linesChanged);
 
   // The symptom of the bug this whole step exists for: the job says it is fully
   // paid and nobody has finished the work. It can be legitimate - a customer may
@@ -148,9 +183,15 @@ export function ChangeOrder({
         <dd>{money(totalCents)}</dd>
       </div>
       <div>
-        <dt>{diffCents < 0 ? t.changeOrder.reviewTakesOff : t.changeOrder.reviewAdds}</dt>
+        <dt>
+          {diffCents < 0
+            ? t.changeOrder.reviewTakesOff
+            : diffCents > 0
+              ? t.changeOrder.reviewAdds
+              : t.changeOrder.reviewNoChange}
+        </dt>
         <dd className={diffCents > 0 ? "co-up" : diffCents < 0 ? "co-down" : undefined}>
-          {diffCents === 0 ? "-" : `${diffCents > 0 ? "+" : "-"}${money(Math.abs(diffCents))}`}
+          {diffCents === 0 ? t.changeOrder.reviewNone : `${diffCents > 0 ? "+" : "-"}${money(Math.abs(diffCents))}`}
         </dd>
       </div>
       <div className="co-sums-total">
@@ -170,6 +211,25 @@ export function ChangeOrder({
     </dl>
   );
 
+  // The breakdown as the customer will read it, set the same way their page
+  // sets it: one line per row, price on the right.
+  const lineList = (items: ChangeLineDraft[]) => (
+    <div className="co-lines">
+      <p className="co-label">{t.changeOrder.linesTitle}</p>
+      <ul className="co-lines-rows">
+        {items.map((l, i) => (
+          <li key={i}>
+            <span className="co-lines-title">
+              {l.title}
+              {l.description && <em>{l.description}</em>}
+            </span>
+            <span className="co-lines-amount">{money(Math.round(Number(l.amount) * 100))}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+
   // ── A change is already out with the customer ──
   // One at a time, so there is never a question of which figure they answered.
   if (pending) {
@@ -180,6 +240,7 @@ export function ChangeOrder({
         <p className="co-lead">{fill(t.changeOrder.waitingLead, { name: first })}</p>
 
         <p className="co-note-back">{pending.note}</p>
+        {pending.lines && pending.lines.length > 0 && lineList(pending.lines)}
 
         <dl className="co-sums">
           <div>
@@ -190,10 +251,12 @@ export function ChangeOrder({
             <dt>{t.changeOrder.proposed}</dt>
             <dd>
               {money(pending.amountCents)}{" "}
-              <span className={pendingDiff > 0 ? "co-up" : "co-down"}>
-                ({pendingDiff > 0 ? "+" : "-"}
-                {money(Math.abs(pendingDiff))})
-              </span>
+              {pendingDiff !== 0 && (
+                <span className={pendingDiff > 0 ? "co-up" : "co-down"}>
+                  ({pendingDiff > 0 ? "+" : "-"}
+                  {money(Math.abs(pendingDiff))})
+                </span>
+              )}
             </dd>
           </div>
         </dl>
@@ -245,6 +308,8 @@ export function ChangeOrder({
         <div className="co-preview">
           <p className="co-note-back">{note.trim()}</p>
           {bookedFor && <p className="co-held">{fill(t.changeOrder.reviewDateHeld, { when: bookedFor })}</p>}
+          {hasLines && lineList(lineDrafts)}
+          {dropsLines && <p className="co-hint">{t.changeOrder.linesGone}</p>}
           {sums}
         </div>
 
@@ -302,7 +367,17 @@ export function ChangeOrder({
           action={(fd) => {
             fd.set("id", id);
             fd.set("note", note);
-            fd.set("amount", amount);
+            // With a breakdown the total is its sum. The server works it out
+            // again from the lines and never trusts this figure for it.
+            fd.set("amount", hasLines ? (nextCents / 100).toFixed(2) : amount);
+            if (canBreakDown) {
+              fd.set(
+                "lines_json",
+                JSON.stringify(
+                  lineDrafts.map((l) => ({ title: l.title, description: l.description ?? "", amount: l.amount, required: true })),
+                ),
+              );
+            }
             // The server refuses a send without this, so the tick is a real
             // gate rather than a disabled button somebody can get around.
             fd.set("payments_checked", checked ? "yes" : "no");
@@ -364,18 +439,43 @@ export function ChangeOrder({
           <em>{t.changeOrder.noteHint}</em>
         </label>
 
-        <label className="co-field co-field-amount">
-          <span>{t.changeOrder.amountLabel}</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+        {/* Optional, and the same breakdown editor the quote uses, so a crew who
+            has broken one price down knows this one already. Leave it empty and
+            the change is one figure, exactly as before. */}
+        {canBreakDown && (
+          <OptionBuilder
+            rows={rows}
+            onChange={(next) => {
+              setRows(next);
+              setChecked(false);
+            }}
+            labels={{
+              ...t.quoteOptions,
+              breakdownEmpty: t.changeOrder.breakdownEmpty,
+              breakdownHint: t.changeOrder.breakdownHint,
+            }}
+            mode="breakdown"
           />
-          <em>{fill(t.changeOrder.amountHint, { now: money(totalCents) })}</em>
-        </label>
+        )}
+
+        {/* With lines, the lines own the total: the breakdown above adds it
+            up and the sums below carry it, so there is no box to type a
+            second, different figure into. */}
+        {!hasLines && (
+          <label className="co-field co-field-amount">
+            <span>{t.changeOrder.amountLabel}</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <em>{fill(t.changeOrder.amountHint, { now: money(totalCents) })}</em>
+          </label>
+        )}
+        {dropsLines && <p className="co-hint">{t.changeOrder.linesGone}</p>}
 
         {/* The customer's arithmetic, shown as it is typed. This panel is the
             answer to "what about the deposit": it is already counted, because the
@@ -385,7 +485,9 @@ export function ChangeOrder({
         {refundCents > 0 && (
           <p className="co-warn">{fill(t.changeOrder.refundWarn, { amount: money(refundCents) })}</p>
         )}
-        {diffCents === 0 && valid && <p className="co-hint">{t.changeOrder.sameTotal}</p>}
+        {diffCents === 0 && valid && (
+          <p className="co-hint">{linesChanged ? t.changeOrder.sameTotalNewLines : t.changeOrder.sameTotal}</p>
+        )}
 
         <p className="co-hint">{fill(t.changeOrder.sendHint, { name: first })}</p>
 

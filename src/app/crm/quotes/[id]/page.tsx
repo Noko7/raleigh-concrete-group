@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
+import { boughtLines, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
 import { toCents } from "@/lib/crm/fees";
 import { SITE_ORIGIN } from "@/lib/crm/env";
@@ -162,7 +162,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const showChange = showSchedule && quote.status !== "completed" && quote.status !== "paid";
   const pendingChange =
     quote.change_requested_at && quote.change_amount != null
-      ? { note: quote.change_note ?? "", amountCents: toCents(quote.change_amount) }
+      ? { note: quote.change_note ?? "", amountCents: toCents(quote.change_amount), lines: quote.change_lines }
       : null;
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
@@ -364,6 +364,8 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 }
                 workCompleted={Boolean(quote.completed_at)}
                 pending={pendingChange}
+                lines={boughtLines(options)}
+                canBreakDown={packages.length === 0}
                 locale={locale}
               />
             </div>

@@ -41,7 +41,7 @@ export function PriceCard({
   value,
   onChange,
   derived,
-  derivedLabel = "Total, worked out from the options below",
+  derivedLabel = "Total, from the price breakdown below",
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -160,21 +160,37 @@ export function PickOneSuggestion({
  * component that page itself uses. Closed until asked for: the form already
  * reads like it, this is the final check.
  */
+export type PreviewLine = { title: string; amount: number; description?: string };
+
 export function CustomerPreview({
   firstName,
   price,
   derived,
   sections,
   startOpen = false,
+  lines = [],
+  extras = 0,
+  choice = false,
 }: {
   firstName: string;
   price: number | null;
   derived: boolean;
   sections: Sections;
   startOpen?: boolean;
+  /** The price breakdown: every line that is part of the job, filled in. */
+  lines?: PreviewLine[];
+  /** How many optional extras the customer will be asked about. */
+  extras?: number;
+  /** The job is priced two ways, so the customer picks one first. */
+  choice?: boolean;
 }) {
   const [open, setOpen] = useState(startOpen);
   const filled = QUOTE_SECTION_FIELDS.filter((f) => sections[f].trim());
+  // A breakdown with nothing to pick between: the customer page shows the scope,
+  // then every line with its price, then the total - so the preview does too,
+  // in that order. Only a quote priced two ways still waits on a pick.
+  const breakdown = !choice && lines.length > 0;
+  const breakdownTotal = Math.round(lines.reduce((sum, l) => sum + l.amount, 0) * 100) / 100;
   return (
     <>
       <button type="button" className="jq-preview-toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
@@ -184,19 +200,49 @@ export function CustomerPreview({
         <div className="jq-preview">
           <p className="jq-preview-note">This is how it shows on {firstName}&apos;s phone.</p>
           <p className="cq-title">Hi {firstName},</p>
-          <div className="cq-price">
-            <span className="cq-price-label">{derived ? "Your total" : "Your price, all in"}</span>
-            {/* A quote with options shows no total until the customer picks,
-                so neither does the preview of it. */}
-            <span className="cq-price-value">{!derived && price != null && price > 0 ? dollars(price) : "-"}</span>
-            <span className="cq-price-sub">
-              {derived ? "Shown once they pick their options" : "Free quote · no obligation until you approve"}
-            </span>
-          </div>
+          {/* The single-price card. A broken-down quote has no card up here on
+              the customer's page - its total sits under the lines it adds up -
+              so the preview leaves it out too rather than showing a dash. */}
+          {!breakdown && (
+            <div className="cq-price">
+              <span className="cq-price-label">{derived ? "Your total" : "Your price, all in"}</span>
+              {/* A quote with options shows no total until the customer picks,
+                  so neither does the preview of it. */}
+              <span className="cq-price-value">{!derived && price != null && price > 0 ? dollars(price) : "-"}</span>
+              <span className="cq-price-sub">
+                {derived ? "Shown once they pick their options" : "Free quote · no obligation until you approve"}
+              </span>
+            </div>
+          )}
           {filled.length > 0 && (
             <div className="cq-summary">
               <h2>What&apos;s included</h2>
               <QuoteSections sections={filled.map((f) => [QUOTE_SECTION_LABELS[f], sections[f]] as const)} />
+            </div>
+          )}
+          {breakdown && (
+            <div className="jq-preview-breakdown">
+              <h2 className="cq-opts-title">Price breakdown</h2>
+              <ul className="cq-opt-list cq-breakdown">
+                {lines.map((l, i) => (
+                  <li key={i} className="cq-opt cq-opt-on">
+                    <div className="cq-opt-head">
+                      <span className="cq-opt-title">{l.title}</span>
+                      <span className="cq-opt-price">{dollars(l.amount) ?? "$0"}</span>
+                    </div>
+                    {l.description && <p className="cq-opt-desc">{l.description}</p>}
+                  </li>
+                ))}
+              </ul>
+              {extras > 0 && (
+                <p className="cq-fine">
+                  Then {extras === 1 ? "1 optional extra" : `${extras} optional extras`} they can say yes or no to.
+                </p>
+              )}
+              <div className="cq-opt-total">
+                <span>Your total</span>
+                <strong>{dollars(breakdownTotal) ?? "$0"}</strong>
+              </div>
             </div>
           )}
         </div>

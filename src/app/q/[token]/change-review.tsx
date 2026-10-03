@@ -27,6 +27,7 @@ export function ChangeReview({
   toCents,
   paidCents,
   when,
+  lines = null,
 }: {
   token: string;
   /** What the crew said is changing, word for word. */
@@ -39,6 +40,11 @@ export function ChangeReview({
   paidCents: number;
   /** Their booked day, already formatted, when they have one. */
   when: string | null;
+  /**
+   * The breakdown that comes with the change, when the crew wrote one. It adds
+   * up to the new total, so it sits directly above it.
+   */
+  lines?: { title: string; description: string | null; amount: number }[] | null;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("choose");
@@ -116,16 +122,36 @@ export function ChangeReview({
           customer reads a message like this asking. */}
       {when && <p className="cr-date">Your date doesn&apos;t move: <strong>{when}</strong></p>}
 
+      {/* Where the new total goes, line by line. Plain rows, the same look as
+          the breakdown on their quote, so it reads as the same document. */}
+      {lines && lines.length > 0 && (
+        <div className="cr-lines">
+          <p className="cr-lines-title">New price breakdown</p>
+          <ul className="cq-opt-list cq-breakdown">
+            {lines.map((l, i) => (
+              <li key={i} className="cq-opt cq-opt-on">
+                <div className="cq-opt-head">
+                  <span className="cq-opt-title">{l.title}</span>
+                  <span className="cq-opt-price">{money(Math.round(Number(l.amount) * 100))}</span>
+                </div>
+                {l.description && <p className="cq-opt-desc">{l.description}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <dl className="cr-sums">
         <div>
           <dt>Price you approved</dt>
           <dd>{money(fromCents)}</dd>
         </div>
         <div>
-          <dt>{diff > 0 ? "This change adds" : "This change takes off"}</dt>
-          <dd className={diff > 0 ? "cr-up" : "cr-down"}>
-            {diff > 0 ? "+" : "-"}
-            {money(Math.abs(diff))}
+          {/* Same total, new breakdown: said as no change rather than as a
+              "+$0" that reads like a trick. */}
+          <dt>{diff > 0 ? "This change adds" : diff < 0 ? "This change takes off" : "Change to the price"}</dt>
+          <dd className={diff > 0 ? "cr-up" : diff < 0 ? "cr-down" : undefined}>
+            {diff === 0 ? "None" : `${diff > 0 ? "+" : "-"}${money(Math.abs(diff))}`}
           </dd>
         </div>
         <div className="cr-sums-total">

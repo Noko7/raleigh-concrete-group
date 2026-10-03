@@ -147,6 +147,60 @@ export function QuoteActions({
   // have answered every extra, $0 is a real answer (they said no to it all).
   const nothingPicked = choice ? !chosen : running === 0 && !allAnswered;
 
+  // The lines that make up the price, in the order the crew put them.
+  const breakdown = options.filter((o) => o.required);
+
+  // One line of the quote. A breakdown line is a title, a price and what it
+  // covers; an extra adds its yes / no. Shared by every group above so the two
+  // kinds can never drift apart in how a price or a description is shown.
+  const renderLine = (o: PublicOption) => {
+    const answer = answers[o.id];
+    const on = o.required || answer === "accepted";
+    return (
+      <li key={o.id} className={`cq-opt${on ? " cq-opt-on" : ""}${answer === "declined" ? " cq-opt-off" : ""}`}>
+        <div className="cq-opt-head">
+          <span className="cq-opt-title">{o.title}</span>
+          <span className="cq-opt-price">{usd(o.amount)}</span>
+        </div>
+        {o.description && (
+          <SectionText
+            text={o.description}
+            className="cq-opt-desc"
+            chars={110}
+            lines={2}
+            more="Show details"
+            less="Hide details"
+          />
+        )}
+        {o.required ? (
+          // In the breakdown group every line is included, so saying so on
+          // each one is noise. It earns its place next to extras, on a quote
+          // priced two ways, where included and optional share one list.
+          choice && <span className="cq-opt-included">Included in your project</span>
+        ) : (
+          <div className="cq-opt-choice" role="group" aria-label={`${o.title}: add it or not`}>
+            <button
+              type="button"
+              className={`cq-opt-btn${answer === "accepted" ? " cq-opt-btn-yes" : ""}`}
+              aria-pressed={answer === "accepted"}
+              onClick={() => setAnswers((a) => ({ ...a, [o.id]: "accepted" }))}
+            >
+              Yes, add it
+            </button>
+            <button
+              type="button"
+              className={`cq-opt-btn${answer === "declined" ? " cq-opt-btn-no" : ""}`}
+              aria-pressed={answer === "declined"}
+              onClick={() => setAnswers((a) => ({ ...a, [o.id]: "declined" }))}
+            >
+              No thanks
+            </button>
+          </div>
+        )}
+      </li>
+    );
+  };
+
   // Both Approve buttons do exactly this, so there is one path into scheduling
   // rather than two that can drift.
   function approve() {
@@ -555,67 +609,47 @@ export function QuoteActions({
             </div>
           )}
 
-          {/* The whole point of an itemised quote: each extra is its own yes or
-              no, and the total underneath moves as they answer. Nothing is
-              ticked for them, so the number they end up approving is one they
-              built. */}
+          {/* Two kinds of line, shown as two groups. The breakdown is what
+              they are paying for - materials, labor and the rest - so it reads
+              as a list with prices and nothing to press. Extras are the only
+              part they decide, so they are the only part with buttons.
+
+              On a quote priced two ways the lines sit on top of whichever
+              option they pick, and stay one list under "Anything to add?". */}
           {itemised && (
             <>
-              <h2 className="cq-opts-title">{choice ? "Anything to add?" : "Choose what you'd like"}</h2>
-              {choice && (
-                <p className="cq-fine cq-alts-lead">These are priced the same whichever option you picked above.</p>
-              )}
-              {discount && (
-                <p className="cq-fine cq-opt-todo">
-                  Your ${DECLINE_CREDIT} credit is held. Answer each option and it comes off the total below.
-                </p>
-              )}
-              <ul className="cq-opt-list">
-                {options.map((o) => {
-                  const answer = answers[o.id];
-                  const on = o.required || answer === "accepted";
-                  return (
-                    <li key={o.id} className={`cq-opt${on ? " cq-opt-on" : ""}${answer === "declined" ? " cq-opt-off" : ""}`}>
-                      <div className="cq-opt-head">
-                        <span className="cq-opt-title">{o.title}</span>
-                        <span className="cq-opt-price">{usd(o.amount)}</span>
-                      </div>
-                      {o.description && (
-                        <SectionText
-                          text={o.description}
-                          className="cq-opt-desc"
-                          chars={110}
-                          lines={2}
-                          more="Show details"
-                          less="Hide details"
-                        />
+              {choice ? (
+                <>
+                  <h2 className="cq-opts-title">Anything to add?</h2>
+                  <p className="cq-fine cq-alts-lead">These are priced the same whichever option you picked above.</p>
+                  {discount && (
+                    <p className="cq-fine cq-opt-todo">
+                      Your ${DECLINE_CREDIT} credit is held. Answer each option and it comes off the total below.
+                    </p>
+                  )}
+                  <ul className="cq-opt-list">{options.map(renderLine)}</ul>
+                </>
+              ) : (
+                <>
+                  {breakdown.length > 0 && (
+                    <>
+                      <h2 className="cq-opts-title">Price breakdown</h2>
+                      <ul className="cq-opt-list cq-breakdown">{breakdown.map(renderLine)}</ul>
+                    </>
+                  )}
+                  {optional.length > 0 && (
+                    <>
+                      <h2 className="cq-opts-title">{breakdown.length > 0 ? "Optional extras" : "Choose what you'd like"}</h2>
+                      {discount && (
+                        <p className="cq-fine cq-opt-todo">
+                          Your ${DECLINE_CREDIT} credit is held. Answer each option and it comes off the total below.
+                        </p>
                       )}
-                      {o.required ? (
-                        <span className="cq-opt-included">Included in your project</span>
-                      ) : (
-                        <div className="cq-opt-choice" role="group" aria-label={`${o.title}: add it or not`}>
-                          <button
-                            type="button"
-                            className={`cq-opt-btn${answer === "accepted" ? " cq-opt-btn-yes" : ""}`}
-                            aria-pressed={answer === "accepted"}
-                            onClick={() => setAnswers((a) => ({ ...a, [o.id]: "accepted" }))}
-                          >
-                            Yes, add it
-                          </button>
-                          <button
-                            type="button"
-                            className={`cq-opt-btn${answer === "declined" ? " cq-opt-btn-no" : ""}`}
-                            aria-pressed={answer === "declined"}
-                            onClick={() => setAnswers((a) => ({ ...a, [o.id]: "declined" }))}
-                          >
-                            No thanks
-                          </button>
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+                      <ul className="cq-opt-list">{optional.map(renderLine)}</ul>
+                    </>
+                  )}
+                </>
+              )}
             </>
           )}
 
