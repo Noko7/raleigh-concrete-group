@@ -2,7 +2,14 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 
-import { DEFAULT_DEPOSIT_PERCENT, METHOD_LABELS, depositCents, usd, type PaymentMethod } from "@/lib/crm/fees";
+import {
+  DEFAULT_DEPOSIT_PERCENT,
+  METHOD_LABELS,
+  depositCents,
+  depositDueNowCents,
+  usd,
+  type PaymentMethod,
+} from "@/lib/crm/fees";
 import { jobLedger, payeeState, reconcileCheckout } from "@/lib/crm/payments";
 import { getQuoteByToken } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay } from "@/lib/site-data";
@@ -91,6 +98,9 @@ export default async function PayPage({
   const paidRows = rows.filter((r) => r.status === "paid" || r.status === "refunded");
   const settled = ledger.dueCents <= 0;
   const deposit = Math.min(depositCents(ledger.totalCents, DEFAULT_DEPOSIT_PERCENT), ledger.dueCents);
+  // A second deposit an approved change asked for, still unpaid. When there is
+  // one it is the amount this page leads with.
+  const dueNow = depositDueNowCents(quote.deposit_target_cents, ledger.paidCents, ledger.dueCents);
   const progress = ledger.totalCents > 0 ? Math.min(100, Math.round((ledger.paidCents / ledger.totalCents) * 100)) : 0;
   const payeeName = payee.ok ? payee.staff.full_name?.trim() || businessName : businessName;
 
@@ -170,6 +180,7 @@ export default async function PayPage({
             token={token}
             dueCents={ledger.dueCents}
             depositCents={deposit}
+            dueNowCents={dueNow}
             paidCents={ledger.paidCents}
             payeeName={payeeName}
           />

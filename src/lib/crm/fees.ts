@@ -263,6 +263,20 @@ export function applySettlements(ledger: Ledger, settledCents: number): Ledger {
   };
 }
 
+/**
+ * A second deposit still waiting to be paid, in cents.
+ *
+ * A change that adds materials can ask for money up front. The job then carries
+ * a target - "they should have paid this much in total before we start" - and
+ * this is how far short of it they are. Never below zero, so it reads zero the
+ * moment their check is recorded; never above the balance, so a later change
+ * that lowers the price can't leave them asked for more than they owe.
+ */
+export function depositDueNowCents(targetCents: number | null | undefined, paidCents: number, dueCents: number): number {
+  if (targetCents == null) return 0;
+  return Math.max(0, Math.min(Number(targetCents) - paidCents, dueCents));
+}
+
 /** Half the job, rounded to the cent, for the first payment we suggest. */
 export function depositCents(jobTotalCents: number, percent = DEFAULT_DEPOSIT_PERCENT): number {
   return Math.round((jobTotalCents * percent) / 100);

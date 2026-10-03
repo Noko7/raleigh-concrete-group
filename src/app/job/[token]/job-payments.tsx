@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { recordManualPayment, sendPayLink, type PaymentState } from "@/app/crm/quotes/[id]/payment-actions";
 import { RECORDED_METHODS, fromCents, usd, type PaymentMethod } from "@/lib/crm/fees";
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, fill, type Locale } from "@/lib/crm/i18n";
 
 const initial: PaymentState = { ok: false };
 
@@ -40,6 +40,7 @@ export function JobPayments({
   totalCents,
   paidCents,
   dueCents,
+  dueNowCents = 0,
   feeDueCents,
   feeSettledCents = 0,
   rows,
@@ -50,6 +51,8 @@ export function JobPayments({
   totalCents: number;
   paidCents: number;
   dueCents: number;
+  /** A second deposit from an approved change, still to come in. 0 when none. */
+  dueNowCents?: number;
   feeDueCents: number;
   /** What they have already sent the office for this job. */
   feeSettledCents?: number;
@@ -92,6 +95,12 @@ export function JobPayments({
           </div>
         </dl>
       </div>
+
+      {/* The second deposit, when a change asked for one: the figure to collect
+          first, said before anything else on the card. */}
+      {!settled && dueNowCents > 0 && (
+        <p className="jp-now">{fill(t.dueNow, { now: usd(dueNowCents), rest: usd(dueCents - dueNowCents) })}</p>
+      )}
 
       {/* What they owe the office, and how it gets there. Only the second line
           changes: the fee is the same either way, and only the route differs. */}
@@ -165,7 +174,10 @@ export function JobPayments({
                       inputMode="decimal"
                       // Seeded with the balance because that is what a crew is
                       // usually handed, and they can type over it in one tap.
-                      defaultValue={String(fromCents(dueCents))}
+                      // The deposit when one is due, not the whole balance: a
+                      // pre-filled full balance is how a deposit once got
+                      // recorded as the job paid in full.
+                      defaultValue={String(fromCents(dueNowCents > 0 ? dueNowCents : dueCents))}
                       autoComplete="off"
                       disabled={saving}
                     />

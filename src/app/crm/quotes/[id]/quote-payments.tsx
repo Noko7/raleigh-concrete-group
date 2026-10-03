@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { RECORDED_METHODS, fromCents, usd, type PaymentMethod } from "@/lib/crm/fees";
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import {
   correctRecordedPayment,
   recordManualPayment,
@@ -59,6 +59,7 @@ export function QuotePayments({
   totalCents,
   paidCents,
   dueCents,
+  dueNowCents = 0,
   feeTotalCents,
   feeCollectedCents,
   feeDueCents,
@@ -72,6 +73,8 @@ export function QuotePayments({
   totalCents: number;
   paidCents: number;
   dueCents: number;
+  /** A second deposit from an approved change, still to come in. 0 when none. */
+  dueNowCents?: number;
   feeTotalCents: number;
   feeCollectedCents: number;
   feeDueCents: number;
@@ -134,6 +137,11 @@ export function QuotePayments({
         </div>
       </div>
 
+      {/* The second deposit, when a change asked for one. */}
+      {!settled && dueNowCents > 0 && (
+        <p className="qp-now">{fill(t.dueNow, { now: usd(dueNowCents), rest: usd(dueCents - dueNowCents) })}</p>
+      )}
+
       {/* The office's cut, split three ways so nobody has to do the subtraction:
           what the job earns, what Stripe already took, what is still owed.
           Said in the office's voice - the crew's card says "you owe", which is
@@ -193,7 +201,7 @@ export function QuotePayments({
               name="amount"
               type="text"
               inputMode="decimal"
-              defaultValue={String(fromCents(dueCents))}
+              defaultValue={String(fromCents(dueNowCents > 0 ? dueNowCents : dueCents))}
               autoComplete="off"
               disabled={saving}
             />

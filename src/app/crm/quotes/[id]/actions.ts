@@ -885,19 +885,35 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     lines = parsed.rows.map((r) => ({ ...r, id: undefined, required: true }));
   }
 
-  const result = await requestChange(session, id, { note, newAmount: Number(raw), lines });
+  // What they have actually handed over, read off the same ledger every other
+  // screen reads, so the figure in the log is the figure on the money card -
+  // and so a second deposit is checked against the real balance.
+  const { ledger } = await jobLedger(current);
+
+  // A second deposit, when the box is ticked: what they send up front if they
+  // approve, typed in dollars.
+  let depositCents: number | null = null;
+  if (String(formData.get("deposit_on") ?? "") === "yes") {
+    const typed = Number(String(formData.get("deposit") ?? "").replace(/[$,\s]/g, ""));
+    depositCents = Number.isFinite(typed) ? Math.round(typed * 100) : NaN;
+  }
+
+  const result = await requestChange(session, id, {
+    note,
+    newAmount: Number(raw),
+    lines,
+    depositCents,
+    paidCents: ledger.paidCents,
+  });
   if (!result.ok || !result.quote) return { ok: false, error: result.error ?? "Could not send that change." };
   const quote = result.quote;
-
-  // What they have actually handed over, read off the same ledger every other
-  // screen reads, so the figure in the log is the figure on the money card.
-  const { ledger } = await jobLedger(quote);
 
   await addEvent(session, id, "change_requested", {
     note: quote.change_note,
     from: quote.quote_amount,
     to: quote.change_amount,
     lines: quote.change_lines,
+    deposit_cents: quote.change_deposit_cents,
     paid_cents: ledger.paidCents,
     // Who stood behind the figures. The balance the customer is being asked to
     // approve rests on the recorded payments, and this is the record that

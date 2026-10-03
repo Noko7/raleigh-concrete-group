@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/crm/auth";
 import { boughtLines, changeStartLines, dollars, requestedVisitOf, STATUS_LABELS, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, inQuietHours, todayYmd } from "@/lib/crm/clock";
-import { toCents } from "@/lib/crm/fees";
+import { depositDueNowCents, toCents } from "@/lib/crm/fees";
 import { crewEventText, quoteSends } from "@/lib/crm/events";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
@@ -83,7 +83,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   const showChange = accepted && !isDone;
   const pendingChange =
     quote.change_requested_at && quote.change_amount != null
-      ? { note: quote.change_note ?? "", amountCents: toCents(quote.change_amount), lines: quote.change_lines }
+      ? {
+          note: quote.change_note ?? "",
+          amountCents: toCents(quote.change_amount),
+          lines: quote.change_lines,
+          depositCents: quote.change_deposit_cents,
+        }
       : null;
 
   // The same column read two ways: a booked appointment on an in-person request,
@@ -452,6 +457,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             totalCents={money.ledger.totalCents}
             paidCents={money.ledger.paidCents}
             dueCents={money.ledger.dueCents}
+            dueNowCents={depositDueNowCents(quote.deposit_target_cents, money.ledger.paidCents, money.ledger.dueCents)}
             feeDueCents={money.ledger.feeDueNowCents}
             feeSettledCents={money.ledger.feeSettledCents}
             rows={money.rows.map((r) => ({

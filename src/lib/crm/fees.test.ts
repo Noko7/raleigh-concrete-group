@@ -28,6 +28,7 @@ import {
   INTRO_FEE_RATE,
   STANDARD_FEE_RATE,
   type LedgerRow,
+  depositDueNowCents,
 } from "./fees.ts";
 
 // A row in the shape readLedger reads. Defaults are the common case - a paid
@@ -457,4 +458,28 @@ test("card is never a method somebody can type in", () => {
   assert.equal(isRecordedMethod("other"), true);
   assert.equal(isRecordedMethod("bitcoin"), false);
   assert.equal(isRecordedMethod(""), false);
+});
+
+// ── A second deposit on a change ────────────────────────────────────────────
+// Dave: $8,000 patio, $4,000 paid. A change adds $1,390 of materials and asks
+// for that $1,390 up front. On approval the target is what he had paid plus the
+// deposit, $5,390, and "due now" is how far short of it he is.
+
+test("a second deposit is due until it comes in, then reads zero", () => {
+  const target = 400000 + 139000;
+  // Approved: total $9,390, paid $4,000, due $5,390.
+  assert.equal(depositDueNowCents(target, 400000, 539000), 139000);
+  // His $1,390 check is recorded.
+  assert.equal(depositDueNowCents(target, 539000, 400000), 0);
+  // Part of it came in.
+  assert.equal(depositDueNowCents(target, 450000, 489000), 89000);
+  // He paid more than asked.
+  assert.equal(depositDueNowCents(target, 600000, 339000), 0);
+});
+
+test("never more than the balance, and nothing when none was asked for", () => {
+  // A later change lowered the price below the target.
+  assert.equal(depositDueNowCents(539000, 400000, 50000), 50000);
+  assert.equal(depositDueNowCents(null, 400000, 539000), 0);
+  assert.equal(depositDueNowCents(undefined, 0, 800000), 0);
 });

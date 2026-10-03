@@ -26,12 +26,15 @@ export function PayPanel({
   token,
   dueCents,
   depositCents,
+  dueNowCents = 0,
   paidCents,
   payeeName,
 }: {
   token: string;
   dueCents: number;
   depositCents: number;
+  /** A second deposit from an approved change, still to pay. 0 when none. */
+  dueNowCents?: number;
   paidCents: number;
   payeeName: string;
 }) {
@@ -41,7 +44,20 @@ export function PayPanel({
   // leads. Once something has been paid, there is only one sensible number
   // left and offering a "deposit" again would be inviting them to underpay.
   const fresh = paidCents === 0;
-  const choices: Choice[] = fresh
+  // A change asked for money up front (materials for the added work): that is
+  // what they came here to pay, so it leads, with the whole balance beside it.
+  const secondDeposit = dueNowCents > 0 && dueNowCents < dueCents;
+  const choices: Choice[] = secondDeposit
+    ? [
+        {
+          key: "deposit2",
+          label: usd(dueNowCents),
+          note: "Deposit for your change - covers the added materials",
+          cents: dueNowCents,
+        },
+        { key: "full", label: usd(dueCents), note: "Pay the whole balance now", cents: dueCents },
+      ]
+    : fresh
     ? [
         {
           key: "deposit",

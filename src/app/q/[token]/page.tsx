@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DECLINE_CREDIT, dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, slotsFor } from "@/lib/crm/constants";
-import { toCents, usd } from "@/lib/crm/fees";
+import { depositDueNowCents, toCents, usd } from "@/lib/crm/fees";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, getWorkHours, isOpenAgain, isQuoteExpired, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
@@ -154,8 +154,12 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             toCents: toCents(quote.change_amount),
             paidCents: ledger.paidCents,
             lines: quote.change_lines,
+            depositCents: quote.change_deposit_cents,
           }
         : null;
+    // A second deposit from an approved change, still waiting to be paid. Clears
+    // itself once the money is recorded - see depositDueNowCents.
+    const dueNowCents = depositDueNowCents(quote.deposit_target_cents, ledger.paidCents, ledger.dueCents);
     const bookedFor = quote.scheduled_date
       ? `${prettyDate(quote.scheduled_date)}${quote.scheduled_time ? ` at ${quote.scheduled_time}` : ""}`
       : null;
@@ -171,6 +175,8 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             paidCents={pendingChange.paidCents}
             when={bookedFor}
             lines={pendingChange.lines}
+            depositCents={pendingChange.depositCents}
+            payHref={payee.ok ? `/pay/${token}` : null}
           />
         )}
         <div className="cq-confirm cq-confirm-ok">
@@ -243,7 +249,12 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               them until they have chosen to pay. */}
           {ledger.paidCents > 0 && (
             <p className="cq-confirm-paid">
-              {ledger.dueCents > 0 ? (
+              {dueNowCents > 0 ? (
+                <>
+                  Paid <strong>{usd(ledger.paidCents)}</strong> · <strong>{usd(dueNowCents)}</strong> deposit due now ·{" "}
+                  {usd(ledger.dueCents - dueNowCents)} when the work is done
+                </>
+              ) : ledger.dueCents > 0 ? (
                 <>
                   Paid <strong>{usd(ledger.paidCents)}</strong> · <strong>{usd(ledger.dueCents)}</strong> to go
                 </>
@@ -256,7 +267,11 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           )}
           {payee.ok && ledger.dueCents > 0 && (
             <Link href={`/pay/${token}`} className="cq-btn cq-btn-primary cq-confirm-pay">
-              {ledger.paidCents > 0 ? `Pay the ${usd(ledger.dueCents)} balance` : "Pay your deposit"}
+              {dueNowCents > 0
+                ? `Pay the ${usd(dueNowCents)} deposit`
+                : ledger.paidCents > 0
+                  ? `Pay the ${usd(ledger.dueCents)} balance`
+                  : "Pay your deposit"}
             </Link>
           )}
 

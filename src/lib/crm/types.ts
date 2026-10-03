@@ -185,6 +185,15 @@ export type Quote = {
   // empty one, replaces them when the customer approves. When it has lines they
   // add up to change_amount. Null until supabase/change-order-lines.sql is run.
   change_lines: ChangeLine[] | null;
+  // A second deposit the change asks for, in cents, paid up front if the
+  // customer approves it (materials for the extra work, say). Null when the
+  // change asks for nothing up front.
+  change_deposit_cents: number | null;
+  // What the customer should have paid IN TOTAL before the work goes ahead,
+  // set when a change with a deposit is approved. "Due now" is this minus what
+  // they have paid, so it clears itself once the money is recorded - see
+  // depositDueNowCents. Null on every job that was never asked for one.
+  deposit_target_cents: number | null;
 };
 
 // One line of a change order's breakdown, as stored on the pending change.
