@@ -4320,3 +4320,30 @@ textarea.qm-input { min-height: 0; resize: vertical; }
   .cq-wrap:has(> .cr) > .cq-confirm { min-height: 0; }
 }
 .cr { color: #1f2328; }
+
+/* A second deposit on a change. One tick, and when it is on, one figure. The
+   hint sits inside the label so the tick reads as a sentence, not a setting. */
+.co-deposit { display: flex; flex-direction: column; gap: 0.6rem; }
+.co-deposit-toggle span { display: flex; flex-direction: column; gap: 0.2rem; }
+.co-deposit-toggle em { font-style: normal; font-weight: 400; font-size: 0.8rem; line-height: 1.45; color: var(--crm-muted); }
+.co-light .co-deposit-toggle em { color: #5b6470; }
+.co-deposit-on .co-deposit-toggle { border-color: var(--amber); }
+.co-field em.co-deposit-err { color: #f87171; }
+.co-light .co-field em.co-deposit-err { color: #b91c1c; }
+/* The "due now" row: the one figure the customer acts on first. */
+.co-sums-now { border-top: 1px dashed var(--crm-border); margin-top: 0.2rem; padding-top: 0.45rem; }
+.co-light .co-sums-now { border-top-color: #e0d5c4; }
+.co-sums-now dt, .co-sums-now dd { font-weight: 800; color: var(--amber) !important; }
+.co-light .co-sums-now dt, .co-light .co-sums-now dd { color: var(--amber-dark) !important; }
+
+.cr-sums-now { border-top: 1px dashed #e2e5ea; margin-top: 0.25rem; padding-top: 0.5rem; }
+.cr-sums-now dt { color: #1f2328 !important; font-weight: 800; }
+.cr-sums-now dd { color: var(--amber-dark); font-size: 1.15rem; font-weight: 800; }
+.cr-pay { display: flex; align-items: center; justify-content: center; text-decoration: none; margin: 0.4rem 0 0.8rem; }
+
+/* The same fact on the crew's and the owner's money cards. */
+.jp-now, .qp-now {
+  margin: 0 0 1rem; padding: 0.65rem 0.85rem; border-radius: 0.6rem; font-size: 0.9rem; font-weight: 700; line-height: 1.45;
+  background: #fff7ed; border: 1px solid #fed7aa; color: #7c2d12;
+}
+.qp-now { margin-bottom: 0.8rem; }

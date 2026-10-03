@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireSession } from "@/lib/crm/auth";
 import { boughtLines, changeStartLines, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
-import { toCents } from "@/lib/crm/fees";
+import { depositDueNowCents, toCents } from "@/lib/crm/fees";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
@@ -162,7 +162,12 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const showChange = showSchedule && quote.status !== "completed" && quote.status !== "paid";
   const pendingChange =
     quote.change_requested_at && quote.change_amount != null
-      ? { note: quote.change_note ?? "", amountCents: toCents(quote.change_amount), lines: quote.change_lines }
+      ? {
+          note: quote.change_note ?? "",
+          amountCents: toCents(quote.change_amount),
+          lines: quote.change_lines,
+          depositCents: quote.change_deposit_cents,
+        }
       : null;
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
@@ -402,6 +407,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 totalCents={money.ledger.totalCents}
                 paidCents={money.ledger.paidCents}
                 dueCents={money.ledger.dueCents}
+                dueNowCents={depositDueNowCents(quote.deposit_target_cents, money.ledger.paidCents, money.ledger.dueCents)}
                 feeTotalCents={money.ledger.feeTotalCents}
                 feeCollectedCents={money.ledger.feeCollectedCents}
                 feeDueCents={money.ledger.feeDueNowCents}

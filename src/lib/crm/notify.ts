@@ -1497,7 +1497,7 @@ export async function notifyChangeRequested(q: QuoteInfo, note: string): Promise
 export async function notifyChangeAnswered(
   q: QuoteInfo,
   accepted: boolean,
-  change: { note: string; fromCents: number; toCents: number; paidCents: number },
+  change: { note: string; fromCents: number; toCents: number; paidCents: number; depositCents?: number | null },
   contractorPhone?: string | null,
 ): Promise<void> {
   const diff = change.toCents - change.fromCents;
@@ -1520,6 +1520,14 @@ export async function notifyChangeAnswered(
           // is a line to read past, and "still to collect" already says it.
           ...(change.paidCents > 0 ? block("Already collected:", money(change.paidCents)) : []),
           ...block("Still to collect:", money(dueCents)),
+          // The second deposit, when the change asked for one: the part of
+          // "still to collect" that has to come in before the work.
+          ...(change.depositCents && change.depositCents > 0
+            ? block(
+                "Deposit due now:",
+                `${money(Math.min(change.depositCents, dueCents))}, rest when the work is done`,
+              )
+            : []),
         ]
       : block("Price unchanged:", money(change.fromCents))),
     // The day is the thing a crew checks next, and a change order never moves

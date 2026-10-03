@@ -50,6 +50,7 @@ export async function POST(request: Request) {
           fromCents: toCents(result.from),
           toCents: toCents(result.to),
           paidCents,
+          depositCents: result.depositCents ?? null,
         },
         contractorPhone,
       );

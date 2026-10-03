@@ -79,7 +79,7 @@ export function ChangeOrder({
   /** Whether the work itself is finished - decides the paid-in-full warning. */
   workCompleted: boolean;
   /** The change already waiting on the customer, if there is one. */
-  pending: { note: string; amountCents: number; lines?: ChangeLineDraft[] | null } | null;
+  pending: { note: string; amountCents: number; lines?: ChangeLineDraft[] | null; depositCents?: number | null } | null;
   /**
    * Where the breakdown starts: the job as the customer agreed it. Its own
    * lines when it has them, otherwise one line carrying the agreed total - so
@@ -108,6 +108,11 @@ export function ChangeOrder({
   // Ticked on the review step. Reset whenever they go back to edit, because a
   // tick that survives a changed figure is a tick against something else.
   const [checked, setChecked] = useState(false);
+  // A second deposit: off unless the crew ask for one. The amount is theirs to
+  // set, seeded with what the change adds the first time the box is ticked,
+  // because "they send us the $1,390 for the materials" is the usual case.
+  const [depositOn, setDepositOn] = useState(false);
+  const [deposit, setDeposit] = useState("");
   // The breakdown, when there is one. Seeded from the job's own lines for the
   // same reason the total is seeded: a change is an edit to what was agreed.
   const [rows, setRows] = useState<OptionRow[]>(() =>
@@ -167,9 +172,23 @@ export function ChangeOrder({
   // which is a different conversation and has to be said out loud before the
   // change goes out rather than discovered afterwards.
   const refundCents = valid ? Math.max(0, paidCents - nextCents) : 0;
+  // The second deposit, and the rest of the balance once it is in. Checked
+  // against the balance this change leaves, the same rule the server applies.
+  // Only while the box can be seen: a change that ends up owing them money
+  // back hides it, and a tick left behind must not block or ride along.
+  const asking = depositOn && refundCents === 0;
+  const depositCentsVal = asking ? Math.round(Number(deposit.replace(/[$,\s]/g, "")) * 100) : 0;
+  const depositProblem = !asking
+    ? null
+    : !Number.isFinite(depositCentsVal) || depositCentsVal < 100
+      ? t.changeOrder.depositTooSmall
+      : depositCentsVal > dueCents
+        ? fill(t.changeOrder.depositTooMuch, { max: money(dueCents) })
+        : null;
+  const showDeposit = asking && !depositProblem && valid;
   // A new total, or the same total with a new breakdown: "same price, but show
   // me where it goes" is a real change for the customer to approve.
-  const composed = valid && note.trim().length >= 3 && (diffCents !== 0 || linesChanged);
+  const composed = valid && note.trim().length >= 3 && (diffCents !== 0 || linesChanged) && !depositProblem;
 
   // The symptom of the bug this whole step exists for: the job says it is fully
   // paid and nobody has finished the work. It can be legitimate - a customer may
@@ -213,6 +232,20 @@ export function ChangeOrder({
         <dt>{refundCents > 0 ? t.changeOrder.reviewBack2You : t.changeOrder.reviewLeft}</dt>
         <dd>{refundCents > 0 ? money(refundCents) : money(dueCents)}</dd>
       </div>
+      {/* The balance split in two when a second deposit is asked for, so the
+          customer reads exactly what to send now and what waits for the end. */}
+      {showDeposit && (
+        <>
+          <div className="co-sums-now">
+            <dt>{t.changeOrder.sumDueNow}</dt>
+            <dd>{money(depositCentsVal)}</dd>
+          </div>
+          <div>
+            <dt>{t.changeOrder.sumRest}</dt>
+            <dd>{money(dueCents - depositCentsVal)}</dd>
+          </div>
+        </>
+      )}
     </dl>
   );
 
@@ -252,6 +285,12 @@ export function ChangeOrder({
             <dt>{t.changeOrder.nowTotal}</dt>
             <dd>{money(totalCents)}</dd>
           </div>
+          {pending.depositCents != null && pending.depositCents > 0 && (
+            <div>
+              <dt>{t.changeOrder.pendingDeposit}</dt>
+              <dd>{money(pending.depositCents)}</dd>
+            </div>
+          )}
           <div>
             <dt>{t.changeOrder.proposed}</dt>
             <dd>
@@ -386,6 +425,8 @@ export function ChangeOrder({
             // The server refuses a send without this, so the tick is a real
             // gate rather than a disabled button somebody can get around.
             fd.set("payments_checked", checked ? "yes" : "no");
+            fd.set("deposit_on", asking ? "yes" : "no");
+            fd.set("deposit", deposit);
             // The total this preview was drawn against. The server refuses the
             // send if the job has been repriced since, rather than letting a
             // reviewed difference go out against a figure nobody saw.
@@ -482,6 +523,49 @@ export function ChangeOrder({
         )}
         {dropsLines && <p className="co-hint">{t.changeOrder.linesGone}</p>}
 
+        {/* A second deposit. One tick and one figure: most changes ask for
+            nothing up front, so it stays out of the way until it is wanted. */}
+        {refundCents === 0 && (
+          <div className={`co-deposit${depositOn ? " co-deposit-on" : ""}`}>
+            <label className="co-check co-deposit-toggle">
+              <input
+                type="checkbox"
+                checked={depositOn}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setDepositOn(on);
+                  setChecked(false);
+                  if (on && deposit.trim() === "") {
+                    const seed = Math.max(0, Math.min(diffCents, dueCents));
+                    setDeposit(seed > 0 ? (seed / 100).toFixed(2) : "");
+                  }
+                }}
+              />
+              <span>
+                {t.changeOrder.depositToggle}
+                <em>{fill(t.changeOrder.depositHint, { name: first })}</em>
+              </span>
+            </label>
+            {depositOn && (
+              <label className="co-field co-field-amount">
+                <span>{t.changeOrder.depositLabel}</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="1"
+                  value={deposit}
+                  onChange={(e) => {
+                    setDeposit(e.target.value);
+                    setChecked(false);
+                  }}
+                />
+                {depositProblem && <em className="co-deposit-err">{depositProblem}</em>}
+              </label>
+            )}
+          </div>
+        )}
+
         {/* The customer's arithmetic, shown as it is typed. This panel is the
             answer to "what about the deposit": it is already counted, because the
             balance has always been the total minus what has come in. */}
@@ -490,6 +574,7 @@ export function ChangeOrder({
         {refundCents > 0 && (
           <p className="co-warn">{fill(t.changeOrder.refundWarn, { amount: money(refundCents) })}</p>
         )}
+
         {diffCents === 0 && valid && (
           <p className="co-hint">{linesChanged ? t.changeOrder.sameTotalNewLines : t.changeOrder.sameTotal}</p>
         )}

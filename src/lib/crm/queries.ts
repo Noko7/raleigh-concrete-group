@@ -2062,6 +2062,7 @@ const CLEAR_CHANGE: Partial<Quote> = {
   change_requested_at: null,
   change_requested_by: null,
   change_lines: null,
+  change_deposit_cents: null,
 };
 
 export type ChangeRequestResult = { ok: boolean; error?: string; quote?: Quote };
@@ -2075,7 +2076,7 @@ export type ChangeRequestResult = { ok: boolean; error?: string; quote?: Quote }
 export async function requestChange(
   session: Session,
   id: string,
-  input: { note: string; newAmount: number; lines?: QuoteOptionDraft[] },
+  input: { note: string; newAmount: number; lines?: QuoteOptionDraft[]; depositCents?: number | null; paidCents?: number },
 ): Promise<ChangeRequestResult> {
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
@@ -2139,12 +2140,28 @@ export async function requestChange(
     return { ok: false, error: "That's the same total they already agreed to. Change the figure, or just call them." };
   }
 
+  // A second deposit, if the change asks for one: whole cents, at least a
+  // dollar, and no more than the balance the change leaves them with - asking
+  // for more up front than the job will be owed is a mistake, not a deposit.
+  let deposit: number | null = null;
+  if (input.depositCents != null) {
+    deposit = Math.round(Number(input.depositCents));
+    const balance = toCents(amount) - Math.max(0, input.paidCents ?? 0);
+    if (!Number.isFinite(deposit) || deposit < 100) {
+      return { ok: false, error: "Enter how much they need to send up front, or untick the deposit." };
+    }
+    if (deposit > balance) {
+      return { ok: false, error: "The deposit can't be more than what they'll owe after this change." };
+    }
+  }
+
   const { quote, error } = await updateQuoteResult(session, id, {
     change_note: note,
     change_amount: amount,
     change_requested_at: new Date().toISOString(),
     change_requested_by: session.staff.id,
     change_lines: changeLines,
+    change_deposit_cents: deposit,
   });
   if (!quote) {
     return {
@@ -2182,6 +2199,8 @@ export type ChangeResponseResult = {
   from?: number | null;
   to?: number | null;
   note?: string | null;
+  /** The second deposit the approved change asked for, in cents, if any. */
+  depositCents?: number | null;
 };
 
 /**
@@ -2231,6 +2250,7 @@ export async function recordChangeResponse(
     note?: string | null;
     old_lines?: unknown;
     new_lines?: unknown;
+    deposit_cents?: number | null;
   };
   // Answered in another tab between the read above and the lock.
   if (out.status !== "ok" || !out.quote) return { ok: true, duplicate: true };
@@ -2247,11 +2267,17 @@ export async function recordChangeResponse(
       type: action === "accept" ? "change_accepted" : "change_declined",
       // The breakdown either side of the change, so "what did this job include
       // before they asked for the bigger pad" is answerable from the log.
-      meta: { from, to, note, ...(out.new_lines != null ? { lines_before: out.old_lines, lines_after: out.new_lines } : {}) },
+      meta: {
+        from,
+        to,
+        note,
+        ...(out.new_lines != null ? { lines_before: out.old_lines, lines_after: out.new_lines } : {}),
+        ...(out.deposit_cents != null ? { deposit_cents: out.deposit_cents } : {}),
+      },
     }),
   }).catch(() => {});
 
-  return { ok: true, quote: out.quote, from, to, note };
+  return { ok: true, quote: out.quote, from, to, note, depositCents: out.deposit_cents ?? null };
 }
 
 // Confirm (or move) the work day. Runs as the logged-in user so RLS keeps a

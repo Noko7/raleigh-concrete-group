@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { usd as money } from "@/lib/crm/fees";
@@ -28,6 +29,8 @@ export function ChangeReview({
   paidCents,
   when,
   lines = null,
+  depositCents = null,
+  payHref = null,
 }: {
   token: string;
   /** What the crew said is changing, word for word. */
@@ -45,6 +48,13 @@ export function ChangeReview({
    * up to the new total, so it sits directly above it.
    */
   lines?: { title: string; description: string | null; amount: number }[] | null;
+  /**
+   * A second deposit the change asks for, in cents: paid up front once they
+   * approve, for materials on the added work. Null when it asks for nothing.
+   */
+  depositCents?: number | null;
+  /** Where to pay it by card, when card payment is set up on this job. */
+  payHref?: string | null;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("choose");
@@ -56,6 +66,9 @@ export function ChangeReview({
   // than shown as a $0 balance, because a customer owed money needs to know it
   // is coming back, not that they owe nothing.
   const refundCents = Math.max(0, paidCents - toCents);
+  // What to send now and what waits for the end, when a deposit is asked for.
+  const nowCents = depositCents && depositCents > 0 ? Math.min(depositCents, dueCents) : 0;
+  const restCents = dueCents - nowCents;
 
   async function answer(action: "accept" | "decline") {
     setError("");
@@ -92,6 +105,17 @@ export function ChangeReview({
           {paidCents > 0 && dueCents > 0 ? `, with ${money(dueCents)} left to pay.` : "."}
           {refundCents > 0 && ` We'll get ${money(refundCents)} back to you.`}
         </p>
+        {nowCents > 0 && (
+          <p className="cr-note">
+            <strong>{money(nowCents)} is due now</strong> for the materials. The rest, {money(restCents)}, is due when
+            the work is done.
+          </p>
+        )}
+        {nowCents > 0 && payHref && (
+          <Link href={payHref} className="cr-yes cr-pay">
+            Pay the {money(nowCents)} deposit
+          </Link>
+        )}
         {when && <p className="cr-note">Your date is still {when}.</p>}
       </div>
     );
@@ -170,6 +194,20 @@ export function ChangeReview({
           <dt>{refundCents > 0 ? "Back to you" : "Left to pay"}</dt>
           <dd>{refundCents > 0 ? money(refundCents) : money(dueCents)}</dd>
         </div>
+        {/* The second deposit: the part of that balance to send now, for the
+            materials, and what waits for the end. */}
+        {nowCents > 0 && (
+          <>
+            <div className="cr-sums-now">
+              <dt>Due now, for materials</dt>
+              <dd>{money(nowCents)}</dd>
+            </div>
+            <div>
+              <dt>Rest when the work is done</dt>
+              <dd>{money(restCents)}</dd>
+            </div>
+          </>
+        )}
       </dl>
 
       <div className="cr-acts">

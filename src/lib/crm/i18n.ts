@@ -523,6 +523,15 @@ const en = {
     // The job had a breakdown and the change has none.
     linesGone: "The old breakdown comes off and the job goes back to one price.",
     sameTotalNewLines: "Same total as before. They're approving the new breakdown.",
+    // ── A second deposit, for materials on the added work ──
+    depositToggle: "Ask for a second deposit up front",
+    depositHint: "For materials on the added work. {name} pays it on approval, and the rest when the work is done.",
+    depositLabel: "Second deposit",
+    depositTooSmall: "Enter how much they need to send up front, or untick the deposit.",
+    depositTooMuch: "That's more than they'll owe after this change ({max}).",
+    sumDueNow: "Due now, for materials",
+    sumRest: "Rest when the work is done",
+    pendingDeposit: "Deposit due on approval",
     refundWarn: "That's less than they've already paid, so we'd owe them {amount} back. Worth a call before you send it.",
     sendHint: "{name} gets a text with the change and a link. Their date doesn't move.",
     // ── The preview, between composing a change and sending it ──
@@ -761,6 +770,8 @@ const en = {
     paid: "Paid so far",
     due: "Still to collect",
     settled: "Paid in full",
+    // A second deposit from an approved change, still waiting to come in.
+    dueNow: "Second deposit due now: {now}. The other {rest} is due when the work is done.",
     noPrice: "No price on this job yet, so there's nothing to collect.",
     // The debt the cash board is built around. Named plainly, because a
     // contractor should never be surprised by it at the end of a month.
