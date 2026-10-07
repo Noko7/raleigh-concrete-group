@@ -2229,6 +2229,33 @@ export async function recordChangeResponse(
   // for them to do - which is the truth.
   if (!q.change_requested_at || q.change_amount == null) return { ok: true, duplicate: true };
 
+  return applyChange(q.id, action === "accept");
+}
+
+/**
+ * Apply a change the customer already agreed to, on the phone or on site.
+ *
+ * Same columns, same transaction and same log row as the customer tapping
+ * approve on their link - the only difference is who says they agreed, which
+ * goes in the log as `recorded_by` so the trail shows it wasn't the customer's
+ * own button. The caller has already written the change (requestChange), which
+ * is where access and the figures are checked.
+ */
+export async function recordChangeAgreed(
+  session: Session,
+  id: string,
+): Promise<ChangeResponseResult> {
+  const by = session.staff.full_name || session.staff.email || "Staff";
+  return applyChange(id, true, { recorded_by: by });
+}
+
+async function applyChange(
+  quoteId: string,
+  accept: boolean,
+  extraMeta: Record<string, unknown> = {},
+): Promise<ChangeResponseResult> {
+  const action = accept ? "accept" : "decline";
+
   // The price, the breakdown and the cleared change, in one transaction (see
   // supabase/change-order-lines.sql). Two separate writes could leave a job
   // showing the new lines against the old total if the second one failed.
@@ -2239,7 +2266,7 @@ export async function recordChangeResponse(
   // come from the same function or they drift. See /api/change-response.
   const res = await pgAdmin("rpc/apply_change_response", {
     method: "POST",
-    body: JSON.stringify({ p_id: q.id, p_accept: action === "accept" }),
+    body: JSON.stringify({ p_id: quoteId, p_accept: accept }),
   });
   if (!res.ok) return { ok: false, error: "Could not save your answer. Please call us." };
   const out = (await res.json()) as {
@@ -2263,7 +2290,7 @@ export async function recordChangeResponse(
     method: "POST",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({
-      quote_id: q.id,
+      quote_id: quoteId,
       type: action === "accept" ? "change_accepted" : "change_declined",
       // The breakdown either side of the change, so "what did this job include
       // before they asked for the bigger pad" is answerable from the log.
@@ -2273,6 +2300,7 @@ export async function recordChangeResponse(
         note,
         ...(out.new_lines != null ? { lines_before: out.old_lines, lines_after: out.new_lines } : {}),
         ...(out.deposit_cents != null ? { deposit_cents: out.deposit_cents } : {}),
+        ...extraMeta,
       },
     }),
   }).catch(() => {});

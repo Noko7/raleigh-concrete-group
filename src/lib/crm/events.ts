@@ -251,15 +251,16 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       // approving a balance, so the row has to say who stood behind the half of
       // it that came from the ledger.
       const by = m.payments_checked_by ? `, payments checked by ${String(m.payments_checked_by)}` : "";
-      return `Change sent for approval: ${money(m.from)} → ${money(m.to)}${paid}${by}${m.note ? ` - "${String(m.note)}"` : ""}`;
+      const what = m.agreed ? "Change agreed with the customer directly, not texted" : "Change sent for approval";
+      return `${what}: ${money(m.from)} → ${money(m.to)}${paid}${by}${m.note ? ` - "${String(m.note)}"` : ""}`;
     }
     case "change_delivery":
-      if (m.skipped) return `Change request saved without texting ${String(m.to ?? "the customer")}`;
       if (m.delivered) return `Change request texted to ${String(m.to ?? "the customer")}`;
       if (m.held_until) return `Change request queued for ${String(m.to ?? "the customer")} (quiet hours, goes out ${heldWhen(m.held_until)})`;
       return `Change request text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` - ${String(m.error)}` : ""}`;
     case "change_accepted": {
       const money = (v: unknown) => dollars(v as number) ?? "no price";
+      if (m.recorded_by) return `Change applied, agreed directly and recorded by ${String(m.recorded_by)}: ${money(m.from)} → ${money(m.to)}`;
       return `Customer approved the change: ${money(m.from)} → ${money(m.to)}`;
     }
     case "change_declined": {

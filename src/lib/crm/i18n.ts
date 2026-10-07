@@ -567,11 +567,12 @@ const en = {
     ledgerHintNone:
       "So they'll be asked for the whole new total. If they did hand over a deposit that was never recorded, record it first.",
     sendTo: "Send it to {name}",
-    // Texting the customer is optional - some changes are already agreed on
-    // site and the crew will tell them in person.
-    notifyTick: "Text {name} a link to approve it",
-    notifyOffHint: "{name} won't be texted. The change still waits on their job page for approval, so let them know it's there.",
-    saveFor: "Save it without texting {name}",
+    // Agreed on the phone or on site: there is nobody to ask, so the job is
+    // updated now and the customer isn't texted.
+    agreedTick: "{name} already agreed to this (phone or in person) - update the job now, don't text them",
+    agreedHint: "The new total goes on the job right away and {name} won't get a text. Record any money they paid for it on the payments card.",
+    agreedDepositDropped: "The second deposit is left off - record what they actually paid on the payments card instead.",
+    applyNow: "Update the job",
     send: "Send it for approval",
     sending: "Sending…",
     cancel: "Never mind",

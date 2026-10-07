@@ -20,7 +20,7 @@ import {
   visitDateOf,
 } from "@/lib/crm/constants";
 import { STATUSES, type Status } from "@/lib/crm/env";
-import { toCents } from "@/lib/crm/fees";
+import { toCents, usd } from "@/lib/crm/fees";
 import { removeQuoteFromCalendar, syncQuoteToCalendar } from "@/lib/crm/gcal";
 import {
   alertOwner,
@@ -68,6 +68,7 @@ import {
   parseQuoteOptions,
   parseQuotePackages,
   recordOfflineAcceptance,
+  recordChangeAgreed,
   requestChange,
   sameOptions,
   samePackages,
@@ -77,7 +78,7 @@ import {
   updateQuoteResult,
   type OptionChoice,
 } from "@/lib/crm/queries";
-import { jobLedger, settleJobIfPaid } from "@/lib/crm/payments";
+import { jobLedger, resyncJobPaidState, settleJobIfPaid } from "@/lib/crm/payments";
 import type { Quote } from "@/lib/crm/types";
 import type { QuoteOptionDraft, QuotePackageDraft } from "@/lib/crm/constants";
 import type { ChangeState, FinishState, SaveState, ScheduleState } from "./types";
@@ -890,10 +891,14 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   // and so a second deposit is checked against the real balance.
   const { ledger } = await jobLedger(current);
 
+  // The customer already said yes (phone, on site) - apply it now, no text.
+  const agreed = String(formData.get("agreed") ?? "") === "yes";
+
   // A second deposit, when the box is ticked: what they send up front if they
-  // approve, typed in dollars.
+  // approve, typed in dollars. Only when they are being asked - agreed in
+  // person, any money they handed over goes on the payments card.
   let depositCents: number | null = null;
-  if (String(formData.get("deposit_on") ?? "") === "yes") {
+  if (!agreed && String(formData.get("deposit_on") ?? "") === "yes") {
     const typed = Number(String(formData.get("deposit") ?? "").replace(/[$,\s]/g, ""));
     depositCents = Number.isFinite(typed) ? Math.round(typed * 100) : NaN;
   }
@@ -919,21 +924,22 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     // approve rests on the recorded payments, and this is the record that
     // somebody confirmed them before it went out.
     payments_checked_by: session.staff.full_name || session.staff.email || "Staff",
+    ...(agreed ? { agreed: true } : {}),
   });
 
-  // The customer's text carries the change and the link, never the figures -
-  // see notifyChangeRequested for why. Their answer comes back through
-  // /api/change-response.
-  // Texting them is the default, but it is the sender's call: a change already
-  // talked through on site, or one the crew want to walk them through on the
-  // phone first, shouldn't land as a surprise text. Either way the change waits
-  // on the customer's page for their approval - this only decides whether they
-  // are told about it now.
-  const tellCustomer = String(formData.get("notify") ?? "yes") !== "no";
   const firstName = quote.name.trim().split(/\s+/)[0] || quote.name;
 
-  if (!tellCustomer) {
-    await addEvent(session, id, "change_delivery", { delivered: false, skipped: true, to: quote.phone });
+  // Already agreed - on the phone, or on site. There is nobody to ask, so
+  // nobody is texted and the price moves now, through the same transaction
+  // the customer's approve button uses, logged with who recorded it.
+  if (agreed) {
+    const applied = await recordChangeAgreed(session, id);
+    if (!applied.ok || applied.duplicate) {
+      // The change is written but not applied. Leave it pending rather than
+      // half-done: the card shows it waiting, and it can be withdrawn and redone.
+      return { ok: false, error: "The change was saved but the price didn't update. Withdraw it and try again." };
+    }
+    await resyncJobPaidState(id).catch(() => {});
 
     revalidatePath(`/crm/quotes/${id}`);
     revalidatePath("/crm");
@@ -941,10 +947,13 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
 
     return {
       ok: true,
-      message: `Change saved for ${firstName} to approve on their job page. They were not texted - let them know it's there. Nothing moves until they approve.`,
+      message: `Job updated to ${usd(toCents(applied.to ?? quote.change_amount))}. ${firstName} was not texted.`,
     };
   }
 
+  // The customer's text carries the change and the link, never the figures -
+  // see notifyChangeRequested for why. Their answer comes back through
+  // /api/change-response.
   const sent = await notifyChangeRequested(
     {
       id,

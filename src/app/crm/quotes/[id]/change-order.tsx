@@ -113,9 +113,9 @@ export function ChangeOrder({
   // because "they send us the $1,390 for the materials" is the usual case.
   const [depositOn, setDepositOn] = useState(false);
   const [deposit, setDeposit] = useState("");
-  // Whether the customer gets a text about it. On by default; off when the
-  // change was already talked through and the crew will tell them themselves.
-  const [notify, setNotify] = useState(true);
+  // The customer already said yes - on the phone, or on site. Then there is
+  // nobody to ask: the job is updated now and they aren't texted.
+  const [agreed, setAgreed] = useState(false);
   // The breakdown, when there is one. Seeded from the job's own lines for the
   // same reason the total is seeded: a change is an edit to what was agreed.
   const [rows, setRows] = useState<OptionRow[]>(() =>
@@ -428,7 +428,7 @@ export function ChangeOrder({
             // The server refuses a send without this, so the tick is a real
             // gate rather than a disabled button somebody can get around.
             fd.set("payments_checked", checked ? "yes" : "no");
-            fd.set("notify", notify ? "yes" : "no");
+            fd.set("agreed", agreed ? "yes" : "no");
             fd.set("deposit_on", asking ? "yes" : "no");
             fd.set("deposit", deposit);
             // The total this preview was drawn against. The server refuses the
@@ -444,16 +444,19 @@ export function ChangeOrder({
           </label>
 
           <label className="co-check">
-            <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
-            <span>{fill(t.changeOrder.notifyTick, { name: first })}</span>
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+            <span>{fill(t.changeOrder.agreedTick, { name: first })}</span>
           </label>
-          {!notify && <p className="co-hint">{fill(t.changeOrder.notifyOffHint, { name: first })}</p>}
+          {agreed && <p className="co-hint">{fill(t.changeOrder.agreedHint, { name: first })}</p>}
+          {agreed && asking && <p className="co-hint">{t.changeOrder.agreedDepositDropped}</p>}
 
           <div className="co-acts">
             <button type="submit" className="co-go" disabled={busy || !checked || !composed}>
               {busy
                 ? t.changeOrder.sending
-                : fill(notify ? t.changeOrder.sendTo : t.changeOrder.saveFor, { name: first })}
+                : agreed
+                  ? t.changeOrder.applyNow
+                  : fill(t.changeOrder.sendTo, { name: first })}
             </button>
             <button
               type="button"
