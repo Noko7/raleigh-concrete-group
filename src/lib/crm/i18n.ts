@@ -569,8 +569,10 @@ const en = {
     sendTo: "Send it to {name}",
     // Agreed on the phone or on site: there is nobody to ask, so the job is
     // updated now and the customer isn't texted.
-    agreedTick: "{name} already agreed to this (phone or in person) - update the job now, don't text them",
-    agreedHint: "The new total goes on the job right away and {name} won't get a text. Record any money they paid for it on the payments card.",
+    // Ticked: they get a text and approve it. Unticked: they already agreed
+    // (phone or in person), so the job is updated now with no text.
+    textTick: "Send text to customer for approval?",
+    agreedHint: "No text - use this when {name} already agreed (phone or in person). The new total goes on the job right away. Record any money they paid for it on the payments card.",
     agreedDepositDropped: "The second deposit is left off - record what they actually paid on the payments card instead.",
     applyNow: "Update the job",
     send: "Send it for approval",

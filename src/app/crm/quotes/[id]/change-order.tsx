@@ -444,8 +444,8 @@ export function ChangeOrder({
           </label>
 
           <label className="co-check">
-            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
-            <span>{fill(t.changeOrder.agreedTick, { name: first })}</span>
+            <input type="checkbox" checked={!agreed} onChange={(e) => setAgreed(!e.target.checked)} />
+            <span>{t.changeOrder.textTick}</span>
           </label>
           {agreed && <p className="co-hint">{fill(t.changeOrder.agreedHint, { name: first })}</p>}
           {agreed && asking && <p className="co-hint">{t.changeOrder.agreedDepositDropped}</p>}
