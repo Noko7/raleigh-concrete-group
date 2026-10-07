@@ -254,6 +254,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return `Change sent for approval: ${money(m.from)} → ${money(m.to)}${paid}${by}${m.note ? ` - "${String(m.note)}"` : ""}`;
     }
     case "change_delivery":
+      if (m.skipped) return `Change request saved without texting ${String(m.to ?? "the customer")}`;
       if (m.delivered) return `Change request texted to ${String(m.to ?? "the customer")}`;
       if (m.held_until) return `Change request queued for ${String(m.to ?? "the customer")} (quiet hours, goes out ${heldWhen(m.held_until)})`;
       return `Change request text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` - ${String(m.error)}` : ""}`;

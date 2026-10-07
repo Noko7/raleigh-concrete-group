@@ -567,6 +567,11 @@ const en = {
     ledgerHintNone:
       "So they'll be asked for the whole new total. If they did hand over a deposit that was never recorded, record it first.",
     sendTo: "Send it to {name}",
+    // Texting the customer is optional - some changes are already agreed on
+    // site and the crew will tell them in person.
+    notifyTick: "Text {name} a link to approve it",
+    notifyOffHint: "{name} won't be texted. The change still waits on their job page for approval, so let them know it's there.",
+    saveFor: "Save it without texting {name}",
     send: "Send it for approval",
     sending: "Sending…",
     cancel: "Never mind",

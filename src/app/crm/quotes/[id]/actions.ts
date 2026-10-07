@@ -924,6 +924,27 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   // The customer's text carries the change and the link, never the figures -
   // see notifyChangeRequested for why. Their answer comes back through
   // /api/change-response.
+  // Texting them is the default, but it is the sender's call: a change already
+  // talked through on site, or one the crew want to walk them through on the
+  // phone first, shouldn't land as a surprise text. Either way the change waits
+  // on the customer's page for their approval - this only decides whether they
+  // are told about it now.
+  const tellCustomer = String(formData.get("notify") ?? "yes") !== "no";
+  const firstName = quote.name.trim().split(/\s+/)[0] || quote.name;
+
+  if (!tellCustomer) {
+    await addEvent(session, id, "change_delivery", { delivered: false, skipped: true, to: quote.phone });
+
+    revalidatePath(`/crm/quotes/${id}`);
+    revalidatePath("/crm");
+    revalidatePath("/job/[token]", "page");
+
+    return {
+      ok: true,
+      message: `Change saved for ${firstName} to approve on their job page. They were not texted - let them know it's there. Nothing moves until they approve.`,
+    };
+  }
+
   const sent = await notifyChangeRequested(
     {
       id,
@@ -956,7 +977,7 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     smsError: sent.ok ? undefined : sent.detail,
     smsHeldUntil: sent.held ? sent.sendAfterLabel : undefined,
     smsTo: sent.to ?? quote.phone,
-    message: `Change sent to ${quote.name.trim().split(/\s+/)[0] || quote.name} to approve. Nothing moves until they do.`,
+    message: `Change sent to ${firstName} to approve. Nothing moves until they do.`,
   };
 }
 
