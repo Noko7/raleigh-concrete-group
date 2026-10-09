@@ -8,8 +8,10 @@ import { recordFeeSettlement, type SettleState } from "./actions";
 const initial: SettleState = { ok: false };
 
 /**
- * "Mike sent me $1,240 on Zelle."
+ * "Mike sent me $600 on Zelle for Dave Allmon's job."
  *
+ * Recorded against the job it was for, so the ledger reads by job and each
+ * job shows what's been sent on it - half from the deposit, half at the end.
  * Folded away until it is needed, and seeded with exactly what that person
  * owes - the overwhelmingly common case is somebody clearing their balance in
  * full, and making the office type a figure it already knows is how the number
@@ -18,7 +20,13 @@ const initial: SettleState = { ok: false };
 export function SettleForm({
   contractors,
 }: {
-  contractors: { staffId: string; name: string; balanceCents: number }[];
+  contractors: {
+    staffId: string;
+    name: string;
+    balanceCents: number;
+    /** Their jobs with fee still owed on them, so the payment lands on the job it was for. */
+    jobs: { id: string; name: string; owedCents: number }[];
+  }[];
 }) {
   const [state, action, pending] = useActionState(recordFeeSettlement, initial);
   const [open, setOpen] = useState(false);
@@ -26,6 +34,13 @@ export function SettleForm({
   const [method, setMethod] = useState<PaymentMethod>("zelle");
 
   const picked = contractors.find((c) => c.staffId === staffId);
+  // The job it was for. Defaults to the one owing most, which is almost always
+  // the one they're paying; "" is a lump sum across their balance.
+  const [jobPick, setJobPick] = useState<{ staffId: string; jobId: string } | null>(null);
+  const jobId =
+    jobPick && jobPick.staffId === staffId ? jobPick.jobId : (picked?.jobs[0]?.id ?? "");
+  const pickedJob = picked?.jobs.find((j) => j.id === jobId);
+  const seed = pickedJob ? pickedJob.owedCents : (picked?.balanceCents ?? 0);
 
   if (contractors.length === 0) return null;
 
@@ -55,6 +70,24 @@ export function SettleForm({
           </label>
 
           <label className="crm-field">
+            <span>For which job</span>
+            <select
+              className="crm-input"
+              name="quote_id"
+              value={jobId}
+              onChange={(e) => setJobPick({ staffId, jobId: e.target.value })}
+              disabled={pending}
+            >
+              {(picked?.jobs ?? []).map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.name} - {usd(j.owedCents)} owed
+                </option>
+              ))}
+              <option value="">Not for one job (lump sum)</option>
+            </select>
+          </label>
+
+          <label className="crm-field">
             <span>How much</span>
             <input
               className="crm-input"
@@ -63,8 +96,8 @@ export function SettleForm({
               inputMode="decimal"
               // Keyed on the person so switching contractor reseeds the figure
               // rather than leaving the last one's balance in the box.
-              key={staffId}
-              defaultValue={picked ? String(fromCents(picked.balanceCents)) : ""}
+              key={`${staffId}:${jobId}`}
+              defaultValue={seed > 0 ? String(fromCents(seed)) : ""}
               autoComplete="off"
               disabled={pending}
             />

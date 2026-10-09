@@ -127,14 +127,14 @@ test("an empty job owes its whole total and is not settled", () => {
   assert.equal(l.feeTotalCents, 0);
 });
 
-test("a $10,000 job with a $500 cash deposit owes $500 of fee today, not $1,500", () => {
-  // The README's own worked example. What a contractor owes is bounded by what
-  // the customer has actually handed them.
+test("a $10,000 job with a $500 cash deposit owes $75 of fee today, not $1,500", () => {
+  // The fee is earned in step with what the customer has handed over: 15% of
+  // the $500 collected.
   const l = readLedger(1000000, null, [row({ amount_cents: 50000, method: "cash" })], 0.15);
   assert.equal(l.feeTotalCents, 150000);
   assert.equal(l.feeCollectedCents, 0);
   assert.equal(l.feeOwedCents, 150000);
-  assert.equal(l.feeDueNowCents, 50000);
+  assert.equal(l.feeDueNowCents, 7500);
   assert.equal(l.offStripeCents, 50000);
   assert.equal(l.dueCents, 950000);
 });
@@ -297,19 +297,14 @@ test("correcting a deposit recorded as the whole job restores the real balance",
   assert.equal(fixed.dueCents, 412500, "the other half is owed again");
   assert.equal(fixed.settled, false, "so the job must stop claiming to be paid");
 
-  // What the contractor owes the office does NOT move, and that is correct
-  // rather than a miss. feeDueNowCents is capped by cash COLLECTED, not scaled
-  // by it - the office is owed its whole cut as soon as enough has come in to
-  // cover it, and $4,125 covers $1,237.50 just as well as $8,250 did. The
-  // correction changes what the CUSTOMER owes; the crew's debt was already
-  // fully earned by the deposit.
-  assert.equal(fixed.feeDueNowCents, feeTotalCents(total, rate));
-  assert.equal(fixed.feeDueNowCents, wrong.feeDueNowCents);
+  // The fee follows the money: half the job collected, half the fee due. The
+  // correction halves what the crew owe the office along with what the
+  // customer has paid.
+  assert.equal(fixed.feeDueNowCents, Math.round(feeTotalCents(total, rate) / 2));
 
-  // Where the correction does reach the fee is on a job whose deposit is
-  // smaller than the cut itself.
+  // A small deposit earns a small share of the fee.
   const small = readLedger(total, null, [row({ amount_cents: 50000, method: "cash" })], rate);
-  assert.equal(small.feeDueNowCents, 50000, "never more than the crew have actually been handed");
+  assert.equal(small.feeDueNowCents, 7500, "the rate on what the crew have actually been handed");
 });
 
 test("a voided payment counts for nothing, everywhere", () => {
@@ -482,4 +477,27 @@ test("never more than the balance, and nothing when none was asked for", () => {
   assert.equal(depositDueNowCents(539000, 400000, 50000), 50000);
   assert.equal(depositDueNowCents(null, 400000, 539000), 0);
   assert.equal(depositDueNowCents(undefined, 0, 800000), 0);
+});
+
+test("the fee is earned in step with payments, and a change order moves it", () => {
+  // Dave's job: $8,000 at 15%, half the fee sent from the deposit, then a
+  // change order to $9,390. What is owed is 15% of what has come in, less what
+  // was already sent - never the whole new fee before the balance is paid.
+  const rate = 0.15;
+  const deposit = row({ amount_cents: 400000, method: "check" });
+  const before = applySettlements(readLedger(toCents(8000), null, [deposit], rate), 60000);
+  assert.equal(before.feeEarnedCents, 60000, "half collected, half the fee");
+  assert.equal(before.feeDueNowCents, 0, "and the half was sent");
+
+  const extra = row({ amount_cents: 139000, method: "cash" });
+  const after = applySettlements(readLedger(toCents(9390), null, [deposit, extra], rate), 60000);
+  assert.equal(after.feeTotalCents, 140850, "15% of the new total");
+  assert.equal(after.feeEarnedCents, 80850, "15% of the $5,390 collected");
+  assert.equal(after.feeDueNowCents, 20850, "less the $600 already sent");
+
+  const paidOff = applySettlements(
+    readLedger(toCents(9390), null, [deposit, extra, row({ amount_cents: 400000, method: "cash" })], rate),
+    60000,
+  );
+  assert.equal(paidOff.feeDueNowCents, 80850, "the rest of the fee once the job is paid off");
 });

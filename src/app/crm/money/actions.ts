@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/crm/auth";
 import { isRecordedMethod, usd } from "@/lib/crm/fees";
 import { recordSettlement } from "@/lib/crm/payments";
-import { getStaffById } from "@/lib/crm/queries";
+import { getQuote, getStaffById } from "@/lib/crm/queries";
 
 export type SettleState = { ok: boolean; error?: string; message?: string };
 
@@ -41,8 +41,19 @@ export async function recordFeeSettlement(_prev: SettleState, formData: FormData
   const method = String(formData.get("method") ?? "");
   if (!isRecordedMethod(method)) return { ok: false, error: "Pick how they sent it." };
 
+  // The job it was for, when one was picked. Must be one of theirs: a fee sent
+  // by Mike can't be booked against Rafa's job.
+  const quoteId = String(formData.get("quote_id") ?? "").trim() || null;
+  let jobName: string | null = null;
+  if (quoteId) {
+    const job = await getQuote(session, quoteId);
+    if (!job || job.assigned_to !== staffId) return { ok: false, error: "That job isn't one of theirs." };
+    jobName = job.name;
+  }
+
   const saved = await recordSettlement(session, {
     staffId,
+    quoteId,
     amountCents,
     method,
     note: String(formData.get("note") ?? "").trim().slice(0, 500) || null,
@@ -52,5 +63,12 @@ export async function recordFeeSettlement(_prev: SettleState, formData: FormData
   }
 
   revalidatePath("/crm/money");
-  return { ok: true, message: `${usd(amountCents)} from ${target.full_name || "them"} recorded.` };
+  if (quoteId) {
+    revalidatePath(`/crm/quotes/${quoteId}`);
+    revalidatePath("/job/[token]", "page");
+  }
+  return {
+    ok: true,
+    message: `${usd(amountCents)} from ${target.full_name || "them"} recorded${jobName ? ` for ${jobName}` : ""}.`,
+  };
 }

@@ -142,12 +142,15 @@ export type Ledger = {
   /**
    * What the contractor actually owes the office TODAY.
    *
-   * Bounded by what the customer has handed over: a $500 cash deposit on a
-   * $10,000 job makes $500 due, not the whole $1,500. The office is never owed
-   * money the contractor has not been paid yet, and the rest becomes due as the
-   * balance comes in.
+   * In step with what the customer has handed over: the office earns its
+   * rate on every dollar collected, so a $5,000 cash deposit on a $10,000 job
+   * at 15% makes $750 due, not the whole $1,500. The rest becomes due as the
+   * balance comes in - which is how the crew actually pay it, half from the
+   * deposit and half at the end.
    */
   feeDueNowCents: number;
+  /** The fee earned so far: the same share of the fee as of the job collected. */
+  feeEarnedCents: number;
   /** Of the owed fee, how much is already promised to a checkout in flight. */
   feeReservedCents: number;
   /** What a NEW payment may carry. Owed, less anything already reserved. */
@@ -201,6 +204,13 @@ export function readLedger(
   // this file is for facts.
   const total = feeRate != null ? feeTotalCents(jobTotalCents, Number(feeRate)) : (feeTotal ?? 0);
   const feeOwedCents = Math.max(0, total - feeCollectedCents);
+  // Earned in proportion to what has been collected. Worked from the fee total
+  // rather than the rate, so it holds on a job whose rate was never frozen and
+  // lands on exactly the fee total once the job is paid off.
+  const feeEarnedCents =
+    jobTotalCents <= 0 || paidCents >= jobTotalCents
+      ? total
+      : Math.max(0, Math.round((total * paidCents) / jobTotalCents));
 
   // A checkout that has been opened and not yet paid is already carrying part
   // of the fee. Subtracting it here is what stops a customer who opens the
@@ -224,7 +234,8 @@ export function readLedger(
     // A card payment takes as much of the fee as it can carry, so on a card
     // deposit this lands at zero straight away. It only stays positive when
     // money arrived some way that couldn't pay the office on the way past.
-    feeDueNowCents: Math.max(0, Math.min(total, paidCents) - feeCollectedCents),
+    feeDueNowCents: Math.max(0, feeEarnedCents - feeCollectedCents),
+    feeEarnedCents,
     feeReservedCents,
     feeChargeableCents: Math.max(0, feeOwedCents - feeReservedCents),
     feeSettledCents: 0,

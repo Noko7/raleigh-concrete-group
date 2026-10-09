@@ -11,7 +11,7 @@
 // that. The office never holds a customer's money and never owes a contractor
 // anything, so every balance on this page is a number somebody owes the office
 // and never the other way round.
-import { readLedger, toCents, usd, type Ledger } from "./fees";
+import { applySettlements, readLedger, toCents, usd, type Ledger } from "./fees";
 import { pgUser } from "./rest";
 import type { FeeSettlement, QuotePayment, Session, Staff } from "./types";
 
@@ -53,7 +53,15 @@ export type JobMoney = {
   status: string;
   paidAt: string | null;
   createdAt: string;
+  /**
+   * The job's ledger, net of the fee the contractor has sent over against THIS
+   * job (ledger.feeSettledCents), so feeDueNowCents is what is still owed on it.
+   */
   ledger: Ledger;
+  /** The office's fee earned so far: its rate on what the customer has paid. */
+  feeEarnedCents: number;
+  /** Fee received on this job: taken by Stripe plus sent over by hand. */
+  feeReceivedCents: number;
   /** Every payment on this job, newest first, for the row that expands. */
   payments: QuotePayment[];
   /**
@@ -122,6 +130,8 @@ export type ContractorMoney = {
   name: string;
   /** Jobs of theirs that have taken at least one payment. */
   jobs: number;
+  /** What their live jobs are worth, after any change orders. */
+  jobValueCents: number;
   /** Collected from customers on their jobs, all methods. */
   collectedCents: number;
   /** Of that, how much never went through Stripe. */
@@ -300,24 +310,39 @@ export async function moneyBoard(
     jobsRes.rows.push(...extra.rows);
   }
 
-  const allJobs: JobMoney[] = jobsRes.rows.map((j) => ({
-    id: j.id,
-    name: j.name,
-    staffId: j.assigned_to,
-    staffName: j.assigned_to ? (names.get(j.assigned_to) ?? "Unassigned") : "Unassigned",
-    status: j.status,
-    paidAt: j.paid_at,
-    createdAt: j.created_at,
-    payments: byJob.get(j.id) ?? [],
-    onBooks: known.has(j.id),
-    isTest: j.is_test === true,
-    // The same function the crew's page and the customer's page read through.
-    // A second implementation here would drift, and the first anyone would know
-    // of it is a contractor disputing a figure. The rate goes in with it, so
-    // the fee is a percentage of what the job is worth now rather than of
-    // whatever it was worth the day the rate was frozen.
-    ledger: readLedger(toCents(j.quote_amount), j.fee_total_cents, byJob.get(j.id) ?? [], j.fee_rate),
-  }));
+  // Fee sent over by hand, against the job it was for. A settlement with no
+  // job still counts against the contractor's balance below; it just can't be
+  // shown on a job row.
+  const settledByJob = new Map<string, number>();
+  for (const s of settlementsRes.rows) {
+    if (!s.quote_id) continue;
+    settledByJob.set(s.quote_id, (settledByJob.get(s.quote_id) ?? 0) + s.amount_cents);
+  }
+
+  const allJobs: JobMoney[] = jobsRes.rows.map((j) => {
+    const raw = readLedger(toCents(j.quote_amount), j.fee_total_cents, byJob.get(j.id) ?? [], j.fee_rate);
+    const ledger = applySettlements(raw, settledByJob.get(j.id) ?? 0);
+    return {
+      id: j.id,
+      name: j.name,
+      staffId: j.assigned_to,
+      staffName: j.assigned_to ? (names.get(j.assigned_to) ?? "Unassigned") : "Unassigned",
+      status: j.status,
+      paidAt: j.paid_at,
+      createdAt: j.created_at,
+      payments: byJob.get(j.id) ?? [],
+      onBooks: known.has(j.id),
+      isTest: j.is_test === true,
+      // The same function the crew's page and the customer's page read through.
+      // A second implementation here would drift, and the first anyone would know
+      // of it is a contractor disputing a figure. The rate goes in with it, so
+      // the fee is a percentage of what the job is worth now rather than of
+      // whatever it was worth the day the rate was frozen.
+      ledger,
+      feeEarnedCents: raw.feeEarnedCents,
+      feeReceivedCents: raw.feeCollectedCents + ledger.feeSettledCents,
+    };
+  });
 
   // One gate, applied everywhere a figure is summed. Anything that reads a
   // payment has to ask this too, or the tiles and the ledger under them
@@ -352,6 +377,7 @@ export async function moneyBoard(
         staffId: job.staffId,
         name: job.staffName,
         jobs: 0,
+        jobValueCents: 0,
         collectedCents: 0,
         offStripeCents: 0,
         feeEarnedCents: 0,
@@ -362,12 +388,13 @@ export async function moneyBoard(
       perStaff.set(k, row);
     }
     if (job.ledger.paidCents > 0) row.jobs += 1;
+    if (job.onBooks) row.jobValueCents += job.ledger.totalCents;
     row.collectedCents += job.ledger.paidCents;
     row.offStripeCents += job.ledger.offStripeCents;
-    // Earned means earned SO FAR: bounded by what the customer has actually
-    // paid, which is what feeDueNowCents + feeCollectedCents adds up to. The
-    // office is never owed money the contractor hasn't been handed yet.
-    row.feeEarnedCents += job.ledger.feeDueNowCents + job.ledger.feeCollectedCents;
+    // Earned means earned SO FAR: the rate on what the customer has actually
+    // paid. A card payment can take more than that up front, and what Stripe
+    // took is earned too, so it is whichever is larger.
+    row.feeEarnedCents += Math.max(job.feeEarnedCents, job.ledger.feeCollectedCents);
     row.feeCollectedCents += job.ledger.feeCollectedCents;
   }
 

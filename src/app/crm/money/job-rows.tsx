@@ -52,8 +52,10 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
           paid: acc.paid + j.ledger.paidCents,
           due: acc.due + (j.onBooks ? j.ledger.dueCents : 0),
           fee: acc.fee + j.ledger.feeTotalCents,
+          feeIn: acc.feeIn + j.feeReceivedCents,
+          feeOwed: acc.feeOwed + j.ledger.feeDueNowCents,
         }),
-        { total: 0, paid: 0, due: 0, fee: 0 },
+        { total: 0, paid: 0, due: 0, fee: 0, feeIn: 0, feeOwed: 0 },
       ),
     [rows],
   );
@@ -92,6 +94,8 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
                 <th className="led-num">Paid</th>
                 <th className="led-num">Outstanding</th>
                 <th className="led-num">Your fee</th>
+                <th className="led-num">Fee received</th>
+                <th className="led-num">Fee owed now</th>
                 <th aria-label="Detail" />
               </tr>
             </thead>
@@ -119,6 +123,10 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
                       {j.onBooks ? usd(j.ledger.dueCents) : "-"}
                     </td>
                     <td className="led-num led-fee">{usd(j.ledger.feeTotalCents)}</td>
+                    <td className="led-num">{j.feeReceivedCents > 0 ? usd(j.feeReceivedCents) : "-"}</td>
+                    <td className={`led-num${j.ledger.feeDueNowCents > 0 ? " cash-owed" : ""}`}>
+                      {usd(j.ledger.feeDueNowCents)}
+                    </td>
                     <td className="led-num">
                       <button
                         type="button"
@@ -132,7 +140,7 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
                   </tr>,
                   isOpen && (
                     <tr key={`${j.id}:detail`} className="led-detail-row">
-                      <td colSpan={7}>
+                      <td colSpan={9}>
                         {j.payments.length === 0 ? (
                           <p className="crm-muted crm-sm">
                             No payments recorded against this job.
@@ -181,6 +189,8 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
                 <td className="led-num">{usd(totals.paid)}</td>
                 <td className={`led-num${totals.due > 0 ? " cash-owed" : ""}`}>{usd(totals.due)}</td>
                 <td className="led-num led-fee">{usd(totals.fee)}</td>
+                <td className="led-num">{usd(totals.feeIn)}</td>
+                <td className={`led-num${totals.feeOwed > 0 ? " cash-owed" : ""}`}>{usd(totals.feeOwed)}</td>
                 <td />
               </tr>
             </tfoot>

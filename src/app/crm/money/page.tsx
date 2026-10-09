@@ -74,6 +74,10 @@ export default async function MoneyPage({
             staffId: c.staffId as string,
             name: c.name,
             balanceCents: c.balanceCents,
+            jobs: board.jobs
+              .filter((j) => j.staffId === c.staffId && j.ledger.feeDueNowCents > 0)
+              .sort((a, b) => b.ledger.feeDueNowCents - a.ledger.feeDueNowCents)
+              .map((j) => ({ id: j.id, name: j.name, owedCents: j.ledger.feeDueNowCents })),
           }))}
         />
       </div>
@@ -232,6 +236,7 @@ export default async function MoneyPage({
                 <tr>
                   <th>Contractor</th>
                   <th className="led-num">Jobs paid</th>
+                  <th className="led-num">Job value</th>
                   <th className="led-num">Collected</th>
                   <th className="led-num">Of that, cash</th>
                   <th className="led-num">Your fee earned</th>
@@ -245,6 +250,7 @@ export default async function MoneyPage({
                   <tr key={c.staffId ?? "unassigned"}>
                     <td>{c.name}</td>
                     <td className="led-num">{c.jobs}</td>
+                    <td className="led-num">{usd(c.jobValueCents)}</td>
                     <td className="led-num">{usd(c.collectedCents)}</td>
                     <td className="led-num">{usd(c.offStripeCents)}</td>
                     <td className="led-num led-fee">{usd(c.feeEarnedCents)}</td>
@@ -258,8 +264,9 @@ export default async function MoneyPage({
           </div>
         )}
         <p className="crm-muted crm-sm cash-note">
-          Fees are earned as the customer pays, never before. A card payment takes the office&apos;s cut on the way
-          past; cash doesn&apos;t, so it lands in the last column until the contractor sends it over.
+          Your fee is earned as the customer pays: your rate on every dollar collected, on the job total after any
+          change orders. A card payment takes your cut on the way past; cash doesn&apos;t, so it lands in the last
+          column until the contractor sends it over. Job value is what their open and finished jobs are worth now.
         </p>
       </section>
     </main>

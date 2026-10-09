@@ -45,6 +45,7 @@ export function LedgerTable({
   contractors: { id: string; name: string }[];
 }) {
   const [who, setWho] = useState("");
+  const [job, setJob] = useState("");
   const [kind, setKind] = useState("");
   const [window, setWindow] = useState<Window>("90");
 
@@ -52,11 +53,20 @@ export function LedgerTable({
     const since = window === "all" ? 0 : Date.now() - Number(window) * 86_400_000;
     return entries.filter((e) => {
       if (who && (e.staffId ?? "") !== who) return false;
+      if (job && e.jobId !== job) return false;
       if (kind && e.kind !== kind) return false;
       if (since && new Date(e.at).getTime() < since) return false;
       return true;
     });
-  }, [entries, who, kind, window]);
+  }, [entries, who, job, kind, window]);
+
+  // Every job with something on the ledger, for reading one job's whole
+  // history - payments in, fee sent over - in one place.
+  const jobs = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const e of entries) if (e.jobId && !seen.has(e.jobId)) seen.set(e.jobId, e.customer);
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [entries]);
 
   // Footed rather than left to the eye. A ledger whose columns do not add up to
   // something you can check against a bank statement is a list, not a ledger.
@@ -78,6 +88,17 @@ export function LedgerTable({
       <div className="led-head">
         <h2 className="crm-card-title">Ledger</h2>
         <div className="led-filters">
+          <label className="led-filter">
+            <span>Job</span>
+            <select value={job} onChange={(e) => setJob(e.target.value)}>
+              <option value="">Every job</option>
+              {jobs.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="led-filter">
             <span>Contractor</span>
             <select value={who} onChange={(e) => setWho(e.target.value)}>
