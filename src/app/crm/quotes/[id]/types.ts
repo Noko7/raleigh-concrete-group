@@ -59,4 +59,6 @@ export type ChangeState = {
   smsError?: string;
   smsHeldUntil?: string;
   smsTo?: string;
+  /** Applied, but something alongside it (a payment) didn't save. */
+  warning?: string;
 };

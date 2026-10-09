@@ -3980,12 +3980,13 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .co-light .co-field > span { color: #374151; font-size: 0.85rem; }
 .co-field em { font-style: normal; font-size: 0.78rem; color: var(--crm-muted); line-height: 1.4; }
 .co-light .co-field em { color: #6b7280; }
-.co-field textarea, .co-field input {
+.co-field textarea, .co-field input, .co-field select {
   padding: 0.7rem; border: 1px solid var(--crm-border); border-radius: 0.6rem;
   font: inherit; background: var(--crm-surface-solid); color: var(--crm-text); min-height: 48px;
   resize: vertical; width: 100%; box-sizing: border-box;
 }
-.co-light .co-field textarea, .co-light .co-field input { border-color: #d1d5db; background: #fff; color: #1f2328; }
+.co-light .co-field textarea, .co-light .co-field input, .co-light .co-field select { border-color: #d1d5db; background: #fff; color: #1f2328; }
+.co-paid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
 .co-field-amount input { font-weight: 800; font-variant-numeric: tabular-nums; }
 
 /* What the customer will see, worked out live. The deposit row is why this

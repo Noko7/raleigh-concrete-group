@@ -572,8 +572,11 @@ const en = {
     // Ticked: they get a text and approve it. Unticked: they already agreed
     // (phone or in person), so the job is updated now with no text.
     textTick: "Send text to customer for approval?",
-    agreedHint: "No text - use this when {name} already agreed (phone or in person). The new total goes on the job right away. Record any money they paid for it on the payments card.",
-    agreedDepositDropped: "The second deposit is left off - record what they actually paid on the payments card instead.",
+    agreedHint: "No text - use this when {name} already agreed (phone or in person). The new total goes on the job right away.",
+    paidTick: "{name} already paid for this change",
+    paidAmount: "Amount they paid",
+    paidMethod: "How they paid",
+    agreedDepositDropped: "The second deposit is left off - tick below if they already paid for the change.",
     applyNow: "Update the job",
     send: "Send it for approval",
     sending: "Sending…",

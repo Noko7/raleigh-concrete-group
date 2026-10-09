@@ -20,7 +20,7 @@ import {
   visitDateOf,
 } from "@/lib/crm/constants";
 import { STATUSES, type Status } from "@/lib/crm/env";
-import { toCents, usd } from "@/lib/crm/fees";
+import { isRecordedMethod, toCents, usd, type RecordedMethod } from "@/lib/crm/fees";
 import { removeQuoteFromCalendar, syncQuoteToCalendar } from "@/lib/crm/gcal";
 import {
   alertOwner,
@@ -82,6 +82,7 @@ import { jobLedger, resyncJobPaidState, settleJobIfPaid } from "@/lib/crm/paymen
 import type { Quote } from "@/lib/crm/types";
 import type { QuoteOptionDraft, QuotePackageDraft } from "@/lib/crm/constants";
 import type { ChangeState, FinishState, SaveState, ScheduleState } from "./types";
+import { takeManualPayment } from "./manual-payment";
 
 export async function saveQuote(_prev: SaveState, formData: FormData): Promise<SaveState> {
   const session = await getSession();
@@ -903,6 +904,18 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     depositCents = Number.isFinite(typed) ? Math.round(typed * 100) : NaN;
   }
 
+  // Money they handed over for it, when the change was agreed in person and
+  // paid on the spot. Recorded once the new total is on the job, so the
+  // payment counts against the new balance and the Money page reads right.
+  let paidNow: { method: RecordedMethod; amountCents: number } | null = null;
+  if (agreed && String(formData.get("paid_on") ?? "") === "yes") {
+    const method = String(formData.get("paid_method") ?? "");
+    if (!isRecordedMethod(method)) return { ok: false, error: "Pick how they paid for the change." };
+    const typed = Number(String(formData.get("paid_amount") ?? "").replace(/[$,\s]/g, ""));
+    if (!Number.isFinite(typed) || typed <= 0) return { ok: false, error: "Enter how much they paid for the change." };
+    paidNow = { method, amountCents: Math.round(typed * 100) };
+  }
+
   const result = await requestChange(session, id, {
     note,
     newAmount: Number(raw),
@@ -912,6 +925,20 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   });
   if (!result.ok || !result.quote) return { ok: false, error: result.error ?? "Could not send that change." };
   const quote = result.quote;
+
+  // Checked against the balance the change leaves before anything moves, so a
+  // typo can't leave the price applied and the payment refused. The change is
+  // taken back off the job so it can simply be sent again.
+  if (paidNow) {
+    const newDue = toCents(quote.change_amount) - ledger.paidCents;
+    if (paidNow.amountCents > newDue) {
+      await cancelChange(session, id).catch(() => {});
+      return {
+        ok: false,
+        error: `That's more than the ${usd(Math.max(0, newDue))} they'll owe after this change. Enter the amount actually taken.`,
+      };
+    }
+  }
 
   await addEvent(session, id, "change_requested", {
     note: quote.change_note,
@@ -941,14 +968,29 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     }
     await resyncJobPaidState(id).catch(() => {});
 
+    const newTotal = usd(toCents(applied.to ?? quote.change_amount));
+    let message = `Job updated to ${newTotal}. ${firstName} was not texted.`;
+    let warning: string | undefined;
+    if (paidNow && applied.quote) {
+      const taken = await takeManualPayment(session, applied.quote, {
+        ...paidNow,
+        note: `For the change: ${quote.change_note ?? ""}`.slice(0, 500),
+      });
+      if (taken.ok) {
+        message = `Job updated to ${newTotal} and ${usd(paidNow.amountCents)} recorded. ${
+          (taken.dueCents ?? 0) > 0 ? `${usd(taken.dueCents ?? 0)} still to collect.` : "Paid in full."
+        } ${firstName} was not texted.`;
+      } else {
+        warning = `The price is updated, but the ${usd(paidNow.amountCents)} payment didn't save: ${taken.error ?? "try again"}. Record it on the payments card.`;
+      }
+    }
+
     revalidatePath(`/crm/quotes/${id}`);
     revalidatePath("/crm");
+    revalidatePath("/crm/money");
     revalidatePath("/job/[token]", "page");
 
-    return {
-      ok: true,
-      message: `Job updated to ${usd(toCents(applied.to ?? quote.change_amount))}. ${firstName} was not texted.`,
-    };
+    return { ok: true, message, warning };
   }
 
   // The customer's text carries the change and the link, never the figures -

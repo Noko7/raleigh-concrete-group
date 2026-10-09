@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
 import { isRecordedMethod, toCents, usd } from "@/lib/crm/fees";
-import { notifyCashRecorded, notifyPaymentCorrected, notifyPayLink } from "@/lib/crm/notify";
+import { notifyPaymentCorrected, notifyPayLink } from "@/lib/crm/notify";
 import {
   applyRefund,
   correctableReason,
@@ -13,12 +13,11 @@ import {
   listPaymentsAdmin,
   paymentById,
   payeeState,
-  recordPayment,
   resyncJobPaidState,
-  settleJobIfPaid,
   voidRecordedPaymentAdmin,
 } from "@/lib/crm/payments";
 import { refundPayment } from "@/lib/crm/stripe";
+import { takeManualPayment } from "./manual-payment";
 import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 
 export type PaymentState = { ok: boolean; error?: string; message?: string };
@@ -133,55 +132,17 @@ export async function recordManualPayment(_prev: PaymentState, formData: FormDat
   const amountCents = parseAmount(formData.get("amount"));
   if (amountCents === null) return { ok: false, error: "Enter how much they paid." };
 
-  // Frozen here: this is money moving, so the rate the office earns on this job
-  // is settled now and won't drift if the contractor crosses the 3-job mark
-  // before the balance comes in.
-  const before = await jobLedger(quote, { freeze: true });
-  if (before.ledger.totalCents <= 0) {
-    return { ok: false, error: "This job has no price on it yet, so there's nothing to pay against." };
-  }
-  if (amountCents > before.ledger.dueCents) {
-    return {
-      ok: false,
-      error: `That's more than the ${usd(before.ledger.dueCents)} still owed. Enter the amount actually taken.`,
-    };
-  }
-
   const note = String(formData.get("note") ?? "").trim().slice(0, 500);
-  const saved = await recordPayment(session, {
-    quoteId: id,
-    method,
-    amountCents,
-    // Nothing was collected for the office - see the note above.
-    feeCents: 0,
-    status: "paid",
-    recordedBy: session.staff.id,
-    note: note || null,
-  });
-  if (!saved.ok) return { ok: false, error: saved.error ?? "Could not save that payment." };
-
-  await addEvent(session, id, "payment_received", { method, amount_cents: amountCents, fee_cents: 0 });
-  await settleJobIfPaid(id).catch(() => {});
-
-  // Read back rather than subtracting: the alert below tells the owner what is
-  // still owed, and that figure has to come from the ledger, not from arithmetic
-  // done on a stale copy of it.
-  const after = await jobLedger(quote);
-  await notifyCashRecorded({
-    q: { id, name: quote.name, phone: quote.phone, job_token: quote.job_token },
-    amountCents,
-    method,
-    who: session.staff.full_name || "the crew",
-    dueCents: after.ledger.dueCents,
-    feeOwedCents: after.ledger.feeDueNowCents,
-  }).catch(() => {});
+  const taken = await takeManualPayment(session, quote, { method, amountCents, note });
+  if (!taken.ok) return { ok: false, error: taken.error ?? "Could not save that payment." };
+  const dueCents = taken.dueCents ?? 0;
 
   refreshMoneyViews(id);
   return {
     ok: true,
     message:
-      after.ledger.dueCents > 0
-        ? `${usd(amountCents)} recorded. ${usd(after.ledger.dueCents)} still to collect.`
+      dueCents > 0
+        ? `${usd(amountCents)} recorded. ${usd(dueCents)} still to collect.`
         : `${usd(amountCents)} recorded. This job is paid in full.`,
   };
 }

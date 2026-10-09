@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { CHANGE_NOTE_MAX, sameChangeLines, type ChangeLineDraft } from "@/lib/crm/constants";
-import { usd as money, type PaymentMethod } from "@/lib/crm/fees";
+import { RECORDED_METHODS, usd as money, type PaymentMethod } from "@/lib/crm/fees";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { sendChangeOrder, withdrawChangeOrder } from "./actions";
 import { blankRow, filledRows, OptionBuilder, rowAmount, type OptionRow } from "./option-builder";
@@ -116,6 +116,11 @@ export function ChangeOrder({
   // The customer already said yes - on the phone, or on site. Then there is
   // nobody to ask: the job is updated now and they aren't texted.
   const [agreed, setAgreed] = useState(false);
+  // Money they handed the crew for it there and then, recorded with the change
+  // so the balance and the Money page are right the moment it's saved.
+  const [paidOn, setPaidOn] = useState(false);
+  const [paidAmount, setPaidAmount] = useState("");
+  const [paidMethod, setPaidMethod] = useState<string>("cash");
   // The breakdown, when there is one. Seeded from the job's own lines for the
   // same reason the total is seeded: a change is an edit to what was agreed.
   const [rows, setRows] = useState<OptionRow[]>(() =>
@@ -327,6 +332,7 @@ export function ChangeOrder({
     return (
       <section className={card}>
         <p className="co-ok">{state.message}</p>
+        {state.warning && <p className="co-err">{state.warning}</p>}
         {delivery}
       </section>
     );
@@ -429,6 +435,9 @@ export function ChangeOrder({
             // gate rather than a disabled button somebody can get around.
             fd.set("payments_checked", checked ? "yes" : "no");
             fd.set("agreed", agreed ? "yes" : "no");
+            fd.set("paid_on", agreed && paidOn ? "yes" : "no");
+            fd.set("paid_amount", paidAmount);
+            fd.set("paid_method", paidMethod);
             fd.set("deposit_on", asking ? "yes" : "no");
             fd.set("deposit", deposit);
             // The total this preview was drawn against. The server refuses the
@@ -448,6 +457,49 @@ export function ChangeOrder({
             <span>{t.changeOrder.textTick}</span>
           </label>
           {agreed && <p className="co-hint">{fill(t.changeOrder.agreedHint, { name: first })}</p>}
+          {agreed && (
+            <label className="co-check">
+              <input
+                type="checkbox"
+                checked={paidOn}
+                onChange={(e) => {
+                  setPaidOn(e.target.checked);
+                  // Seeded with what the change adds, the usual case: they paid
+                  // the difference on the spot.
+                  if (e.target.checked && paidAmount === "" && diffCents > 0) {
+                    setPaidAmount((Math.min(diffCents, dueCents) / 100).toFixed(2));
+                  }
+                }}
+              />
+              <span>{fill(t.changeOrder.paidTick, { name: first })}</span>
+            </label>
+          )}
+          {agreed && paidOn && (
+            <div className="co-paid">
+              <label className="co-field co-field-amount">
+                <span>{t.changeOrder.paidAmount}</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0.01"
+                  value={paidAmount}
+                  onChange={(e) => setPaidAmount(e.target.value)}
+                  placeholder="0.00"
+                />
+              </label>
+              <label className="co-field">
+                <span>{t.changeOrder.paidMethod}</span>
+                <select value={paidMethod} onChange={(e) => setPaidMethod(e.target.value)}>
+                  {RECORDED_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {t.payments.methods[m as PaymentMethod] ?? m}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
           {agreed && asking && <p className="co-hint">{t.changeOrder.agreedDepositDropped}</p>}
 
           <div className="co-acts">
