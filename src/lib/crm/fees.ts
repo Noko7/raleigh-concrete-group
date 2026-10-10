@@ -142,14 +142,12 @@ export type Ledger = {
   /**
    * What the contractor actually owes the office TODAY.
    *
-   * In step with what the customer has handed over: the office earns its
-   * rate on every dollar collected, so a $5,000 cash deposit on a $10,000 job
-   * at 15% makes $750 due, not the whole $1,500. The rest becomes due as the
-   * balance comes in - which is how the crew actually pay it, half from the
-   * deposit and half at the end.
+   * The whole fee on the job total, less what has already reached the office.
+   * Not tied to how much the customer has paid: a $10,000 job at 15% owes the
+   * office $1,500 whether the customer has paid $500 or all of it.
    */
   feeDueNowCents: number;
-  /** The fee earned so far: the same share of the fee as of the job collected. */
+  /** The office's fee on this job: its rate on the whole job total. */
   feeEarnedCents: number;
   /** Of the owed fee, how much is already promised to a checkout in flight. */
   feeReservedCents: number;
@@ -204,13 +202,10 @@ export function readLedger(
   // this file is for facts.
   const total = feeRate != null ? feeTotalCents(jobTotalCents, Number(feeRate)) : (feeTotal ?? 0);
   const feeOwedCents = Math.max(0, total - feeCollectedCents);
-  // Earned in proportion to what has been collected. Worked from the fee total
-  // rather than the rate, so it holds on a job whose rate was never frozen and
-  // lands on exactly the fee total once the job is paid off.
-  const feeEarnedCents =
-    jobTotalCents <= 0 || paidCents >= jobTotalCents
-      ? total
-      : Math.max(0, Math.round((total * paidCents) / jobTotalCents));
+  // The whole fee, on the whole job total as it stands after any change
+  // orders - not a share of what the customer has paid so far. Each job reads
+  // straight: its fee, less what has already reached the office.
+  const feeEarnedCents = total;
 
   // A checkout that has been opened and not yet paid is already carrying part
   // of the fee. Subtracting it here is what stops a customer who opens the

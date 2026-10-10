@@ -58,7 +58,7 @@ export type JobMoney = {
    * job (ledger.feeSettledCents), so feeDueNowCents is what is still owed on it.
    */
   ledger: Ledger;
-  /** The office's fee earned so far: its rate on what the customer has paid. */
+  /** The office's fee on this job: its rate on the whole job total. */
   feeEarnedCents: number;
   /** Fee received on this job: taken by Stripe plus sent over by hand. */
   feeReceivedCents: number;
@@ -391,9 +391,8 @@ export async function moneyBoard(
     if (job.onBooks) row.jobValueCents += job.ledger.totalCents;
     row.collectedCents += job.ledger.paidCents;
     row.offStripeCents += job.ledger.offStripeCents;
-    // Earned means earned SO FAR: the rate on what the customer has actually
-    // paid. A card payment can take more than that up front, and what Stripe
-    // took is earned too, so it is whichever is larger.
+    // The whole fee on the job total. What Stripe took can't be less than
+    // earned in practice, but whichever is larger is what the office has had.
     row.feeEarnedCents += Math.max(job.feeEarnedCents, job.ledger.feeCollectedCents);
     row.feeCollectedCents += job.ledger.feeCollectedCents;
   }

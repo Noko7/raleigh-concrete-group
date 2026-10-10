@@ -264,8 +264,8 @@ export default async function MoneyPage({
           </div>
         )}
         <p className="crm-muted crm-sm cash-note">
-          Your fee is earned as the customer pays: your rate on every dollar collected, on the job total after any
-          change orders. A card payment takes your cut on the way past; cash doesn&apos;t, so it lands in the last
+          Your fee is your rate on each job&apos;s whole total after any change orders, owed in full whatever the
+          customer has paid so far. A card payment takes your cut on the way past; cash doesn&apos;t, so it lands in the last
           column until the contractor sends it over. Job value is what their open and finished jobs are worth now.
         </p>
       </section>
