@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { cronAuthorized } from "@/lib/crm/cron-auth";
 import { ymdInDays } from "@/lib/crm/clock";
-import { CREW_REMINDER_DAYS } from "@/lib/crm/constants";
+import { CREW_REMINDER_DAYS, STALE_LEAD_HOURS } from "@/lib/crm/constants";
 import {
   REMINDER_SPACING_MINUTES,
   flushHeldMessages,
@@ -34,7 +34,7 @@ export const dynamic = "force-dynamic";
 //   2. Remind the assigned crew 3 days out, the day before, and the morning of.
 //      Soonest first, and spaced 15 minutes apart per person (see spacer()).
 //   3. Nudge the assigned contractor (+owner) about leads nobody has quoted
-//      or scheduled a visit for, 12+ hours old - one text listing all of
+//      or scheduled a visit for, 48+ hours old (STALE_LEAD_HOURS) - one text listing all of
 //      theirs, not one per lead.
 //   4. Follow up with a customer who hasn't accepted or declined a sent
 //      quote within 48 hours.
@@ -126,13 +126,13 @@ export async function GET(request: Request) {
     }
   }
 
-  // ── 3. Stale leads: nobody has quoted or scheduled a visit in 12h ─────────
+  // ── 3. Stale leads: nobody has quoted or scheduled a visit in 48h ─────────
   // One text per person, listing all of their stale leads - not one text per
   // lead. A contractor who was off yesterday came back to six near-identical
   // alerts and read none of them; a list is less noise and says more, because
   // "you are six behind" is the actual news. The owner's copy spans everybody,
   // so the unassigned pile has somewhere to be reported too.
-  const stale = await listStaleLeads(12);
+  const stale = await listStaleLeads(STALE_LEAD_HOURS);
   const byContractor = new Map<string, StaleLeadGroup>();
   for (const q of stale) {
     const key = q.assigned_to ?? "";

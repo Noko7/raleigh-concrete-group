@@ -59,9 +59,9 @@ function isUntouched(q: BoardQuote, today: string): boolean {
 
 const hoursSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 3_600_000;
 
-// The two thresholds the rest of the system already uses: 12 hours is when the
-// contractor gets nudged, 48 is when a lead is properly late. Amber then red,
-// so a card's colour means the same thing as the texts going out about it.
+// Amber from 12 hours so a lead sitting a while is visible on the board, red
+// from 48 - which is also when the contractor gets the "lead needs attention"
+// text (STALE_LEAD_HOURS).
 function ageBadge(q: BoardQuote, today: string): { text: string; tone: "warn" | "late" } | null {
   if (!isUntouched(q, today)) return null;
   const h = hoursSince(q.created_at);

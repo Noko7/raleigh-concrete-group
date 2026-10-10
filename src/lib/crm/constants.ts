@@ -41,6 +41,12 @@ export const LEAD_TIME_DAYS = 7;
 // truck, so it can happen sooner.
 export const VISIT_LEAD_DAYS = 4;
 
+// How old an untouched lead has to be before its contractor gets the "lead
+// needs attention" text. Two days, not half of one: leads routinely land while
+// the crew is out on a job, and a nudge the next morning read as nagging about
+// work they hadn't had a chance to get to. Sent once per lead.
+export const STALE_LEAD_HOURS = 48;
+
 // ── Appointment slots ───────────────────────────────────────────────────────
 // Quote visits are booked back to back against ONE contractor's day, an hour
 // apart. The gap is what "back to back" means here: two visits for the same

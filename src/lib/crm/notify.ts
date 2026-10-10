@@ -12,7 +12,7 @@
 // [sms] prefix so they can be diagnosed.
 import { phoneDisplay } from "@/lib/site-data";
 import { clockLabel, hourLabel, inQuietHours, nextSendableAt, now, QUIET_FROM_HOUR, QUIET_UNTIL_HOUR } from "./clock";
-import { dollars, noEmDash, QUOTE_TTL_DAYS, visitDateOf } from "./constants";
+import { dollars, noEmDash, QUOTE_TTL_DAYS, STALE_LEAD_HOURS, visitDateOf } from "./constants";
 import { SITE_ORIGIN } from "./env";
 // Named apart from the local dollars-only `usd` below: money that came from the
 // ledger is in cents and must be printed with them, or a $6,172.50 deposit goes
@@ -1886,7 +1886,7 @@ export async function notifyCrewReminder(
   ).catch(() => null);
 }
 
-// ── 12. Stale lead: still nothing sent 12h after it came in ────────────────
+// ── 12. Stale lead: still nothing sent 48h after it came in ────────────────
 // Never sent for a lead whose visit is still ahead of it - see
 // hasUpcomingVisit. So a visit date appearing here has already passed, which
 // is a different and more pointed message than "nobody has looked at this":
@@ -1900,7 +1900,7 @@ export function staleLeadMessage(q: QuoteInfo, contractorName?: string | null): 
     greeting,
     visited
       ? `you visited this job on ${visited} and no quote has gone out yet:`
-      : "this lead came in over 12 hours ago and no quote has gone out yet:",
+      : `this lead came in over ${STALE_LEAD_HOURS} hours ago and no quote has gone out yet:`,
     "",
     customerBrief(q),
     "",
@@ -1954,7 +1954,7 @@ export function staleLeadDigest(
     `${leads.length} LEADS NEED ATTENTION`,
     "",
     greeting,
-    "these came in over 12 hours ago and no quote has gone out yet:",
+    `these came in over ${STALE_LEAD_HOURS} hours ago and no quote has gone out yet:`,
     "",
     ...shown.flatMap((l, i) => [staleLeadItem(l.quote, i + 1, l.who), ""]),
     rest > 0 ? `...and ${rest} more. Open the CRM to see all ${leads.length}.` : null,
