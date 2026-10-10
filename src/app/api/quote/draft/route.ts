@@ -84,6 +84,18 @@ export async function POST(request: Request) {
       return noContent;
     }
 
+    // They already sent a request from another form - a second tab, or the
+    // form opened again - so this one isn't a lost lead and texting the owner
+    // "not sent" would be wrong.
+    if (left && (await recentLeadFrom(phone))) {
+      await pgAdmin(`quote_drafts?submission_id=eq.${submissionId}&alerted_at=is.null`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ alerted_at: now }),
+      }).catch(() => {});
+      return noContent;
+    }
+
     if (left) {
       // Claim the alert: only a form that hasn't been sent and hasn't already
       // been alerted comes back from this, so two "left" beacons for one form
@@ -125,4 +137,19 @@ export async function POST(request: Request) {
     console.error("[draft] unhandled error", e);
   }
   return noContent;
+}
+
+// A lead from this number in the last few hours, matched on the digits so
+// "(919) 691-8744" and "9196918744" are the same person.
+const RECENT_LEAD_HOURS = 6;
+async function recentLeadFrom(phone: string): Promise<boolean> {
+  const digits = phone.replace(/\D/g, "").slice(-10);
+  if (digits.length !== 10) return false;
+  const since = new Date(Date.now() - RECENT_LEAD_HOURS * 3600_000).toISOString();
+  const res = await pgAdmin(
+    `quote_requests?created_at=gte.${encodeURIComponent(since)}&select=phone&order=created_at.desc&limit=200`,
+  ).catch(() => null);
+  if (!res?.ok) return false;
+  const rows = (await res.json().catch(() => [])) as { phone: string | null }[];
+  return rows.some((r) => (r.phone ?? "").replace(/\D/g, "").slice(-10) === digits);
 }

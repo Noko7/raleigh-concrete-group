@@ -571,10 +571,17 @@ function Modal({ onClose }: { onClose: () => void }) {
   // form or the tab without sending. If they never press the button - stuck on
   // the address, a phone call interrupting, an error they gave up on - the
   // office still has a number to call (CRM > Funnel, and a text to the owner).
+  //
+  // Closing the form is not the same as leaving. People shut it to check
+  // something and reopen it seconds later - on 10 Oct a customer did exactly
+  // that, and the owner got "QUOTE STARTED, NOT SENT" six minutes before their
+  // finished request. So a close only ARMS that alert (armLeftAlert): it goes
+  // if they then leave the page or haven't come back within a few minutes, and
+  // reopening the form or sending it calls it off.
   const draftRef = useRef({ data, mode, step: current as string });
   draftRef.current = { data, mode, step: current };
   const sendDraft = useCallback(
-    (left: boolean) => {
+    (left: boolean, defer = false) => {
       if (leadSaved.current) return;
       const { data: d, mode: m, step } = draftRef.current;
       if (d.name.trim().length < 2 || !isValidPhone(d.phone)) return;
@@ -590,26 +597,21 @@ function Modal({ onClose }: { onClose: () => void }) {
         source_path: window.location.pathname,
         left,
       });
-      try {
-        // A beacon survives the tab closing, which is the case that matters.
-        const sent =
-          left &&
-          typeof navigator.sendBeacon === "function" &&
-          navigator.sendBeacon("/api/quote/draft", new Blob([body], { type: "application/json" }));
-        if (!sent) {
-          fetch("/api/quote/draft", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body,
-            keepalive: true,
-          }).catch(() => {});
-        }
-      } catch {
-        // Never allowed to get in the way of the form.
+      if (left && defer) {
+        // Saved now as a plain draft, flagged as left only if they don't return.
+        postDraft(JSON.stringify({ ...JSON.parse(body), left: false }), false);
+        armLeftAlert(body);
+        return;
       }
+      postDraft(body, left);
     },
     [submissionId],
   );
+
+  // Reopened, or a fresh form: whatever alert an earlier close armed is off.
+  useEffect(() => {
+    cancelLeftAlert();
+  }, []);
 
   // Saved a moment after they stop typing, and on every step change.
   const contactKey = `${data.name}|${data.phone}|${data.address}|${data.email}|${data.service}|${current}`;
@@ -648,7 +650,7 @@ function Modal({ onClose }: { onClose: () => void }) {
 
   const dismiss = useCallback(() => {
     recordClose();
-    sendDraft(true);
+    sendDraft(true, true);
     onClose();
   }, [recordClose, onClose, sendDraft]);
 
@@ -884,6 +886,7 @@ function Modal({ onClose }: { onClose: () => void }) {
       if (isConfirmedSave(res.status, json)) {
         finished.current = true;
         leadSaved.current = true;
+        cancelLeftAlert();
         clearSaved();
         setVisitBooked(json.visit_booked !== false);
         setFilesFailed(failedCount);
@@ -1367,6 +1370,50 @@ function Modal({ onClose }: { onClose: () => void }) {
 }
 
 /* ── Root: intercept #quote CTAs site-wide and render the modal ───────────── */
+
+// ── The abandoned-form alert, armed when the form is closed ─────────────────
+// Module-level so it outlives the modal: closing the form unmounts it, and the
+// alert still has to go if they then leave the page.
+const LEFT_GRACE_MS = 5 * 60 * 1000;
+let pendingLeft: { timer: ReturnType<typeof setTimeout>; fire: () => void } | null = null;
+
+function postDraft(body: string, left: boolean) {
+  try {
+    // A beacon survives the tab closing, which is the case that matters.
+    const sent =
+      left &&
+      typeof navigator.sendBeacon === "function" &&
+      navigator.sendBeacon("/api/quote/draft", new Blob([body], { type: "application/json" }));
+    if (!sent) {
+      fetch("/api/quote/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      }).catch(() => {});
+    }
+  } catch {
+    // Never allowed to get in the way of the form.
+  }
+}
+
+function cancelLeftAlert() {
+  if (!pendingLeft) return;
+  clearTimeout(pendingLeft.timer);
+  window.removeEventListener("pagehide", pendingLeft.fire);
+  pendingLeft = null;
+}
+
+function armLeftAlert(body: string) {
+  cancelLeftAlert();
+  const fire = () => {
+    cancelLeftAlert();
+    postDraft(body, true);
+  };
+  pendingLeft = { timer: setTimeout(fire, LEFT_GRACE_MS), fire };
+  window.addEventListener("pagehide", fire);
+}
+
 export function QuoteModalRoot() {
   const [open, setOpen] = useState(false);
 
