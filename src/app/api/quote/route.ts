@@ -318,6 +318,26 @@ async function handle(request: Request) {
       .slice(0, LIMITS.files);
     fileUrls = cleaned.length ? cleaned : null;
   }
+  // An online quote is priced from what they send, so it needs at least one
+  // photo and a few words about the job. The one exception to "never refuse"
+  // above: an online request with neither is a name and a number we can't
+  // price and, on 11 Oct, couldn't reach either. The form checks this first;
+  // this stops anything that posts here without going through it.
+  if (quoteType === "online") {
+    const missing: string[] = [];
+    if (!fileUrls || fileUrls.length === 0) missing.push("photo");
+    if (details.trim().length < 10) missing.push("details");
+    if (missing.length) {
+      return fail(
+        422,
+        missing.includes("photo")
+          ? "Please add at least one photo of the spot so we can price it."
+          : "Please tell us a little about the job so we can price it.",
+        { fields: missing },
+      );
+    }
+  }
+
   // Photos the form tried and failed to upload. They're told on the success
   // screen to text them over; the office is told to expect them.
   const filesFailed = typeof body.files_failed === "number" && body.files_failed > 0 ? Math.min(Math.floor(body.files_failed), 20) : 0;

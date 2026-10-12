@@ -1714,6 +1714,34 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .crm-paper .qo-kind-optional, .crm-paper .qc-letter { background: rgba(255, 255, 255, 0.08); color: var(--crm-muted); }
 .crm-paper .qo-kind-required, .crm-paper .qc-card-rec .qc-letter { background: rgba(194, 104, 42, 0.22); color: #f0a36b; }
 
+/* The change-order card on the owner's job page is dark too, but it is not
+   inside .crm-paper, so its line items fell back to the crew's light rows and
+   the CRM's pale grey hint text under each item sat on white - unreadable.
+   Same dark treatment as the quote editor. (.co-light, the crew's version,
+   keeps its own light rules further down.) */
+.co:not(.co-light) .qo-box { border-color: var(--crm-border); }
+.co:not(.co-light) .qo-row, .co:not(.co-light) .qo-row-required {
+  background: var(--crm-surface-solid); border-color: var(--crm-border); color: var(--crm-text);
+}
+.co:not(.co-light) .qo-row-required { border-left-color: var(--crm-accent); }
+.co:not(.co-light) .qo-field, .co:not(.co-light) .qo-toggle { color: var(--crm-muted); }
+.co:not(.co-light) .qo-field input, .co:not(.co-light) .qo-field textarea {
+  background: #20262e; border-color: var(--crm-border); color: var(--crm-text);
+}
+.co:not(.co-light) .qo-field input[readonly] { background: rgba(255, 255, 255, 0.04); color: var(--crm-muted); }
+.co:not(.co-light) .qo-row-tools button, .co:not(.co-light) .qo-add-btn {
+  background: transparent; border-color: var(--crm-border); color: var(--crm-text);
+}
+.co:not(.co-light) .qo-add-btn:hover { border-color: var(--crm-accent); color: #f0a36b; }
+.co:not(.co-light) .qo-remove { color: #f87171 !important; }
+.co:not(.co-light) .qo-kind-optional { background: rgba(255, 255, 255, 0.08); color: var(--crm-muted); }
+.co:not(.co-light) .qo-kind-required { background: rgba(194, 104, 42, 0.22); color: #f0a36b; }
+.co:not(.co-light) .qo-preset { background: transparent; border-color: var(--crm-border); color: var(--crm-text); }
+.co:not(.co-light) .qo-gap { color: #fbbf24; }
+.co:not(.co-light) .qo-gap-over { color: #f87171; }
+.co:not(.co-light) .qo-gap-even { color: #4ade80; }
+.co:not(.co-light) .qo-total-quiet { color: var(--crm-muted); }
+
 .crm-paper .jq-pickone p { color: var(--crm-text); }
 
 /* The preview: the customer's layout, in the CRM's colours. */

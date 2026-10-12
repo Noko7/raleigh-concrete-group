@@ -21,6 +21,8 @@ import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
 // upload without a word and still say "You're all set!" - so it no longer
 // looks at them at all. If the server can't save, the server says so.
 const MAX_FILE_MB = 50;
+// Enough for "cracked driveway, about 20x30" - not a word count anyone notices.
+const MIN_ONLINE_DETAILS = 10;
 
 // How long to wait for /api/quote before telling the customer we couldn't
 // confirm it. Generous, because the request itself is small and the server
@@ -545,6 +547,14 @@ function Modal({ onClose }: { onClose: () => void }) {
   const stepNumber = stepIndex + 1;
   const isLastStep = stepIndex === STEPS.length - 1;
 
+  // An online quote is priced from what they send, so it can't go without at
+  // least one photo and a few words about the job. Added 11 Oct after an online
+  // request came in with a name, a dead number and nothing else - no way to
+  // price it and no way to reach them. In-person requests stay as they were.
+  const onlineNeedsMore = mode === "online";
+  const hasPhoto = files.length > 0;
+  const hasDetails = data.details.trim().length >= MIN_ONLINE_DETAILS;
+
   // What is still stopping them on this step, in words the Funnel page can
   // count: "phone+address" means they left Contact with both unfinished. Only
   // which requirement - never what they typed.
@@ -556,6 +566,8 @@ function Modal({ onClose }: { onClose: () => void }) {
       if (!hasSomeAddress(data.address)) missing.push("address");
     } else if (current === "service") {
       if (!data.service) missing.push("service");
+      if (onlineNeedsMore && !hasPhoto) missing.push("photo");
+      if (onlineNeedsMore && !hasDetails) missing.push("details");
     } else if (current === "schedule") {
       if (!data.visitDate) missing.push("date");
       if (!data.visitTime) missing.push("time");
@@ -716,7 +728,7 @@ function Modal({ onClose }: { onClose: () => void }) {
       // either - it's optional, and the server drops a bad one into a note.
       return data.name.trim().length >= 2 && isValidPhone(data.phone) && hasSomeAddress(data.address);
     }
-    if (current === "service") return data.service !== "";
+    if (current === "service") return data.service !== "" && (!onlineNeedsMore || (hasPhoto && hasDetails));
     if (current === "schedule") {
       const picked = /^\d{4}-\d{2}-\d{2}$/.test(data.visitDate) && data.visitTime !== "";
       // A full or non-working day only blocks an in-person request, which is
@@ -825,6 +837,19 @@ function Modal({ onClose }: { onClose: () => void }) {
       setErrorMsg(message);
       setStatus("error");
     };
+    // A restored draft (page reloaded mid-form) comes back without its photos -
+    // the browser can't keep them - so check again here rather than trusting
+    // that the service step was passed with them.
+    if (onlineNeedsMore && (!hasPhoto || !hasDetails)) {
+      inFlight.current = false;
+      setStepIndex(STEPS.indexOf("service"));
+      setErrorMsg(
+        !hasPhoto
+          ? "Please add at least one photo of the spot so we can price it."
+          : "Please tell us a little about the job so we can price it.",
+      );
+      return;
+    }
     try {
       let fileUrls: string[] = [];
       let failedCount = 0;
@@ -834,6 +859,17 @@ function Modal({ onClose }: { onClose: () => void }) {
         fileUrls = up.paths;
         failedCount = up.failed;
         if (failedCount) track({ event: "error", step: "schedule", mode, detail: "upload" });
+      }
+      // An online quote needs a photo that actually arrived. If none did, stop
+      // here and let them try again - what they typed is already in the draft
+      // the office can see, and the photos already up won't upload twice.
+      if (onlineNeedsMore && fileUrls.length === 0) {
+        inFlight.current = false;
+        setStatus("idle");
+        setErrorMsg(
+          `Your photo didn't upload. Check your connection and tap the button again, or text it to us at ${phoneDisplay}.`,
+        );
+        return;
       }
       setStatus("sending");
       const skip = Boolean(opts.skipVisit);
@@ -912,6 +948,12 @@ function Modal({ onClose }: { onClose: () => void }) {
         setStepIndex(STEPS.indexOf("contact"));
         setAddressVerified(false);
         setErrorMsg(serverMsg || "Please check your contact details.");
+      } else if (fields.includes("photo") || fields.includes("details")) {
+        // An online quote turned down for having no photo or description:
+        // back to the step where they add them.
+        setStatus("idle");
+        setStepIndex(STEPS.indexOf("service"));
+        setErrorMsg(serverMsg || "Please add a photo and a short description of the job.");
       } else {
         // Includes a 2xx that isn't a confirmed save: whatever it is, it is
         // not proof the lead exists, so it is not a success. (A slot that went
@@ -1165,7 +1207,9 @@ function Modal({ onClose }: { onClose: () => void }) {
                     {files.length ? "Add more photos" : "Add a photo of the spot"}
                   </span>
                   <span className="qm-dropzone-hint">
-                    Optional, but it gets you a faster price. Up to 8 photos or videos.
+                    {mode === "online"
+                      ? "Required - at least one photo so we can price it. Up to 8 photos or videos."
+                      : "Optional, but it gets you a faster price. Up to 8 photos or videos."}
                   </span>
                 </label>
                 {fileError && <p className="qm-err">{fileError}</p>}
@@ -1187,7 +1231,13 @@ function Modal({ onClose }: { onClose: () => void }) {
                 )}
 
                 <label className="qm-label qm-mt" htmlFor="qm-details">
-                  Anything else? <span className="qm-optional">optional</span>
+                  {mode === "online" ? (
+                    "Describe the job"
+                  ) : (
+                    <>
+                      Anything else? <span className="qm-optional">optional</span>
+                    </>
+                  )}
                 </label>
                 <textarea data-clarity-mask="true"
                   id="qm-details"
@@ -1195,8 +1245,16 @@ function Modal({ onClose }: { onClose: () => void }) {
                   rows={2}
                   value={data.details}
                   onChange={(e) => set({ details: e.target.value })}
-                  placeholder="Rough size (like 20x30 ft) or when you want it done"
+                  placeholder={
+                    mode === "online"
+                      ? "What needs doing, rough size (like 20x30 ft), and when you want it done"
+                      : "Rough size (like 20x30 ft) or when you want it done"
+                  }
                 />
+                {mode === "online" && !hasDetails && data.details.trim().length > 0 && (
+                  <p className="qm-dropzone-hint">A few more words, please.</p>
+                )}
+                {errorMsg && <p className="qm-err">{errorMsg}</p>}
               </div>
             )}
 
