@@ -828,10 +828,15 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background: rgba(28, 31, 36, 0.95);
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  /* Solid, not frosted. On iPhone Safari a fixed bar with a backdrop blur gets
+     re-composited as the toolbar collapses and expands mid-scroll, and it drifts
+     up the screen while you scroll. Its own GPU layer keeps it pinned. */
+  background: rgb(28, 31, 36);
   border-top: 1px solid rgba(255,255,255,0.1);
-  backdrop-filter: blur(10px);
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 @media (min-width: 768px) {
   .mobile-bar { display: none; }
