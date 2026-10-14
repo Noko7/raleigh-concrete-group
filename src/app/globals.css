@@ -617,24 +617,24 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 .ba-label-left { left: 0.75rem; }
 .ba-label-right { right: 0.75rem; }
 
-/* ─── Gallery: continuous smooth auto-scroll ─────────── */
+/* ─── Gallery: auto-scrolling strip customers can scroll freely ─────────── */
+/* Driven from script (gallery-carousel.tsx) so a swipe, trackpad or mouse drag
+   moves it too. Scrollbar hidden; the strip itself is the control. */
 .gscroll {
   position: relative;
   width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  cursor: grab;
   -webkit-mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
   mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
 }
+.gscroll::-webkit-scrollbar { display: none; }
+.gscroll:active { cursor: grabbing; }
 .gscroll-track {
   display: flex;
   width: max-content;
-  /* Opposite direction from the hero strip; duplicated list + -50% = seamless.
-     The duration is set per carousel from its photo count. */
-  animation: marquee-scroll var(--gscroll-seconds, 240s) linear infinite reverse;
-  will-change: transform;
-}
-.gscroll:hover .gscroll-track {
-  animation-play-state: paused;
 }
 .gscroll-item {
   position: relative;
@@ -660,10 +660,9 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   height: 100%;
   object-fit: cover;
 }
-/* Asked for less motion: no auto-scroll, a strip they can swipe instead. */
+/* Asked for less motion: the script skips the drift; the strip still scrolls. */
 @media (prefers-reduced-motion: reduce) {
-  .gscroll { overflow-x: auto; -webkit-mask-image: none; mask-image: none; }
-  .gscroll-track { animation: none; }
+  .gscroll { -webkit-mask-image: none; mask-image: none; }
 }
 @media (max-width: 768px) {
   .gscroll-item { width: 17rem; height: 11.5rem; margin-right: 0.8rem; }
