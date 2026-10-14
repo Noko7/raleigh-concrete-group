@@ -81,7 +81,7 @@ export function ServicePage({ service }: { service: Service }) {
       />
       <SiteHeader activeService={service.slug} />
 
-      <main className="pb-24 md:pb-0">
+      <main>
         <Breadcrumbs
           items={[
             { name: "Home", path: "/" },

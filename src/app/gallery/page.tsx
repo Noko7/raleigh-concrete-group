@@ -25,7 +25,7 @@ export default function GalleryPage() {
   return (
     <>
       <SiteHeader />
-      <main className="pb-24 md:pb-0">
+      <main>
         <section className="mx-auto w-full max-w-6xl px-4 pb-8 pt-12 md:px-8 md:pt-16">
           <span className="mb-2 block text-xs font-bold uppercase tracking-[0.22em] text-amber-accent">
             Our Work

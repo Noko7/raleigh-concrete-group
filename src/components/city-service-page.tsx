@@ -68,7 +68,7 @@ export function CityServicePage({
       />
       <SiteHeader activeService={slug} />
 
-      <main className="pb-24 md:pb-0">
+      <main>
         <Breadcrumbs
           items={[
             { name: "Home", path: "/" },

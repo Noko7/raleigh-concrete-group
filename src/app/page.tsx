@@ -51,7 +51,7 @@ export default function Home() {
   return (
     <>
       <SiteHeader />
-      <main className="pb-24 md:pb-0">
+      <main>
         {/* ── Hero ── */}
         <section className="relative overflow-hidden pb-6 pt-12 md:pt-16">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_30%,rgba(194,104,42,0.18),transparent_45%)]" />

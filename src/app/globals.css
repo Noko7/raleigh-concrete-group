@@ -817,10 +817,13 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
 /* ─── Mobile sticky bar ──────────────────────────────── */
 .mobile-bar > a { min-width: 0; padding-left: 0.6rem; padding-right: 0.6rem; }
 .mobile-bar {
-  position: fixed;
+  /* Sticky, not fixed. iPhone Safari mis-places position: fixed bars while its
+     toolbar collapses and expands mid-scroll - the bar slid up the screen. A
+     sticky bar is part of the page, the last thing in it, so Safari scrolls it
+     with everything else and it holds the bottom edge; at the very end of the
+     page it simply sits in place under the footer. */
+  position: sticky;
   bottom: 0;
-  left: 0;
-  right: 0;
   z-index: 40;
   /* Grid, not three flex-1 buttons: the buttons are nowrap with 1.5rem of
      side padding each, which added up to wider than a 360px phone and pushed
@@ -830,14 +833,8 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
   padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  /* Solid, not frosted. On iPhone Safari a fixed bar with a backdrop blur gets
-     re-composited as the toolbar collapses and expands mid-scroll, and it drifts
-     up the screen while you scroll. Its own GPU layer keeps it pinned. */
   background: rgb(28, 31, 36);
   border-top: 1px solid rgba(255,255,255,0.1);
-  transform: translate3d(0, 0, 0);
-  -webkit-transform: translate3d(0, 0, 0);
-  backface-visibility: hidden;
 }
 @media (min-width: 768px) {
   .mobile-bar { display: none; }

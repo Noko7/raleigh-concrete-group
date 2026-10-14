@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
   return (
     <>
       <SiteHeader />
-      <main className="pb-24 md:pb-0">
+      <main>
         <section className="mx-auto w-full max-w-3xl px-4 pb-16 pt-12 md:px-8 md:pt-16">
           <h1 className="mb-2 font-headline text-5xl text-ivory md:text-6xl">Privacy Policy</h1>
           <p className="mb-10 text-sm font-semibold uppercase tracking-[0.14em] text-slate-400">
