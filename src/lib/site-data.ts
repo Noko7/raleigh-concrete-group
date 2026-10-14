@@ -1261,7 +1261,6 @@ export type GalleryImage = { src: string; alt: string };
 // comparison sliders) and the customer-service trust photo (used in About).
 export const galleryImages: GalleryImage[] = [
   { src: "/images/residential_driveway_raleigh_concrete_2.png", alt: "Newly poured residential driveway" },
-  { src: "/images/back_patio_finished.png", alt: "Finished backyard concrete patio" },
   { src: "/images/pavers_driveway.png", alt: "Custom paver driveway in Raleigh" },
   { src: "/images/retaining_wall.png", alt: "Block retaining wall installation" },
   { src: "/images/retaining-wall-brick.png", alt: "Brick retaining wall installation" },
@@ -1351,7 +1350,7 @@ export const locations: Record<LocationKey, LocationContent> = {
     seoTitle: "Concrete Cary NC | Driveways, Patios & Pavers",
     description:
       "From new driveways to custom paver patios, we handle concrete and hardscaping for homes in Cary. Fair pricing, and we leave your place cleaner than we found it.",
-    heroImage: "/images/back_patio_finished.png",
+    heroImage: "/images/decorative_stampted_back_patio.png",
     beforeAfterPairs: sharedBeforeAfter,
     neighborhoods: ["Preston", "Amberly", "Highcroft", "MacGregor Downs", "West Cary"],
   },
