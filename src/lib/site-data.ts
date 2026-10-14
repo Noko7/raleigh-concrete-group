@@ -271,7 +271,7 @@ export const services: Service[] = [
       "ADA-aware ramps and pads",
       "Free quote",
     ],
-    image: "/images/parkinglot-commercial-job.png",
+    image: "/images/walkway_entryway-commercial.png",
     showcaseImage: "/images/commercial-entryway-clean.png",
   },
   {
@@ -309,7 +309,7 @@ export const services: Service[] = [
       "Phased scheduling to protect access",
       "Free commercial estimate",
     ],
-    image: "/images/parkinglot-commercial-job.png",
+    image: "/images/loadnig_dock_commercial.png",
     showcaseImage: "/images/hoa_sidewalk_commercial.png",
   },
   {
@@ -1260,6 +1260,17 @@ export type GalleryImage = { src: string; alt: string };
 // page. Intentionally excludes before/after pairs (those live in the dedicated
 // comparison sliders) and the customer-service trust photo (used in About).
 export const galleryImages: GalleryImage[] = [
+  // Newest first. Paver work, 2026: one or two frames per job rather than every
+  // angle - four shots of the same patio read as a thin portfolio, not a deep one.
+  { src: "/images/pavers_patio_cobble_finished.jpeg", alt: "Tumbled cobble paver patio with charcoal border" },
+  { src: "/images/pavers_patio_base_prep_crew.jpeg", alt: "Our crew screeding the base for a paver patio" },
+  { src: "/images/pool_deck_pavers_wide.jpeg", alt: "Paver pool deck surrounding a backyard pool" },
+  { src: "/images/pavers_patio_firepit.jpeg", alt: "Paver patio with a built-in fire pit" },
+  { src: "/images/pavers_patio_white_inlay_overhead.jpeg", alt: "Light paver patio with dark inlay banding" },
+  { src: "/images/pavers_patio_white_inlay_border.jpeg", alt: "Paver patio with contrasting border detail" },
+  { src: "/images/pavers_steps_lighting.jpeg", alt: "Paver steps with built-in riser lighting" },
+  { src: "/images/pavers_walkway_curved_side_yard.jpeg", alt: "Curved paver walkway along the side of a home" },
+  // Earlier work.
   { src: "/images/residential_driveway_raleigh_concrete_2.png", alt: "Newly poured residential driveway" },
   { src: "/images/pavers_driveway.png", alt: "Custom paver driveway in Raleigh" },
   { src: "/images/retaining_wall.png", alt: "Block retaining wall installation" },
@@ -1272,22 +1283,11 @@ export const galleryImages: GalleryImage[] = [
   { src: "/images/walkway_concrete_front_of_house.png", alt: "Concrete walkway at a home's front entrance" },
   { src: "/images/pavers_front_porch-stairs.png", alt: "Paver front porch and stairs" },
   { src: "/images/stampted_patio_2.png", alt: "Stamped concrete patio detail" },
-  { src: "/images/parkinglot-commercial-job.png", alt: "Commercial parking lot concrete project" },
   { src: "/images/commercial-entryway-clean.png", alt: "Clean commercial concrete entryway" },
   { src: "/images/commercial-sidewalk-entry-way-medical.png", alt: "Commercial sidewalk near medical building" },
   { src: "/images/hoa_sidewalk_commercial.png", alt: "HOA commercial sidewalk concrete work" },
   { src: "/images/loadnig_dock_commercial.png", alt: "Commercial loading dock concrete project" },
   { src: "/images/driveway_close_up_detailed_8k.png", alt: "Broom-finished concrete driveway close-up" },
-  // Paver work, 2026. One or two frames per job rather than every angle: four
-  // shots of the same patio read as a thin portfolio, not a deep one.
-  { src: "/images/pavers_patio_cobble_finished.jpeg", alt: "Tumbled cobble paver patio with charcoal border" },
-  { src: "/images/pavers_patio_base_prep_crew.jpeg", alt: "Our crew screeding the base for a paver patio" },
-  { src: "/images/pool_deck_pavers_wide.jpeg", alt: "Paver pool deck surrounding a backyard pool" },
-  { src: "/images/pavers_patio_firepit.jpeg", alt: "Paver patio with a built-in fire pit" },
-  { src: "/images/pavers_patio_white_inlay_overhead.jpeg", alt: "Light paver patio with dark inlay banding" },
-  { src: "/images/pavers_patio_white_inlay_border.jpeg", alt: "Paver patio with contrasting border detail" },
-  { src: "/images/pavers_steps_lighting.jpeg", alt: "Paver steps with built-in riser lighting" },
-  { src: "/images/pavers_walkway_curved_side_yard.jpeg", alt: "Curved paver walkway along the side of a home" },
 ];
 
 export const links = {
