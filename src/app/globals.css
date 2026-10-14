@@ -15,20 +15,21 @@
   --color-amber-accent: var(--amber);
 }
 
-html, body {
-  min-height: 100%;
-  /* Nothing may push the page sideways on a phone. clip, not hidden: hidden
-     turns body into a scroll container, which breaks every position: sticky
-     header and bar on the site. This is the backstop; the elements that were
-     overflowing are fixed where they are styled. */
+/* Nothing may push the page sideways on a phone. clip, not hidden: hidden
+   makes a scroll container, which breaks every position: sticky header on the
+   site. On a wrapper (layout.tsx), never on html or body: there it makes iPhone
+   Safari drag the fixed bottom bar up the screen mid-scroll. This is the
+   backstop; elements that overflowed are fixed where they are styled. */
+.site-clip {
   overflow-x: clip;
   max-width: 100%;
 }
 
 body {
   margin: 0;
+  /* No background-attachment: fixed - iPhone Safari doesn't support it and
+     repaints the whole page on every scroll frame trying. */
   background: linear-gradient(160deg, var(--charcoal-start), var(--charcoal-end));
-  background-attachment: fixed;
   color: var(--ivory);
   font-family: var(--font-body), sans-serif;
 }

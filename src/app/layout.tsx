@@ -64,10 +64,14 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${headline.variable} ${body.variable} h-full antialiased`}>
-      <body className="min-h-full">
+    <html lang="en" className={`${headline.variable} ${body.variable} antialiased`}>
+      <body className="min-h-screen">
         <JsonLd data={[localBusinessSchema(), websiteSchema()]} />
-        {children}
+        {/* The sideways-overflow guard lives on this wrapper, not on html/body:
+            on iPhone Safari an overflow rule on the page root makes position:
+            fixed elements (the bottom Quote/Call/Text bar) slide up the screen
+            while scrolling. */}
+        <div className="site-clip">{children}</div>
         <QuoteModalRoot />
         <VercelInsights />
         <Clarity />
