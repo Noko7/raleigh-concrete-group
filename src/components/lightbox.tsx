@@ -81,7 +81,6 @@ export function Lightbox({ images, index, onClose, onNavigate }: LightboxProps) 
           quality={90}
           priority
         />
-        <p className="lightbox-caption">{current.alt}</p>
       </div>
 
       {images.length > 1 && (
