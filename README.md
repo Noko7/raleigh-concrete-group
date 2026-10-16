@@ -442,7 +442,7 @@ test panel to text every owner number at once.
 
 Customer-facing text settings:
 - `OWNER_NAME` *(optional)* - first name used to introduce the business in the **first** text a customer gets (default `Noah`), e.g. "this is Noah with Raleigh Concrete Group". Every later message speaks as the business, so a name here doesn't tie the whole thread to one person.
-- `GOOGLE_REVIEW_URL` *(optional)* - your Google review link; included in the post-job thank-you text. If unset, the thank-you still sends without a link.
+- `GOOGLE_REVIEW_URL` *(optional)* - overrides the Google review link in the post-job thank-you text. Defaults to https://g.page/r/Cf1V-s7AJLEaEAI/review.
 
 **Daily reminders (Vercel Cron)**
 Two daily crons, both declared in `vercel.json` and both free on the Hobby plan (it allows up to two cron jobs, each once a day). Both share the same `CRON_SECRET` env var in Vercel - sent as a Bearer token, and the endpoints reject anything else.

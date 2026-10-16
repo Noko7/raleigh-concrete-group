@@ -1338,7 +1338,7 @@ export async function completeJob(_prev: FinishState, formData: FormData): Promi
 
   await addEvent(session, id, "status_changed", { from: current.status, to: "completed" });
   await addEvent(session, id, "job_completed", { checks, note: note || null });
-  await notifyComplete({ name: current.name, phone: current.phone }).catch(() => {});
+  await notifyComplete({ id, name: current.name, phone: current.phone }).catch(() => {});
   await alertOwner(
     [
       "JOB COMPLETED",

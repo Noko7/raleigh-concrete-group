@@ -695,7 +695,9 @@ export function payLink(token: string): string {
 // being true the moment anyone else picks up the phone. Everything after the
 // introduction speaks as the business.
 const OWNER_NAME = (process.env.OWNER_NAME || "Noah").trim();
-const REVIEW_URL = (process.env.GOOGLE_REVIEW_URL || "").trim();
+// The Google review link in the job-complete thank-you. GOOGLE_REVIEW_URL
+// overrides it without a deploy.
+const REVIEW_URL = (process.env.GOOGLE_REVIEW_URL || "https://g.page/r/Cf1V-s7AJLEaEAI/review").trim();
 const BUSINESS = "Raleigh Concrete Group";
 
 // The opt-out notice goes in the FIRST message we ever send someone, and only
@@ -2117,9 +2119,9 @@ export async function notifyComplete(q: QuoteInfo): Promise<void> {
     q.phone,
     text([
       `Hi ${firstName(q.name)},`,
-      "thanks so much for your business and for supporting local.",
+      "thank you for choosing us and for supporting a local business. We hope you love how it turned out!",
       ...(REVIEW_URL
-        ? ["", "If you were happy with the work, we'd love a quick review:", REVIEW_URL]
+        ? ["", "If you have a minute, a quick Google review would mean a lot to our small team:", REVIEW_URL]
         : []),
       "",
       BUSINESS,
