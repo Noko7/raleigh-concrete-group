@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { isLocale } from "@/lib/crm/i18n";
 import { toE164 } from "@/lib/crm/notify";
 import { consumeInvite, getUsableInvite } from "@/lib/crm/queries";
-import { adminCreateUser, pgAdmin } from "@/lib/crm/rest";
+import { adminCreateUser, adminDeleteUser, pgAdmin } from "@/lib/crm/rest";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 // Public: redeems a contractor invite into an account. The only unauthenticated path that can create a
@@ -78,6 +78,11 @@ export async function POST(request: Request) {
 
   // Conditional on still being unused, so of two racing submissions only one gets an account.
   if (!(await consumeInvite(invite.id, created.id))) {
+    // The loser's login must not outlive the race. Deleting the auth user cascades to the inactive
+    // staff row the signup trigger made.
+    if (!(await adminDeleteUser(created.id))) {
+      console.error("[contractor-join] could not delete the account that lost the invite race", { id: created.id });
+    }
     return NextResponse.json({ ok: false, error: GENERIC }, { status: 409 });
   }
 

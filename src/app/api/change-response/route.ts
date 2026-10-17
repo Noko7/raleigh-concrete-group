@@ -4,6 +4,7 @@ import { toCents } from "@/lib/crm/fees";
 import { notifyChangeAnswered } from "@/lib/crm/notify";
 import { listPaymentsAdmin, resyncJobPaidState } from "@/lib/crm/payments";
 import { getStaffPhoneById, recordChangeResponse } from "@/lib/crm/queries";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 // The customer answering a change order from their quote link. Separate from /api/quote-response: it
 // concerns an already-agreed job and shares nothing but the page.
@@ -13,6 +14,13 @@ export async function POST(request: Request) {
     body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ ok: false, error: "Invalid request." }, { status: 400 });
+  }
+  // Duplicates are already handled downstream; this only stops a script on the endpoint.
+  if (await rateLimit(`chresp:${clientIp(request)}`, 20, 10 * 60 * 1000)) {
+    return NextResponse.json(
+      { ok: false, error: "Too many attempts. Please give us a call." },
+      { status: 429 },
+    );
   }
 
   const token = typeof body.token === "string" ? body.token : "";
