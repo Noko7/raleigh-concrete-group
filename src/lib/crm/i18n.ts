@@ -803,6 +803,13 @@ const en = {
     feeTaken: "taken by card",
     feeLeft: "still owed",
     feeSettledLabel: "sent over by hand",
+    // Owner-only: part of the fee taken off this job by hand.
+    feeWaivedLabel: "waived by you",
+    feeWaivedCrew: "Less {amount} waived by the office.",
+    waiveOpen: "Adjust your fee",
+    waiveAmount: "Amount to waive (of the {fee} fee)",
+    waiveNoteHint: "e.g. change order was materials only",
+    waiveSave: "Save",
     owedNone: "Nothing owed - it came out of the card payment.",
     // The fee was paid, by the crew, after the fact. Not "it came out of the
     // card payment", which on a cash job is simply untrue.

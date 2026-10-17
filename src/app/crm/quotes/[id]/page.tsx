@@ -412,6 +412,8 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 feeRate={money.rate}
                 feeCollectedCents={money.ledger.feeCollectedCents}
                 feeDueCents={money.ledger.feeDueNowCents}
+                feeWaivedCents={money.ledger.feeWaivedCents}
+                feeWaivedNote={quote.fee_waived_note ?? null}
                 feeSettledCents={money.ledger.feeSettledCents}
                 rows={money.rows.map((r) => ({
                   id: r.id,

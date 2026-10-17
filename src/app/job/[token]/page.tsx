@@ -464,6 +464,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             feeCollectedCents={money.ledger.feeCollectedCents}
             feeDueCents={money.ledger.feeDueNowCents}
             feeSettledCents={money.ledger.feeSettledCents}
+            feeWaivedCents={money.ledger.feeWaivedCents}
             rows={money.rows.map((r) => ({
               id: r.id,
               method: r.method,

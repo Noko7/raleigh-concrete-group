@@ -390,3 +390,45 @@ export async function voidRecordedPayment(_prev: PaymentState, formData: FormDat
     message: `${usd(row.amount_cents)} taken off the books. ${usd(after.ledger.dueCents)} still to collect.`,
   };
 }
+
+// ── Waiving part of the office fee ──────────────────────────────────────────
+
+/**
+ * Take some or all of the office fee off one job. Owner only.
+ *
+ * For part of a job total the office shouldn't take a cut of - a change order
+ * that only passed materials through at cost. Sets the amount rather than
+ * adding to it, so typing a new figure replaces the old one and 0 clears it.
+ * The database refuses this column from anybody but an owner as well.
+ */
+export async function setFeeWaiver(_prev: PaymentState, formData: FormData): Promise<PaymentState> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
+
+  const id = String(formData.get("id") ?? "");
+  const quote = id ? await getQuote(session, id) : null;
+  if (!quote) return { ok: false, error: "You don't have access to this job." };
+
+  const typed = String(formData.get("amount") ?? "").replace(/[$,\s]/g, "");
+  const dollars = typed === "" ? 0 : Number(typed);
+  if (!Number.isFinite(dollars) || dollars < 0) return { ok: false, error: "Enter the amount to waive, or 0 to clear it." };
+  const cents = Math.round(dollars * 100);
+
+  // Against the full fee, before any waiver: the most there is to take off.
+  const { ledger } = await jobLedger({ ...quote, fee_waived_cents: 0 });
+  if (cents > ledger.feeTotalCents) {
+    return { ok: false, error: `That's more than the whole ${usd(ledger.feeTotalCents)} fee on this job.` };
+  }
+
+  const note = String(formData.get("note") ?? "").trim().slice(0, 500) || null;
+  const before = Number(quote.fee_waived_cents ?? 0);
+  const saved = await updateQuote(session, id, { fee_waived_cents: cents, fee_waived_note: cents > 0 ? note : null });
+  if (!saved) return { ok: false, error: "Could not save that. Run supabase/fee-waiver.sql and try again." };
+
+  await addEvent(session, id, "fee_waived", { from_cents: before, to_cents: cents, note });
+  refreshMoneyViews(id);
+  return {
+    ok: true,
+    message: cents > 0 ? `${usd(cents)} of your fee waived on this job.` : "Fee waiver cleared.",
+  };
+}

@@ -139,6 +139,9 @@ export type Quote = {
   // silently reprice work that was already quoted and agreed.
   fee_rate: number | null;
   fee_total_cents: number | null;
+  /** Cents the owner took off this job's office fee by hand. 0 = none. */
+  fee_waived_cents?: number | null;
+  fee_waived_note?: string | null;
   scheduled_by: string | null;
   scheduled_at: string | null;
   discount_accepted: boolean;

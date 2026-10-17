@@ -254,6 +254,11 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       const what = m.agreed ? "Change agreed with the customer directly, not texted" : "Change sent for approval";
       return `${what}: ${money(m.from)} → ${money(m.to)}${paid}${by}${m.note ? ` - "${String(m.note)}"` : ""}`;
     }
+    case "fee_waived": {
+      const to = Number(m.to_cents ?? 0);
+      const note = m.note ? ` - "${String(m.note)}"` : "";
+      return to > 0 ? `Office fee: ${centsUsd(to)} waived by the owner${note}` : "Office fee waiver cleared";
+    }
     case "change_delivery":
       if (m.delivered) return `Change request texted to ${String(m.to ?? "the customer")}`;
       if (m.held_until) return `Change request queued for ${String(m.to ?? "the customer")} (quiet hours, goes out ${heldWhen(m.held_until)})`;

@@ -161,6 +161,8 @@ export type Ledger = {
    * one twice.
    */
   feeSettledCents: number;
+  /** Taken off the fee by the owner (fee_waived_cents). Already out of feeTotalCents. */
+  feeWaivedCents: number;
   /** Nothing left to collect from the customer. */
   settled: boolean;
   /** Of what has been collected, how much never touched Stripe. */
@@ -182,6 +184,7 @@ export function readLedger(
   feeTotal: number | null | undefined,
   rows: LedgerRow[],
   feeRate?: number | null,
+  feeWaivedCents?: number | null,
 ): Ledger {
   const paid = rows.filter((r) => r.status === "paid" || r.status === "refunded");
   const pending = rows.filter((r) => r.status === "pending");
@@ -200,7 +203,12 @@ export function readLedger(
   // first time money is about to move, and the office earns nothing on a job
   // nobody has paid for. A number here before then would be a forecast, and
   // this file is for facts.
-  const total = feeRate != null ? feeTotalCents(jobTotalCents, Number(feeRate)) : (feeTotal ?? 0);
+  //
+  // Less whatever the owner waived on this job - part of the total that isn't
+  // the office's to take a cut of, like materials passed through at cost.
+  const fullFee = feeRate != null ? feeTotalCents(jobTotalCents, Number(feeRate)) : (feeTotal ?? 0);
+  const waived = Math.min(fullFee, Math.max(0, Math.round(Number(feeWaivedCents) || 0)));
+  const total = fullFee - waived;
   const feeOwedCents = Math.max(0, total - feeCollectedCents);
   // The whole fee, on the whole job total as it stands after any change
   // orders - not a share of what the customer has paid so far. Each job reads
@@ -234,6 +242,7 @@ export function readLedger(
     feeReservedCents,
     feeChargeableCents: Math.max(0, feeOwedCents - feeReservedCents),
     feeSettledCents: 0,
+    feeWaivedCents: waived,
     settled: paidCents >= jobTotalCents && jobTotalCents > 0,
     offStripeCents,
   };

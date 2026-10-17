@@ -49,7 +49,7 @@ export async function listPaymentsAdmin(quoteId: string): Promise<QuotePayment[]
 
 /** The whole money picture for one job, from its rows. */
 export function ledgerOf(quote: Quote, rows: QuotePayment[]): Ledger {
-  return readLedger(toCents(quote.quote_amount), quote.fee_total_cents, rows, quote.fee_rate);
+  return readLedger(toCents(quote.quote_amount), quote.fee_total_cents, rows, quote.fee_rate, quote.fee_waived_cents);
 }
 
 // ── Freezing the rate ───────────────────────────────────────────────────────
@@ -376,7 +376,10 @@ export async function jobLedger(
   return {
     // Net of any fee the contractor has already sent the office for this job -
     // see applySettlements for why that has to happen here and not in readLedger.
-    ledger: applySettlements(readLedger(toCents(quote.quote_amount), fee.feeTotalCents, rows), settledCents),
+    ledger: applySettlements(
+      readLedger(toCents(quote.quote_amount), fee.feeTotalCents, rows, null, quote.fee_waived_cents),
+      settledCents,
+    ),
     rows,
     rate: fee.rate,
   };

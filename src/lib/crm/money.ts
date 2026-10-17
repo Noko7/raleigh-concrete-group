@@ -39,6 +39,7 @@ type JobRow = {
   // re-derived from it rather than trusting a stamp that predates the last
   // time somebody edited the price.
   fee_rate: number | null;
+  fee_waived_cents: number | null;
   status: string;
   paid_at: string | null;
   completed_at: string | null;
@@ -276,7 +277,7 @@ export async function moneyBoard(
     readRows<JobRow>(
       session,
       "quote_requests?customer_response=eq.accepted&status=neq.lost" +
-        "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,status,paid_at,completed_at,created_at,is_test" +
+        "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,fee_waived_cents,status,paid_at,completed_at,created_at,is_test" +
         `&order=created_at.desc&limit=${JOB_LIMIT}`,
     ),
     readRows<QuotePayment>(session, `quote_payments?select=*&order=created_at.desc&limit=${PAYMENT_LIMIT}`),
@@ -319,7 +320,7 @@ export async function moneyBoard(
     const extra = await readRows<JobRow>(
       session,
       `quote_requests?id=in.(${strays.slice(0, 200).join(",")})` +
-        "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,status,paid_at,completed_at,created_at,is_test",
+        "&select=id,name,assigned_to,quote_amount,fee_total_cents,fee_rate,fee_waived_cents,status,paid_at,completed_at,created_at,is_test",
     );
     jobsRes.rows.push(...extra.rows);
   }
@@ -334,7 +335,7 @@ export async function moneyBoard(
   }
 
   const allJobs: JobMoney[] = jobsRes.rows.map((j) => {
-    const raw = readLedger(toCents(j.quote_amount), j.fee_total_cents, byJob.get(j.id) ?? [], j.fee_rate);
+    const raw = readLedger(toCents(j.quote_amount), j.fee_total_cents, byJob.get(j.id) ?? [], j.fee_rate, j.fee_waived_cents);
     const ledger = applySettlements(raw, settledByJob.get(j.id) ?? 0);
     return {
       id: j.id,

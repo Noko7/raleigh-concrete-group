@@ -489,3 +489,28 @@ test("the fee is on the whole job total, and a change order moves it", () => {
   assert.equal(after.feeTotalCents, 140850, "15% of the new total");
   assert.equal(after.feeDueNowCents, 80850, "$1,408.50 less the $600 already sent");
 });
+
+test("an owner waiver comes off the fee, and only the fee", () => {
+  // Dave's job: $9,390 at 15%, the $1,390 change order was materials at cost,
+  // so the owner waives 15% of it ($208.50). $600 of the fee already sent.
+  const rate = 0.15;
+  const rows = [row({ amount_cents: 400000, method: "check" }), row({ amount_cents: 139000, method: "cash" })];
+  const l = applySettlements(readLedger(toCents(9390), null, rows, rate, 20850), 60000);
+  assert.equal(l.feeWaivedCents, 20850);
+  assert.equal(l.feeTotalCents, 120000, "15% of the $8,000 the fee was really on");
+  assert.equal(l.feeDueNowCents, 60000, "$1,200 less the $600 already sent");
+  assert.equal(l.dueCents, 400000, "what the customer owes doesn't move");
+
+  // No waiver reads exactly as before.
+  assert.equal(readLedger(toCents(9390), null, rows, rate).feeTotalCents, 140850);
+  assert.equal(readLedger(toCents(9390), null, rows, rate, 0).feeWaivedCents, 0);
+});
+
+test("a waiver can't take the fee below zero, and caps card fees too", () => {
+  const l = readLedger(1000000, null, [], 0.15, 999999999);
+  assert.equal(l.feeWaivedCents, 150000, "capped at the whole fee");
+  assert.equal(l.feeTotalCents, 0);
+  assert.equal(l.feeChargeableCents, 0, "a card payment takes nothing for the office");
+  // Without a frozen rate, it comes off the stored figure.
+  assert.equal(readLedger(1000000, 75000, [], null, 25000).feeTotalCents, 50000);
+});

@@ -52,6 +52,7 @@ export function JobPayments({
   feeCollectedCents,
   feeDueCents,
   feeSettledCents = 0,
+  feeWaivedCents = 0,
   rows,
 }: {
   id: string;
@@ -72,6 +73,8 @@ export function JobPayments({
   feeDueCents: number;
   /** What they have already sent the office for this job. */
   feeSettledCents?: number;
+  /** Taken off the fee by the office on this job. Already out of feeTotalCents. */
+  feeWaivedCents?: number;
   rows: PaymentRow[];
 }) {
   const t = dict(locale).payments;
@@ -126,6 +129,7 @@ export function JobPayments({
         <strong>{usd(feeTotalCents)}</strong>
         <span className="jp-fee-note">
           {fill(feeRateFrozen ? t.feeRate : t.feeRateLocks, { rate: pct(feeRate), total: usd(totalCents) })}
+          {feeWaivedCents > 0 && ` ${fill(t.feeWaivedCrew, { amount: usd(feeWaivedCents) })}`}
         </span>
         <dl className="jp-fee-split">
           <div>

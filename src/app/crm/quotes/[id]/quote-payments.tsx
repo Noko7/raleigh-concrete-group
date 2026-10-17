@@ -9,6 +9,7 @@ import {
   recordManualPayment,
   refundJobPayment,
   sendPayLink,
+  setFeeWaiver,
   voidRecordedPayment,
   type PaymentState,
 } from "./payment-actions";
@@ -67,6 +68,8 @@ export function QuotePayments({
   feeCollectedCents,
   feeDueCents,
   feeSettledCents = 0,
+  feeWaivedCents = 0,
+  feeWaivedNote = null,
   rows,
 }: {
   id: string;
@@ -84,6 +87,9 @@ export function QuotePayments({
   feeDueCents: number;
   /** What the contractor has already sent over by hand for this job. */
   feeSettledCents?: number;
+  /** Taken off the office fee by the owner on this job, and why. */
+  feeWaivedCents?: number;
+  feeWaivedNote?: string | null;
   rows: QuotePaymentRow[];
 }) {
   const d = dict(locale);
@@ -93,6 +99,8 @@ export function QuotePayments({
   const [refundState, refundAction, refunding] = useActionState(refundJobPayment, initial);
   const [fixState, fixAction, fixing] = useActionState(correctRecordedPayment, initial);
   const [voidState, voidAction, voiding] = useActionState(voidRecordedPayment, initial);
+  const [waiveState, waiveAction, waiving] = useActionState(setFeeWaiver, initial);
+  const [openWaive, setOpenWaive] = useState(false);
   const [openCash, setOpenCash] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("cash");
   // Which row is being corrected, and whether its void branch is showing. One
@@ -107,10 +115,11 @@ export function QuotePayments({
 
   const settled = dueCents <= 0 && totalCents > 0;
   const feedback =
-    linkState.error || cashState.error || refundState.error || fixState.error || voidState.error ||
-    linkState.message || cashState.message || refundState.message || fixState.message || voidState.message;
+    linkState.error || cashState.error || refundState.error || fixState.error || voidState.error || waiveState.error ||
+    linkState.message || cashState.message || refundState.message || fixState.message || voidState.message ||
+    waiveState.message;
   const isError = Boolean(
-    linkState.error || cashState.error || refundState.error || fixState.error || voidState.error,
+    linkState.error || cashState.error || refundState.error || fixState.error || voidState.error || waiveState.error,
   );
 
   if (totalCents <= 0) {
@@ -161,7 +170,56 @@ export function QuotePayments({
           </>
         )}
         <strong className={feeDueCents > 0 ? "qp-owed" : ""}>{usd(feeDueCents)}</strong> {t.feeLeft}
+        {feeWaivedCents > 0 && (
+          <>
+            {" "}· {usd(feeWaivedCents)} {t.feeWaivedLabel}
+            {feeWaivedNote ? ` (${feeWaivedNote})` : ""}
+          </>
+        )}
       </p>
+
+      {/* Owner only: take part of the fee off this job, e.g. a change order that
+          only passed materials through at cost. Sets the amount; 0 clears it. */}
+      {isOwner && (
+        <>
+          <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setOpenWaive((v) => !v)}>
+            {openWaive ? d.common.close : t.waiveOpen}
+          </button>
+          {openWaive && (
+            <form action={waiveAction} className="qp-form">
+              <input type="hidden" name="id" value={id} />
+              <label className="crm-field">
+                <span>{fill(t.waiveAmount, { fee: usd(feeTotalCents + feeWaivedCents) })}</span>
+                <input
+                  className="crm-input"
+                  name="amount"
+                  type="text"
+                  inputMode="decimal"
+                  defaultValue={feeWaivedCents > 0 ? String(fromCents(feeWaivedCents)) : ""}
+                  placeholder="0.00"
+                  autoComplete="off"
+                  disabled={waiving}
+                />
+              </label>
+              <label className="crm-field qp-note">
+                <span>{t.noteLabel}</span>
+                <input
+                  className="crm-input"
+                  name="note"
+                  type="text"
+                  maxLength={500}
+                  defaultValue={feeWaivedNote ?? ""}
+                  placeholder={t.waiveNoteHint}
+                  disabled={waiving}
+                />
+              </label>
+              <button type="submit" className="crm-btn crm-btn-primary" disabled={waiving}>
+                {waiving ? t.recording : t.waiveSave}
+              </button>
+            </form>
+          )}
+        </>
+      )}
 
       {!settled && (
         <div className="crm-editor-foot qp-actions">
