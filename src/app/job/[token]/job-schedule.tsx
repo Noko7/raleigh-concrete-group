@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
-import { setJobDate } from "@/app/crm/quotes/[id]/actions";
+import { setJobDate } from "@/app/crm/quotes/[id]/schedule-actions";
 import type { PreferredSlot, ScheduleState } from "@/app/crm/quotes/[id]/types";
 import { DateField } from "./date-field";
 

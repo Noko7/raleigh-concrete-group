@@ -5,7 +5,7 @@ import { useActionState, useState } from "react";
 import { CHANGE_NOTE_MAX, firstNameOf, parseDollars, sameChangeLines, type ChangeLineDraft } from "@/lib/crm/constants";
 import { RECORDED_METHODS, usd as money, type PaymentMethod } from "@/lib/crm/fees";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
-import { sendChangeOrder, withdrawChangeOrder } from "./actions";
+import { sendChangeOrder, withdrawChangeOrder } from "./change-order-actions";
 import { blankRow, filledRows, OptionBuilder, rowAmount, type OptionRow } from "./option-builder";
 import type { ChangeState } from "./types";
 

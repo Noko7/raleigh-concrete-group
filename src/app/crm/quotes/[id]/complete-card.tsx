@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 
 import { PhotoUpload } from "@/app/crm/photo-upload";
-import { completeJob } from "./actions";
+import { completeJob } from "./status-actions";
 import type { FinishState } from "./types";
 
 // Same server action as the crew's page, so the before/after photo requirement holds for owners too.

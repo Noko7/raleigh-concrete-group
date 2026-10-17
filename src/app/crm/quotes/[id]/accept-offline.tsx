@@ -5,7 +5,7 @@ import { useActionState, useMemo, useState } from "react";
 import { firstNameOf, dollars, optionAmount, packageLetter, quoteTotal, TIME_RE, to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { DateField } from "@/app/job/[token]/date-field";
-import { acceptOffline } from "./actions";
+import { acceptOffline } from "./schedule-actions";
 import type { ScheduleState } from "./types";
 
 // "They said yes on the phone."

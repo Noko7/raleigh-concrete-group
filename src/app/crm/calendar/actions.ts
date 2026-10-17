@@ -6,7 +6,7 @@ import { getSession } from "@/lib/crm/auth";
 import { clearGoogleToken, syncQuoteToCalendar } from "@/lib/crm/gcal";
 import { notifyVisitMoved } from "@/lib/crm/notify";
 import { addEvent, getQuote, getStaffById, rescheduleVisit } from "@/lib/crm/queries";
-import { cancelAppointment, setJobDate } from "@/app/crm/quotes/[id]/actions";
+import { cancelAppointment, setJobDate } from "@/app/crm/quotes/[id]/schedule-actions";
 
 export type CalActionState = { ok: boolean; error?: string; message?: string };
 

@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
-import { setJobDate } from "./actions";
+import { setJobDate } from "./schedule-actions";
 import type { PreferredSlot, ScheduleState } from "./types";
 
 function pretty(s: string): string {

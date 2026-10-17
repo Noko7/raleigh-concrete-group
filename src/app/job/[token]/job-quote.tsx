@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { dollars, QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
-import { saveQuote } from "@/app/crm/quotes/[id]/actions";
+import { saveQuote } from "@/app/crm/quotes/[id]/save-actions";
 import {
   MoreWaysToPrice,
   OptionBuilder,

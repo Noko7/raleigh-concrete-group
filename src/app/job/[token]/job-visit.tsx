@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { DEFAULT_VISIT_SLOTS, TIME_RE, to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, type Locale } from "@/lib/crm/i18n";
-import { confirmVisit } from "@/app/crm/quotes/[id]/actions";
+import { confirmVisit } from "@/app/crm/quotes/[id]/schedule-actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
 import { DateField } from "./date-field";
 

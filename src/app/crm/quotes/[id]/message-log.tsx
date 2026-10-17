@@ -5,7 +5,7 @@ import { isCancellable, isCancelled, isHeld, type QuoteMessage } from "@/lib/crm
 import { CancelHeldText } from "./cancel-held-text";
 import { SendHeldNow } from "./send-held-now";
 
-// Keep in step with QUOTE_TEXT_KINDS in actions.ts, which decides what actually happens.
+// Keep in step with QUOTE_TEXT_KINDS in send-actions.ts, which decides what actually happens.
 const QUOTE_KINDS = new Set(["quote_ready", "quote_updated"]);
 
 // Every text this job produced and whether it left. Sends are best-effort (an outage must never fail a

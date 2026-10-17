@@ -39,7 +39,7 @@ import { CancelAppointment } from "./cancel-appointment";
 import { QuotePayments } from "./quote-payments";
 import { ScheduleCard } from "./schedule-card";
 import { preferredSlots } from "./types";
-import { rotateTokens, setTestFlag } from "./actions";
+import { rotateTokens, setTestFlag } from "./status-actions";
 
 export const dynamic = "force-dynamic";
 

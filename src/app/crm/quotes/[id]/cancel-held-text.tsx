@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 
-import { cancelHeldMessage } from "./actions";
+import { cancelHeldMessage } from "./send-actions";
 import type { ScheduleState } from "./types";
 
 // Stopping a reminder changes nothing else. The text that carries the quote IS the quote: stopping it
