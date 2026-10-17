@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { firstNameOf } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
-import { cancelAppointment } from "./actions";
+import { cancelAppointment } from "./schedule-actions";
 import type { ScheduleState } from "./types";
 
 // Cancel an appointment from the job itself (crew page or quote page), where the

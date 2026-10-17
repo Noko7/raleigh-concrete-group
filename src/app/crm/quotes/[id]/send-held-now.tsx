@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 
 import { dict, type Locale } from "@/lib/crm/i18n";
-import { sendHeldTextNow } from "./actions";
+import { sendHeldTextNow } from "./send-actions";
 import type { ScheduleState } from "./types";
 
 // "Don't wait - send it now." Quiet hours hold customer texts until 8am, which is wrong for a corrected

@@ -588,7 +588,7 @@ which is what made the job link and the pipeline feel like separate systems.
 | All message copy | `src/lib/crm/notify.ts` |
 | Customer approves + picks days | `src/app/q/[token]/quote-actions.tsx` → `src/app/api/quote-response/route.ts` |
 | Approval recorded, dates validated | `recordCustomerResponse` in `src/lib/crm/queries.ts` |
-| Crew confirms / moves the day | `setJobDate` in `src/app/crm/quotes/[id]/actions.ts` → `confirmSchedule` in `queries.ts` |
+| Crew confirms / moves the day | `setJobDate` in `src/app/crm/quotes/[id]/schedule-actions.ts` → `confirmSchedule` in `queries.ts` |
 | Scheduling UI (owner) | `src/app/crm/quotes/[id]/schedule-card.tsx` |
 | Scheduling UI (crew) | `src/app/job/[token]/job-schedule.tsx` |
 | Crew quotes a job | `src/app/job/[token]/job-quote.tsx` → the same `saveQuote` action |
@@ -596,7 +596,7 @@ which is what made the job link and the pipeline feel like separate systems.
 | The held-text queue | `flushHeldMessages` in `src/lib/crm/notify.ts` |
 | Queue health readout | `queueHealth` in `src/lib/crm/queries.ts` |
 | Retry decision (+ tests) | `planRetry` in `src/lib/crm/send-retry.ts` |
-| Send a queued text now | `sendHeldMessageNow` in `notify.ts`, `sendHeldTextNow` in `crm/quotes/[id]/actions.ts` |
+| Send a queued text now | `sendHeldMessageNow` in `notify.ts`, `sendHeldTextNow` in `crm/quotes/[id]/send-actions.ts` |
 | Address rule (form + API) | `src/lib/address.ts` |
 | Owner recipient list | `ownerRecipients` in `notify.ts` |
 | Test a real send | CRM → Settings → Text notifications |

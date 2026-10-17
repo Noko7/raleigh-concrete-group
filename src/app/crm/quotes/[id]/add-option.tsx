@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { AutoTextarea } from "@/components/auto-textarea";
 import { firstNameOf, dollars, PACKAGE_TITLE_MAX, packageLetter } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
-import { addQuoteOption } from "./actions";
+import { addQuoteOption } from "./save-actions";
 import type { SaveState } from "./types";
 
 // "They said it's too much. Send them the asphalt price as well."

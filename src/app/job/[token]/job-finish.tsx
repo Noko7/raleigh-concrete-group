@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { dict, type Locale } from "@/lib/crm/i18n";
-import { completeJob } from "@/app/crm/quotes/[id]/actions";
+import { completeJob } from "@/app/crm/quotes/[id]/status-actions";
 import type { FinishState } from "@/app/crm/quotes/[id]/types";
 import { PhotoUpload } from "@/app/crm/photo-upload";
 import { AutoTextarea } from "@/components/auto-textarea";

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { STATUS_LABELS, STATUSES } from "@/lib/crm/constants";
 import { AutoTextarea } from "@/components/auto-textarea";
-import { saveQuote } from "./actions";
+import { saveQuote } from "./save-actions";
 import type { SaveState } from "./types";
 
 type ContractorOption = { id: string; label: string };
