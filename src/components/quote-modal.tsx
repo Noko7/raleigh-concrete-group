@@ -1,19 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
 import { ymdInDays } from "@/lib/crm/clock";
 import { DEFAULT_VISIT_SLOTS, VISIT_LEAD_DAYS } from "@/lib/crm/constants";
 import { newAttemptId, trackFunnel, type TrackInput } from "@/lib/funnel-client";
 import {
   isConfirmedSave,
-  isValidUsPhone,
   leadReference,
   newSubmissionId,
   smsFallbackHref,
   UUID_RE,
 } from "@/lib/quote-submit";
-import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
+import { phoneDisplay, phoneHref } from "@/lib/site-data";
+import { ChoiceStep } from "./quote-modal/ChoiceStep";
+import { ContactStep } from "./quote-modal/ContactStep";
+import { IconBack, IconClose } from "./quote-modal/icons";
+import { ScheduleStep } from "./quote-modal/ScheduleStep";
+import { ServiceStep } from "./quote-modal/ServiceStep";
+import { isValidPhone, prettyDay, type FormState, type Mode, type Status } from "./quote-modal/shared";
+import { SuccessStep } from "./quote-modal/SuccessStep";
 
 // Everything is saved through our server (/api/upload-url, /api/quote); the browser never checks Supabase
 // settings itself. If the server can't save, it says so.
@@ -115,20 +120,6 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
   }
 }
 
-type Mode = "online" | "inperson";
-type Status = "idle" | "uploading" | "sending" | "success" | "error";
-
-type FormState = {
-  service: string;
-  address: string;
-  details: string;
-  name: string;
-  phone: string;
-  email: string;
-  visitDate: string;
-  visitTime: string;
-};
-
 const EMPTY: FormState = {
   service: "",
   address: "",
@@ -154,35 +145,16 @@ const DEFAULT_SLOTS = DEFAULT_VISIT_SLOTS;
 function minVisitDate(): string {
   return ymdInDays(VISIT_LEAD_DAYS);
 }
-function prettyDay(s: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "";
-  return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-}
 
 function cityFromAddress(address: string): string {
   const parts = address.split(",").map((p) => p.trim());
   return parts.length >= 2 ? parts[1] : "";
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const isValidPhone = isValidUsPhone;
 // A partial address doesn't block: it's a phone call, whereas a lead that gave up is nothing. The field
 // still asks for (and greens) a full one; the server notes partials on the lead.
 function hasSomeAddress(a: string): boolean {
   return a.trim().length >= 5;
-}
-// (919) 555-0123 while adding digits only (formatting on backspace re-adds what they deleted). Anything
-// that isn't a plain 10-digit number is left as typed.
-function formatPhone(next: string, prev: string): string {
-  if (next.length < prev.length) return next;
-  const d = next.replace(/\D/g, "");
-  if (d.length === 0 || d.length > 10 || d.startsWith("1")) return next;
-  if (d.length < 4) return d.length === 3 ? `(${d}) ` : `(${d}`;
-  if (d.length < 7) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-}
-function isValidEmail(email: string): boolean {
-  return email === "" || EMAIL_RE.test(email);
 }
 // Phones (especially iOS) report empty or generic MIME types for HEIC and .mov; infer from the extension
 // so Storage's allow-list accepts the file.
@@ -207,192 +179,6 @@ function fileMime(file: File): string {
 function isAllowedFile(file: File): boolean {
   const m = fileMime(file);
   return m.startsWith("image/") || m.startsWith("video/");
-}
-
-// Icons inherit currentColor.
-const svgBase = {
-  width: 24,
-  height: 24,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.8,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  "aria-hidden": true,
-};
-function IconBolt() {
-  return (
-    <svg {...svgBase}>
-      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
-    </svg>
-  );
-}
-function IconCalendar() {
-  return (
-    <svg {...svgBase}>
-      <rect x="3" y="4.5" width="18" height="16" rx="2" />
-      <path d="M3 9h18M8 2.5v4M16 2.5v4" />
-    </svg>
-  );
-}
-function IconCamera() {
-  return (
-    <svg {...svgBase}>
-      <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2L8 5h8l1.5 2h2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-9Z" />
-      <circle cx="12" cy="12.5" r="3.2" />
-    </svg>
-  );
-}
-function IconCheck({ className }: { className?: string }) {
-  return (
-    <svg {...svgBase} className={className}>
-      <path d="m5 12.5 4.5 4.5L19 6.5" />
-    </svg>
-  );
-}
-function IconArrow() {
-  return (
-    <svg {...svgBase} className="qm-choice-arrow">
-      <path d="M5 12h14M13 6l6 6-6 6" />
-    </svg>
-  );
-}
-function IconBack() {
-  return (
-    <svg {...svgBase}>
-      <path d="M19 12H5M11 6l-6 6 6 6" />
-    </svg>
-  );
-}
-function IconClose() {
-  return (
-    <svg {...svgBase}>
-      <path d="M6 6 18 18M18 6 6 18" />
-    </svg>
-  );
-}
-
-function StepHead({ n, of, title, sub }: { n: number; of: number; title: string; sub?: string }) {
-  return (
-    <div className="qm-step-head">
-      <p className="qm-step-count">
-        Step {n} of {of}
-      </p>
-      <h2 className="qm-title">{title}</h2>
-      {sub && <p className="qm-sub">{sub}</p>}
-    </div>
-  );
-}
-
-// Free US Census geocoder, proxied via /api/address.
-function AddressAutocomplete({
-  value,
-  verified,
-  onChange,
-  onVerifiedChange,
-}: {
-  value: string;
-  verified: boolean;
-  onChange: (next: string) => void;
-  onVerifiedChange: (v: boolean) => void;
-}) {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showList, setShowList] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [searchedEmpty, setSearchedEmpty] = useState(false);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reqId = useRef(0);
-  const boxRef = useRef<HTMLDivElement>(null);
-  // Typed a full address without tapping a suggestion: still green.
-  const complete = isFullAddress(value);
-
-  const lookup = useCallback((q: string) => {
-    if (debounce.current) clearTimeout(debounce.current);
-    setSearchedEmpty(false);
-    if (q.trim().length < 6) {
-      setSuggestions([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    debounce.current = setTimeout(async () => {
-      const myId = ++reqId.current;
-      try {
-        const res = await fetch(`/api/address?q=${encodeURIComponent(q)}`);
-        const data = await res.json();
-        if (myId !== reqId.current) return; // superseded
-        const list: string[] = Array.isArray(data.suggestions) ? data.suggestions : [];
-        setSuggestions(list);
-        setShowList(true);
-        setSearchedEmpty(list.length === 0);
-      } catch {
-        if (myId === reqId.current) setSuggestions([]);
-      } finally {
-        if (myId === reqId.current) setLoading(false);
-      }
-    }, 350);
-  }, []);
-
-  useEffect(() => {
-    function onDocClick(e: MouseEvent) {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setShowList(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
-
-  return (
-    <div className="qm-autocomplete" ref={boxRef}>
-      <input data-clarity-mask="true"
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          onVerifiedChange(false);
-          lookup(e.target.value);
-        }}
-        onFocus={() => suggestions.length && setShowList(true)}
-        placeholder="123 Main St, Raleigh, NC"
-        autoComplete="off"
-        inputMode="text"
-      />
-      {/* One fixed status slot: swapping text inside it keeps the fields below from jumping while typing. */}
-      <span className={`qm-ac-status qm-slot${verified && !loading ? " qm-ac-ok" : ""}`}>
-        {loading ? (
-          "Looking up addresses…"
-        ) : verified ? (
-          <>
-            <IconCheck className="qm-ac-check" /> Verified address
-          </>
-        ) : complete ? (
-          "Looks good. Pick a match above if you see yours."
-        ) : searchedEmpty ? (
-          "No exact match yet. Keep typing your street, city and state."
-        ) : (
-          ADDRESS_HINT
-        )}
-      </span>
-      {showList && suggestions.length > 0 && (
-        <ul className="qm-suggestions" data-clarity-mask="true">
-          {suggestions.map((s) => (
-            <li key={s}>
-              <button
-                type="button"
-                onClick={() => {
-                  onChange(s);
-                  onVerifiedChange(true);
-                  setShowList(false);
-                  setSuggestions([]);
-                }}
-              >
-                {s}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
 }
 
 function Modal({ onClose }: { onClose: () => void }) {
@@ -889,42 +675,15 @@ function Modal({ onClose }: { onClose: () => void }) {
 
         {/* Both: a success screen needs a saved row behind it. */}
         {status === "success" && leadRef ? (
-          <div className="qm-body qm-success">
-            <div className="qm-check">
-              <IconCheck />
-            </div>
-            <h2 className="qm-title">You&apos;re all set!</h2>
-            <p className="qm-sub">
-              {mode === "inperson" && !visitBooked
-                ? "We got your request. We'll call or text you shortly to set a time for your visit."
-                : "We got your request and we'll reach out soon with your quote. Want to talk now? Give us a call."}
-            </p>
-            {mode === "inperson" && visitBooked && data.visitDate && (
-              <p className="qm-sub">
-                Your visit: <strong>{prettyDay(data.visitDate)} at {data.visitTime}</strong>
-              </p>
-            )}
-            {/* Photos never fail a request; missing ones get a way to follow on. */}
-            {filesFailed > 0 && (
-              <p className="qm-err">
-                {filesFailed === 1 ? "One photo" : `${filesFailed} photos`} didn&apos;t upload.{" "}
-                <a href={smsHref} className="qm-consent-link">
-                  Text {filesFailed === 1 ? "it" : "them"} to us
-                </a>{" "}
-                at {phoneDisplay}.
-              </p>
-            )}
-            {/* The reference is the start of the saved row's id. */}
-            <p className="qm-ref">
-              Reference <strong>{leadRef}</strong>
-            </p>
-            <a href={phoneHref} className="cta-primary qm-full">
-              Call {phoneDisplay}
-            </a>
-            <button className="qm-text-btn" onClick={onClose}>
-              Close
-            </button>
-          </div>
+          <SuccessStep
+            mode={mode}
+            visitBooked={visitBooked}
+            data={data}
+            filesFailed={filesFailed}
+            smsHref={smsHref}
+            leadRef={leadRef}
+            onClose={onClose}
+          />
         ) : (
           <>
             {mode && (
@@ -934,329 +693,61 @@ function Modal({ onClose }: { onClose: () => void }) {
             )}
 
             {current === "choice" && (
-              <div className="qm-body">
-                <h2 className="qm-title">Get your free quote</h2>
-                <p className="qm-sub">Pick one. Both are free and there&apos;s no obligation.</p>
-                {/* The whole card is the tap target. */}
-                <div className="qm-choices">
-                  <button className="qm-choice qm-choice--main" onClick={() => pickMode("online")}>
-                    <span className="qm-choice-icon">
-                      <IconBolt />
-                    </span>
-                    <span className="qm-choice-text">
-                      <span className="qm-choice-title">Online quote</span>
-                      <span className="qm-choice-desc">Send a photo. We text you the price.</span>
-                    </span>
-                    <span className="qm-choice-badge">Fastest</span>
-                    <IconArrow />
-                  </button>
-                  <button className="qm-choice" onClick={() => pickMode("inperson")}>
-                    <span className="qm-choice-icon">
-                      <IconCalendar />
-                    </span>
-                    <span className="qm-choice-text">
-                      <span className="qm-choice-title">In-person quote</span>
-                      <span className="qm-choice-desc">We come out, measure, and give you a written price.</span>
-                    </span>
-                    <IconArrow />
-                  </button>
-                </div>
-                <p className="qm-choice-foot">
-                  Rather talk? Call <a href={phoneHref}>{phoneDisplay}</a>
-                </p>
-              </div>
+              <ChoiceStep
+                pickMode={pickMode}
+              />
             )}
 
             {current === "contact" && (
-              <div className="qm-body">
-                <StepHead n={1} of={totalSteps} title="Your details" sub="Takes about 30 seconds." />
-                <label className="qm-label" htmlFor="qm-name">Your name</label>
-                <input data-clarity-mask="true"
-                  id="qm-name"
-                  className="qm-input"
-                  value={data.name}
-                  onChange={(e) => set({ name: e.target.value })}
-                  autoComplete="name"
-                  maxLength={120}
-                  placeholder="First and last name"
-                  enterKeyHint="next"
-                />
-                <label className="qm-label qm-mt" htmlFor="qm-phone">Mobile number</label>
-                <input data-clarity-mask="true"
-                  id="qm-phone"
-                  className="qm-input"
-                  type="tel"
-                  value={data.phone}
-                  onChange={(e) => set({ phone: formatPhone(e.target.value, data.phone) })}
-                  enterKeyHint="next"
-                  autoComplete="tel"
-                  maxLength={32}
-                  inputMode="tel"
-                  placeholder="(919) 555-0123"
-                />
-                {/* Fixed-height slot so the address field below doesn't move. */}
-                <span className="qm-ac-status qm-slot">
-                  {data.phone.trim() !== "" && !isValidPhone(data.phone)
-                    ? "Enter a 10-digit number, like (919) 555-0123."
-                    : "We text your price here. No spam."}
-                </span>
-                <label className="qm-label">Address of the job</label>
-                <AddressAutocomplete
-                  value={data.address}
-                  verified={addressVerified}
-                  onChange={(v) => set({ address: v })}
-                  onVerifiedChange={setAddressVerified}
-                />
-                <label className="qm-label" htmlFor="qm-email">
-                  Email <span className="qm-optional">optional</span>
-                </label>
-                <input data-clarity-mask="true"
-                  id="qm-email"
-                  className="qm-input"
-                  type="email"
-                  value={data.email}
-                  onChange={(e) => set({ email: e.target.value })}
-                  autoComplete="email"
-                  maxLength={200}
-                  placeholder="you@email.com"
-                />
-                <span className="qm-ac-status qm-slot">
-                  {!isValidEmail(data.email) ? "That email doesn't look right. Check it, or leave it blank." : ""}
-                </span>
-
-                {/* Server-side contact rejections land here, on the step that can fix them. */}
-                {errorMsg && <p className="qm-err">{errorMsg}</p>}
-
-                {/*
-                  Trap field. Label and name must be nothing autofill recognises: autofill fills "Company" from saved
-                  addresses, turning real customers into bots.
-                */}
-                <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: "auto", height: 0, width: 0, overflow: "hidden" }}>
-                  <label>
-                    Leave this empty
-                    <input data-clarity-mask="true"
-                      type="text"
-                      name="rcg_leave_blank"
-                      tabIndex={-1}
-                      autoComplete="off"
-                      data-1p-ignore="true"
-                      data-lpignore="true"
-                      data-bwignore="true"
-                      data-form-type="other"
-                      value={honeypot}
-                      onChange={(e) => setHoneypot(e.target.value)}
-                    />
-                  </label>
-                </div>
-              </div>
+              <ContactStep
+                totalSteps={totalSteps}
+                data={data}
+                set={set}
+                addressVerified={addressVerified}
+                setAddressVerified={setAddressVerified}
+                errorMsg={errorMsg}
+                honeypot={honeypot}
+                setHoneypot={setHoneypot}
+              />
             )}
 
             {current === "service" && (
-              <div className="qm-body">
-                <StepHead n={2} of={totalSteps} title="What are we pouring?" sub="Tap one. Not sure? Pick Other." />
-                {/* Tiles, not a <select>: every choice visible, one tap. */}
-                <div className="qm-tiles" role="radiogroup" aria-label="What do you need?">
-                  {quoteServiceOptions.map((option) => {
-                    const on = data.service === option;
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        role="radio"
-                        aria-checked={on}
-                        className={`qm-tile${on ? " qm-tile--on" : ""}`}
-                        onClick={() => set({ service: option })}
-                      >
-                        {option.replace("/", " / ")}
-                        {on && <IconCheck className="qm-tile-check" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <label className={`qm-dropzone qm-mt${mode === "online" ? " qm-dropzone--main" : ""}`}>
-                  <input data-clarity-mask="true"
-                    type="file"
-                    accept="image/*,video/*"
-                    multiple
-                    onChange={(e) => addFiles(e.target.files)}
-                    hidden
-                  />
-                  <span className="qm-dropzone-icon">
-                    <IconCamera />
-                  </span>
-                  <span className="qm-dropzone-title">
-                    {files.length ? "Add more photos" : "Add a photo of the spot"}
-                  </span>
-                  <span className="qm-dropzone-hint">
-                    {mode === "online"
-                      ? "Required - at least one photo so we can price it. Up to 8 photos or videos."
-                      : "Optional, but it gets you a faster price. Up to 8 photos or videos."}
-                  </span>
-                </label>
-                {fileError && <p className="qm-err">{fileError}</p>}
-                {files.length > 0 && (
-                  <ul className="qm-filelist" data-clarity-mask="true">
-                    {files.map((f, i) => (
-                      <li key={`${f.name}-${i}`}>
-                        <span className="qm-file-name">{f.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                          aria-label={`Remove ${f.name}`}
-                        >
-                          <IconClose />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                <label className="qm-label qm-mt" htmlFor="qm-details">
-                  {mode === "online" ? (
-                    "Describe the job"
-                  ) : (
-                    <>
-                      Anything else? <span className="qm-optional">optional</span>
-                    </>
-                  )}
-                </label>
-                <textarea data-clarity-mask="true"
-                  id="qm-details"
-                  className="qm-input"
-                  rows={2}
-                  value={data.details}
-                  onChange={(e) => set({ details: e.target.value })}
-                  placeholder={
-                    mode === "online"
-                      ? "What needs doing, rough size (like 20x30 ft), and when you want it done"
-                      : "Rough size (like 20x30 ft) or when you want it done"
-                  }
-                />
-                {mode === "online" && !hasDetails && data.details.trim().length > 0 && (
-                  <p className="qm-dropzone-hint">A few more words, please.</p>
-                )}
-                {errorMsg && <p className="qm-err">{errorMsg}</p>}
-              </div>
+              <ServiceStep
+                totalSteps={totalSteps}
+                mode={mode}
+                data={data}
+                set={set}
+                files={files}
+                setFiles={setFiles}
+                addFiles={addFiles}
+                fileError={fileError}
+                hasDetails={hasDetails}
+                errorMsg={errorMsg}
+              />
             )}
 
             {/* In-person books a visit; online picks a fallback slot. */}
             {current === "schedule" && (
-              <div className="qm-body">
-                {/*
-                  The online wording promises nothing: a customer who thinks they have an appointment when they don't is
-                  the worst outcome.
-                */}
-                <StepHead
-                  n={3}
-                  of={totalSteps}
-                  title={mode === "online" ? "If we need a look" : "When should we come?"}
-                  sub={
-                    mode === "online"
-                      ? "Most jobs we price from photos. If yours needs a look, when's good? We'll text before anyone comes out."
-                      : "Pick a day, then a time."
-                  }
-                />
-                <label className="qm-label" htmlFor="qm-date">Day</label>
-                <input data-clarity-mask="true"
-                  id="qm-date"
-                  className="qm-input"
-                  type="date"
-                  min={minDate}
-                  value={data.visitDate}
-                  onChange={(e) => {
-                    set({ visitDate: e.target.value });
-                    // Both modes ask: in-person must know the slot is free, and online fallback hours must still be hours
-                    // that crew works.
-                    checkVisitDate(e.target.value, data.service);
-                  }}
-                />
-                <span
-                  className={`qm-ac-status qm-slot${
-                    dateChecking ? "" : dateFull ? " qm-ac-full" : data.visitDate ? " qm-ac-ok" : ""
-                  }`}
-                >
-                  {mode === "online" ? (
-                    data.visitDate ? (
-                      <>
-                        <IconCheck className="qm-ac-check" /> We&apos;ll aim for {prettyDay(data.visitDate)} if a visit
-                        is needed
-                      </>
-                    ) : (
-                      "Nothing is booked. We'll text you first."
-                    )
-                  ) : dateChecking ? (
-                    "Checking that day…"
-                  ) : dayOff ? (
-                    "We're not out that day. Please pick another."
-                  ) : dateFull ? (
-                    "That day is full. Please pick another."
-                  ) : data.visitDate ? (
-                    <>
-                      <IconCheck className="qm-ac-check" /> {prettyDay(data.visitDate)} is open
-                    </>
-                  ) : (
-                    `Earliest we can come out is ${VISIT_LEAD_DAYS} days from today.`
-                  )}
-                </span>
-                <label className="qm-label">Time</label>
-                {/* role=group so screen readers treat the chips as one question. */}
-                <div className="qm-chips" role="group" aria-label="Time">
-                  {slots.map((t) => {
-                    const taken = takenTimes.includes(t);
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        disabled={taken}
-                        title={taken ? "Already booked" : undefined}
-                        className={`qm-chip${data.visitTime === t ? " qm-chip--active" : ""}${
-                          taken ? " qm-chip--taken" : ""
-                        }`}
-                        onClick={() => set({ visitTime: t })}
-                      >
-                        {t}
-                      </button>
-                    );
-                  })}
-                </div>
-                {takenTimes.length > 0 && !dateFull && (
-                  <span className="qm-ac-status qm-slot">Greyed-out times are already booked that day.</span>
-                )}
-
-                {/* Send without a time and we call: a missing time costs a phone call, a missing lead costs the job. */}
-                <button
-                  type="button"
-                  className="qm-text-btn qm-skip"
-                  disabled={busy}
-                  onClick={() => {
-                    track({ event: "done", step: "schedule", mode, ms: stepMs(), detail: "skipped_time" });
-                    void submit({ skipVisit: true });
-                  }}
-                >
-                  {mode === "online"
-                    ? "Skip this and send my request"
-                    : dateFull || dayOff
-                      ? "No day works? Send it and we'll call you to set a time"
-                      : "None of these times work? Send it and we'll call you"}
-                </button>
-
-                {/* A rejected date returns as idle, and the reason must come with it. */}
-                {(status === "error" || errorMsg) && (
-                  <p className="qm-err">{errorMsg || `Something went wrong. Please text or call us at ${phoneDisplay} instead.`}</p>
-                )}
-                {/* The fallback text arrives with what they typed. */}
-                {status === "error" && (
-                  <div className="qm-fallback">
-                    <a href={smsHref} className="cta-primary qm-full">
-                      Text us this request
-                    </a>
-                    <a href={phoneHref} className="qm-text-btn">
-                      Or call {phoneDisplay}
-                    </a>
-                  </div>
-                )}
-              </div>
+              <ScheduleStep
+                totalSteps={totalSteps}
+                mode={mode}
+                minDate={minDate}
+                data={data}
+                set={set}
+                checkVisitDate={checkVisitDate}
+                dateChecking={dateChecking}
+                dateFull={dateFull}
+                dayOff={dayOff}
+                slots={slots}
+                takenTimes={takenTimes}
+                busy={busy}
+                track={track}
+                stepMs={stepMs}
+                submit={submit}
+                status={status}
+                errorMsg={errorMsg}
+                smsHref={smsHref}
+              />
             )}
 
             {/* SMS consent disclosure (A2P 10DLC), shown before submitting. */}
