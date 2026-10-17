@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/crm/auth";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
+import { listCrewViews } from "@/lib/crm/crew-views";
 import { listQuotes, listStaff } from "@/lib/crm/queries";
 import { KanbanBoard, type BoardQuote } from "./kanban-board";
 import { NewQuoteForm } from "./new-quote-form";
@@ -20,10 +21,14 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
   const t = dict(locale);
 
   // Independent queries, so don't make the second wait on the first.
-  const [quotes, staff] = await Promise.all([
+  const [quotes, staff, crewViews] = await Promise.all([
     listQuotes(session, { search: sp.search, assignedTo: sp.assignedTo }),
     listStaff(session),
+    // Owner only - an empty list for anybody else.
+    listCrewViews(session),
   ]);
+  // Opens of each job by its CURRENT contractor, for the owner's card pill.
+  const crewViewsOf = new Map(crewViews.map((v) => [`${v.quote_id}:${v.staff_id}`, v.view_count]));
   const contractors = staff.filter((s) => s.role === "contractor");
   const nameMap: Record<string, string> = {};
   for (const s of staff) nameMap[s.id] = s.full_name || s.email || "Staff";
@@ -39,6 +44,7 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
     assigned_to: q.assigned_to,
     quote_amount: q.quote_amount,
     view_count: q.view_count,
+    crew_views: q.assigned_to ? (crewViewsOf.get(`${q.id}:${q.assigned_to}`) ?? 0) : 0,
     quote_type: q.quote_type,
     created_at: q.created_at,
     scheduled_date: q.scheduled_date,

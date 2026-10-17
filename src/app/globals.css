@@ -4376,3 +4376,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
   background: #fff7ed; border: 1px solid #fed7aa; color: #7c2d12;
 }
 .qp-now { margin-bottom: 0.8rem; }
+
+/* Owner-only crew views on the job page: one contractor per line. */
+.crm-crew-view { display: block; }

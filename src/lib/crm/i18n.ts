@@ -125,6 +125,12 @@ const en = {
     customerViews: "Customer views",
     firstViewed: "first",
     notOpened: "not opened yet",
+    // Owner-only: how often the assigned contractor opened the job page.
+    crewViews: "Crew views",
+    crewNotOpened: "Not opened by the crew yet",
+    time: "time",
+    times: "times",
+    lastViewed: "last",
     customerResponse: "Customer response",
     accepted: "Accepted",
     declined: "Declined",

@@ -19,6 +19,8 @@ export type BoardQuote = {
   assigned_to: string | null;
   quote_amount: number | null;
   view_count: number;
+  /** Owner only: times the assigned contractor opened this job. 0 for everyone else. */
+  crew_views: number;
   quote_type: string | null;
   created_at: string;
   scheduled_date: string | null;
@@ -459,7 +461,12 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                               {t.pipeline.pillViewed} {q.view_count}x
                             </span>
                           )}
-                          {q.assigned_to && <span className="kb-pill kb-pill-assigned">{nameMap[q.assigned_to] ?? t.pipeline.crew}</span>}
+                          {q.assigned_to && (
+                            <span className="kb-pill kb-pill-assigned">
+                              {nameMap[q.assigned_to] ?? t.pipeline.crew}
+                              {q.crew_views > 0 && ` · ${t.pipeline.pillViewed} ${q.crew_views}x`}
+                            </span>
+                          )}
                         </div>
                       );
                     })()}

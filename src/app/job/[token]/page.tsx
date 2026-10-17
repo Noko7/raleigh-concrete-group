@@ -22,6 +22,7 @@ import { preferredSlots } from "@/app/crm/quotes/[id]/types";
 import { JobFinish } from "./job-finish";
 import { JobHeldTexts } from "./job-held-texts";
 import { JobPayments } from "./job-payments";
+import { CrewViewBeacon } from "./crew-view-beacon";
 import { JobQuote } from "./job-quote";
 import { JobReschedule } from "./job-reschedule";
 import { JobSchedule } from "./job-schedule";
@@ -265,6 +266,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
 
   return (
     <main className="job-wrap">
+      {session.staff.role !== "owner" && <CrewViewBeacon token={token} />}
       <div className="job-card">
         <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="job-logo" priority />
 

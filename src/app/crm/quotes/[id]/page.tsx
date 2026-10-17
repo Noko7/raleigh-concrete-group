@@ -11,6 +11,7 @@ import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText, quoteSends } from "@/lib/crm/events";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { correctableReason, jobLedger, payeeState } from "@/lib/crm/payments";
+import { listCrewViews } from "@/lib/crm/crew-views";
 import { usd } from "@/lib/crm/fees";
 import {
   getQuote,
@@ -85,13 +86,15 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   // Four independent queries that used to run one after another, so opening a
   // job cost four sequential round-trips to Supabase before anything rendered.
   // None of them depends on another's result.
-  const [allStaff, events, messages, agreements, options, packages] = await Promise.all([
+  const [allStaff, events, messages, agreements, options, packages, crewViews] = await Promise.all([
     listStaff(session),
     listEvents(session, id),
     listMessages(session, id),
     listAgreementsForQuote(session, id),
     listQuoteOptions(session, id),
     listQuotePackages(session, id),
+    // Owner only - an empty list for anybody else.
+    listCrewViews(session, id),
   ]);
   // Only reachable by a contractor on a job with no crew link (the redirect
   // above catches every other case), so it stays out of the batch.
@@ -554,6 +557,22 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   {quote.view_count} {quote.viewed_at ? `· ${t.job.firstViewed} ${fmt(quote.viewed_at)}` : `· ${t.job.notOpened}`}
                 </dd>
               </div>
+              {/* Owner only: how often the crew opened this job. */}
+              {isOwner && (quote.assigned_to || crewViews.length > 0) && (
+                <div>
+                  <dt>{t.job.crewViews}</dt>
+                  <dd>
+                    {crewViews.length === 0
+                      ? t.job.crewNotOpened
+                      : crewViews.map((v) => (
+                          <span key={v.staff_id} className="crm-crew-view">
+                            {nameMap.get(v.staff_id) ?? "Staff"} · {v.view_count}{" "}
+                            {v.view_count === 1 ? t.job.time : t.job.times} · {t.job.lastViewed} {fmt(v.last_viewed_at)}
+                          </span>
+                        ))}
+                  </dd>
+                </div>
+              )}
             </dl>
             {quote.details && (
               <div className="crm-details-block">
