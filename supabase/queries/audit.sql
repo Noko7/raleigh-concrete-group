@@ -29,6 +29,9 @@
 -- Reads the catalogue rather than the tables, so it cannot fail no matter how
 -- far behind the database is. Anything marked MISSING means PART 1 will error
 -- on the sections that use it: run that file first.
+-- (Those files now live in supabase/archive/ and production has all of them. On
+-- production a MISSING row is drift: compare with supabase/schema.sql before
+-- running anything, since some archived files undo later changes.)
 with needed(feature, migration, obj, col) as (
   values
     ('Leads',            'crm.sql',              'quote_requests', 'status'),

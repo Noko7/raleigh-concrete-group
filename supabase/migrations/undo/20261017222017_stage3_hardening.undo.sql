@@ -1,6 +1,6 @@
 -- Raleigh Concrete Group - undo stage 3 (hardening)
 -- Puts the database back as it was read on 2026-10-17, before
--- stage3-hardening.sql ran. See supabase/snapshots/2026-10-17-pre-stage3.sql.
+-- migrations/20261017222017_stage3_hardening.sql ran. See supabase/snapshots/2026-10-17-pre-stage3.sql.
 -- Safe to re-run.
 --
 --   1. send_to_make is enabled again (stage 3 only disabled it).
