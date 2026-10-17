@@ -11,18 +11,14 @@ type GalleryCarouselProps = {
   images: GalleryImage[];
 };
 
-// How long each photo takes to pass: about 36px a second on desktop and 24 on
-// a phone, slow enough to look at a photo as it goes by.
+// About 36px/s on desktop, 24 on a phone.
 const SECONDS_PER_PHOTO = 12;
-// After a swipe, drag or scroll, how long the strip waits before drifting again.
 const RESUME_AFTER_MS = 2500;
-// A mouse drag shorter than this is still a click on the photo.
+// A shorter mouse drag is still a click.
 const DRAG_THRESHOLD_PX = 6;
 
-// Auto-scrolling strip of recent work that customers can also scroll freely:
-// swipe on a phone, trackpad or drag with a mouse. The list is rendered twice
-// and the scroll position wraps by half its width, so it loops seamlessly in
-// either direction. Clicking a tile opens the lightbox.
+// Auto-scrolls but can be swiped, scrolled or dragged. Rendered twice and wrapped by half its width to loop
+// seamlessly both ways.
 export function GalleryCarousel({ images }: GalleryCarouselProps) {
   const [active, setActive] = useState<number | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -47,8 +43,7 @@ export function GalleryCarousel({ images }: GalleryCarouselProps) {
       last = now;
       const h = half();
       if (h > 0) {
-        // Wrap by half the width - the two copies look identical - and carry an
-        // in-progress mouse drag across with it.
+        // Wrap by half (the copies are identical), carrying any in-progress drag.
         const shift = el.scrollLeft < 1 ? h : el.scrollLeft >= h * 2 - el.clientWidth - 1 ? -h : 0;
         if (shift) {
           el.scrollLeft += shift;
@@ -56,8 +51,7 @@ export function GalleryCarousel({ images }: GalleryCarouselProps) {
         }
         const idle = !reduced && !hovering.current && !drag.current && now >= pausedUntil.current;
         if (idle) {
-          // Fractional position kept here: scrollLeft rounds to whole pixels,
-          // and a slow drift would otherwise never move.
+          // Fractional position kept here: scrollLeft rounds to whole pixels, so a slow drift would never move.
           if (Math.abs(pos - el.scrollLeft) > 2) pos = el.scrollLeft;
           pos -= (h / (images.length * SECONDS_PER_PHOTO * 1000)) * dt;
           el.scrollLeft = pos;

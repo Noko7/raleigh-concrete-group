@@ -38,7 +38,6 @@ export function BeforeAfterSlider({
   };
   const onPointerUp = () => { dragging.current = false; };
 
-  // Touch on container
   const onTouchMove = useCallback((e: TouchEvent) => {
     e.preventDefault();
     updatePosition(e.touches[0].clientX);
@@ -62,7 +61,7 @@ export function BeforeAfterSlider({
       role="img"
       aria-label="Before and after comparison"
     >
-      {/* After (base layer, full width) */}
+      {/* After: base layer, full width. */}
       <div className="ba-layer ba-after">
         <Image
           src={afterSrc}
@@ -75,7 +74,7 @@ export function BeforeAfterSlider({
         <span className="ba-label ba-label-right">After</span>
       </div>
 
-      {/* Before (clipped to left of handle) */}
+      {/* Before: clipped to the left of the handle. */}
       <div className="ba-layer ba-before" style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}>
         <Image
           src={beforeSrc}
@@ -88,7 +87,6 @@ export function BeforeAfterSlider({
         <span className="ba-label ba-label-left">Before</span>
       </div>
 
-      {/* Divider + handle */}
       <div className="ba-divider" style={{ left: `${position}%` }}>
         <div
           className="ba-handle"

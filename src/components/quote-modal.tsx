@@ -15,31 +15,21 @@ import {
 } from "@/lib/quote-submit";
 import { phoneDisplay, phoneHref, quoteServiceOptions } from "@/lib/site-data";
 
-// Everything this form saves goes through our own server (/api/upload-url and
-// /api/quote), which holds the database keys. The browser used to check its
-// own copy of the Supabase settings and, if they were missing, skip the photo
-// upload without a word and still say "You're all set!" - so it no longer
-// looks at them at all. If the server can't save, the server says so.
+// Everything is saved through our server (/api/upload-url, /api/quote); the browser never checks Supabase
+// settings itself. If the server can't save, it says so.
 const MAX_FILE_MB = 50;
-// Enough for "cracked driveway, about 20x30" - not a word count anyone notices.
+// Enough for "cracked driveway, about 20x30".
 const MIN_ONLINE_DETAILS = 10;
 
-// How long to wait for /api/quote before telling the customer we couldn't
-// confirm it. Generous, because the request itself is small and the server
-// answers before sending any texts; anything past this is a hang, not a slow
-// network. A retry after a timeout is safe: see submissionId below.
+// Generous: the request is small and the server answers before sending texts, so past this is a hang.
+// Retrying after a timeout is safe (see submissionId).
 const SUBMIT_TIMEOUT_MS = 30_000;
 const SIGN_TIMEOUT_MS = 15_000;
-// A photo upload is given up on when no bytes have moved for this long - not
-// after a fixed total, because a 40MB video on a weak signal is slow but fine,
-// and one that has stopped moving is not going to finish.
+// Given up only when no bytes move for this long: a large video on weak signal is slow but fine.
 const UPLOAD_STALL_MS = 45_000;
 
-// What they've typed, kept for this tab so closing the form by accident (a tap
-// outside it, Escape, the back gesture) and opening it again doesn't mean
-// typing it all again. Also carries the submission id, so the reopened form is
-// the same request and not a second one. Cleared once it's sent. Photos can't
-// be kept this way; the rest can.
+// Kept for this tab so an accidental close doesn't lose what they typed. Carries the submission id so a
+// reopened form is the same request. Cleared once sent. Photos can't be kept.
 const DRAFT_KEY = "rcg_quote_form_v1";
 const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 type Saved = {
@@ -80,7 +70,7 @@ function clearSaved() {
   } catch {}
 }
 
-// PUT a file to its signed URL with progress, giving up only when it stalls.
+// Gives up only when the upload stalls.
 function putFile(url: string, file: File, contentType: string, onProgress: (f: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -114,8 +104,7 @@ function putFile(url: string, file: File, contentType: string, onProgress: (f: n
   });
 }
 
-// fetch with a deadline. An AbortError comes back as a thrown error, which the
-// caller treats like any other failure to confirm.
+// An AbortError is thrown, and the caller treats it like any other failure to confirm.
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
@@ -151,29 +140,17 @@ const EMPTY: FormState = {
   visitTime: "",
 };
 
-// Both modes ask for a date, but they mean different things by it, and that
-// distinction is the whole point:
-//
-//   in-person  the customer is booking a visit. We confirm it on the spot.
-//   online     a fallback slot in case the job turns out to be too big to price
-//              from photos. Nobody is coming out unless a contractor confirms
-//              it first, and the customer is told exactly that.
-//
-// Treating the online date as a booking is what put appointments nobody had
-// agreed to on the crew's job page and in the owner's alerts.
+// Both modes ask for a date, meaning different things:
+//   in-person  booking a visit, confirmed on the spot
+//   online     a fallback slot if photos aren't enough; nobody comes unless a contractor confirms
 const STEPS = ["contact", "service", "schedule"] as const;
 
 type Step = (typeof STEPS)[number];
 
-// The slots shown before a date is picked. Once one is, the real list comes
-// back from /api/availability - it belongs to the contractor this job type
-// routes to, whose working hours are theirs to set, so it cannot be a constant
-// baked into the bundle.
+// Real slots come from /api/availability: they belong to the contractor this job type routes to.
 const DEFAULT_SLOTS = DEFAULT_VISIT_SLOTS;
 
-// Soonest an in-person visit can be requested, as YYYY-MM-DD. The server checks
-// this too: `min` on a date input is a convenience, not a rule, and picking a
-// day in the past used to sail straight through.
+// YYYY-MM-DD. The server checks too: `min` on a date input is a convenience, not a rule.
 function minVisitDate(): string {
   return ymdInDays(VISIT_LEAD_DAYS);
 }
@@ -189,17 +166,13 @@ function cityFromAddress(address: string): string {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isValidPhone = isValidUsPhone;
-// Enough of an address to go on. A full "123 Main St, Raleigh, NC" is still
-// what the field asks for and what it shows a green light for, but it no longer
-// stops anyone: a lead with a partial address is a phone call, a lead that gave
-// up on the address field is nothing. The server notes it on the lead.
+// A partial address doesn't block: it's a phone call, whereas a lead that gave up is nothing. The field
+// still asks for (and greens) a full one; the server notes partials on the lead.
 function hasSomeAddress(a: string): boolean {
   return a.trim().length >= 5;
 }
-// (919) 555-0123 as they type, so they can see the number is right. Only
-// while they are adding digits: formatting on a backspace would put back the
-// bracket or dash they were trying to delete. Anything that isn't a plain
-// 10-digit number (a leading 1, an extension) is left exactly as typed.
+// (919) 555-0123 while adding digits only (formatting on backspace re-adds what they deleted). Anything
+// that isn't a plain 10-digit number is left as typed.
 function formatPhone(next: string, prev: string): string {
   if (next.length < prev.length) return next;
   const d = next.replace(/\D/g, "");
@@ -211,9 +184,8 @@ function formatPhone(next: string, prev: string): string {
 function isValidEmail(email: string): boolean {
   return email === "" || EMAIL_RE.test(email);
 }
-// Phones (especially iOS) often report an empty or generic MIME type for HEIC
-// photos and .mov videos. Infer a real type from the extension so Storage's
-// allow-list accepts the upload and the file is stored with the right type.
+// Phones (especially iOS) report empty or generic MIME types for HEIC and .mov; infer from the extension
+// so Storage's allow-list accepts the file.
 const EXT_MIME: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -237,7 +209,7 @@ function isAllowedFile(file: File): boolean {
   return m.startsWith("image/") || m.startsWith("video/");
 }
 
-/* ── Icons (inline SVG, inherit currentColor) ─────────────────────────────── */
+// Icons inherit currentColor.
 const svgBase = {
   width: 24,
   height: 24,
@@ -301,7 +273,6 @@ function IconClose() {
   );
 }
 
-/* ── Step heading: where they are, then one plain question ─────────────────── */
 function StepHead({ n, of, title, sub }: { n: number; of: number; title: string; sub?: string }) {
   return (
     <div className="qm-step-head">
@@ -314,7 +285,7 @@ function StepHead({ n, of, title, sub }: { n: number; of: number; title: string;
   );
 }
 
-/* ── Address autocomplete (free US Census geocoder, proxied via /api/address) ─ */
+// Free US Census geocoder, proxied via /api/address.
 function AddressAutocomplete({
   value,
   verified,
@@ -333,8 +304,7 @@ function AddressAutocomplete({
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reqId = useRef(0);
   const boxRef = useRef<HTMLDivElement>(null);
-  // Typed something that already reads as a full address, even if they haven't
-  // tapped a suggestion. Both paths are accepted, so both get a green light.
+  // Typed a full address without tapping a suggestion: still green.
   const complete = isFullAddress(value);
 
   const lookup = useCallback((q: string) => {
@@ -351,7 +321,7 @@ function AddressAutocomplete({
       try {
         const res = await fetch(`/api/address?q=${encodeURIComponent(q)}`);
         const data = await res.json();
-        if (myId !== reqId.current) return; // a newer request superseded this one
+        if (myId !== reqId.current) return; // superseded
         const list: string[] = Array.isArray(data.suggestions) ? data.suggestions : [];
         setSuggestions(list);
         setShowList(true);
@@ -386,10 +356,7 @@ function AddressAutocomplete({
         autoComplete="off"
         inputMode="text"
       />
-      {/* One status element that always exists, rather than three that appear
-          and disappear. Swapping the text inside a fixed slot means the fields
-          below never shift while someone is typing, which is what made this
-          form jump around on a phone. */}
+      {/* One fixed status slot: swapping text inside it keeps the fields below from jumping while typing. */}
       <span className={`qm-ac-status qm-slot${verified && !loading ? " qm-ac-ok" : ""}`}>
         {loading ? (
           "Looking up addresses…"
@@ -428,9 +395,8 @@ function AddressAutocomplete({
   );
 }
 
-/* ── The modal ────────────────────────────────────────────────────────────── */
 function Modal({ onClose }: { onClose: () => void }) {
-  // Picked up where they left off, if they closed it earlier in this tab.
+  // Restored if they closed it earlier in this tab.
   const restored = useRef(loadSaved()).current;
   const [mode, setMode] = useState<Mode | null>(restored?.mode ?? null);
   const [stepIndex, setStepIndex] = useState(restored?.mode ? restored.stepIndex : 0);
@@ -441,49 +407,31 @@ function Modal({ onClose }: { onClose: () => void }) {
   const [fileError, setFileError] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [honeypot, setHoneypot] = useState("");
-  // The reference of the saved lead, shown on the success screen. The success
-  // screen cannot render without one: it only exists once the server has
-  // handed back the id of the row it wrote.
+  // The success screen can't render without this: it exists only once the server returns the saved row's id.
   const [leadRef, setLeadRef] = useState("");
-  // What the success screen needs to be honest: whether an in-person visit was
-  // actually booked, and how many photos didn't make it.
+  // So the success screen is honest: was a visit actually booked, how many photos didn't make it.
   const [visitBooked, setVisitBooked] = useState(true);
   const [filesFailed, setFilesFailed] = useState(0);
   const [uploadNote, setUploadNote] = useState("");
-  // One per filled-in form, sent on every attempt (lib/quote-submit.ts). The
-  // server keeps it under a unique index, so pressing the button again after a
-  // timeout finds the lead already saved instead of making a second one.
+  // Sent on every attempt (lib/quote-submit.ts); a unique index makes a retry find the saved lead.
   const submissionId = useRef(restored?.submissionId ?? newSubmissionId()).current;
-  // Photos already uploaded, by file. A submit the server turns down (a slot
-  // taken, a date too soon) used to upload every photo again on the next try -
-  // 34MB, three times, for one customer on 5 Sep. Now each file goes up once.
+  // Uploaded paths by file, so a submit the server turns down doesn't re-upload every photo.
   const uploaded = useRef(new Map<File, string>());
-  // Guards against a second submit starting while one is in flight. The button
-  // is disabled too, but state updates are async and a fast double tap can land
-  // before the re-render that disables it.
+  // The button is disabled too, but a fast double tap can land before that re-render.
   const inFlight = useRef(false);
-  // Set the moment the server confirms the save. After that there is no draft
-  // to rescue, and nothing may report this form as abandoned.
+  // After the server confirms, nothing may report this form as abandoned.
   const leadSaved = useRef(false);
   const [dateChecking, setDateChecking] = useState(false);
   const [dateFull, setDateFull] = useState(false);
-  // Slots the crew already has on the chosen day. Greying these out is nicer
-  // than letting someone pick one and bounce off a 409 two screens later, but
-  // it is not the guard - the server re-checks, because two people can be on
-  // this form at once and the browser's copy of "free" goes stale immediately.
+  // Greyed out as a courtesy only; the server re-checks because "free" goes stale immediately.
   const [takenTimes, setTakenTimes] = useState<string[]>([]);
-  // The slots this contractor actually offers on the chosen day, which is a
-  // function of their own working hours rather than a fixed list of five.
+  // From the contractor's own working hours.
   const [slots, setSlots] = useState<string[]>(DEFAULT_SLOTS);
-  // They don't work that weekday at all. Distinct from "every hour is taken",
-  // because the answer is a different day rather than a different time.
+  // Distinct from "every hour taken": the answer is a different day, not a different time.
   const [dayOff, setDayOff] = useState(false);
   const minDate = useRef(minVisitDate()).current;
 
-  // Funnel tracking (src/lib/funnel.ts): which step people reach, how long each
-  // takes, and where they give up. Refs rather than state because none of it
-  // is ever drawn, and the close handlers need the latest values without being
-  // re-bound on every keystroke.
+  // Funnel tracking (src/lib/funnel.ts). Refs: never drawn, and bound-once close handlers need the latest values.
   const attemptId = useRef(newAttemptId()).current;
   const openedAt = useRef(Date.now());
   const stepStartedAt = useRef(Date.now());
@@ -495,10 +443,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   );
   const stepMs = () => Date.now() - stepStartedAt.current;
 
-  // `service` decides whose calendar this is: a lead goes to the contractor who
-  // takes that job type. Checking against the primary contractor regardless,
-  // which is what this used to do, answered about the wrong person's day for
-  // every lead the routing rules send elsewhere.
+  // `service` decides whose calendar: a lead goes to the contractor who takes that job type.
   async function checkVisitDate(date: string, service: string) {
     setDateFull(false);
     setDayOff(false);
@@ -525,16 +470,14 @@ function Modal({ onClose }: { onClose: () => void }) {
       const taken = Array.isArray(json.taken) ? json.taken : [];
       setSlots(open);
       setTakenTimes(taken);
-      // If they had already chosen a time and it's gone - taken, or no longer
-      // a slot this contractor offers - drop it rather than leaving a selected
-      // chip that will be rejected on submit.
+      // Drop a chosen time that's no longer available, rather than a chip that will be rejected on submit.
       setData((d) =>
         d.visitTime && (taken.includes(d.visitTime) || !open.includes(d.visitTime))
           ? { ...d, visitTime: "" }
           : d,
       );
     } catch {
-      // Don't block on a network hiccup; the server re-checks either way.
+      // Don't block on a network hiccup; the server re-checks.
       setDateFull(false);
       setDayOff(false);
     } finally {
@@ -547,17 +490,12 @@ function Modal({ onClose }: { onClose: () => void }) {
   const stepNumber = stepIndex + 1;
   const isLastStep = stepIndex === STEPS.length - 1;
 
-  // An online quote is priced from what they send, so it can't go without at
-  // least one photo and a few words about the job. Added 11 Oct after an online
-  // request came in with a name, a dead number and nothing else - no way to
-  // price it and no way to reach them. In-person requests stay as they were.
+  // An online quote is priced from what they send: at least one photo and a few words are required.
   const onlineNeedsMore = mode === "online";
   const hasPhoto = files.length > 0;
   const hasDetails = data.details.trim().length >= MIN_ONLINE_DETAILS;
 
-  // What is still stopping them on this step, in words the Funnel page can
-  // count: "phone+address" means they left Contact with both unfinished. Only
-  // which requirement - never what they typed.
+  // Countable by the Funnel page: "phone+address" = left Contact with both unfinished. Never what they typed.
   function unmet(): string {
     const missing: string[] = [];
     if (current === "contact") {
@@ -577,19 +515,10 @@ function Modal({ onClose }: { onClose: () => void }) {
     return missing.length ? missing.join("+") : "ready";
   }
 
-  // ── The safety net under the submit button ──
-  // Once there's a name and a number, what they've typed goes to
-  // /api/quote/draft as they go, and once more marked `left` if they close the
-  // form or the tab without sending. If they never press the button - stuck on
-  // the address, a phone call interrupting, an error they gave up on - the
-  // office still has a number to call (CRM > Funnel, and a text to the owner).
-  //
-  // Closing the form is not the same as leaving. People shut it to check
-  // something and reopen it seconds later - on 10 Oct a customer did exactly
-  // that, and the owner got "QUOTE STARTED, NOT SENT" six minutes before their
-  // finished request. So a close only ARMS that alert (armLeftAlert): it goes
-  // if they then leave the page or haven't come back within a few minutes, and
-  // reopening the form or sending it calls it off.
+  // Safety net: once there's a name and number, input is posted to /api/quote/draft as they go, and once
+  // more marked `left` if they leave without sending, so the office still has a number to call.
+  // Closing the form is not leaving (people reopen it seconds later), so a close only ARMS the alert
+  // (armLeftAlert): it fires if they leave the page or don't return within a few minutes.
   const draftRef = useRef({ data, mode, step: current as string });
   draftRef.current = { data, mode, step: current };
   const sendDraft = useCallback(
@@ -610,7 +539,7 @@ function Modal({ onClose }: { onClose: () => void }) {
         left,
       });
       if (left && defer) {
-        // Saved now as a plain draft, flagged as left only if they don't return.
+        // Plain draft now; flagged as left only if they don't return.
         postDraft(JSON.stringify({ ...JSON.parse(body), left: false }), false);
         armLeftAlert(body);
         return;
@@ -620,12 +549,12 @@ function Modal({ onClose }: { onClose: () => void }) {
     [submissionId],
   );
 
-  // Reopened, or a fresh form: whatever alert an earlier close armed is off.
+  // Reopened or fresh: cancel any alert an earlier close armed.
   useEffect(() => {
     cancelLeftAlert();
   }, []);
 
-  // Saved a moment after they stop typing, and on every step change.
+  // Debounced, and on every step change.
   const contactKey = `${data.name}|${data.phone}|${data.address}|${data.email}|${data.service}|${current}`;
   useEffect(() => {
     if (leadSaved.current) return;
@@ -633,7 +562,6 @@ function Modal({ onClose }: { onClose: () => void }) {
     return () => clearTimeout(t);
   }, [contactKey, sendDraft]);
 
-  // And kept in this tab, so reopening the form picks up where they were.
   useEffect(() => {
     if (leadSaved.current) return;
     storeSaved({ submissionId, mode, stepIndex, data, addressVerified });
@@ -645,8 +573,7 @@ function Modal({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("pagehide", onHide);
   }, [sendDraft]);
 
-  // Everything the dismiss paths need, kept current for handlers that are
-  // bound once (Escape, pagehide).
+  // Kept current for handlers bound once (Escape, pagehide).
   const leaveRef = useRef({ step: current as string, mode, unmet: "ready" });
   leaveRef.current = { step: current, mode, unmet: unmet() };
 
@@ -668,8 +595,7 @@ function Modal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     track({ event: "open" });
-    // Closing the tab or navigating away with the form open is giving up too,
-    // and the likeliest way to do it on a phone.
+    // Leaving the page with the form open is giving up too (the likeliest way on a phone).
     const onHide = () => recordClose("left_page");
     window.addEventListener("pagehide", onHide);
     return () => window.removeEventListener("pagehide", onHide);
@@ -678,8 +604,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     stepStartedAt.current = Date.now();
     track({ event: "view", step: current, mode });
-    // `mode` only ever changes in the same render as the step does, so this is
-    // still one view per step shown.
+    // `mode` only changes in the same render as the step, so this is still one view per step.
   }, [current, mode, track]);
 
   useEffect(() => {
@@ -721,28 +646,21 @@ function Modal({ onClose }: { onClose: () => void }) {
 
   function canProceed(): boolean {
     if (current === "contact") {
-      // Name, a phone number, and something for an address. That's all that
-      // stops anyone. The field still asks for the full address and lights up
-      // green when it has one; a partial one is noted on the lead for the
-      // office to confirm on the call. An email with a typo doesn't stop them
-      // either - it's optional, and the server drops a bad one into a note.
+      // Only name, phone and some address block. Partial addresses are noted for the office to confirm; email is
+      // optional and the server moves a bad one into a note.
       return data.name.trim().length >= 2 && isValidPhone(data.phone) && hasSomeAddress(data.address);
     }
     if (current === "service") return data.service !== "" && (!onlineNeedsMore || (hasPhoto && hasDetails));
     if (current === "schedule") {
       const picked = /^\d{4}-\d{2}-\d{2}$/.test(data.visitDate) && data.visitTime !== "";
-      // A full or non-working day only blocks an in-person request, which is
-      // the only one taking a slot out of somebody's day. An online customer is
-      // offering a fallback we may never use, so "that day is busy" is not a
-      // reason to stop them submitting their photos.
+      // Only in-person takes a slot from someone's day; an online fallback day being busy is no reason to stop.
       if (mode === "online") return picked && !dateChecking;
       return picked && !dateFull && !dayOff && !dateChecking;
     }
     return false;
   }
 
-  // Moving between steps clears any stale complaint from the last submit, so a
-  // fixed field doesn't keep showing the old reason it was rejected.
+  // Clear stale submit errors so a fixed field doesn't show the old reason.
   function back() {
     track({ event: "back", step: current, mode, ms: stepMs() });
     setErrorMsg("");
@@ -754,23 +672,17 @@ function Modal({ onClose }: { onClose: () => void }) {
     if (!canProceed()) return;
     setErrorMsg("");
     if (!isLastStep) {
-      // Contact records whether the address came from the search or was typed
-      // out by hand - a lot of typed ones says the autocomplete isn't helping.
+      // Picked vs typed address: many typed ones means the autocomplete isn't helping.
       const detail = current === "contact" ? (addressVerified ? "address_picked" : "address_typed") : undefined;
       track({ event: "done", step: current, mode, ms: stepMs(), detail });
       setStepIndex((i) => i + 1);
     } else submit();
   }
 
-  // Private bucket. The browser no longer has blanket write access: we ask our
-  // server for a one-time signed upload URL (rate-limited + type-checked) and
-  // PUT the file straight to it. We store only the object path on the lead row.
-  //
-  // Photos are optional, so they can never stop the request: a file that won't
-  // go up (after one retry) is counted and skipped, the request is sent with
-  // the rest, and the success screen asks them to text the missing ones. Until
-  // 24 Sep one failed photo meant no lead at all - 31 Aug, six photos uploaded
-  // and nothing saved.
+  // Private bucket: the server issues one-time signed upload URLs (rate-limited, type-checked); we store
+  // only the object path.
+  // Photos are optional and never block the request: a file that fails twice is counted and skipped, and
+  // the success screen asks for it by text.
   async function uploadFiles(): Promise<{ paths: string[]; failed: number }> {
     const paths: string[] = [];
     let failed = 0;
@@ -818,28 +730,20 @@ function Modal({ onClose }: { onClose: () => void }) {
     return { paths, failed };
   }
 
-  // The only way to the success screen. Read the rule in lib/quote-submit.ts
-  // before changing anything here: success is shown when, and only when, the
-  // server returns the id of the row it saved. Every other outcome - an error
-  // body, a non-JSON body, a timeout, a thrown fetch, a response shape nobody
-  // has thought of yet - lands on an error with our phone number, and the
-  // form keeps everything they typed so pressing the button again just works.
+  // The only way to the success screen; read lib/quote-submit.ts first. Success only when the server returns
+  // the saved row's id. Anything else shows an error with our number and keeps the input for a retry.
   async function submit(opts: { skipVisit?: boolean } = {}) {
     if (inFlight.current) return;
     inFlight.current = true;
     setErrorMsg("");
-    // Recorded, then sent like any other request. The server decides what a
-    // filled trap means (it saves it to Archived and tells the owner); the
-    // browser never again answers on the server's behalf.
+    // The server decides what a filled trap means (saves to Archived, tells the owner).
     if (honeypot.trim() !== "") track({ event: "error", step: current, mode, detail: "honeypot" });
     const fail = (detail: string, message: string) => {
       track({ event: "error", step: "schedule", mode, detail });
       setErrorMsg(message);
       setStatus("error");
     };
-    // A restored draft (page reloaded mid-form) comes back without its photos -
-    // the browser can't keep them - so check again here rather than trusting
-    // that the service step was passed with them.
+    // A restored draft has no photos (the browser can't keep them), so re-check here.
     if (onlineNeedsMore && (!hasPhoto || !hasDetails)) {
       inFlight.current = false;
       setStepIndex(STEPS.indexOf("service"));
@@ -860,9 +764,7 @@ function Modal({ onClose }: { onClose: () => void }) {
         failedCount = up.failed;
         if (failedCount) track({ event: "error", step: "schedule", mode, detail: "upload" });
       }
-      // An online quote needs a photo that actually arrived. If none did, stop
-      // here and let them try again - what they typed is already in the draft
-      // the office can see, and the photos already up won't upload twice.
+      // No photo arrived: stop and let them retry (the draft is already visible to the office).
       if (onlineNeedsMore && fileUrls.length === 0) {
         inFlight.current = false;
         setStatus("idle");
@@ -899,8 +801,7 @@ function Modal({ onClose }: { onClose: () => void }) {
           SUBMIT_TIMEOUT_MS,
         );
       } catch (e) {
-        // No answer at all: offline, dropped, or past the deadline. We don't
-        // know whether it arrived, so we don't say it did. Retrying is safe.
+        // No answer (offline, dropped, timed out): it may have arrived, so don't claim it did. Retrying is safe.
         const timedOut = e instanceof DOMException && e.name === "AbortError";
         fail(
           timedOut ? "timeout" : "network",
@@ -934,7 +835,6 @@ function Modal({ onClose }: { onClose: () => void }) {
 
       const fields = Array.isArray(json?.fields) ? json.fields : [];
       const serverMsg = typeof json?.error === "string" && json.error ? json.error : "";
-      // Why the server said no: the fields it named, or the status code.
       track({
         event: "error",
         step: "schedule",
@@ -942,23 +842,19 @@ function Modal({ onClose }: { onClose: () => void }) {
         detail: fields.length ? `server_${fields.slice(0, 4).join("+")}` : `server_${res.status}`,
       });
       if (fields.includes("address") || fields.includes("phone") || fields.includes("name")) {
-        // Rejected on the contact details: take them back to that step rather
-        // than showing the reason on a screen that can't fix it.
+        // Contact rejected: back to the step that can fix it.
         setStatus("idle");
         setStepIndex(STEPS.indexOf("contact"));
         setAddressVerified(false);
         setErrorMsg(serverMsg || "Please check your contact details.");
       } else if (fields.includes("photo") || fields.includes("details")) {
-        // An online quote turned down for having no photo or description:
-        // back to the step where they add them.
+        // Missing photo or description: back to the step that adds them.
         setStatus("idle");
         setStepIndex(STEPS.indexOf("service"));
         setErrorMsg(serverMsg || "Please add a photo and a short description of the job.");
       } else {
-        // Includes a 2xx that isn't a confirmed save: whatever it is, it is
-        // not proof the lead exists, so it is not a success. (A slot that went
-        // while they chose is no longer a refusal - the server saves the lead
-        // without it - so there is no "go back and pick again" branch.)
+        // Includes a 2xx that isn't a confirmed save. (A slot lost meanwhile isn't a refusal: the server saves
+        // the lead without it.)
         setErrorMsg(serverMsg || `We couldn't save your request just now. Please text or call us at ${phoneDisplay}.`);
         setStatus("error");
       }
@@ -982,17 +878,16 @@ function Modal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="qm-overlay" onClick={dismiss} role="dialog" aria-modal="true" aria-label="Request a quote">
-      {/* In Clarity recordings the headings, buttons, errors and the success
-          screen stay readable - that is how you tell "gave up" from "was told
-          no" from "sent it" when watching one back. What someone types, and
-          the addresses suggested to them, are masked field by field below. */}
+      {/*
+        Clarity sees headings, buttons, errors and the success screen; typed values and address suggestions
+        are masked field by field below.
+      */}
       <div className="qm-card" onClick={(e) => e.stopPropagation()}>
         <button className="qm-close" onClick={dismiss} aria-label="Close">
           <IconClose />
         </button>
 
-        {/* Both, not either: a success screen with no saved row behind it is
-            the exact bug this form has had three times. */}
+        {/* Both: a success screen needs a saved row behind it. */}
         {status === "success" && leadRef ? (
           <div className="qm-body qm-success">
             <div className="qm-check">
@@ -1009,8 +904,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 Your visit: <strong>{prettyDay(data.visitDate)} at {data.visitTime}</strong>
               </p>
             )}
-            {/* Photos are never why a request fails, so the ones that didn't
-                upload get a way to follow on, not an error. */}
+            {/* Photos never fail a request; missing ones get a way to follow on. */}
             {filesFailed > 0 && (
               <p className="qm-err">
                 {filesFailed === 1 ? "One photo" : `${filesFailed} photos`} didn&apos;t upload.{" "}
@@ -1020,8 +914,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                 at {phoneDisplay}.
               </p>
             )}
-            {/* Proof it was saved: the reference is the start of the row's id,
-                which only exists once the server has written it. */}
+            {/* The reference is the start of the saved row's id. */}
             <p className="qm-ref">
               Reference <strong>{leadRef}</strong>
             </p>
@@ -1034,20 +927,17 @@ function Modal({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <>
-            {/* Progress (hidden on the choice screen) */}
             {mode && (
               <div className="qm-progress">
                 <div className="qm-progress-bar" style={{ width: `${(stepNumber / totalSteps) * 100}%` }} />
               </div>
             )}
 
-            {/* Step: choice (online vs in-person) */}
             {current === "choice" && (
               <div className="qm-body">
                 <h2 className="qm-title">Get your free quote</h2>
                 <p className="qm-sub">Pick one. Both are free and there&apos;s no obligation.</p>
-                {/* Two big buttons and one sentence each. The whole card is the
-                    tap target, and the arrow says it goes somewhere. */}
+                {/* The whole card is the tap target. */}
                 <div className="qm-choices">
                   <button className="qm-choice qm-choice--main" onClick={() => pickMode("online")}>
                     <span className="qm-choice-icon">
@@ -1077,7 +967,6 @@ function Modal({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* Step 1: Contact (name, phone, address together) */}
             {current === "contact" && (
               <div className="qm-body">
                 <StepHead n={1} of={totalSteps} title="Your details" sub="Takes about 30 seconds." />
@@ -1105,8 +994,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                   inputMode="tel"
                   placeholder="(919) 555-0123"
                 />
-                {/* Fixed-height slot: the message swaps in and out without
-                    moving the address field below it. */}
+                {/* Fixed-height slot so the address field below doesn't move. */}
                 <span className="qm-ac-status qm-slot">
                   {data.phone.trim() !== "" && !isValidPhone(data.phone)
                     ? "Enter a 10-digit number, like (919) 555-0123."
@@ -1136,16 +1024,13 @@ function Modal({ onClose }: { onClose: () => void }) {
                   {!isValidEmail(data.email) ? "That email doesn't look right. Check it, or leave it blank." : ""}
                 </span>
 
-                {/* A server-side rejection of the contact details lands here,
-                    on the step that can actually fix it. */}
+                {/* Server-side contact rejections land here, on the step that can fix them. */}
                 {errorMsg && <p className="qm-err">{errorMsg}</p>}
 
-                {/* The trap field. Its label and name
-                    are deliberately nothing a browser or password manager
-                    recognises: it used to be labelled "Company", and autofill
-                    fills a Company field from a saved address - which turned a
-                    real customer into a "bot" whose request vanished behind a
-                    success screen. */}
+                {/*
+                  Trap field. Label and name must be nothing autofill recognises: autofill fills "Company" from saved
+                  addresses, turning real customers into bots.
+                */}
                 <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: "auto", height: 0, width: 0, overflow: "hidden" }}>
                   <label>
                     Leave this empty
@@ -1166,13 +1051,10 @@ function Modal({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* Step 2: Service */}
             {current === "service" && (
               <div className="qm-body">
                 <StepHead n={2} of={totalSteps} title="What are we pouring?" sub="Tap one. Not sure? Pick Other." />
-                {/* Tiles, not a dropdown: every choice is on screen and one tap
-                    picks it. A closed <select> hides the answer behind a tap
-                    and a scroll on the phones this is filled in on. */}
+                {/* Tiles, not a <select>: every choice visible, one tap. */}
                 <div className="qm-tiles" role="radiogroup" aria-label="What do you need?">
                   {quoteServiceOptions.map((option) => {
                     const on = data.service === option;
@@ -1258,13 +1140,13 @@ function Modal({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* Step 3: Schedule. In-person books a visit; online picks a
-                fallback slot we only use if the job can't be priced remotely. */}
+            {/* In-person books a visit; online picks a fallback slot. */}
             {current === "schedule" && (
               <div className="qm-body">
-                {/* The online wording promises nothing. Most jobs never need a
-                    visit, and a customer who thinks they have an appointment
-                    when they don't is the worst outcome here. */}
+                {/*
+                  The online wording promises nothing: a customer who thinks they have an appointment when they don't is
+                  the worst outcome.
+                */}
                 <StepHead
                   n={3}
                   of={totalSteps}
@@ -1284,12 +1166,8 @@ function Modal({ onClose }: { onClose: () => void }) {
                   value={data.visitDate}
                   onChange={(e) => {
                     set({ visitDate: e.target.value });
-                    // Both modes ask, for different reasons. In-person is
-                    // taking a slot out of somebody's day and has to know it's
-                    // free. Online is only offering a fallback, but the hours
-                    // still have to be hours that crew works - a slot offered
-                    // at 6pm to somebody who finishes at 4 is a fallback that
-                    // can never be taken up.
+                    // Both modes ask: in-person must know the slot is free, and online fallback hours must still be hours
+                    // that crew works.
                     checkVisitDate(e.target.value, data.service);
                   }}
                 />
@@ -1322,7 +1200,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                   )}
                 </span>
                 <label className="qm-label">Time</label>
-                {/* role=group so the chips read as one question to a screen reader. */}
+                {/* role=group so screen readers treat the chips as one question. */}
                 <div className="qm-chips" role="group" aria-label="Time">
                   {slots.map((t) => {
                     const taken = takenTimes.includes(t);
@@ -1346,10 +1224,7 @@ function Modal({ onClose }: { onClose: () => void }) {
                   <span className="qm-ac-status qm-slot">Greyed-out times are already booked that day.</span>
                 )}
 
-                {/* The way through when no slot suits: send it without one and
-                    we call to set a time. Picking a time is the step people
-                    gave up on most (18 Sep: cycled dates, left), and a missing
-                    time costs a phone call - a missing lead costs the job. */}
+                {/* Send without a time and we call: a missing time costs a phone call, a missing lead costs the job. */}
                 <button
                   type="button"
                   className="qm-text-btn qm-skip"
@@ -1366,14 +1241,11 @@ function Modal({ onClose }: { onClose: () => void }) {
                       : "None of these times work? Send it and we'll call you"}
                 </button>
 
-                {/* Shown whenever there's a message, not only in the "error"
-                    status: a rejected date bounces back here as idle, and the
-                    reason has to come with it. */}
+                {/* A rejected date returns as idle, and the reason must come with it. */}
                 {(status === "error" || errorMsg) && (
                   <p className="qm-err">{errorMsg || `Something went wrong. Please text or call us at ${phoneDisplay} instead.`}</p>
                 )}
-                {/* When we couldn't take it, sending it to us has to be one tap
-                    and not a retelling: the text arrives with what they typed. */}
+                {/* The fallback text arrives with what they typed. */}
                 {status === "error" && (
                   <div className="qm-fallback">
                     <a href={smsHref} className="cta-primary qm-full">
@@ -1387,7 +1259,7 @@ function Modal({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* SMS consent disclosure (A2P 10DLC compliant), shown before submitting */}
+            {/* SMS consent disclosure (A2P 10DLC), shown before submitting. */}
             {mode && isLastStep && (
               <p className="qm-consent">
                 By submitting this form, you agree to receive text messages from Raleigh Concrete
@@ -1401,7 +1273,6 @@ function Modal({ onClose }: { onClose: () => void }) {
               </p>
             )}
 
-            {/* Footer nav (hidden on the choice screen) */}
             {mode && (
             <div className="qm-footer">
               <button className="qm-back" onClick={back} disabled={busy} aria-label="Back">
@@ -1427,17 +1298,13 @@ function Modal({ onClose }: { onClose: () => void }) {
   );
 }
 
-/* ── Root: intercept #quote CTAs site-wide and render the modal ───────────── */
-
-// ── The abandoned-form alert, armed when the form is closed ─────────────────
-// Module-level so it outlives the modal: closing the form unmounts it, and the
-// alert still has to go if they then leave the page.
+// Abandoned-form alert. Module-level so it outlives the modal unmounting.
 const LEFT_GRACE_MS = 5 * 60 * 1000;
 let pendingLeft: { timer: ReturnType<typeof setTimeout>; fire: () => void } | null = null;
 
 function postDraft(body: string, left: boolean) {
   try {
-    // A beacon survives the tab closing, which is the case that matters.
+    // A beacon survives the tab closing.
     const sent =
       left &&
       typeof navigator.sendBeacon === "function" &&
@@ -1451,7 +1318,7 @@ function postDraft(body: string, left: boolean) {
       }).catch(() => {});
     }
   } catch {
-    // Never allowed to get in the way of the form.
+    // Must never get in the way of the form.
   }
 }
 

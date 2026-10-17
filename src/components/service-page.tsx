@@ -39,9 +39,7 @@ function CtaBar() {
 }
 
 export function ServicePage({ service }: { service: Service }) {
-  // Guarantee the stacked hero + showcase images are never identical. Prefer the
-  // service's own showcase image, then fall back through a small pool until we
-  // land on something different from the hero image.
+  // Never show the same image for hero and showcase.
   const showcaseFallbacks = [
     "/images/servicing-to-client-image.png",
     "/images/workers_pouring_driveway_live_action.png",
@@ -88,7 +86,6 @@ export function ServicePage({ service }: { service: Service }) {
             { name: service.name, path: `/services/${service.slug}` },
           ]}
         />
-        {/* Hero */}
         <section className="relative overflow-hidden py-12 md:py-16">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_30%,rgba(194,104,42,0.18),transparent_48%)]" />
           <div className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 md:px-8 lg:grid-cols-2 lg:items-center">
@@ -160,7 +157,6 @@ export function ServicePage({ service }: { service: Service }) {
           </section>
         )}
 
-        {/* What you get */}
         <section className="mx-auto w-full max-w-6xl px-4 py-12 md:px-8">
           <div className="grid gap-8 lg:grid-cols-2 lg:items-center">
             <div>
@@ -212,13 +208,11 @@ export function ServicePage({ service }: { service: Service }) {
           </div>
         </section>
 
-        {/* Gallery */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8">
           <h2 className="mb-6 font-headline text-4xl text-ivory">Recent Work</h2>
           <GalleryCarousel images={galleryImages} />
         </section>
 
-        {/* Quote */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8" id="quote">
           <div className="rounded-3xl bg-ivory p-8 text-center text-[#2b1a12] md:p-12">
             <h2 className="mb-3 font-headline text-4xl text-[#2b1a12] md:text-5xl">
@@ -242,10 +236,8 @@ export function ServicePage({ service }: { service: Service }) {
           </div>
         </section>
 
-        {/* FAQ */}
         <FaqSection faqs={faqs} heading={`${service.name} FAQs`} />
 
-        {/* Other services */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8">
           <h2 className="mb-6 font-headline text-3xl text-ivory">Other Services We Offer</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

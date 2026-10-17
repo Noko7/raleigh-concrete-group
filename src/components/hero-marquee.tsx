@@ -7,8 +7,7 @@ import { Lightbox } from "@/components/lightbox";
 
 type MarqueeImage = { src: string; alt: string };
 
-// Continuous auto-scrolling hero strip. The list is rendered twice so the loop
-// is seamless; clicking any tile opens the full-resolution lightbox.
+// Rendered twice so the loop is seamless.
 export function HeroMarquee({ images }: { images: MarqueeImage[] }) {
   const [active, setActive] = useState<number | null>(null);
 

@@ -112,7 +112,6 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
   return (
     <header className="site-header">
       <div className="header-inner">
-        {/* ── Logo (horizontal) ── */}
         <Link href="/" className="logo-lockup" onClick={close} aria-label={businessName}>
           <Image
             src="/images/logo_horizontal_light.png"
@@ -124,7 +123,6 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
           />
         </Link>
 
-        {/* ── Desktop nav ── */}
         <nav className="main-nav" aria-label="Primary">
           <NavDropdown label="Residential" items={residentialNav} activeService={activeService} />
           <NavDropdown label="Commercial" items={commercialNav} activeService={activeService} />
@@ -136,7 +134,6 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
           </Link>
         </nav>
 
-        {/* ── Desktop CTAs ── */}
         <div className="header-ctas">
           <a href={links.call} className="hdr-call">
             <CallIcon />
@@ -147,7 +144,6 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
           </a>
         </div>
 
-        {/* ── Mobile hamburger ── */}
         <button
           className="hamburger"
           aria-label={menuOpen ? "Close menu" : "Open menu"}
@@ -160,7 +156,6 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
         </button>
       </div>
 
-      {/* ── Mobile drawer ── */}
       {menuOpen && (
         <div className="mobile-menu" role="dialog" aria-modal="true" aria-label="Navigation">
           <nav className="mobile-nav">

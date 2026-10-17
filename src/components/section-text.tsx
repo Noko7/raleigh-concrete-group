@@ -2,16 +2,8 @@
 
 import { useState } from "react";
 
-// Past a length, text is folded to its first few lines with a "Show more".
-// One owner writes "Not applicable" under Permits and a paragraph under Pour
-// and finish; on a phone the paragraph pushes the Approve button a screen
-// further down. Folded, every block takes about the same room until the
-// customer asks for the rest. The full text is in the page either way, only
-// clipped, so nothing is hidden from search-in-page or a screen reader.
-//
-// Used for the quote's sections and for the descriptions on its options, which
-// fold sooner: there the price and the choice are the point, the paragraph
-// under them is for whoever wants it.
+// Long text folds to a few lines with "Show more" so a long section doesn't push Approve off screen.
+// The full text stays in the DOM (search-in-page, screen readers). Option descriptions fold sooner.
 export function SectionText({
   text,
   chars = 240,
@@ -43,8 +35,7 @@ export function SectionText({
         className="cq-step-more"
         aria-expanded={open}
         onClick={(e) => {
-          // Inside a card that is itself a control (an option they tap to
-          // pick): reading more is not picking it.
+          // Inside a tappable card: reading more isn't picking it.
           e.stopPropagation();
           setOpen((o) => !o);
         }}
