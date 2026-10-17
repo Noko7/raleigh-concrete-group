@@ -241,7 +241,7 @@ Sends are best-effort on purpose — a texting outage must never fail a customer
 quote submission — but "best-effort" used to mean "silent". A lead could land
 with nobody notified, and the only trace was a line in the Vercel logs.
 
-Every attempt now writes a row to `quote_messages` (`supabase/message-log.sql`),
+Every attempt now writes a row to `quote_messages` (`supabase/archive/message-log.sql`),
 including the ones that never reach the provider: an unparseable number, an
 empty message, or an owner alert with no owner phone configured. Those are the
 failures worth catching, because from the outside they look exactly like
@@ -288,12 +288,12 @@ itself drains, and why the queue is now reported rather than assumed.
    not running or the sending is failing. `Can't read the queue` means the
    database is rejecting the query, which is almost always a migration.
 2. **The job page's message log** has the provider's own error on the row.
-3. **`supabase/audit.sql`** lists any migration that has not been run. A missing
+3. **`supabase/queries/audit.sql`** lists any migration that has not been run. A missing
    column on `quote_messages` stops the queue outright. Its X1 section lists
    texts that are due and still sitting there.
 
 A stalled queue does not lose texts, it **accumulates** them - so before fixing
-the cause, run `supabase/queue-backlog.sql` and see what is about to go out.
+the cause, run `supabase/queries/queue-backlog.sql` and see what is about to go out.
 This morning's quote should fly; last Tuesday's should not, and the ordinary
 Cancel button will not touch it because that only offers itself on a text whose
 hour has not come yet. Part 2 of that file retires the stale ones.
@@ -605,4 +605,4 @@ Pipeline stages, lead times and the reminder schedule are constants in
 `src/lib/crm/constants.ts` (`STATUSES`, `LEAD_TIME_DAYS`, `VISIT_LEAD_DAYS`,
 `MAX_PREFERRED_DATES`, `CREW_REMINDER_DAYS`, `VISIT_TIME_SLOTS`).
 
-Crew reminder tracking needs `supabase/crew-reminders.sql` to have been run.
+Crew reminder tracking uses the columns from `supabase/archive/crew-reminders.sql` (live).

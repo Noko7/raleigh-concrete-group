@@ -23,7 +23,7 @@ src/
   lib/
     site-data.ts        # ALL content: services, locations, gallery, reviews
 public/images/          # real project photos + logos
-supabase/schema.sql     # run once to create the quote_requests table
+supabase/               # database: migrations/, schema.sql (reference), archive/ - see Database below
 ```
 
 ## Edit content
@@ -58,9 +58,9 @@ single long form. Submissions save to Supabase via its REST API (no SDK installe
 **demo mode** (shows success, saves nothing) until the keys below are set.
 
 **One-time setup:**
-1. In Supabase → **SQL Editor**, paste & run `supabase/schema.sql`. This creates the
-   `quote_requests` table, the `quote-uploads` storage bucket, and policies that let the public site
-   insert leads + upload files but not read them.
+1. The database is already set up (see **Database** below). `quote_requests`, the
+   `quote-uploads` storage bucket and their access rules came from `supabase/archive/schema.sql`:
+   the public site cannot read leads, and uploads go through signed URLs.
 2. In Supabase → **Project Settings → API**, copy the **Project URL** and **anon public** key.
 3. In Vercel → **Settings → Environment Variables**, make sure these two exist (the Supabase
    integration may have added them already - confirm the `NEXT_PUBLIC_` prefix, the browser needs it):
@@ -74,7 +74,7 @@ answers `{ ok: true, saved: true, lead_id }` for a row it actually wrote (`src/l
 with tests). Every other outcome - a database error, a timeout, no network, a response nobody planned
 for - shows an error with the phone number, and the form keeps what they typed. Pressing the button
 again is always safe: each filled-in form carries a submission id, and a unique index
-(`supabase/lead-idempotency.sql`, already applied) turns a repeat into the lead already saved. Photos
+(`supabase/archive/lead-idempotency.sql`, already applied) turns a repeat into the lead already saved. Photos
 upload once per form, however many times it's sent. Texts go out after the response, so a slow SMS
 provider can't turn a saved lead into an error. A request that fills the hidden spam-trap field is
 still saved, into **Archived**, and the owner is texted to check it. The standalone `/estimate`
@@ -98,7 +98,7 @@ page was retired on 23 Sep 2026 and redirects to the home page.
 The notes go at the top of the lead's details, where the pipeline card and the owner's text show them.
 
 **Started but not sent.** Once someone has typed a name and phone number, the form saves it to
-`quote_drafts` (`supabase/quote-drafts.sql`, already applied) and keeps saving as they go. If they
+`quote_drafts` (`supabase/archive/quote-drafts.sql`, already applied) and keeps saving as they go. If they
 close the form or the tab without sending, the owner gets one text ("QUOTE STARTED, NOT SENT") and
 they're listed at the top of **CRM → Funnel** with tap-to-call and a Dismiss button. They haven't
 agreed to texts at that point, so call, don't text. The form also remembers what they typed for the
@@ -121,7 +121,7 @@ rejected the phone number) and splits conversion by online vs in-person, phone
 vs computer, and the page it was opened from. Nothing personal is stored: no
 names, numbers or addresses, and nothing links an attempt to the lead it became.
 
-Setup: run `supabase/funnel.sql` once in Supabase → SQL Editor. That's it.
+Setup: none. The table came from `supabase/archive/funnel.sql` and is live.
 
 **2. Microsoft Clarity** for heatmaps, scroll depth, rage clicks and session
 recordings on the marketing pages. Free, no traffic cap. Already on: the
@@ -301,11 +301,11 @@ against recording *more* than is owed.
   left to collect, and what they owe the office. Whoever made the correction
   isn't texted their own click. Both figures land on the activity log.
 
-Owner only, enforced on the server. `least-privilege.sql` revokes `UPDATE` on
+Owner only, enforced on the server. `supabase/archive/least-privilege.sql` revokes `UPDATE` on
 `quote_payments` from every signed-in user precisely so a contractor cannot
 restate their own entry - the cash board is settled from these rows - so
 corrections go through the service role after the role check. Needs
-`supabase/payment-corrections.sql`, which only widens one check constraint to
+`supabase/archive/payment-corrections.sql`, which only widens one check constraint to
 allow the `voided` status.
 
 **Owner alerts** are limited to the moments worth interrupting you: new lead,
@@ -338,23 +338,10 @@ there. So:
   clicking, which used to mean the office texting itself.
 
 **One-time setup**
-1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/quote-packages.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql`, `supabase/appointments.sql`, `supabase/change-orders.sql` and `supabase/payment-corrections.sql` in the SQL Editor. Once
-   `supabase/payments.sql` is in (see **Getting paid** below), run
-   `supabase/least-privilege.sql` last - it is what stops a contractor rewriting
-   the money columns on their own jobs - and then `supabase/stage1-price-lockdown.sql`
-   (after `fee-waiver.sql`), which stops a contractor changing the price of a job
-   the customer has approved except through a change order the customer approves.
-   `stage1-price-lockdown.verify.sql` checks it; `stage1-price-lockdown.undo.sql` reverts it.
-   It also replaces `apply_change_response`, so after it do not re-run
-   `least-privilege.sql`, `fee-waiver.sql`, `change-order-lines.sql` or
-   `change-deposit.sql`. Run it before deploying the code that ships with it; the
-   code still works against the old database in the meantime.
-
-   `supabase/crew-reminders.sql` also (re)adds `scheduled_time`, so running just
-   that one file is enough to fix "Could not save that date" when confirming a
-   work day. Every file is safe to re-run except the four marked "superseded" at the top (least-privilege, fee-waiver, change-order-lines, change-deposit): re-running them undoes the Stage 1 price lock.
+1. The database is already set up; every file it was built from is live. See
+   **Database** below for where its state is written down and how to change it.
 2. Confirm Vercel env vars exist: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (the CRM needs the service-role key).
-3. Create your owner login: Supabase → **Authentication → Users → Add user** (email + password), then run the promote snippet at the bottom of `supabase/crm.sql`.
+3. Create your owner login: Supabase → **Authentication → Users → Add user** (email + password), then run only the promote snippet at the bottom of `supabase/archive/crm.sql` (never the whole file).
 4. **Subdomain:** in Vercel → Project → **Domains**, add `crm.raleighconcrete.net`; in your DNS registrar add the **CNAME** Vercel shows (typically `crm` → `cname.vercel-dns.com`). Routing to the CRM is already wired in `src/middleware.ts`. (Until DNS is live you can also reach it at `raleighconcrete.net/crm`.)
 
 **Hook your text automation up to the links**
@@ -412,7 +399,7 @@ send it, and DocuSeal emails the signer and hosts the signing page. The CRM is t
 - Files live in a **private** `agreements` storage bucket and are only ever served through
   `/crm/api/agreement`, which scopes access with RLS: an owner sees everything, a contractor sees
   only their own agreement and jobs assigned to them.
-- Requires `supabase/agreements.sql` (step 1 above). No new env vars, no npm packages.
+- Uses the `agreements` table and bucket (`supabase/archive/agreements.sql`, live). No new env vars, no npm packages.
 - Note: a customer with no email on file can't be emailed by DocuSeal - the quote form makes email
   optional, so check the job page before sending.
 
@@ -510,10 +497,10 @@ against the coarser drain the two daily crons already provide.
 
 The two nudges only chase work from the last **14 days** (`REMINDER_MAX_AGE_DAYS` in `src/lib/crm/queries.ts`). That keeps them off stale pipeline nobody intends to work, and - because every existing row counts as un-reminded the first time this runs - stops the first cron after deploy texting every historical lead and old unanswered quote at once.
 
-Run `supabase/hourly-reminders.sql` before deploying this - it adds the tracking columns (`stale_lead_reminded_at`, `visit_reminder_sent_at`, `visit_crew_reminded_at`, `quote_followup_sent_at`) each new job uses to avoid sending the same reminder twice. Moving or cancelling a visit clears its two markers, so the new day gets its own reminders.
+`supabase/archive/hourly-reminders.sql` (live) added the tracking columns (`stale_lead_reminded_at`, `visit_reminder_sent_at`, `visit_crew_reminded_at`, `quote_followup_sent_at`) each new job uses to avoid sending the same reminder twice. Moving or cancelling a visit clears its two markers, so the new day gets its own reminders.
 
 **Quiet hours: no CUSTOMER texts 7pm-8am**
-Quiet hours are a courtesy to customers, not a shift pattern. A text to a customer raised between 7pm and 8am Eastern is not sent and not dropped - it is written to the message log with a `send_after` on it and delivered the next morning, so an 11pm booking still texts them, at 8am. Run `supabase/quiet-hours.sql` to add the two columns this needs (`send_after`, `sent_at`).
+Quiet hours are a courtesy to customers, not a shift pattern. A text to a customer raised between 7pm and 8am Eastern is not sent and not dropped - it is written to the message log with a `send_after` on it and delivered the next morning, so an 11pm booking still texts them, at 8am. The two columns this needs (`send_after`, `sent_at`) came from `supabase/archive/quiet-hours.sql` (live).
 
 **You and the crew get everything, any hour.** Lead alerts, crew reminders, assignment texts and contractor logins are never held - you are on the job and the news is the point. The gate keys off the send's `role`: `customer` waits, `owner` and `crew` don't, and a send with no message-log entry at all (a contractor's login text, the Settings test) is staff-facing by definition and goes straight out.
 
@@ -550,7 +537,7 @@ A sent quote link is good for `QUOTE_TTL_DAYS` (10) days from the last send. Re-
 
 It was 7, and customers were going off to collect two or three other quotes and coming back to a dead link - the window was shorter than the shopping-around it was meant to survive. Every place the number appears reads `QUOTE_TTL_DAYS`, including the customer's quote page and both outbound texts, so changing that one constant is the whole change.
 
-**Changing it does not move the quotes already sent.** `quote_expires_at` is a real timestamp written once at send time, so a quote already in somebody's phone keeps the date it was stamped with. `supabase/quote-ttl-10-days.sql` re-stamps the unanswered ones as though the rule had always been 10 days - which also revives any that ran out in the last three days, so read its header before running it.
+**Changing it does not move the quotes already sent.** `quote_expires_at` is a real timestamp written once at send time, so a quote already in somebody's phone keeps the date it was stamped with. `supabase/archive/quote-ttl-10-days.sql` re-stamped the unanswered ones as though the rule had always been 10 days (which also revived any that ran out in the last three days). It is history: do not run it again.
 
 **Quotes with options: one quote, several answers**
 A quote can be a single price, or a list of **line items** the customer answers one at a time. The
@@ -581,8 +568,8 @@ Nothing changes for a quote with no line items: it stays exactly the single-pric
   finish, Clean up) still cover the job as a whole and are still required to send; each item's own
   description covers what is specific to it.
 
-Run `supabase/quote-options.sql` for this (the `quote_options` table plus its RLS, scoped exactly like
-the job itself: owners see everything, a contractor sees the jobs assigned to them). Safe to re-run.
+`supabase/archive/quote-options.sql` (live) added the `quote_options` table and its RLS, scoped exactly like
+the job itself: owners see everything, a contractor sees the jobs assigned to them.
 Until it is run, quoting still works - the app treats a missing table as "this quote has no line
 items" - and the builder says which file to run if a save is attempted.
 
@@ -628,10 +615,9 @@ customer picks exactly one.
   they went with** before it will record anything.
 - Up to **4** options per quote. Locked to a read-only record once the customer has answered.
 
-Run `supabase/quote-packages.sql` for this (the `quote_packages` table, its RLS scoped exactly like
-`quote_options`, and the one-recommendation index). Safe to re-run. Until it is run, quoting works
-exactly as before - a missing table reads as "this quote offers no choice" - and the builder says
-which file to run if a save is attempted.
+`supabase/archive/quote-packages.sql` (live) added the `quote_packages` table, its RLS scoped exactly like
+`quote_options`, and the one-recommendation index. Without the table, quoting works
+exactly as before - a missing table reads as "this quote offers no choice".
 
 **"They said it's too much. Send them the asphalt price too."**
 The choice above is written before the quote goes out. This is the same thing an hour later, when
@@ -785,7 +771,7 @@ Each contractor has the job types they take (CRM → Crew → Edit details), key
 **Job photos**
 Customer uploads stay in `file_urls`. Staff photos are separate: `internal_urls` (site notes), `before_urls` and `after_urls`. A job cannot be marked complete without at least one before and one after photo - enforced in the `completeJob` server action, so it holds for the owner's CRM button as well as the crew's job page.
 
-Run `supabase/quote-detail.sql` for all of the above (quote sections, `quote_expires_at`, the three photo columns, and `staff.service_types`).
+`supabase/archive/quote-detail.sql` (live) added all of the above (quote sections, `quote_expires_at`, the three photo columns, and `staff.service_types`).
 
 **Google Calendar invites (optional)**
 When a job is booked (customer accepts) or you assign a contractor to a dated job/visit, the app
@@ -794,7 +780,7 @@ they were created with) and the customer (if we have their email). Re-running ke
 so assigning a contractor later still sends them the invite.
 
 Setup (one-time):
-1. Re-run `supabase/crm.sql` - it adds `quote_requests.gcal_event_id` and an `app_integrations` table for the OAuth token.
+1. `quote_requests.gcal_event_id` and the `app_integrations` table for the OAuth token are already live (from `supabase/archive/crm.sql`; do not re-run it).
 2. In **Google Cloud Console** → create a project → **APIs & Services**:
    - Enable the **Google Calendar API**.
    - **OAuth consent screen**: External, add yourself as a test user (or publish).
@@ -807,7 +793,7 @@ Setup (one-time):
 
 ## Getting paid (Stripe Connect + cash)
 
-Run `supabase/payments.sql` once. It adds the Stripe columns on `staff`, the fee
+`supabase/archive/payments.sql` (live) added the Stripe columns on `staff`, the fee
 columns on `quote_requests`, the `quote_payments` ledger and `fee_settlements`.
 
 **The one rule everything else follows:** money moves in one direction. The
@@ -914,11 +900,11 @@ charges), and platforms don't qualify for the 0% APR plans.
 customer's money out of the contractor's balance while the platform keeps its
 cut, so a refunded job would cost the crew the full amount *plus* the fee.
 
-**The ledger is append-only.** `supabase/payments.sql` grants no `delete` on
+**The ledger is append-only.** `supabase/archive/payments.sql` grants no `delete` on
 `quote_payments`. A payment that turns out to be wrong is refunded or corrected,
 never erased - it is the record the office and the contractor settle up from.
 
-**And the ledger is not writable after the fact** (`supabase/least-privilege.sql`).
+**And the ledger is not writable after the fact** (`supabase/archive/least-privilege.sql`).
 A contractor does not only reach the database through the CRM: the project URL
 and the anon key both ship in the browser, and they know their own password, so
 they can get an access token and talk to PostgREST directly. Whatever RLS allows
@@ -947,6 +933,38 @@ Tokens are deliberately left writable (whoever holds a job may rotate its links)
 and so are `status` and `paid_at` (the crew move their own cards, and a job
 marked paid with no payment behind it already shows up on the cash board's
 "check these rows").
+
+## Database (Supabase)
+
+The database's state is written down in the repo, not remembered:
+
+| Where | What |
+| --- | --- |
+| `supabase/migrations/` | Every change since 2026-10-17, one file each, named `<version>_<name>.sql` with the version it has in the live `supabase_migrations.schema_migrations`. |
+| `supabase/migrations/undo/` | The undo for each migration. Stage 1: `undo/20261017221826_stage1_price_lockdown.undo.sql`. Stage 3: `undo/20261017222017_stage3_hardening.undo.sql`. Undo newest first (stage 3 before stage 1). |
+| `supabase/migrations/verify/` | Checks for a migration. `verify/20261017221826_stage1_price_lockdown.verify.sql` tests the stage 1 guard and ends in `ROLLBACK`. |
+| `supabase/schema.sql` | The whole live public schema (tables, indexes, RLS, policies, functions, triggers, grants), generated from the catalog. **Reference only, do not run.** |
+| `supabase/snapshots/` | What the live database looked like just before stage 1 and stage 3. |
+| `supabase/queries/` | Ops queries, not schema changes: `audit.sql` (read-only health check), `money-audit.sql` (fixes are opt-in, `where false`), `queue-backlog.sql`. |
+| `supabase/archive/` | The 33 SQL Editor files the database was built from before migrations were tracked. All live. **Never re-run them**: several would undo later changes. Its README gives the order they ran in and which ones are destructive. |
+
+**Making a database change from now on**
+
+1. Add one file to `supabase/migrations/` named `<UTC timestamp>_<what_it_does>.sql`,
+   e.g. `20261102153000_add_job_notes.sql`, plus its undo in
+   `supabase/migrations/undo/` with the same prefix. Do not wrap it in
+   `begin`/`commit`: the migration runner runs it as one transaction.
+2. Apply it with the Supabase migration tool (`supabase db push`, or
+   `apply_migration` with the same name), so it gets a row in
+   `supabase_migrations.schema_migrations`. If it goes in through the SQL Editor
+   instead, rename the file to the version that row ends up with, or record one.
+   Note: the CLI will also see eight older versions in that table
+   (2026-06-11 to 2026-10-17) that have no file here; their SQL is in
+   `supabase/archive/` (listed in its README).
+3. Regenerate `supabase/schema.sql` from the live catalog (the queries are named
+   in its header) and commit it with the migration.
+4. New functions in `public` only get `EXECUTE` for `postgres`: grant
+   `service_role` (and `authenticated`, if RLS calls it) explicitly.
 
 ## Deploy to Vercel
 This is a standard Next.js app - Vercel builds it in the cloud (no local build needed).

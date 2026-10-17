@@ -1,6 +1,6 @@
 -- Raleigh Concrete Group - undo stage 1 (price lockdown)
 -- Puts the database back exactly as it was read on 2026-10-17, before
--- stage1-price-lockdown.sql ran. See supabase/snapshots/2026-10-17-pre-stage1.sql
+-- migrations/20261017221826_stage1_price_lockdown.sql ran. See supabase/snapshots/2026-10-17-pre-stage1.sql
 -- for the definitions this restores. Safe to re-run.
 --
 -- What it does:

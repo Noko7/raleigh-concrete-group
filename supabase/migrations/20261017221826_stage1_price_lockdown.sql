@@ -1,7 +1,9 @@
 -- Raleigh Concrete Group - stage 1: a contractor cannot lower an agreed price
--- Run this AFTER least-privilege.sql and fee-waiver.sql, once, in Supabase ->
--- SQL Editor. Safe to re-run. Undo: stage1-price-lockdown.undo.sql.
--- Check it: stage1-price-lockdown.verify.sql (inside BEGIN ... ROLLBACK).
+-- Applied to production 2026-10-17 as migration 20261017221826 (already live;
+-- do not run again). Undo: undo/20261017221826_stage1_price_lockdown.undo.sql.
+-- Check it: verify/20261017221826_stage1_price_lockdown.verify.sql (ends in ROLLBACK).
+-- State before it: ../snapshots/2026-10-17-pre-stage1.sql. Files named below
+-- without a path (least-privilege.sql, fee-waiver.sql) are in ../archive/.
 --
 -- Why this file exists.
 --
@@ -50,10 +52,10 @@
 -- `sub`), and owners pass on is_owner().
 --
 -- Section 3 replaces apply_change_response so the customer's Approve applies
--- only the change their page showed them (see there). Run the whole file at
--- once: it is one transaction.
+-- only the change their page showed them (see there). The migration runner
+-- wraps the file in one transaction (it was applied with the lock_timeout below).
 
-begin;
+set local lock_timeout = '5s';
 
 -- ── 1. quote_requests ───────────────────────────────────────────────────────
 -- Same function name and trigger as before, so CREATE OR REPLACE swaps the body
@@ -302,8 +304,6 @@ $function$;
 
 revoke all on function public.apply_change_response(uuid, boolean, timestamptz) from public, anon, authenticated;
 grant execute on function public.apply_change_response(uuid, boolean, timestamptz) to service_role;
-
-commit;
 
 -- PostgREST caches function signatures; this makes it pick up the new one now.
 notify pgrst, 'reload schema';

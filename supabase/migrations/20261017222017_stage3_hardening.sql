@@ -1,6 +1,7 @@
 -- Raleigh Concrete Group - stage 3: database hygiene
--- Run once in Supabase -> SQL Editor. Safe to re-run. Undo: stage3-hardening.undo.sql.
--- The state it was written against: supabase/snapshots/2026-10-17-pre-stage3.sql.
+-- Applied to production 2026-10-17 as migration 20261017222017 (already live;
+-- do not run again). Undo: undo/20261017222017_stage3_hardening.undo.sql.
+-- The state it was written against: ../snapshots/2026-10-17-pre-stage3.sql.
 --
 --   1. The Make.com webhook trigger on new leads is disabled. Nothing uses the
 --      scenario any more, and every lead insert was posting the whole row to it.
@@ -16,10 +17,10 @@
 --      user, so authenticated (and service_role) get it back explicitly.
 --   3. The two updated_at trigger functions get a fixed search_path.
 --
--- If stage1-price-lockdown.sql runs AFTER this, run this again: it creates
+-- If stage 1 (20261017221826) runs AFTER this, run this again: it creates
 -- guard_quote_line_prices() with the default grants.
 
-begin;
+set local lock_timeout = '5s';
 
 -- ── 1. The Make.com webhook ─────────────────────────────────────────────────
 do $$
@@ -49,5 +50,3 @@ end $$;
 -- ── 3. search_path ──────────────────────────────────────────────────────────
 alter function public.touch_updated_at() set search_path = public, pg_temp;
 alter function public.touch_agreements_updated_at() set search_path = public, pg_temp;
-
-commit;
