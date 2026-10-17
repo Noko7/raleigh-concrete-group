@@ -1,46 +1,23 @@
-// One place for "what time is it where the work is".
-//
-// The app runs on Vercel, whose servers are UTC, and it's read on phones set to
-// whatever their owners set them to. Neither is the answer to any question this
-// business actually asks: a job is on a day in North Carolina, a log line
-// happened at a time in North Carolina, and a text lands in somebody's evening
-// in North Carolina. So every "today", every clock time on screen and every
-// send decision goes through here.
-//
-// The zone is named rather than pinned to -05:00. "EST" in conversation means
-// Eastern, and Eastern is EST for four months of the year and EDT for the other
-// eight; a fixed offset would be an hour out all summer, which is exactly the
-// kind of bug that only shows up in a month nobody is testing in.
-//
-// Safe to import from client components: pure Intl, no env, no secrets.
+// Every "today", on-screen time and send decision goes through here, in North Carolina time: servers are
+// UTC and phones are set to anything.
+// A named zone, not -05:00: Eastern is EDT eight months a year. Client-safe (pure Intl).
 
 export const BUSINESS_TZ = "America/New_York";
 
-// Quiet hours. Nothing goes out from 7pm until 8am the next morning - not to a
-// customer, not to the crew, not to the owner. A text at 9pm is a text that
-// wakes somebody up, and none of what this app sends is worth that.
+// Quiet hours: nothing goes out from 7pm to 8am, to anyone.
 export const QUIET_FROM_HOUR = 19;
 export const QUIET_UNTIL_HOUR = 8;
 
 /**
- * The current instant, and the only place the app is allowed to ask for it.
- *
- * Everything time-sensitive - what today is, whether we're inside quiet hours,
- * when a held text is due - reads the clock through here, so there is one thing
- * to reason about, one thing to check against a real time source (see
- * `checkClockDrift` in ./time-check), and one thing to fake if this ever needs
- * testing at 3am.
- *
- * It is the host clock. On Vercel that is an AWS instance kept in step by the
- * platform's own time service, which is accurate to well under a second - far
- * closer than this app needs, given the finest distinction it draws is a
+ * The only place the app reads the current instant (one thing to check, see checkClockDrift, and to fake
+ * in tests). The Vercel host clock is accurate to well under a second; the finest distinction drawn is a
  * one-minute cron tick.
  */
 export function now(): Date {
   return new Date();
 }
 
-/** An hour of the day as people say it: 19 -> "7pm", 8 -> "8am". */
+/** 19 -> "7pm", 8 -> "8am". */
 export function hourLabel(h: number): string {
   return `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
 }
@@ -58,7 +35,6 @@ const partsFmt = new Intl.DateTimeFormat("en-US", {
 
 type Parts = { y: number; mo: number; d: number; h: number; mi: number; s: number };
 
-// The wall clock in Raleigh at a given instant.
 function partsIn(at: Date): Parts {
   const p: Record<string, string> = {};
   for (const { type, value } of partsFmt.formatToParts(at)) p[type] = value;
@@ -69,37 +45,27 @@ function partsIn(at: Date): Parts {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Today's date in Raleigh, as YYYY-MM-DD. */
 export function todayYmd(at: Date = now()): string {
   const { y, mo, d } = partsIn(at);
   return `${y}-${pad(mo)}-${pad(d)}`;
 }
 
-/**
- * A calendar date N days from today in Raleigh, as YYYY-MM-DD. Negative counts
- * back. The arithmetic is done in UTC on a bare date, which has no clocks in it
- * and so can't be knocked an hour sideways by a DST change in the middle.
- */
+/** Negative counts back. Arithmetic on a bare UTC date, so a DST change can't shift it. */
 export function ymdInDays(days: number, at: Date = now()): string {
   const [y, mo, d] = todayYmd(at).split("-").map(Number);
   return new Date(Date.UTC(y, mo - 1, d + days)).toISOString().slice(0, 10);
 }
 
-// How far the business's zone is from UTC at a given instant, in ms.
+// In ms.
 function offsetAt(at: Date): number {
   const { y, mo, d, h, mi, s } = partsIn(at);
-  // Whole seconds on both sides, so the sub-second part of `at` doesn't leak
-  // into an offset that is only ever a whole number of minutes.
+  // Whole seconds on both sides so `at`'s sub-second part doesn't leak into a whole-minute offset.
   return Date.UTC(y, mo - 1, d, h, mi, s) - Math.floor(at.getTime() / 1000) * 1000;
 }
 
 /**
- * The instant at which a wall-clock time in Raleigh happens.
- *
- * Guess the offset from the naive UTC reading, then take it again at the
- * corrected instant: the second pass is what gets the two days a year when the
- * guess lands on the far side of a DST change. 8am is never inside the spring
- * gap, so there's no missing-hour case to resolve here.
+ * Guess the offset from the naive UTC reading, then take it again at the corrected instant: the second
+ * pass handles a guess on the far side of a DST change. 8am is never in the spring gap.
  */
 function instantAt(y: number, mo: number, d: number, h: number, mi: number): Date {
   const naive = Date.UTC(y, mo - 1, d, h, mi);
@@ -107,21 +73,16 @@ function instantAt(y: number, mo: number, d: number, h: number, mi: number): Dat
   return new Date(naive - offsetAt(new Date(once)));
 }
 
-/** Is it currently inside quiet hours in Raleigh? */
 export function inQuietHours(at: Date = now()): boolean {
   const { h } = partsIn(at);
   return h >= QUIET_FROM_HOUR || h < QUIET_UNTIL_HOUR;
 }
 
-/**
- * The next moment a text may go out: right now if we're inside business hours,
- * otherwise 8am - this morning if it's still the small hours, tomorrow morning
- * if the evening has already closed.
- */
+/** Now if inside business hours, else 8am (this morning or tomorrow). */
 export function nextSendableAt(at: Date = now()): Date {
   if (!inQuietHours(at)) return at;
   const { y, mo, d, h } = partsIn(at);
-  // Before 8am is still the same Raleigh date; after 7pm rolls to the next one.
+  // Before 8am is still the same Raleigh date; after 7pm rolls to the next.
   const day = h < QUIET_UNTIL_HOUR ? { y, mo, d } : dayAfter(y, mo, d);
   return instantAt(day.y, day.mo, day.d, QUIET_UNTIL_HOUR, 0);
 }
@@ -131,11 +92,7 @@ function dayAfter(y: number, mo: number, d: number): { y: number; mo: number; d:
   return { y: t.getUTCFullYear(), mo: t.getUTCMonth() + 1, d: t.getUTCDate() };
 }
 
-/**
- * An instant written the way a person here would say it, e.g.
- * "8:00 AM" / "tomorrow at 8:00 AM" - for telling somebody when a held text
- * will actually leave.
- */
+/** E.g. "8:00 AM" / "tomorrow at 8:00 AM", for when a held text will leave. */
 export function clockLabel(at: Date, asOf: Date = now()): string {
   const time = new Intl.DateTimeFormat("en-US", {
     timeZone: BUSINESS_TZ,

@@ -3,8 +3,7 @@ import type { Status } from "./env";
 export type Role = "owner" | "contractor";
 
 export type Staff = {
-  // A practice account. Its fee settlements do not count and it stays out of
-  // the Money page's contractor table. See supabase/test-data.sql.
+  // Practice account: its fee settlements don't count; excluded from the Money page's contractor table.
   is_test?: boolean;
   id: string;
   email: string | null;
@@ -13,21 +12,16 @@ export type Staff = {
   role: Role;
   active: boolean;
   must_reset_password: boolean;
-  // Job types this contractor is routed. Null or empty means no restriction.
+  // Null or empty = no restriction.
   service_types: string[] | null;
-  // Which language the CRM renders in for this person.
   locale: string;
-  // When this person takes quote visits (CRM → Settings → Working hours). Both
-  // hours are the hour a slot STARTS, so 8..16 is nine hourly slots, 8:00 AM
-  // through 4:00 PM. work_days is 0=Sunday..6=Saturday. Nullable for rows that
-  // predate supabase/appointments.sql - always read through readWorkHours().
+  // Both are slot START hours, so 8..16 is 8:00 AM to 4:00 PM. work_days is 0=Sunday..6=Saturday.
+  // Nullable on old rows: always read through readWorkHours().
   work_start_hour: number | null;
   work_end_hour: number | null;
   work_days: number[] | null;
-  // Their Stripe account, once an owner has linked it. The three flags are
-  // Stripe's answer to "can this person be paid" - cached from the API and
-  // kept current by the account.updated webhook, because every screen with a
-  // payment button needs them and none should wait on a round-trip.
+  // Flags cached from Stripe (kept current by the account.updated webhook) so payment buttons don't wait
+  // on a round-trip.
   stripe_account_id: string | null;
   stripe_charges_enabled: boolean;
   stripe_payouts_enabled: boolean;
@@ -36,30 +30,23 @@ export type Staff = {
   created_at: string;
 };
 
-// One payment against a job. A card row moved through Stripe; every other
-// method is money the crew received and recorded.
+// A card row moved through Stripe; every other method was received and recorded by the crew.
 export type QuotePayment = {
   id: string;
   quote_id: string;
   method: string;
   amount_cents: number;
-  // The office's cut taken out of this payment. Only ever non-zero on a card
-  // row, where Stripe moved it as the application fee.
+  // Office cut taken out of this payment. Non-zero only on card rows (Stripe application fee).
   fee_cents: number;
-  // 'voided' is a row that should never have existed - a typo, a duplicate, a
-  // payment against the wrong job. Deliberately NOT 'refunded': that one means
-  // money really went back to the customer and belongs on the ledger on the day
-  // it moved. A voided row counted nothing and is summed nowhere, because every
-  // total in the business filters on 'paid' or 'refunded'. See
-  // supabase/payment-corrections.sql.
+  // 'voided' = a row that should never have existed (typo, duplicate, wrong job); counted nowhere, since
+  // totals filter on 'paid'/'refunded'. Not 'refunded', which means money really went back.
   status: "pending" | "paid" | "failed" | "refunded" | "voided";
-  // Whose account received it. Stored per payment because a job can be
-  // reassigned after money has moved.
+  // Per payment because a job can be reassigned after money moves.
   stripe_account_id: string | null;
   checkout_session_id: string | null;
   payment_intent_id: string | null;
   refunded_cents: number;
-  // Null means the customer paid it themselves and the webhook wrote the row.
+  // Null = the customer paid and the webhook wrote the row.
   recorded_by: string | null;
   note: string | null;
   created_at: string;
@@ -67,8 +54,7 @@ export type QuotePayment = {
   refunded_at: string | null;
 };
 
-// A contractor clearing what they owe the office on cash jobs. Owner-recorded
-// only - the debt runs one way and so does the right to say it is settled.
+// A contractor paying what they owe the office on cash jobs. Owner-recorded only.
 export type FeeSettlement = {
   id: string;
   staff_id: string;
@@ -98,22 +84,17 @@ export type Quote = {
   status: Status;
   assigned_to: string | null;
   quote_amount: number | null;
-  // Legacy free-text quote body. Superseded by the five sections below, kept
-  // so quotes sent before that change still read correctly.
+  // Legacy free-text body, kept so older quotes still read.
   quote_summary: string | null;
-  // The five sections every quote covers. "Not applicable" is a valid answer
-  // for any of them, but none may be blank on a quote that has been sent.
+  // "Not applicable" is valid, but none may be blank on a sent quote.
   quote_scope: string | null;
   quote_permits: string | null;
   quote_prep: string | null;
   quote_pour: string | null;
   quote_cleanup: string | null;
-  // QUOTE_TTL_DAYS from the moment the quote was last sent. Null on quotes that
-  // predate expiry, which stay valid.
+  // QUOTE_TTL_DAYS from the last send. Null on quotes predating expiry, which stay valid.
   quote_expires_at: string | null;
-  // Photos staff add: internal reference shots, and the before/after pair a
-  // contractor must upload to mark the job complete. The customer's own
-  // uploads stay in file_urls.
+  // Staff photos (internal shots, required before/after pair). Customer uploads stay in file_urls.
   internal_urls: string[] | null;
   before_urls: string[] | null;
   after_urls: string[] | null;
@@ -126,20 +107,17 @@ export type Quote = {
   customer_response: "accepted" | "declined" | null;
   customer_responded_at: string | null;
   scheduled_date: string | null;
-  // Crew-chosen start time for the booked day, display copy like "9:00 AM".
+  // Display copy like "9:00 AM".
   scheduled_time: string | null;
-  // Days the customer said work for them; the crew confirms one of these.
+  // The crew confirms one of these.
   preferred_dates: string[] | null;
-  // The start time they asked for on each of those days, index-aligned with
-  // preferred_dates. An entry is null on a quote accepted before the customer
-  // was asked for a time, and the crew's card falls back to its own default.
+  // Index-aligned with preferred_dates. Null entries (older accepts) fall back to the card's default.
   preferred_times: (string | null)[] | null;
-  // The office's cut, frozen onto the job the first time money moves. Never
-  // recalculated: a contractor crossing the 3-job threshold mid-job must not
-  // silently reprice work that was already quoted and agreed.
+  // Frozen the first time money moves and never recalculated: crossing the 3-job threshold mid-job must not
+  // reprice agreed work.
   fee_rate: number | null;
   fee_total_cents: number | null;
-  /** Cents the owner took off this job's office fee by hand. 0 = none. */
+  /** Cents. 0 = none. */
   fee_waived_cents?: number | null;
   fee_waived_note?: string | null;
   scheduled_by: string | null;
@@ -149,71 +127,50 @@ export type Quote = {
   visit_time: string | null;
   gcal_event_id: string | null;
   reminder_sent_at: string | null;
-  // Which crew countdown texts have gone out for this booking ("3", "1", "0").
-  // Cleared whenever the date moves so the new date gets its own run.
+  // Crew countdown texts sent for this booking ("3", "1", "0"). Cleared when the date moves.
   crew_reminders: string[] | null;
   confirmed_at: string | null;
   completed_at: string | null;
   paid_at: string | null;
   payment_requested_at: string | null;
   archived_at: string | null;
-  // A lead that exists to be practised on. Behaves like any other lead
-  // everywhere in the app; the Money page leaves it out of every figure unless
-  // asked to show it. See supabase/test-data.sql.
+  // Practice lead: excluded from Money figures unless asked.
   is_test?: boolean;
-  // 12h nudge: a new lead nobody has quoted or scheduled a visit for.
+  // Stale-lead nudge: nobody has quoted or booked a visit.
   stale_lead_reminded_at: string | null;
-  // Night-before reminders for an in-person quote VISIT (not the booked work day).
+  // Night-before reminder for an in-person quote VISIT (not the work day).
   visit_reminder_sent_at: string | null;
   visit_crew_reminded_at: string | null;
-  // 48h nudge: a sent quote nobody has accepted or declined.
+  // Follow-up nudge: a sent quote nobody has answered.
   quote_followup_sent_at: string | null;
-  // ── A change order waiting on the customer ────────────────────────────────
-  // The job is already agreed and usually already booked, and the customer has
-  // asked for something different. These four are written together and cleared
-  // together, so "is a change waiting?" is just change_requested_at being set.
-  // Null on every row until supabase/change-orders.sql has been run.
-  //
-  // change_amount is the proposed NEW TOTAL for the whole job, never the
-  // difference - every screen derives the delta, so there is one stored number
-  // and no way for the two to disagree. The deposit needs nothing: the ledger
-  // is total-minus-collected, so raising the total raises the balance and
-  // leaves what has been paid exactly where it is.
+  // A pending change order. The four columns are written and cleared together; change_requested_at set
+  // means a change is waiting.
+  // change_amount is the proposed NEW TOTAL, never the difference; screens derive the delta. Deposits need
+  // nothing: the balance is total minus collected.
   change_note: string | null;
   change_amount: number | null;
   change_requested_at: string | null;
   change_requested_by: string | null;
-  // The breakdown that comes with the change, if it has one (materials, labor
-  // and so on). Null leaves the job's line items as they are; a list, even an
-  // empty one, replaces them when the customer approves. When it has lines they
-  // add up to change_amount. Null until supabase/change-order-lines.sql is run.
+  // Null leaves line items unchanged; a list (even empty) replaces them on approval and sums to change_amount.
   change_lines: ChangeLine[] | null;
-  // A second deposit the change asks for, in cents, paid up front if the
-  // customer approves it (materials for the extra work, say). Null when the
-  // change asks for nothing up front.
+  // Cents, paid up front on approval. Null when none asked.
   change_deposit_cents: number | null;
-  // What the customer should have paid IN TOTAL before the work goes ahead,
-  // set when a change with a deposit is approved. "Due now" is this minus what
-  // they have paid, so it clears itself once the money is recorded - see
-  // depositDueNowCents. Null on every job that was never asked for one.
+  // Cents the customer should have paid IN TOTAL before work goes ahead. "Due now" is this minus paid, so it
+  // clears itself (see depositDueNowCents).
   deposit_target_cents: number | null;
 };
 
-// One line of a change order's breakdown, as stored on the pending change.
 export type ChangeLine = { title: string; description: string | null; amount: number };
 
-// One line item on a quote. A quote either has none of these (the original
-// single-price quote) or a list of them, each of which the customer answers on
-// its own - which is what lets somebody take the patio and leave the sidewalk.
+// A quote has none (single price) or a list the customer answers line by line.
 export type QuoteOption = {
   id: string;
   quote_id: string;
   title: string;
   description: string | null;
-  // numeric(10,2) comes back from PostgREST as a string, so read it through
-  // optionAmount() rather than assuming a number.
+  // numeric(10,2) arrives from PostgREST as a string; read via optionAmount().
   amount: number | string;
-  // Part of the base job, rather than an extra the customer chooses.
+  // Part of the base job, not an optional extra.
   required: boolean;
   sort_order: number;
   customer_response: "accepted" | "declined" | null;
@@ -222,22 +179,18 @@ export type QuoteOption = {
   updated_at: string;
 };
 
-// One complete way of doing the job, on a quote that offers a choice of them.
-// The customer picks exactly one; line items above are added to whichever they
-// pick. A quote with no packages is the ordinary quote it has always been.
+// The customer picks exactly one; line items are added on top.
 export type QuotePackage = {
   id: string;
   quote_id: string;
   title: string;
   description: string | null;
-  // numeric(10,2) comes back from PostgREST as a string, so read it through
-  // optionAmount() rather than assuming a number.
+  // numeric(10,2) arrives from PostgREST as a string; read via optionAmount().
   amount: number | string;
-  // The one the contractor would pick. At most one per quote.
+  // At most one per quote.
   recommended: boolean;
   sort_order: number;
-  // 'accepted' on the one they chose, 'declined' on every other package on the
-  // same quote - the record is of the choice, not just of the winner.
+  // 'declined' on every other package, so the record is of the choice.
   customer_response: "accepted" | "declined" | null;
   responded_at: string | null;
   created_at: string;
@@ -253,7 +206,6 @@ export type QuoteEvent = {
   created_at: string;
 };
 
-// A one-time link that lets a contractor create their own account.
 export type ContractorInvite = {
   id: string;
   token: string;
@@ -262,8 +214,7 @@ export type ContractorInvite = {
   created_by: string | null;
   created_at: string;
   expires_at: string;
-  // First time the link was opened, and how many times - the difference between
-  // "never clicked" and "clicked but didn't finish".
+  // Tells "never clicked" from "clicked but didn't finish".
   opened_at: string | null;
   open_count: number;
   used_at: string | null;
@@ -274,8 +225,7 @@ export type ContractorInvite = {
 export type AgreementKind = "contractor" | "customer";
 export type AgreementStatus = "pending" | "sent" | "signed" | "declined" | "void";
 
-// One contract we track in the CRM. The signing itself happens in DocuSeal
-// (managed separately); this is the record of it, plus the stored file.
+// Signing happens in DocuSeal; this is the record plus the stored file.
 export type Agreement = {
   id: string;
   kind: AgreementKind;

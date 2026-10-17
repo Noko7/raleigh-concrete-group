@@ -1,30 +1,15 @@
-// The owner's view of every dollar in the business.
-//
-// Server-only. The owner sees every job; a contractor gets the same board
-// scoped to their own (see moneyBoard). Everything here is assembled from three tables and
-// computed in one pass rather than queried per job: the arithmetic that decides
-// what a contractor owes has to be the SAME arithmetic the crew's job page
-// shows them, and the only way to guarantee that is for both to go through
-// readLedger.
-//
-// The one idea worth holding on to: money moves in one direction. The customer
-// pays the contractor, and the contractor pays the office its percentage out of
-// that. The office never holds a customer's money and never owes a contractor
-// anything, so every balance on this page is a number somebody owes the office
-// and never the other way round.
+// The owner's view of every dollar (a contractor gets the same board scoped to their jobs). Server-only.
+// All figures go through readLedger so they match the crew's job page exactly.
+// Money flows one way: customer pays contractor, contractor pays the office its cut. Every balance here
+// is owed TO the office.
 import { applySettlements, readLedger, toCents, usd, type Ledger } from "./fees";
 import { pgAdmin, pgUser } from "./rest";
 import type { FeeSettlement, QuotePayment, Session, Staff } from "./types";
 
-// How far back the "collected recently" figures look.
 export const MONEY_WINDOW_DAYS = 30;
 
-// Row ceilings on the three reads this page is built from.
-//
-// Named rather than inlined because the page has to be able to say when it hit
-// one. Every figure here is a sum over rows, so a read that came back capped is
-// a total that is quietly too small - and an accounting page that under-reports
-// without saying so is worse than one that refuses to load.
+// Row ceilings. Every figure is a sum over rows, so a capped read is a silently low total;
+// the page reports which read hit its ceiling.
 const JOB_LIMIT = 1000;
 const PAYMENT_LIMIT = 2000;
 const SETTLEMENT_LIMIT = 1000;
@@ -35,9 +20,7 @@ type JobRow = {
   assigned_to: string | null;
   quote_amount: number | string | null;
   fee_total_cents: number | null;
-  // The frozen rate. Read alongside the cents figure so the ledger can be
-  // re-derived from it rather than trusting a stamp that predates the last
-  // time somebody edited the price.
+  // Frozen rate, read with the cents figure so the ledger can be re-derived after price edits.
   fee_rate: number | null;
   fee_waived_cents: number | null;
   status: string;
@@ -55,37 +38,23 @@ export type JobMoney = {
   status: string;
   paidAt: string | null;
   createdAt: string;
-  /**
-   * The job's ledger, net of the fee the contractor has sent over against THIS
-   * job (ledger.feeSettledCents), so feeDueNowCents is what is still owed on it.
-   */
+  /** Net of fee already settled against THIS job, so feeDueNowCents is what is still owed on it. */
   ledger: Ledger;
-  /** The office's fee on this job: its rate on the whole job total. */
+  /** Office fee: its rate on the whole job total. */
   feeEarnedCents: number;
-  /** Fee received on this job: taken by Stripe plus sent over by hand. */
+  /** Stripe application fee plus fee settled by hand. */
   feeReceivedCents: number;
-  /** Every payment on this job, newest first, for the row that expands. */
   payments: QuotePayment[];
   /**
-   * Whether this job is still part of the pipeline.
-   *
-   * False for one that took money and then went to Lost, was archived, or had
-   * its quote retracted. Money it collected is still money: it counts in
-   * takings and in what the office earned, because the customer really did
-   * hand it over. What it does NOT do is count in "customers still owe" -
-   * nobody is chasing the balance of a job that is over.
+   * False once the job went Lost, was archived, or had its quote retracted. Its money still counts in
+   * takings and fees earned, but not in "customers still owe".
    */
   onBooks: boolean;
-  /** A practice lead. Real rows, real arithmetic, kept out of the real totals. */
+  /** Practice lead: real rows, excluded from real totals. */
   isTest: boolean;
 };
 
-// ── The ledger itself ───────────────────────────────────────────────────────
-// One row per movement of money, whatever kind. Payments and refunds come from
-// the customer's side; a settlement is the contractor handing the office the
-// cut a cash job never took on its way past. They belong in one list because
-// they answer one question - what has actually moved - and keeping them in two
-// is how a month's takings and a month's fees end up reconciled by hand.
+// One row per movement of money, so takings and fees reconcile from a single list.
 export type LedgerEntryKind = "payment" | "refund" | "settlement";
 
 export type LedgerEntry = {
@@ -98,18 +67,14 @@ export type LedgerEntry = {
   staffId: string | null;
   staffName: string;
   method: string;
-  /** Money in, in cents. Negative on a refund, which is money going back out. */
+  /** Cents. Negative on a refund. */
   amountCents: number;
-  /** The office's cut carried by this row. */
+  /** Office cut carried by this row, in cents. */
   feeCents: number;
   note: string | null;
 };
 
-// ── Rows the numbers cannot be trusted on ───────────────────────────────────
-// Every figure on this page is a sum over rows, so one wrong row is a wrong
-// total with nothing on screen to say so. These are the shapes that produce a
-// number the page cannot justify, listed by name so they can be opened and
-// fixed rather than guessed at.
+// Rows whose shape makes a total wrong, listed so they can be fixed.
 export type AttentionKind =
   | "paid_no_payments"
   | "accepted_no_price"
@@ -123,97 +88,68 @@ export type AttentionRow = {
   name: string;
   staffName: string;
   detail: string;
-  /** What it is doing to the totals, in cents. Zero when it only distorts a count. */
+  /** Effect on the totals, in cents. Zero when it only distorts a count. */
   effectCents: number;
 };
 
 export type ContractorMoney = {
   staffId: string | null;
   name: string;
-  /** Jobs of theirs that have taken at least one payment. */
+  /** Only jobs that have taken at least one payment. */
   jobs: number;
-  /** What their live jobs are worth, after any change orders. */
+  /** After change orders. */
   jobValueCents: number;
-  /** Collected from customers on their jobs, all methods. */
   collectedCents: number;
-  /** Of that, how much never went through Stripe. */
   offStripeCents: number;
-  /** What the office has earned on their jobs so far. */
   feeEarnedCents: number;
   /** Taken automatically as a Stripe application fee. */
   feeCollectedCents: number;
-  /** Sent over by hand afterwards - Zelle, Venmo, cash. */
+  /** Sent over by hand afterwards (Zelle, Venmo, cash). */
   feeSettledCents: number;
-  /** What they still owe the office. The only number that needs chasing. */
+  /** What they still owe the office. */
   balanceCents: number;
 };
 
 export type MoneyBoard = {
-  /** Everything customers have handed over, on every open or finished job. */
+  /** From customers, on every open or finished job. */
   collectedCents: number;
-  /** Still to collect from customers across jobs that aren't settled. */
   outstandingCents: number;
   feeEarnedCents: number;
   feeCollectedCents: number;
   feeSettledCents: number;
-  /** Earned, less collected, less settled. What the office is still owed. */
+  /** Earned - collected - settled. */
   feeBalanceCents: number;
-  /** Collected in the last MONEY_WINDOW_DAYS, split by how it arrived. */
   byMethod: { method: string; cents: number }[];
   recentCents: number;
   contractors: ContractorMoney[];
-  /** Jobs with money still to come in, biggest balance first. */
+  /** Biggest balance first. */
   owing: JobMoney[];
-  /** Every accepted job, newest first, each with its own payments attached. */
   jobs: JobMoney[];
-  /** Every movement of money, newest first. */
   entries: LedgerEntry[];
-  /** Rows whose shape makes a total above wrong. Empty is the healthy state. */
+  /** Empty is the healthy state. */
   attention: AttentionRow[];
-  /** True when supabase/payments.sql hasn't been run yet. */
+  /** Payment tables missing (read returned 404). */
   missingTables: boolean;
-  /**
-   * Which of the three reads came back at its row ceiling, if any.
-   *
-   * Empty is the normal state and the only one where the totals above can be
-   * trusted. Non-empty means this page is summing a slice, and it says so on
-   * screen rather than quietly reporting a smaller business than there is.
-   */
+  /** Reads that hit their row ceiling. Non-empty means the totals cover only a slice. */
   truncated: string[];
   /**
-   * Every quote that has ever gone to a customer: how many, and what they add
-   * up to in dollars. Read on its own, every row, rather than summed over the
-   * rows loaded above, so the row ceilings cannot make it too small.
-   *
-   * Null means the read failed. The card shows a dash for that rather than a
-   * zero, because "we have never quoted anybody" and "the query broke" look
-   * identical as a $0 and only one of them is worth acting on.
+   * All-time count and dollar total of sent quotes, read separately so row ceilings can't shrink it.
+   * Null means the read failed; the card shows a dash, not a misleading $0.
    */
   quotesSentAllTime: { count: number; cents: number } | null;
-  /** How many practice leads were left out. Zero hides the switch entirely. */
+  /** Zero hides the switch. */
   testCount: number;
-  /** Whether this board was built with them in. */
   includingTests: boolean;
 };
 
 async function readRows<T>(session: Session, path: string): Promise<{ rows: T[]; ok: boolean }> {
   const res = await pgUser(path, session.accessToken);
-  // A 404 here means the migration hasn't been run. Told apart from "no rows"
-  // on purpose: the page says which it is, because "$0.00 everywhere" and
-  // "you haven't run the SQL file" look identical and only one is a problem.
+  // 404 = table missing, reported separately from "no rows".
   if (!res.ok) return { rows: [], ok: false };
   return { rows: (await res.json()) as T[], ok: true };
 }
 
-/**
- * The count and dollar total of every quote matching `path`.
- *
- * Paged a thousand at a time, one small column, until a page comes back short:
- * the figure it backs says "all time", and every other total on this page is a
- * sum over at most a thousand rows. PostgREST's own sum() would be one request,
- * but aggregates are switched off on Supabase by default and turning them on
- * is a project setting nobody should have to remember.
- */
+/** Paged until a short page: the figure says "all time". PostgREST aggregates are off by default on Supabase. */
 const SENT_PAGE = 1000;
 const SENT_MAX_PAGES = 200;
 async function sumQuotes(session: Session, path: string): Promise<{ count: number; cents: number } | null> {
@@ -230,26 +166,20 @@ async function sumQuotes(session: Session, path: string): Promise<{ count: numbe
     for (const r of rows) cents += toCents(r.quote_amount);
     if (rows.length < SENT_PAGE) return { count, cents };
   }
-  // 200,000 quotes. Past this, a total that is short is worse than none.
+  // 200,000 quotes. Past this a short total is worse than none.
   return null;
 }
 
 export async function moneyBoard(
   session: Session,
   staff: Staff[],
-  // Testing a payment writes a real row through the real code, which is the
-  // only kind of test worth running - and the reason a morning of trying
-  // things out otherwise shows up as takings. Practice leads are left out of
-  // every figure here by default and put back in when somebody is checking
-  // that a test payment landed the way they expected.
+  // Test payments write real rows, so practice leads are excluded unless includeTests.
   opts: { includeTests?: boolean } = {},
 ): Promise<MoneyBoard> {
   const includeTests = opts.includeTests === true;
-  // A contractor reads this board too, for their own Money page. Their token
-  // already limits jobs and payments to their own through RLS; settlements are
-  // owner-only there (a contractor must not be able to WRITE one), so theirs
-  // are read with the service key, pinned to their own staff id. Without them
-  // a crew who had sent the fee over would still be told they owe it.
+  // Contractors read this board too. RLS scopes their jobs and payments, but settlements are owner-only
+  // (contractors must not write them), so theirs are read with the service key pinned to their staff id.
+  // Otherwise a crew that sent the fee would still be shown as owing it.
   const isOwner = session.staff.role === "owner";
   const settlementsPath = `fee_settlements?select=*&order=created_at.desc&limit=${SETTLEMENT_LIMIT}`;
   const readSettlements = isOwner
@@ -259,20 +189,12 @@ export async function moneyBoard(
         ok: res.ok,
       }));
   const names = new Map(staff.map((s) => [s.id, s.full_name || s.email || "Unnamed"]));
-  // Practice accounts. A test contractor's settlement is a real row in
-  // fee_settlements, and it was counting as a fee received while the practice
-  // job that earned it was hidden - so the office looked to have been paid a
-  // cut it never earned. Their jobs are NOT swept up with them: a real
-  // customer's job assigned to a test account is still a real job.
+  // A test contractor's settlements are excluded (their job is hidden, so the fee was never earned).
+  // Their jobs are not: a real customer's job assigned to a test account is still real.
   const testStaff = new Set(staff.filter((p) => p.is_test).map((p) => p.id));
 
-  // A quote that was retracted has its quote_sent_at cleared by wipeQuote, so
-  // it correctly drops back out of this count: the customer is no longer
-  // holding a price from us and the link they had is dead.
-  //
-  // One per customer, not one per send. A corrected quote and an added option
-  // both re-send the same row rather than making a second one, which is the
-  // reading an owner means by "how many quotes have we sent".
+  // Retracted quotes drop out (wipeQuote clears quote_sent_at). Counts customers, not sends: re-sends
+  // reuse the same row.
   const [jobsRes, paymentsRes, settlementsRes, quotesSentAllTime] = await Promise.all([
     readRows<JobRow>(
       session,
@@ -282,18 +204,13 @@ export async function moneyBoard(
     ),
     readRows<QuotePayment>(session, `quote_payments?select=*&order=created_at.desc&limit=${PAYMENT_LIMIT}`),
     readSettlements,
-    // `not.is.true` rather than `is.false`: is_test arrived with test-data.sql
-    // and is null on every row written before it, and `is.false` would drop
-    // every one of them - which is most of the history this figure is about.
-    // The owner's figure only; the crew page never shows it.
+    // `not.is.true`, not `is.false`: is_test is null on older rows.
     isOwner
       ? sumQuotes(session, `quote_requests?quote_sent_at=not.is.null${includeTests ? "" : "&is_test=not.is.true"}`)
       : Promise.resolve(null),
   ]);
 
-  // A read that came back exactly full is a read that was probably cut short.
-  // Measured here, before the stray-job top-up below adds rows of its own and
-  // makes the count unreadable.
+  // A read that came back exactly full was probably cut short. Measured before the stray-job top-up adds rows.
   const truncated = [
     jobsRes.rows.length >= JOB_LIMIT ? "jobs" : null,
     paymentsRes.rows.length >= PAYMENT_LIMIT ? "payments" : null,
@@ -308,12 +225,8 @@ export async function moneyBoard(
     else byJob.set(p.quote_id, [p]);
   }
 
-  // Jobs with money on them that the filter above would have dropped: marked
-  // lost, archived, or no longer showing as accepted. Left out, their payments
-  // sat in quote_payments and in no total on this page - money that had
-  // genuinely been collected, invisible because somebody changed a status
-  // afterwards. A ledger that loses track of money when a row changes state is
-  // not a ledger, so they are fetched back in and marked.
+  // Jobs with money that the filter above dropped (lost, archived, no longer accepted). Fetched back so
+  // their payments still appear in the totals.
   const known = new Set(jobsRes.rows.map((j) => j.id));
   const strays = [...new Set(payments.map((p) => p.quote_id))].filter((id) => id && !known.has(id));
   if (strays.length > 0) {
@@ -325,9 +238,7 @@ export async function moneyBoard(
     jobsRes.rows.push(...extra.rows);
   }
 
-  // Fee sent over by hand, against the job it was for. A settlement with no
-  // job still counts against the contractor's balance below; it just can't be
-  // shown on a job row.
+  // A settlement with no job still counts against the contractor's balance; it just has no job row.
   const settledByJob = new Map<string, number>();
   for (const s of settlementsRes.rows) {
     if (!s.quote_id) continue;
@@ -348,33 +259,20 @@ export async function moneyBoard(
       payments: byJob.get(j.id) ?? [],
       onBooks: known.has(j.id),
       isTest: j.is_test === true,
-      // The same function the crew's page and the customer's page read through.
-      // A second implementation here would drift, and the first anyone would know
-      // of it is a contractor disputing a figure. The rate goes in with it, so
-      // the fee is a percentage of what the job is worth now rather than of
-      // whatever it was worth the day the rate was frozen.
+      // Same function the crew and customer pages use, so figures can't drift. Current rate, so the fee tracks
+      // what the job is worth now.
       ledger,
       feeEarnedCents: raw.feeEarnedCents,
       feeReceivedCents: raw.feeCollectedCents + ledger.feeSettledCents,
     };
   });
 
-  // One gate, applied everywhere a figure is summed. Anything that reads a
-  // payment has to ask this too, or the tiles and the ledger under them
-  // disagree about which morning actually happened.
+  // Every money sum must apply this gate, or tiles and ledger disagree.
   const testIds = new Set(allJobs.filter((j) => j.isTest).map((j) => j.id));
   const counts = (quoteId: string | null) => includeTests || !quoteId || !testIds.has(quoteId);
   const jobs = includeTests ? allJobs : allJobs.filter((j) => !j.isTest);
 
-  // Fees the contractor has already sent over by hand.
-  //
-  // Gated like everything else that reads money. A settlement recorded against
-  // a practice job is practice: without this the tile would report a fee
-  // received against a job whose fee was never earned, and "your fees,
-  // received" would disagree with the ledger it sits above. A settlement with
-  // no job on it cannot be told apart from a real one, so it stays - that is
-  // the honest reading of a payment somebody made against a balance rather
-  // than against a job.
+  // Settlements on practice jobs are excluded. A settlement with no job can't be told apart, so it stays.
   const settledByStaff = new Map<string, number>();
   for (const s of settlementsRes.rows) {
     if (!counts(s.quote_id)) continue;
@@ -406,8 +304,7 @@ export async function moneyBoard(
     if (job.onBooks) row.jobValueCents += job.ledger.totalCents;
     row.collectedCents += job.ledger.paidCents;
     row.offStripeCents += job.ledger.offStripeCents;
-    // The whole fee on the job total. What Stripe took can't be less than
-    // earned in practice, but whichever is larger is what the office has had.
+    // Whichever is larger of earned and Stripe-collected is what the office has had.
     row.feeEarnedCents += Math.max(job.feeEarnedCents, job.ledger.feeCollectedCents);
     row.feeCollectedCents += job.ledger.feeCollectedCents;
   }
@@ -418,7 +315,6 @@ export async function moneyBoard(
       ...c,
       balanceCents: Math.max(0, c.feeEarnedCents - c.feeCollectedCents - c.feeSettledCents),
     }))
-    // Whoever owes the most, first. This page exists to answer one question.
     .sort((a, b) => b.balanceCents - a.balanceCents || b.collectedCents - a.collectedCents);
 
   const since = Date.now() - MONEY_WINDOW_DAYS * 86_400_000;
@@ -436,10 +332,7 @@ export async function moneyBoard(
 
   const jobsById = new Map(jobs.map((j) => [j.id, j]));
 
-  // ── One list of everything that moved ───────────────────────────────────
-  // A refund is its own row rather than a smaller payment: the money went out
-  // on a different day, and a ledger that quietly rewrites the original entry
-  // cannot be reconciled against a bank statement.
+  // A refund is its own row (different day), so the ledger reconciles against a bank statement.
   const entries: LedgerEntry[] = [];
   for (const p of payments) {
     if (p.status !== "paid" && p.status !== "refunded") continue;
@@ -483,9 +376,7 @@ export async function moneyBoard(
       staffId: st.staff_id,
       staffName: names.get(st.staff_id) ?? "A contractor",
       method: st.method,
-      // Money reaching the office, not the crew. It is the fee arriving late,
-      // so it counts in the fee column and not in takings - putting it in both
-      // would count one dollar twice.
+      // Fee reaching the office: fee column only, not takings, or it counts twice.
       amountCents: 0,
       feeCents: st.amount_cents,
       note: st.note,
@@ -493,23 +384,14 @@ export async function moneyBoard(
   }
   entries.sort((a, b) => b.at.localeCompare(a.at));
 
-  // ── Rows that make a total lie ──────────────────────────────────────────
   const attention: AttentionRow[] = [];
   for (const j of jobs) {
-    // Off-books jobs have their own row further down. Running them through the
-    // rules below would flag a lost job for being unpaid, which is the point
-    // of it being lost.
+    // Off-books jobs get their own row below; the rules here would flag a lost job as unpaid.
     if (!j.onBooks) continue;
     const total = j.ledger.totalCents;
 
-    // The big one, and the reason a healthy business reads as owing money it
-    // does not. Jobs closed out before the payments ledger existed carry a
-    // paid_at and a status of Paid, and no payment rows at all - so every
-    // penny of them counts as still outstanding, forever.
-    // "No payment rows" has to mean no rows that COUNT, not no rows at all. A job
-    // whose only payment was voided (or never completed) is in exactly the state
-    // this alert is for - marked paid with nothing behind it - and counting the
-    // dead row would hide it.
+    // Jobs closed before the payments ledger existed: Paid status, no payment rows, so they read as outstanding
+    // forever. Only counted rows matter: a job whose only payment was voided must still be flagged.
     const countedRows = j.payments.filter((p) => p.status === "paid" || p.status === "refunded");
     if ((j.status === "paid" || j.paidAt) && countedRows.length === 0 && total > 0) {
       attention.push({
@@ -522,8 +404,7 @@ export async function moneyBoard(
       });
       continue;
     }
-    // Accepted with no price: contributes nothing and cannot be chased,
-    // because there is no figure to chase.
+    // Accepted with no price: nothing to chase.
     if (total <= 0) {
       attention.push({
         kind: "accepted_no_price",
@@ -535,7 +416,7 @@ export async function moneyBoard(
       });
       continue;
     }
-    // More collected than the job is worth. Usually a payment recorded twice.
+    // Usually a payment recorded twice.
     if (j.ledger.paidCents > total) {
       attention.push({
         kind: "overpaid",
@@ -547,8 +428,7 @@ export async function moneyBoard(
       });
       continue;
     }
-    // Money came in and the office's rate was never frozen, so every fee
-    // figure on this job reads zero.
+    // Money came in but the rate was never frozen, so every fee figure reads zero.
     if (j.ledger.paidCents > 0 && j.ledger.feeTotalCents === 0) {
       attention.push({
         kind: "fee_unrated",
@@ -560,10 +440,7 @@ export async function moneyBoard(
       });
     }
   }
-  // Money on a job that left the pipeline. It is in the totals now rather than
-  // nowhere, but it is still worth a person's eye: either the customer is owed
-  // a refund, or the job was not really lost, or - most often - it is a test
-  // row somebody left behind.
+  // Money on a job that left the pipeline: refund owed, not really lost, or a leftover test row.
   for (const j of jobs) {
     if (j.onBooks || j.ledger.paidCents === 0) continue;
     attention.push({
@@ -579,8 +456,7 @@ export async function moneyBoard(
 
   return {
     collectedCents: jobs.reduce((sum, j) => sum + j.ledger.paidCents, 0),
-    // Only what somebody is actually going to be asked for. A job that took a
-    // deposit and then went to Lost is not a customer who owes the balance.
+    // Lost jobs that took a deposit don't owe the balance.
     outstandingCents: jobs.reduce((sum, j) => sum + (j.onBooks ? j.ledger.dueCents : 0), 0),
     feeEarnedCents: contractors.reduce((sum, c) => sum + c.feeEarnedCents, 0),
     feeCollectedCents: contractors.reduce((sum, c) => sum + c.feeCollectedCents, 0),

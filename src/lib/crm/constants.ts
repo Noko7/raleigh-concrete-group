@@ -1,21 +1,18 @@
-// Plain constants safe to import from client components (no secrets here).
+// Safe to import from client components (no secrets).
 
-// Flat "stay with us" credit offered when a customer goes to decline a quote.
+// Flat credit offered when a customer goes to decline a quote, in dollars.
 export const DECLINE_CREDIT = 150;
 
-// The most a change-order note can carry. Long enough to describe widening a
-// patio and what it means for the sub-base, short enough that the customer's
-// text stays a text. Lives here rather than in queries.ts because the crew's
-// card counts against it as they type, and that card is a client component.
+// Lives here, not in queries.ts, because the crew's client-side card counts against it while typing.
 export const CHANGE_NOTE_MAX = 600;
 
-// Pipeline a job moves through, lead -> money:
-//   New       a fresh lead, no quote sent yet
-//   Quoted    price + summary sent, waiting on the customer
-//   Approved  customer said yes and gave preferred days - needs a confirmed date
-//   Scheduled a work day is confirmed and on the calendar
-//   Completed work is done on site
-//   Paid      money received (Zelle / deposit) - the end of the line
+// Pipeline:
+//   New       lead, no quote sent
+//   Quoted    waiting on the customer
+//   Approved  customer said yes with preferred days; needs a confirmed date
+//   Scheduled work day confirmed
+//   Completed work done on site
+//   Paid      money received
 //   Lost      declined or dead
 export const STATUSES = ["new", "quoted", "approved", "scheduled", "completed", "paid", "lost"] as const;
 export type Status = (typeof STATUSES)[number];
@@ -30,63 +27,39 @@ export const STATUS_LABELS: Record<Status, string> = {
   lost: "Lost",
 };
 
-// How many days the customer may propose, and how far out the earliest is.
-// Seven days is the floor for a customer-requested install day: it's long
-// enough to line up crew and materials before committing to anything.
+// Seven-day floor on customer-requested install days: time to line up crew and materials.
 export const MAX_PREFERRED_DATES = 3;
 export const LEAD_TIME_DAYS = 7;
 
-// Earliest an in-person quote VISIT can be requested. Shorter than the install
-// lead time on purpose - a visit is one person for an hour, not a crew and a
-// truck, so it can happen sooner.
+// Shorter than the install lead: a visit is one person for an hour, not a crew and a truck.
 export const VISIT_LEAD_DAYS = 4;
 
-// How old an untouched lead has to be before its contractor gets the "lead
-// needs attention" text. Two days, not half of one: leads routinely land while
-// the crew is out on a job, and a nudge the next morning read as nagging about
-// work they hadn't had a chance to get to. Sent once per lead.
+// Age before the contractor gets the one-time "lead needs attention" text. 48h because leads often land
+// while the crew is on a job.
 export const STALE_LEAD_HOURS = 48;
 
-// After a site visit, how many days the crew get to send the price before that
-// lead counts as needing attention again. Two, not one: the morning after a
-// visit is too soon to be chasing them for the number.
+// Days after a site visit before the lead needs attention again.
 export const VISIT_GRACE_DAYS = 2;
 
-// ── Appointment slots ───────────────────────────────────────────────────────
-// Quote visits are booked back to back against ONE contractor's day, an hour
-// apart. The gap is what "back to back" means here: two visits for the same
-// person must start at least this far apart, because between them is a drive
-// across Raleigh, not a coffee.
-//
-// It is a distance between start times, not a slot width, so it keeps working
-// when a contractor books an odd time from the job page: a 9:30 visit blocks
-// both the 9:00 and the 10:00 slot, which a list of fixed slots could not say.
+// Minimum gap between visit START times for one contractor (a drive across Raleigh). A gap rather than
+// fixed slots, so an odd booked time like 9:30 blocks both 9:00 and 10:00.
 export const VISIT_GAP_MINUTES = 60;
 
-// A booked WORK day is still one per day for the whole business - a pour is a
-// crew, a truck and a day, and nothing about hourly visits changes that. Only
-// the visits above stack.
+// WORK days stay one per day for the whole business; only visits stack.
 
-// The window a contractor offers visits in, before they set their own under
-// CRM → Settings → Working hours. Both numbers are the hour a slot STARTS, so
-// 8..16 is nine slots, 8:00 AM through 4:00 PM.
+// Defaults until the contractor sets Working hours. Both are slot START hours, so 8..16 is 8:00 AM to 4:00 PM.
 export const DEFAULT_WORK_START_HOUR = 8;
 export const DEFAULT_WORK_END_HOUR = 16;
-// Sanity rails on what an owner or contractor may type. Wide enough for an
-// early pour or a late evening estimate, narrow enough that a typo can't offer
-// customers a 3am appointment.
+// Rails on typed hours so a typo can't offer a 3am appointment.
 export const WORK_HOUR_MIN = 5;
 export const WORK_HOUR_MAX = 21;
 
-// Days of the week are 0=Sunday..6=Saturday, matching Date#getUTCDay.
+// 0=Sunday..6=Saturday, matching Date#getUTCDay.
 export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export type WorkHours = { startHour: number; endHour: number; days: number[] };
 
-// Every day of the week, on purpose. Before this existed a customer could book
-// a Saturday visit, and defaulting new rows to Monday-Friday would have taken
-// that away from every contractor at once without anyone asking for it. The
-// preference starts as "no restriction" and only narrows when somebody sets it.
+// All seven days: the preference starts unrestricted and only narrows when someone sets it.
 export const DEFAULT_WORK_HOURS: WorkHours = {
   startHour: DEFAULT_WORK_START_HOUR,
   endHour: DEFAULT_WORK_END_HOUR,
@@ -99,12 +72,8 @@ const clampHour = (n: unknown, fallback: number): number => {
 };
 
 /**
- * A staff row's working-hours columns, read defensively.
- *
- * Every caller goes through here rather than reading the three columns
- * directly: they are nullable for rows that predate the migration, an owner
- * can type anything into the form, and a window whose end is before its start
- * would silently produce a day with no slots in it at all.
+ * Every caller reads working hours through here: columns are nullable on old rows, the form accepts
+ * anything, and end before start would produce a day with no slots.
  */
 export function readWorkHours(
   raw?: { work_start_hour?: number | null; work_end_hour?: number | null; work_days?: number[] | null } | null,
@@ -115,8 +84,7 @@ export function readWorkHours(
   const days = Array.isArray(raw.work_days)
     ? [...new Set(raw.work_days.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort()
     : [];
-  // No days ticked means no restriction rather than "never available", which
-  // would strand every lead routed to that contractor with nothing bookable.
+  // No days ticked = no restriction, not "never available" (which would strand the contractor's leads).
   return { startHour, endHour, days: days.length > 0 ? days : DEFAULT_WORK_HOURS.days };
 }
 
@@ -130,46 +98,37 @@ export function minutesOfTime(t?: string | null): number | null {
   return (m[3].toUpperCase() === "PM" ? h + 12 : h) * 60 + min;
 }
 
-/** 9 -> "9:00 AM", 13 -> "1:00 PM". Spelled the way TIME_RE expects. */
+/** 9 -> "9:00 AM", 13 -> "1:00 PM", in the format TIME_RE expects. */
 export function hourSlot(h: number): string {
   return `${h % 12 || 12}:00 ${h < 12 ? "AM" : "PM"}`;
 }
 
-/** Every start time a contractor offers on a day they work. */
 export function slotsFor(w: WorkHours): string[] {
   const out: string[] = [];
   for (let h = w.startHour; h <= w.endHour; h += 1) out.push(hourSlot(h));
   return out;
 }
 
-/** The slots shown before a date is picked and before we know whose day it is. */
+/** Shown before a date (and so a contractor) is picked. */
 export const DEFAULT_VISIT_SLOTS = slotsFor(DEFAULT_WORK_HOURS);
 
 /**
- * The weekday of a YYYY-MM-DD, 0=Sunday.
- *
- * Read as a bare calendar date in UTC. `new Date("2026-03-08")` is midnight
- * UTC, which is the evening of the 7th in Raleigh, so asking it for a local
- * weekday returns the day before for every date in the western hemisphere.
+ * Weekday of a YYYY-MM-DD, 0=Sunday, read in UTC: `new Date("2026-03-08")` is midnight UTC, the evening
+ * of the 7th in Raleigh, so a local weekday would be a day early.
  */
 export function weekdayOf(ymd: string): number {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
-/** Does this contractor work that day at all? */
 export function worksOn(w: WorkHours, ymd: string): boolean {
   return w.days.includes(weekdayOf(ymd));
 }
 
-// The shape every stored time string is in: "H:MM AM/PM", e.g. "9:00 AM" or
-// "2:15 PM". Not tied to any particular list of slots - this is what
-// scheduled_time/visit_time actually validate against once a contractor is
-// free to pick anything, and what SMS/CRM/calendar code already assumes.
+// Every stored time is "H:MM AM/PM". Validates scheduled_time/visit_time regardless of slot list.
 export const TIME_RE = /^\d{1,2}:\d{2}\s?(AM|PM)$/i;
 
-// Converts a native <input type="time"> value (24h "HH:MM") to the "H:MM
-// AM/PM" string above.
+// Native <input type="time"> value (24h "HH:MM") to "H:MM AM/PM".
 export function to12Hour(hhmm: string): string {
   const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return hhmm;
@@ -178,7 +137,6 @@ export function to12Hour(hhmm: string): string {
   const h = h24 % 12 || 12;
   return `${h}:${m[2]} ${ap}`;
 }
-// The reverse, for handing that same input its current value.
 export function to24Hour(t: string, fallback = "09:00"): string {
   const m = t.trim().match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
   if (!m) return fallback;
@@ -187,12 +145,8 @@ export function to24Hour(t: string, fallback = "09:00"): string {
   return `${String(h).padStart(2, "0")}:${m[2]}`;
 }
 
-// Every quote answers the same five questions, in this order. A concrete
-// quote that skips permits or says nothing about cleanup is where disputes
-// start, so the shape is fixed rather than left to whoever is typing.
-//
-// Order matters: it is the order the customer reads them on their quote page
-// and the order they appear in both editors.
+// Every quote answers these five, in this order (the customer page and both editors). Skipped permits or
+// cleanup is where disputes start, so the shape is fixed.
 export const QUOTE_SECTION_FIELDS = [
   "quote_scope",
   "quote_permits",
@@ -210,8 +164,7 @@ export const QUOTE_SECTION_LABELS: Record<QuoteSectionField, string> = {
   quote_cleanup: "Clean up",
 };
 
-// What each section is for, shown as placeholder text so the answer lands in
-// the right box. Kept short: these are read on a phone on a job site.
+// Placeholder text. Short: read on a phone on a job site.
 export const QUOTE_SECTION_HINTS: Record<QuoteSectionField, string> = {
   quote_scope: "What we're building, the size, and the finish.",
   quote_permits: "Who pulls them, what they cost, or Not applicable.",
@@ -220,22 +173,12 @@ export const QUOTE_SECTION_HINTS: Record<QuoteSectionField, string> = {
   quote_cleanup: "How the site is left, and when.",
 };
 
-// A sent quote link is good for a week. Long enough for a customer to think
-// it over and talk to a partner, short enough that our price isn't held open
-// while material costs move.
+// Long enough to think it over; short enough that the price isn't held while material costs move.
 export const QUOTE_TTL_DAYS = 10;
 
 /**
- * A quote amount, written the way money is written.
- *
- * Quote amounts are stored in DOLLARS (the ledger's own figures are in cents
- * and have `usd()` in ./fees for that - do not mix them up, they disagree by a
- * factor of a hundred).
- *
- * Cents only when there are cents: $950, but $8,250.50. Every call site used to
- * be a bare toLocaleString, which drops a trailing zero and renders a real
- * quote as "$8,250.5" - a price with one decimal place is not a price, and it
- * was going out in texts as well as onto screens.
+ * Quote amounts are in DOLLARS. Ledger figures are cents and use `usd()` in ./fees; mixing them is a 100x
+ * error. Cents shown only when present ($950, $8,250.50); bare toLocaleString gives "$8,250.5".
  */
 export function dollars(n: number | null | undefined): string | null {
   if (n == null || !Number.isFinite(Number(n))) return null;
@@ -266,30 +209,19 @@ export function firstNameOf(full: string, fallback: string): string {
   return full.trim().split(/\s+/)[0] || fallback;
 }
 
-// No em dashes in anything a customer reads.
-//
-// Applied to every outbound text and to the quote body on save, rather than
-// left to whoever is typing. An em dash is the tell that copy was not written
-// by the person sending it, it renders inconsistently across handsets, and
-// nobody types one on a phone anyway. A spaced hyphen says the same thing.
-//
-// Also folds the en dash, and the "--" people type meaning an em dash.
+// No em dashes in customer-facing text (applied to every outbound text and quote body on save): they read
+// as not written by the sender and render inconsistently. Also folds en dashes and "--".
 export function noEmDash(s: string): string {
   return s
     .replace(/\s*[—–]\s*/g, " - ")
     .replace(/\s--\s/g, " - ");
 }
 
-// How we are pricing a job, which decides whether anybody goes to look at it.
-//
-//   inperson  we drive out and measure. The only kind with a real appointment.
-//   online    priced from the customer's photos. They offer a fallback slot in
-//             case the photos aren't enough; nobody is committed to it.
-//   plans     priced from drawings - the commercial case, an apartment block
-//             or a slab schedule. No visit and no photos.
-//
-// null is a row from before this column existed. Those were all site visits,
-// so null is treated as in-person throughout.
+// How a job is priced, which decides whether anyone visits:
+//   inperson  we measure on site; the only kind with a real appointment
+//   online    priced from photos; the customer offers a fallback slot, nobody is committed to it
+//   plans     priced from drawings (commercial); no visit, no photos
+// null predates the column and is treated as in-person.
 export const QUOTE_TYPES = ["inperson", "online", "plans"] as const;
 export type QuoteType = (typeof QUOTE_TYPES)[number];
 
@@ -299,63 +231,34 @@ export const QUOTE_TYPE_LABELS: Record<QuoteType, string> = {
   plans: "From plans",
 };
 
-// visit_date carries two different meanings and quote_type is what tells them
-// apart. Everything that shows a date to a person goes through one of these two
-// readers rather than the column, because the difference between "we are coming"
-// and "we might come" is the whole thing.
+// visit_date means two things depending on quote_type; anything that shows a date to a person reads it
+// through one of these two.
 type Visitable = { quote_type?: string | null; visit_date?: string | null };
 
-// A booked appointment: somebody is expected at an address on this day. Only an
-// in-person row has one. This is what the calendar, Google invites, crew
-// reminders and the job page's headline date are all built on.
-//
-// Written as an allow-list, not "anything except online". The old form was
-// correct while there were exactly two types, and quietly wrong the moment a
-// third arrived: a 'plans' row would have claimed a visit nobody booked, put
-// a commercial job on the calendar, and sent a crew a night-before reminder
-// to drive to an apartment site for an appointment that never existed.
+// A booked appointment (calendar, Google invites, crew reminders, job page date). In-person only.
+// An allow-list so a new type like 'plans' can't claim a visit nobody booked.
 export function visitDateOf(q: Visitable): string | null {
   const booked = q.quote_type === "inperson" || q.quote_type == null;
   return booked ? (q.visit_date ?? null) : null;
 }
 
-// The slot an online customer offered in case their job turns out to be too big
-// to price from photos. It is an option, not a commitment - nobody drives
-// anywhere on it, and the customer has been told we'll text to confirm first.
-// A contractor confirming it is what turns the request in-person, at which point
-// it stops being readable here and becomes a real visit above.
+// An online customer's fallback slot: an option, not a commitment. Confirming it turns the quote
+// in-person, after which it reads as a real visit above.
 export function requestedVisitOf(q: Visitable): string | null {
   return q.quote_type === "online" ? (q.visit_date ?? null) : null;
 }
 
-// How many days before a booked job the crew gets a reminder text. 0 is the
-// morning of. The daily cron fires ~10am ET, so the morning-of text still lands
-// before a typical start time.
+// Days before a booked job the crew gets a reminder; 0 is the morning of (cron runs ~10am ET).
 export const CREW_REMINDER_DAYS = [3, 1, 0];
 
-// Anything to do with what time it is lives in ./clock - the business's zone,
-// today's date, quiet hours. It's imported from client components too, same as
-// this file.
-
-// ── Quote line items ────────────────────────────────────────────────────────
-// A quote can be one price, or it can be a list of things the customer answers
-// one at a time: "yes to the patio, no to the sidewalk". Both shapes exist at
-// once - a quote with no line items is the original single-price quote and
-// behaves exactly as it always did.
-//
-// Two kinds, and the difference is who decides:
-//   required  part of the job. Shown so the customer can see what they're
-//             paying for, but not theirs to drop.
-//   optional  an extra. They say yes or no, and the total follows.
-//
-// Anything shared by both editors and the customer page lives here, since this
-// module is the one that is safe to import from a client component.
+// Line items. A quote with none is a single-price quote.
+//   required  part of the job; shown, but not the customer's to drop
+//   optional  an extra; they say yes or no and the total follows
 export const MAX_QUOTE_OPTIONS = 12;
 export const OPTION_TITLE_MAX = 120;
 export const OPTION_DESC_MAX = 2000;
 
-// The shape both editors post and the server validates. Ids are absent on a
-// row that has not been saved yet.
+// Ids are absent on unsaved rows.
 export type QuoteOptionDraft = {
   id?: string;
   title: string;
@@ -370,16 +273,13 @@ export const optionAmount = (o: Priced): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// What the job costs if the customer takes everything on offer. This is the
-// figure a quote carries while it's out, before anyone has answered.
+// Total if the customer takes everything: the figure a quote carries before anyone answers.
 export function optionsTotal(rows: Priced[]): number {
   return Math.round(rows.reduce((sum, o) => sum + optionAmount(o), 0) * 100) / 100;
 }
 
-// What the job costs given a set of answers: every required item, plus the
-// optional ones with a yes against them. `answers` is keyed by option id;
-// anything missing counts as not chosen, so a half-answered quote reads low
-// rather than optimistically high.
+// Required items plus optional ones answered yes. Missing answers count as not chosen, so a half-answered
+// quote reads low rather than high.
 export function selectedTotal(
   rows: (Priced & { id: string; required: boolean })[],
   answers: Record<string, "accepted" | "declined" | undefined>,
@@ -387,11 +287,7 @@ export function selectedTotal(
   return optionsTotal(rows.filter((o) => o.required || answers[o.id] === "accepted"));
 }
 
-// ── A change order's breakdown ──────────────────────────────────────────────
-// The lines a job stands on today: everything the customer actually bought.
-// Required lines, plus the extras they said yes to. A change order starts from
-// these, so the crew edit the breakdown the customer already agreed to rather
-// than retyping it.
+// A change order starts from what the customer actually bought: required lines plus accepted extras.
 export type ChangeLineDraft = { title: string; description: string | null; amount: number };
 
 export function boughtLines(
@@ -402,13 +298,8 @@ export function boughtLines(
     .map((o) => ({ title: o.title, description: o.description || null, amount: optionAmount(o) }));
 }
 
-// Where a change's breakdown starts: the job exactly as the customer agreed it.
-//
-// A change is nearly always "the same job, plus this", so the lines have to
-// start from the price already agreed. Starting empty was a trap: on a job
-// priced as one figure, typing "Materials $1,390" made $1,390 the whole new
-// price instead of $1,390 on top of it. So a one-price job starts with a single
-// line carrying its agreed total, and any line added after it adds money.
+// A change is nearly always "same job, plus this". A one-price job starts with one line carrying its
+// agreed total, so an added line adds money instead of becoming the whole new price.
 export function changeStartLines(
   bought: ChangeLineDraft[],
   agreedTotal: number | string | null,
@@ -421,7 +312,6 @@ export function changeStartLines(
   return [{ title: (what ? `${what}, as approved` : "Original job, as approved").slice(0, OPTION_TITLE_MAX), description: null, amount }];
 }
 
-// Two breakdowns say the same thing to the customer.
 export function sameChangeLines(a: ChangeLineDraft[], b: ChangeLineDraft[]): boolean {
   return (
     a.length === b.length &&
@@ -434,34 +324,20 @@ export function sameChangeLines(a: ChangeLineDraft[], b: ChangeLineDraft[]): boo
   );
 }
 
-// ── A choice of ways to do the job ──────────────────────────────────────────
-// Line items above answer "and also": a patio, and maybe the sidewalk too.
-// Packages answer the other question, which is "or instead" - a concrete
-// driveway OR an asphalt one, on the same patch of ground. The customer picks
-// exactly one, and the line items apply on top of whichever they picked.
-//
-// Modelled as its own thing rather than as more line items because the two
-// behave in opposite ways: two line items both selected is a bigger job, and
-// two packages both selected is a contradiction.
-//
-// A quote with no packages is the quote this app has always sent.
+// Packages answer "or instead" (concrete OR asphalt driveway); the customer picks exactly one and line
+// items apply on top. Separate from line items because two selected packages is a contradiction.
 export const MAX_QUOTE_PACKAGES = 4;
-// One way of doing the job is not a choice. A single card is a quote somebody
-// is halfway through writing: it is kept, so a save mid-thought doesn't throw
-// the work away, but it prices nothing, shows nobody anything, and the send is
-// refused until there is something to choose between.
+// A single package is a quote in progress: kept so a save mid-thought isn't lost, but it prices nothing
+// and the send is refused.
 export const MIN_QUOTE_PACKAGES = 2;
 export const isChoice = (packages: { length: number }): boolean => packages.length >= MIN_QUOTE_PACKAGES;
 export const PACKAGE_TITLE_MAX = 120;
 export const PACKAGE_DESC_MAX = 2000;
 
-// How the customer is told them apart on their own page: "Option A", "Option
-// B". Letters rather than numbers so nothing reads as a ranking - the only
-// thing that marks one out is the contractor's own recommendation.
+// Letters, not numbers, so nothing reads as a ranking.
 export const packageLetter = (i: number): string => String.fromCharCode(65 + (i % 26));
 
-// The shape both editors post and the server validates. Ids are absent on a
-// package that has not been saved yet.
+// Ids are absent on unsaved packages.
 export type QuotePackageDraft = {
   id?: string;
   title: string;
@@ -470,19 +346,13 @@ export type QuotePackageDraft = {
   recommended: boolean;
 };
 
-// The one the contractor marked, else the first on the page. Used for the
-// headline figure a quote carries while it is out: there is no single price on
-// a quote that offers a choice, and the lead option is the most honest stand-in
-// for one.
+// Recommended, else first: the headline figure for a quote that offers a choice.
 export function leadPackage<T extends { recommended: boolean }>(rows: T[]): T | null {
   if (!isChoice(rows)) return null;
   return rows.find((p) => p.recommended) ?? rows[0] ?? null;
 }
 
-// What the job is worth given a chosen package: that package, plus every
-// required line item, plus the optional ones with a yes against them. `chosen`
-// is null on a quote that offers no choice, and the figure is then exactly what
-// selectedTotal has always returned.
+// `chosen` is null on a quote with no packages; the result then equals selectedTotal.
 export function quoteTotal(
   chosen: Priced | null,
   rows: (Priced & { id: string; required: boolean })[],
@@ -492,9 +362,7 @@ export function quoteTotal(
   return Math.round((base + selectedTotal(rows, answers)) * 100) / 100;
 }
 
-// The headline figure for a quote that is still out: the lead option, plus
-// everything else on the quote. It is what the pipeline, the board and the
-// contractor's own screens show before anybody has chosen.
+// Headline figure before anyone has chosen: the lead package plus everything else.
 export function allInTotal(packages: (Priced & { recommended: boolean })[], rows: Priced[]): number {
   const lead = leadPackage(packages);
   return Math.round(((lead ? optionAmount(lead) : 0) + optionsTotal(rows)) * 100) / 100;

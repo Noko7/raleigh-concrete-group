@@ -1,22 +1,9 @@
-// Server-only Stripe client. Do NOT import from client components: this module
-// references the secret key.
-//
-// No SDK, matching how rest.ts talks to Supabase. Stripe's API is form-encoded
-// HTTP with nested keys written as `a[b]=c`, which is a dozen lines to produce,
-// and the alternative is a dependency in a repo that has deliberately avoided
-// them everywhere else.
-//
-// Two things here are load-bearing and worth reading before changing:
-//
-//   1. `stripeAccount` on a request is what makes a charge a DIRECT charge. It
-//      sends `Stripe-Account: acct_…`, which puts the payment on the
-//      contractor's account rather than the platform's - their balance, their
-//      card fees, their 1099-K. Leave it off and the money lands here instead,
-//      which is the exact outcome this whole design exists to avoid.
-//
-//   2. `verifyWebhook` is the only thing standing between a stranger and
-//      "this job is paid". It must stay a constant-time compare with a
-//      timestamp window.
+// Server-only Stripe client (references the secret key). No SDK, matching rest.ts.
+// Load-bearing:
+//   1. `stripeAccount` sends `Stripe-Account: acct_…`, making a DIRECT charge on the contractor's account
+//      (their balance, card fees, 1099-K). Without it the money lands on the platform.
+//   2. `verifyWebhook` is all that stands between a stranger and "this job is paid": keep it a
+//      constant-time compare with a timestamp window.
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 if (typeof window !== "undefined") {
@@ -26,29 +13,20 @@ if (typeof window !== "undefined") {
 const SECRET = process.env.STRIPE_PRIV_KEY || "";
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SEC || "";
 
-// Pinned rather than floating. Stripe changes shapes between versions, and a
-// payments integration silently re-shaped by an upstream release is how a
-// webhook stops finding the field it reads. This is the version the Stripe
-// account is configured for.
+// Pinned: the Stripe account is configured for this version, and shape changes break webhook reads.
 const API_VERSION = "2026-07-29.dahlia";
 const API = "https://api.stripe.com/v1";
 
 export const STRIPE_READY = Boolean(SECRET);
 
-/** An account id we'd accept from a form or a webhook. */
 export const ACCOUNT_RE = /^acct_[A-Za-z0-9]{8,}$/;
 
 export type StripeResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string; code?: string; status: number };
 
-// Stripe wants application/x-www-form-urlencoded with nested keys spelled
-// `payment_intent_data[application_fee_amount]`. Arrays are indexed:
-// `line_items[0][price_data][currency]`.
-//
-// undefined and null are dropped rather than sent as the strings "undefined"
-// and "null" - which Stripe would cheerfully store, and which is how an
-// optional field ends up on a customer's receipt.
+// Form-encoded with nested keys (`a[b]=c`, arrays indexed). undefined/null are dropped, not sent as
+// the strings "undefined"/"null" (which Stripe would store).
 export function formEncode(obj: Record<string, unknown>, prefix = ""): string {
   const parts: string[] = [];
   for (const [rawKey, value] of Object.entries(obj)) {
@@ -73,13 +51,9 @@ export function formEncode(obj: Record<string, unknown>, prefix = ""): string {
 }
 
 type CallOptions = {
-  /** Act as this connected account - what makes a charge a direct charge. */
+  /** Act as this connected account: what makes a charge a direct charge. */
   stripeAccount?: string | null;
-  /**
-   * Safe to retry. Stripe treats a repeated key as the same request and
-   * returns the original result instead of charging a customer twice, which
-   * matters on every write that moves money.
-   */
+  /** Stripe returns the original result for a repeated key instead of charging twice. */
   idempotencyKey?: string;
   method?: "GET" | "POST";
 };
@@ -112,8 +86,7 @@ async function call<T>(
       body: method === "POST" ? formEncode(body ?? {}) : undefined,
     });
   } catch {
-    // A network failure, not a refusal. Told apart from a 4xx on purpose: this
-    // one is worth retrying and a declined card is not.
+    // Network failure (status 0), told apart from a 4xx: worth retrying, a declined card is not.
     return { ok: false, error: "Couldn't reach Stripe. Please try again.", status: 0 };
   }
 
@@ -122,9 +95,7 @@ async function call<T>(
   } & T;
 
   if (!res.ok) {
-    // Stripe's own message is the useful one ("No such account", "Your card was
-    // declined") and it is written for a human. Passed through for staff
-    // screens; customer-facing callers substitute their own wording.
+    // Stripe's message is human-readable; staff screens show it, customer-facing callers substitute their own.
     return {
       ok: false,
       error: json.error?.message || `Stripe returned ${res.status}.`,
@@ -134,8 +105,6 @@ async function call<T>(
   }
   return { ok: true, data: json as T };
 }
-
-// ── Accounts ────────────────────────────────────────────────────────────────
 
 export type StripeAccount = {
   id: string;
@@ -150,21 +119,13 @@ export type StripeAccount = {
   } | null;
 };
 
-/**
- * Read a connected account.
- *
- * Used when the office pastes an acct_ id in, and again whenever the cached
- * flags need refreshing. The three booleans are the only things the app acts
- * on: `charges_enabled` decides whether a payment link can be sent at all.
- */
+/** Only the three flags are acted on; `charges_enabled` decides whether a payment link can be sent. */
 export async function getAccount(accountId: string): Promise<StripeResult<StripeAccount>> {
   if (!ACCOUNT_RE.test(accountId)) {
     return { ok: false, error: "That doesn't look like a Stripe account ID.", status: 0 };
   }
   return call<StripeAccount>(`accounts/${accountId}`);
 }
-
-// ── Checkout ────────────────────────────────────────────────────────────────
 
 export type CheckoutSession = {
   id: string;
@@ -177,17 +138,9 @@ export type CheckoutSession = {
 };
 
 /**
- * A hosted payment page for one payment on a job.
- *
- * Created ON the contractor's account (`stripeAccount`), which is what makes
- * this a direct charge: the money lands in their balance and only
- * `applicationFeeCents` is moved to the platform.
- *
- * Payment methods are deliberately NOT listed. Leaving `payment_method_types`
- * off lets Stripe show whatever that contractor's account actually has turned
- * on - card today, and Affirm or anything else the day it is approved for them,
- * with no code change here. Hard-coding the list would mean a contractor could
- * be approved for financing and their customers would never be offered it.
+ * Created ON the contractor's account (direct charge): only `applicationFeeCents` goes to the platform.
+ * `payment_method_types` is deliberately omitted so Stripe offers whatever the account has enabled
+ * (e.g. Affirm once approved) with no code change.
  */
 export async function createCheckoutSession(input: {
   stripeAccount: string;
@@ -212,9 +165,7 @@ export async function createCheckoutSession(input: {
     idempotencyKey,
   } = input;
 
-  // Stripe rejects a fee equal to or larger than the charge. Caught here as
-  // well as in the fee engine, because the failure mode is a customer sitting
-  // on a broken checkout page and no way to tell them why.
+  // Stripe rejects a fee >= the charge; checked here too so the customer isn't left on a broken checkout.
   if (applicationFeeCents >= amountCents) {
     return { ok: false, error: "The office's fee can't be the whole payment.", status: 0 };
   }
@@ -233,18 +184,14 @@ export async function createCheckoutSession(input: {
           },
         },
       ],
-      // Omitted entirely when zero: Stripe requires a positive value, so the
-      // final payment on a job whose fee was already taken must not send the
-      // parameter at all rather than sending 0.
+      // Omitted when zero: Stripe requires a positive value.
       payment_intent_data: applicationFeeCents > 0
         ? { application_fee_amount: applicationFeeCents, metadata }
         : { metadata },
       customer_email: customerEmail || undefined,
       success_url: successUrl,
       cancel_url: cancelUrl,
-      // On the session as well as the PaymentIntent: the webhook reads the
-      // session, and a job id that only exists on the intent would mean a
-      // second API call on every delivery to find out which job was paid.
+      // On the session as well as the PaymentIntent: the webhook reads the session.
       metadata,
     },
     { stripeAccount, idempotencyKey },
@@ -261,12 +208,8 @@ export async function getCheckoutSession(
 }
 
 /**
- * Kill a session nobody can use.
- *
- * Called when we created a session and then failed to write our own record of
- * it. An abandoned session is otherwise payable for 24 hours, and a customer
- * paying one we have no row for is money that arrives with no job attached to
- * it - the one outcome the webhook can only log and not fix.
+ * For a session whose row failed to write. Otherwise it stays payable for 24h, and money paid on it has
+ * no job attached.
  */
 export async function expireCheckoutSession(
   sessionId: string,
@@ -277,15 +220,9 @@ export async function expireCheckoutSession(
   );
 }
 
-// ── Refunds ─────────────────────────────────────────────────────────────────
-
 /**
- * Refund a direct charge, and give back the office's cut with it.
- *
- * `refund_application_fee` is not the default and has to be asked for. Without
- * it Stripe returns the customer's money out of the CONTRACTOR's balance while
- * the platform quietly keeps its fee - so a refunded job would cost the crew
- * the full amount plus the office's percentage.
+ * `refund_application_fee` must be requested: without it the refund comes out of the CONTRACTOR's balance
+ * while the platform keeps its fee.
  */
 export async function refundPayment(input: {
   paymentIntentId: string;
@@ -305,35 +242,22 @@ export async function refundPayment(input: {
   );
 }
 
-// ── Webhook verification ────────────────────────────────────────────────────
-
 export type StripeEvent = {
   id: string;
   type: string;
   livemode: boolean;
   created: number;
-  /** Present only on connected-account events - the acct_ the event belongs to. */
+  /** Connected-account events only: the acct_ the event belongs to. */
   account?: string;
   data: { object: Record<string, unknown> };
 };
 
-// How far out of step with Stripe a delivery may be. Five minutes is Stripe's
-// own recommendation: long enough to survive ordinary clock drift and a slow
-// cold start, short enough that a captured request can't be replayed later.
+// Stripe's recommended 5 minutes: survives clock drift, blocks later replay.
 const TOLERANCE_SECONDS = 300;
 
 /**
- * Verify a webhook came from Stripe, and hasn't been replayed.
- *
- * The signed payload is `${timestamp}.${rawBody}` - the RAW body, byte for
- * byte. Parsing the JSON first and re-serialising it changes key order and
- * whitespace and the signature will never match again, which is the classic
- * way this fails.
- *
- * A failure here returns null and the caller answers 400. It must never fall
- * through to "probably fine": this signature is the only thing distinguishing
- * Stripe from anyone on the internet who has guessed the URL, and what is on
- * the other side of it is marking jobs paid.
+ * The signed payload is `${timestamp}.${rawBody}`: the RAW body byte for byte (re-serialised JSON never
+ * matches). Returns null and the caller answers 400; never fall through, since this guards marking jobs paid.
  */
 export function verifyWebhook(rawBody: string, signatureHeader: string | null): StripeEvent | null {
   if (!WEBHOOK_SECRET || !signatureHeader) return null;
@@ -343,8 +267,7 @@ export function verifyWebhook(rawBody: string, signatureHeader: string | null): 
   for (const part of signatureHeader.split(",")) {
     const [k, v] = part.trim().split("=", 2);
     if (k === "t") timestamp = v ?? "";
-    // v1 only. v0 is Stripe's older test-mode scheme and accepting it would
-    // widen what we trust for no benefit.
+    // v1 only; v0 is the older test-mode scheme.
     else if (k === "v1" && v) signatures.push(v);
   }
   if (!timestamp || signatures.length === 0) return null;
@@ -358,9 +281,7 @@ export function verifyWebhook(rawBody: string, signatureHeader: string | null): 
     .digest("hex");
   const expectedBuf = Buffer.from(expected, "utf8");
 
-  // Stripe can send several signatures during a secret rotation, so any match
-  // is a pass. Compared in constant time - a plain === leaks how much of the
-  // signature was right through how long it took to say no.
+  // Several signatures arrive during secret rotation, so any match passes. Constant-time: === leaks timing.
   const matched = signatures.some((sig) => {
     const sigBuf = Buffer.from(sig, "utf8");
     return sigBuf.length === expectedBuf.length && timingSafeEqual(sigBuf, expectedBuf);
@@ -374,10 +295,7 @@ export function verifyWebhook(rawBody: string, signatureHeader: string | null): 
   }
 }
 
-// ── Diagnostics ─────────────────────────────────────────────────────────────
-// What the Settings screen shows an owner when something isn't working. Mirrors
-// smsDiagnostics in notify.ts, and for the same reason: "it doesn't work" is
-// not a fault report anyone can act on.
+// For the Settings screen; mirrors smsDiagnostics in notify.ts.
 export function stripeDiagnostics(): { ready: boolean; missing: string[]; apiVersion: string } {
   const missing: string[] = [];
   if (!SECRET) missing.push("STRIPE_PRIV_KEY");

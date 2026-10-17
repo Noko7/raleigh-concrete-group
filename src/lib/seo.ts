@@ -4,8 +4,7 @@ export const SITE_URL = "https://www.raleighconcrete.net";
 export const BUSINESS_ID = `${SITE_URL}/#business`;
 export const WEBSITE_ID = `${SITE_URL}/#website`;
 
-// Service-area business: we serve the Triangle from Raleigh. We assert the
-// locality/region (no fabricated street address) plus an explicit areaServed.
+// Service-area business: locality/region and areaServed only, no street address.
 export const SERVICE_AREAS = [
   "Raleigh",
   "Cary",

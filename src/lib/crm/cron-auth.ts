@@ -1,12 +1,5 @@
-// The one check standing between Vercel Cron and anybody who has guessed a
-// route name. Server-only: it reads CRON_SECRET.
-//
-// Was three copies of the same four lines, one per cron route, each comparing
-// with `===`. Two problems with that, and the duplication is the smaller one:
-// a plain string compare on a secret returns as soon as it finds a byte that
-// differs, so how long it takes to say no is a function of how much of the
-// secret was right. verifyWebhook in stripe.ts already does this properly, and
-// there was no reason for the crons to be the exception.
+// Guards the cron routes. Server-only (reads CRON_SECRET). Constant-time compare: === leaks how much of
+// the secret matched.
 import { timingSafeEqual } from "node:crypto";
 
 if (typeof window !== "undefined") {
@@ -14,15 +7,8 @@ if (typeof window !== "undefined") {
 }
 
 /**
- * Did this request come from our scheduler?
- *
- * Vercel Cron sends the secret as a Bearer token. Anything else - a missing
- * header, a wrong scheme, a near-miss - is a no, and every no costs the same
- * amount of time.
- *
- * Fails CLOSED when CRON_SECRET is unset. An unset secret is a misconfigured
- * deploy, and the safe reading of it is "nobody may run the crons" rather than
- * "everybody may": these routes text customers and the crew.
+ * Vercel Cron sends the secret as a Bearer token; anything else is a no, in constant time.
+ * Fails CLOSED when CRON_SECRET is unset: these routes text customers and crew.
  */
 export function cronAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET || "";
@@ -32,9 +18,7 @@ export function cronAuthorized(request: Request): boolean {
   const expected = Buffer.from(`Bearer ${secret}`, "utf8");
   const given = Buffer.from(header, "utf8");
 
-  // timingSafeEqual throws on a length mismatch, so the lengths are compared
-  // first. That does leak the LENGTH of the secret, which is not a secret worth
-  // protecting - the contents are, and those are compared in constant time.
+  // timingSafeEqual throws on length mismatch. Leaks only the length, not the contents.
   if (expected.length !== given.length) return false;
   return timingSafeEqual(expected, given);
 }

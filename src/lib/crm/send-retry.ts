@@ -1,27 +1,14 @@
-// What the queue does with the result of one send attempt.
-//
-// Pure, and in its own file, because this is the decision that decides whether
-// a customer's text survives a bad afternoon - and it is easy to get subtly
-// wrong. The first version keyed the whole thing on whether an HTTP status came
-// back, which quietly put "we never made the request" in the same bucket as
-// "the request may have gone through". A missing QUO_API_KEY then destroyed
-// every queued message the next drain touched, which is the exact failure the
-// retry was written to prevent.
-//
-// No imports, no I/O: finishMessage applies the plan, the tests check it.
+// What the queue does with one send attempt's result. Pure (finishMessage applies it, tests check it).
+// Keyed on what we know happened, not whether a status came back: "never made the request" must not be
+// treated like "may have gone through", or a missing QUO_API_KEY destroys the queue.
 
 /**
- * How many times the queue hands one row to the provider before giving up.
- *
- * A cap rather than forever: a number that is a landline, or a workspace that
- * cannot message it, fails identically every time, and retrying that until the
- * heat death of the universe is only noise in the log. Three rides out a
- * provider blip and stops quickly on something that will never send.
+ * A capped number: a landline or unmessageable number fails identically every time. Three rides out a
+ * provider blip.
  */
 export const MAX_SEND_ATTEMPTS = 3;
 
-// Far enough out that a retry is a fresh attempt rather than a hammering, near
-// enough that the next drain picks it up rather than tomorrow's.
+// Long enough to not hammer, short enough for the next drain.
 export const RETRY_BACKOFF_MINUTES = 10;
 
 export type SendOutcome = {
@@ -32,32 +19,21 @@ export type SendOutcome = {
 };
 
 export type RetryPlan = {
-  /** Release the claim and let the next drain try again. */
+  /** Release the claim so the next drain retries. */
   retrying: boolean;
-  /** What to store in `attempts`. An unsent row spends nothing. */
+  /** An unsent row spends nothing. */
   attempts: number;
-  /** Appended to the provider's own words in the log. Null when there is nothing to add. */
+  /** Appended to the provider's words in the log. */
   note: string | null;
 };
 
 /**
- * Decide from what we actually know, not from what came back.
- *
- *   unsent     no request was made - a missing API key, an unset from-number.
- *              Nothing was tried, so it costs no attempt and is ALWAYS put
- *              back: a misconfigured deploy must not eat the queue. These rows
- *              wait, visibly, until the setting is fixed, and then they send.
- *
- *   a status   the round trip finished and the provider refused it. It did not
- *              send, so retry until the cap.
- *
- *   no status  the call threw - a timeout, a dropped connection. We cannot tell
- *              whether it arrived, so it stays claimed. A text nobody got beats
- *              one sent twice when the ambiguity is real.
- *
- * `attempts` is what the row carries now. Pass MAX_SEND_ATTEMPTS to declare a
- * row terminal - used for a held row with no number or body, which has nothing
- * to attempt and should not be annotated as though something was tried.
+ *   unsent     no request made (missing API key, unset from-number). Costs no attempt and is ALWAYS put
+ *              back: a misconfigured deploy must not eat the queue.
+ *   a status   the provider refused it; retry until the cap.
+ *   no status  the call threw (timeout, dropped connection). It may have arrived, so it stays claimed:
+ *              a missed text beats a duplicate.
+ * Pass MAX_SEND_ATTEMPTS as `attempts` to make a row terminal (a held row with no number or body).
  */
 export function planRetry(result: SendOutcome, attempts = 0): RetryPlan {
   const tried = attempts + 1;

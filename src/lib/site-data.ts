@@ -1,5 +1,4 @@
-// ── Raleigh Concrete Group - central site data ──────────────────────────────
-// Edit content here; the homepage, location pages, header and SEO all read from it.
+// Central site content: homepage, location pages, header and SEO read from here.
 
 export const businessName = "Raleigh Concrete Group";
 export const phoneDisplay = "(919) 873-3919";
@@ -36,9 +35,7 @@ export type ServiceGroup = "core" | "concrete" | "hardscaping";
 export type Service = {
   slug: string;
   name: string;
-  // The name where a sentence needs one of it: "a Concrete Driveway quote",
-  // not "a Concrete Driveways quote". Only set when it differs from `name`;
-  // read it through serviceSingular().
+  // "a Concrete Driveway quote", not "Driveways". Only set when it differs from `name`; read via serviceSingular().
   singular?: string;
   navLabel: string;
   group: ServiceGroup;
@@ -53,7 +50,7 @@ export type Service = {
 export const serviceSingular = (s: Pick<Service, "name" | "singular">): string => s.singular ?? s.name;
 
 export const services: Service[] = [
-  // ── Core 6 (priority, shown in nav + homepage) ──
+  // Core 6: shown in nav and homepage.
   {
     slug: "concrete-driveways",
     name: "Concrete Driveways",
@@ -177,7 +174,6 @@ export const services: Service[] = [
     showcaseImage: "/images/stampted_patio_2.png",
   },
 
-  // ── Concrete (volume + satellite-quotable) ──
   {
     slug: "concrete-slabs-flatwork",
     name: "Concrete Slabs & Flatwork",
@@ -349,7 +345,6 @@ export const services: Service[] = [
     showcaseImage: "/images/hoa_sidewalk_commercial.png",
   },
 
-  // ── Hardscaping (high-ticket) ──
   {
     slug: "paver-driveways",
     name: "Paver Driveways",
@@ -472,11 +467,8 @@ export function getService(slug: string): Service | undefined {
   return services.find((s) => s.slug === slug);
 }
 
-// ── Service FAQs ──
-// High-intent Q&A for the money pages. Answers intentionally avoid price
-// figures, warranty claims and licensing claims (per business policy) and lean
-// on durability, process and free-quote messaging. Rendered on service pages
-// and emitted as FAQPage structured data.
+// Service FAQs (also emitted as FAQPage structured data). Per business policy, no price figures, warranty
+// claims or licensing claims.
 export type FaqItem = { q: string; a: string };
 
 const universalServiceFaqs: FaqItem[] = [
@@ -596,27 +588,14 @@ export function getServiceFaqs(slug: string): FaqItem[] {
   return [...specific, ...universalServiceFaqs];
 }
 
-// Specific (non-universal) service FAQs, used when composing city+service pages
-// so we don't repeat the site-wide "what areas do you serve" answer everywhere.
+// Excludes site-wide answers so city+service pages don't repeat them.
 export function getServiceSpecificFaqs(slug: string): FaqItem[] {
   return serviceFaqMap[slug] ?? [];
 }
 
-// ── City + Service landing pages (/[city]/[service]) ──
-// A page in this space exists if and only if it has hand-written copy in
-// `cityServiceLocalContent` below. The pair list is DERIVED from that record,
-// so there is no way to publish a city+service URL without first writing real
-// content for it.
-//
-// This used to be the full cross product: 10 cities x 6 core services = 60
-// pages, of which 8 had bespoke copy and 52 were generated from a sentence
-// template with the city name and two neighborhoods swapped in. Google read
-// those 52 exactly as what they were - it folded
-// /chapel-hill/stamped-decorative-concrete into the Raleigh version
-// ("Duplicate, Google chose different canonical") and left ~79 of the ~99
-// sitemap URLs at "Discovered - currently not indexed", never spending the
-// crawl. Every pair without an entry below now 301s to /services/<slug>
-// instead; see next.config.ts.
+// A /[city]/[service] page exists only if it has hand-written copy in `cityServiceLocalContent`; the pair
+// list is derived from it. Templated pages were treated by Google as duplicates and not indexed; pairs
+// without an entry 301 to /services/<slug> (next.config.ts).
 export type CityServiceContent = {
   service: Service;
   city: string;
@@ -630,28 +609,12 @@ export type CityServiceContent = {
   faqs: FaqItem[];
 };
 
-// ── Hand-written city+service pages ──
-// The single source of truth for which /[city]/[service] URLs exist. Keyed by
-// `${locationKey}/${slug}`. Every entry carries a unique intro, a
-// representative local project, city-specific FAQs and its own meta
-// description - no shared template text, because shared template text is what
-// got the old matrix de-indexed (see cityServicePairs below).
-//
-// Which pairs live here is driven by real demand, not a hunch:
-//  - Raleigh's four are the highest-value pages on the site per docs/seo.md -
-//    the driveway and stamped-concrete keyword clusters are P1 (near-zero
-//    difficulty, high CPC) and are targeted directly at these URLs, not at
-//    /services/<slug>. See RALEIGH_BRANDED_SERVICE_SLUGS in
-//    src/app/services/[service]/page.tsx for how that page keeps its own
-//    <title> from competing with these for the same phrase.
-//  - Morrisville and Chapel Hill were the strongest non-Raleigh city surfaces
-//    in Search Console despite having no bespoke copy at all; Durham produced
-//    a click on a single impression. Cary and Apex kept their existing pages.
-//
-// Project examples are framed as "what a typical project here looks like" so
-// nothing claims a specific past customer, and local rules are described in
-// general terms with an explicit "we'll confirm what yours needs" - we are not
-// the permitting authority and must not read as if we are.
+// The single source of truth for which /[city]/[service] URLs exist, keyed `${locationKey}/${slug}`. Each
+// entry has unique copy: shared template text gets pages de-indexed.
+// Pairs are chosen from demand (docs/seo.md, Search Console). Raleigh's are the P1 targets; see
+// SLUGS_WITH_OWN_RALEIGH_PAGE in src/app/services/[service]/page.tsx for how that page avoids competing.
+// Projects are framed as "typical" so nothing claims a specific customer, and local rules end with "we'll
+// confirm what yours needs": we are not the permitting authority.
 type PriorityContent = {
   intro: string[];
   projectExample: string;
@@ -839,10 +802,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
     ],
   },
 
-  // ── Morrisville ──
-  // The strongest city surface in Search Console by a wide margin, and it was
-  // running on template copy the whole time. Retaining wall queries lead by
-  // roughly 3x, followed by exposed aggregate, driveways and paver patios.
+  // Morrisville: retaining wall queries lead roughly 3x.
   "morrisville/retaining-walls": {
     metaDescription:
       "Retaining wall contractor in Morrisville, NC. Engineered block and poured walls with real drainage behind them, built for the grade changes around Kitts Creek, Carpenter Village and Breckenridge. Free quotes.",
@@ -968,10 +928,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
     ],
   },
 
-  // ── Chapel Hill ──
-  // Second strongest city surface. Driveway queries dominate, and a notable
-  // share of them ask for asphalt/blacktop - which we do not install. The
-  // driveway page answers that head-on rather than letting the visitor bounce.
+  // Chapel Hill: many driveway queries ask for asphalt, which we don't install; the page addresses it.
   "chapel-hill/concrete-driveways": {
     metaDescription:
       "Concrete driveway installation and replacement in Chapel Hill, NC. Built for hilly lots, mature tree roots and Chapel Hill's stormwater rules. Free written quotes.",
@@ -1045,9 +1002,6 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
     ],
   },
 
-  // ── Durham ──
-  // Small but real: one click on one impression for "durham concrete company",
-  // and steady driveway-installation demand.
   "durham/concrete-driveways": {
     metaDescription:
       "Concrete driveway installation and replacement in Durham, NC. Historic-district-aware work in Trinity Park and Hope Valley, plus newer subdivisions near Southpoint. Free quotes.",
@@ -1098,10 +1052,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
   },
 };
 
-// The published city+service URL space, derived from the hand-written content
-// above. There is deliberately no template fallback: if a pair has no entry in
-// `cityServiceLocalContent` it has no page, and next.config.ts 301s it to the
-// service page instead.
+// No template fallback: a pair without an entry has no page and next.config.ts 301s it.
 export const cityServicePairs: { location: LocationKey; service: string }[] =
   Object.keys(cityServiceLocalContent).map((key) => {
     const [location, service] = key.split("/");
@@ -1114,10 +1065,7 @@ export function isCityServicePair(location: string, service: string): boolean {
   return cityServicePairKeys.has(`${location}/${service}`);
 }
 
-/**
- * Which hand-written service pages exist for a city. Used by the cross-link
- * block so a city page never links at a sibling URL that now redirects away.
- */
+/** For cross-links, so a city page never links to a URL that redirects away. */
 export function cityServicesFor(location: LocationKey): string[] {
   return cityServicePairs.filter((p) => p.location === location).map((p) => p.service);
 }
@@ -1149,9 +1097,7 @@ export function getCityServiceContent(
   };
 }
 
-// Localized FAQs for city landing pages. The city name is woven into each
-// answer so every location page carries unique FAQ content (no boilerplate
-// duplication that could read as doorway pages).
+// The city name is woven into each answer so location pages don't read as doorway pages.
 export function getLocationFaqs(city: string): FaqItem[] {
   return [
     {
@@ -1173,7 +1119,6 @@ export function getLocationFaqs(city: string): FaqItem[] {
   ];
 }
 
-// Simple, customer-friendly options for the quote-request dropdown.
 export const quoteServiceOptions = [
   "Driveway",
   "Patio",
@@ -1187,11 +1132,9 @@ export const quoteServiceOptions = [
   "Other",
 ];
 
-// Photo of our team walking a homeowner through their quote - used to build trust.
 export const trustImage = "/images/servicing-to-client-image.png";
 export const clipboardImage = "/images/contractor_holding_pen+paper.png";
 
-// ── Header dropdowns: residential vs commercial ──
 export type NavLink = { label: string; slug: string };
 
 export const residentialNav: NavLink[] = [
@@ -1216,7 +1159,6 @@ export const commercialNav: NavLink[] = [
 ];
 export const commercialServiceSlugs = new Set(commercialNav.map((item) => item.slug));
 
-// ── "What to Expect" 3-step process ──
 export type ProcessStep = { title: string; body: string };
 export const processSteps: ProcessStep[] = [
   {
@@ -1233,7 +1175,6 @@ export const processSteps: ProcessStep[] = [
   },
 ];
 
-// ── Stat bar ("What makes us different") ──
 export type Stat = { value: string; label: string };
 export const homeStats: Stat[] = [
   { value: "5.0★", label: "Rated on Google" },
@@ -1242,7 +1183,6 @@ export const homeStats: Stat[] = [
   { value: "Free", label: "Written Quotes" },
 ];
 
-// ── About / welcome copy ──
 export const aboutParagraphs: string[] = [
   "Finding a concrete contractor you can actually count on in Raleigh shouldn't be this hard. At Raleigh Concrete Group, our crews have poured and built countless driveways, patios, walkways and retaining walls across the Triangle, and we treat every job like it's at our own home.",
   "Whether you need a brand-new driveway, a backyard patio you'll actually use, or a commercial slab done on schedule, we start with a free, detailed quote so you know the price before we ever break ground. Our crews are experienced, respectful on site, and familiar with local codes across Raleigh and the surrounding towns.",
@@ -1256,12 +1196,9 @@ export const valueProps = [
 
 export type GalleryImage = { src: string; alt: string };
 
-// "Recent work" gallery shown in the auto-scrolling carousels and the /gallery
-// page. Intentionally excludes before/after pairs (those live in the dedicated
-// comparison sliders) and the customer-service trust photo (used in About).
+// Excludes before/after pairs (comparison sliders) and the trust photo (About).
 export const galleryImages: GalleryImage[] = [
-  // Newest first. Paver work, 2026: one or two frames per job rather than every
-  // angle - four shots of the same patio read as a thin portfolio, not a deep one.
+  // Newest first. One or two frames per job: four shots of one patio read as a thin portfolio.
   { src: "/images/pavers_patio_cobble_finished.jpeg", alt: "Tumbled cobble paver patio with charcoal border" },
   { src: "/images/pavers_patio_base_prep_crew.jpeg", alt: "Our crew screeding the base for a paver patio" },
   { src: "/images/pool_deck_pavers_wide.jpeg", alt: "Paver pool deck surrounding a backyard pool" },
@@ -1270,7 +1207,6 @@ export const galleryImages: GalleryImage[] = [
   { src: "/images/pavers_patio_white_inlay_border.jpeg", alt: "Paver patio with contrasting border detail" },
   { src: "/images/pavers_steps_lighting.jpeg", alt: "Paver steps with built-in riser lighting" },
   { src: "/images/pavers_walkway_curved_side_yard.jpeg", alt: "Curved paver walkway along the side of a home" },
-  // Earlier work.
   { src: "/images/residential_driveway_raleigh_concrete_2.png", alt: "Newly poured residential driveway" },
   { src: "/images/pavers_driveway.png", alt: "Custom paver driveway in Raleigh" },
   { src: "/images/retaining_wall.png", alt: "Block retaining wall installation" },

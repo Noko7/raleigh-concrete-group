@@ -1,8 +1,4 @@
-// CRM wording, in one place. It used to carry a Spanish copy as well; that was
-// retired, and the CRM is English only. The Locale type and dict() are kept so
-// the pages that read strings through them didn't all need rewriting.
-//
-// Safe to import from client components - there are no server-only deps here.
+// CRM wording, English only. Locale and dict() remain so callers didn't need rewriting. Client-safe.
 
 export const LOCALES = ["en"] as const;
 export type Locale = (typeof LOCALES)[number];
@@ -86,21 +82,18 @@ const en = {
     pillTriedAfterLost: "Tried to open after Lost: {n}x",
     textBtn: "Text",
     deleteLead: "Delete",
-    // {name} is replaced with the customer's name.
     deleteConfirm: "Delete {name}'s lead from the pipeline? You can restore it later from Archived.",
     deleted: "Lead deleted. Restore it anytime from Archived.",
     errMove: "Could not move that quote.",
     errDelete: "Could not delete that lead.",
     nextUp: "Do this next",
-    // {age} is how long it has been waiting, e.g. "3d".
+    // {age}: how long it has been waiting, e.g. "3d".
     waitingFor: "waiting {age}",
-    // {n} is how many other leads are also unquoted.
+    // {n}: how many other leads are also unquoted.
     alsoWaiting: "{n} more waiting",
     sittingOnWork: "Unquoted leads:",
     errAssign: "Could not assign.",
-    // Phone only. The board becomes one stage at a time down there, so these
-    // are the chips that pick which one, and the card's own controls fold away
-    // behind Change so twenty jobs stay a list rather than a scroll.
+    // Phone only: the board shows one stage at a time, picked with these chips.
     stagePicker: "Pick a stage",
     noneInStage: "Nothing in this stage.",
     change: "Change",
@@ -168,8 +161,6 @@ const en = {
     title: "Finish the job",
     confirmed: "Customer confirmed the date.",
     scheduledNote: "Installation scheduled. The customer gets a reminder to confirm two days before.",
-    // No longer promises payment is a later step: it is on this same page now,
-    // in the money card, and has been collectable since the day they approved.
     hint: "When the work is done on site, mark it completed to thank the customer and ask them for a review.",
     markCompleted: "Mark completed",
   },
@@ -240,15 +231,13 @@ const en = {
     kindOnline: "Online quote",
     tomorrow: "Tomorrow",
     yesterday: "Yesterday",
-    // {n} is replaced with the number of days.
     inDays: "in {n} days",
     daysAgo: "{n} days ago",
     earlier: "Earlier",
     allDay: "All day",
     empty: "Nothing scheduled yet. Booked jobs and quote visits show up here.",
     dragHint: "Drag an appointment to another day to reschedule it.",
-    // A slot an online customer offered in case photos aren't enough. Nobody
-    // has agreed to it, so it says so on its face rather than only in a colour.
+    // Nobody has agreed to it, so it says so in words, not only colour.
     notBooked: "Not booked",
     requestedNote:
       "This is a slot {name} offered in case photos aren't enough to price the job. Nobody has agreed to it and nobody is driving to it. Open the job to confirm it as a real visit, or price it from the photos and it disappears.",
@@ -277,7 +266,6 @@ const en = {
     removeVisit: "Remove the visit",
     moveNoteJob: "The customer gets a text that their project moved, and the crew and calendar are updated.",
     moveNoteVisit: "The customer gets a text that their quote visit moved.",
-    // {name} is replaced with the customer's name.
     warnJob: "This releases {name}'s work day. The job goes back to Needs scheduling and stays in your pipeline.",
     warnVisit: "This removes {name}'s quote visit. The lead stays in your pipeline.",
     notifyLabel: "Text {name} that it was cancelled",
@@ -332,14 +320,9 @@ const en = {
     remove: "Delete",
     ownerHint: "Add a contractor agreement on the Contractors page, or a customer agreement from that job's page.",
   },
-  // The line-item builder. A quote is either one price or a list of things the
-  // customer answers one at a time - "yes to the patio, no to the sidewalk" -
-  // and these are the words on the crew's own screen while they write it.
   quoteOptions: {
     title: "Break the price into line items (optional)",
-    // Leads with the breakdown, because that is what most customers who ask for
-    // "line items" mean: show me what I'm paying for. Optional extras are the
-    // second use, not the first.
+    // Leads with the breakdown: that's what most customers asking for "line items" mean.
     emptyHint:
       "Leave this empty for one price. Add a line for each part of the job to show the customer exactly what they're paying for - the total adds itself up. You can also add optional extras they can say yes or no to.",
     hint: "Every line is part of the job unless you let the customer say no to it. They only answer yes or no to the extras.",
@@ -359,25 +342,20 @@ const en = {
     moveUp: "Move up",
     moveDown: "Move down",
     allInTotal: "All in, if they take everything",
-    // When every line is part of the job there is nothing to "take" - it is
-    // just the total.
+    // When every line is required there is nothing to "take".
     total: "Total",
-    // ── Split view: the price breakdown, and the extras kept apart from it ──
-    // A customer who asks "how much is the concrete and how much is the labor"
-    // is asking for this section, so it is the one that is always open.
+    // Always open: "how much is concrete vs labor" is the common question.
     breakdownTitle: "Price breakdown",
     breakdownEmpty:
       "Show the customer what they're paying for: materials, labor and anything else, each with its own price. The total adds itself up. Leave it empty for a single price.",
     breakdownHint: "Every line here is part of the job. The customer sees each one, and the total is their sum.",
     breakdownLinePlaceholder: "e.g. Materials",
     breakdownDescPlaceholder: "Optional. e.g. 4,000 psi concrete, rebar and forms",
-    // Against the price the customer is already holding. {quoted} is that
-    // price, {diff} the gap.
+    // {quoted}: the price the customer holds; {diff}: the gap.
     breakdownUnder: "Quoted price {quoted}. {diff} still to put on a line.",
     breakdownOver: "Quoted price {quoted}. These lines come to {diff} more.",
     breakdownMatches: "Adds up exactly to the quoted price of {quoted}.",
-    // With two prices on offer, a line here is added to whichever they pick -
-    // it is not a breakdown of either one, and the heading has to say so.
+    // With packages, a line here is added to whichever they pick, not a breakdown of either.
     breakdownChoiceTitle: "Added to every option",
     breakdownChoiceHint: "These lines are added to whichever option the customer picks.",
     extrasTitle: "Optional extras",
@@ -391,9 +369,6 @@ const en = {
     answerNo: "Turned down",
     answerNone: "No answer",
   },
-  // The other question customers ask, which line items cannot answer: not "and
-  // also the sidewalk" but "or instead, in asphalt". Two complete ways of doing
-  // the same job, and the customer picks exactly one.
   quotePackages: {
     title: "Give them a choice (optional)",
     emptyHint:
@@ -420,8 +395,6 @@ const en = {
     answerPicked: "They picked this",
     answerNotPicked: "Not picked",
   },
-  // "They said it's too much, send them the asphalt price too." One modal off
-  // the Quotes sent card, rather than four screens of the quote editor.
   addOption: {
     open: "Send them another option",
     openHint: "{name} is holding this quote. Add a second way to do the job and they can compare both on the link they already have.",
@@ -455,9 +428,7 @@ const en = {
     sentHeld: "Saved. The text goes out {when}.",
     sentFailed: "The option was saved, but the text did NOT go out. Send them the quote link yourself.",
   },
-  // Every version of the quote that has gone to this customer. Shown above the
-  // logs on both job pages, because "what have we actually told them" is asked
-  // before "who was told what and when".
+  // Shown above the logs: "what have we told them" comes first.
   quoteLog: {
     title: "Quotes sent",
     none: "No quote has gone to this customer yet.",
@@ -467,8 +438,7 @@ const en = {
     corrected: "Correction",
     optionAdded: "{title} added",
     first: "First quote",
-    // Short on purpose: it sits in the price column, where a long string
-    // wraps and makes one row taller than the rest.
+    // Short: it sits in the price column, where wrapping makes the row taller.
     noPrice: "No price",
     retract: "Sent to the wrong customer?",
     retractWarn:
@@ -477,15 +447,12 @@ const en = {
     retractKeep: "Keep it",
     retracting: "Retracting…",
   },
-  // Writing down a yes that happened out loud. The card is on both job pages,
-  // because the call lands wherever the person who takes it happens to be.
+  // On both job pages: the call lands wherever the person who takes it is.
   acceptOffline: {
     title: "Approved over the phone?",
     lead: "If {name} said yes on a call, record it here instead of sending another quote for them to tap. You can set the day you agreed to at the same time - any day from today.",
     open: "Record their approval",
-    // On a quote that offered a choice of ways to do the job, the first thing
-    // to get out of the caller: which one. Nothing else on this form can be
-    // filled in honestly until it is answered.
+    // Asked first: nothing else on the form can be answered until this is.
     whichOption: "Which option did they go with?",
     whichOptionHint: "They were offered a choice. Pick the one they agreed to on the call.",
     pickOption: "Say which option they took before recording the approval.",
@@ -508,8 +475,7 @@ const en = {
     answerAll: "Mark every optional line took it or left it first.",
     tookNothing: "They left every line. That's a declined quote - ask the office to mark it lost.",
   },
-  // Moving the price on a job that is already agreed, with the customer's say-so.
-  // The crew take the call that starts this, so the card is on their page too.
+  // On the crew page too: the crew take the call that starts a change.
   changeOrder: {
     title: "Customer wants a change?",
     lead: "Say what's changing and what the job comes to now, as one figure or broken down into materials, labor and more. They approve it on the same link they approved the job on, and nothing moves until they do.",
@@ -523,16 +489,13 @@ const en = {
     alreadyPaid: "Already paid",
     newBalance: "New balance",
     sameTotal: "That's the total they already agreed to.",
-    // ── The breakdown that can come with a change ──
     breakdownEmpty:
       "Optional. Break the new total into materials, labor and anything else, and the customer sees each line. Leave it empty to send one figure.",
     breakdownHint:
       "Starts with what they already agreed to. Add a line for what's new, like extra materials, and the total goes up by that amount. The customer sees every line.",
     linesTitle: "New price breakdown",
-    // The job had a breakdown and the change has none.
     linesGone: "The old breakdown comes off and the job goes back to one price.",
     sameTotalNewLines: "Same total as before. They're approving the new breakdown.",
-    // ── A second deposit, for materials on the added work ──
     depositToggle: "Ask for a second deposit up front",
     depositHint: "For materials on the added work. {name} pays it on approval, and the rest when the work is done.",
     depositLabel: "Second deposit",
@@ -543,11 +506,8 @@ const en = {
     pendingDeposit: "Deposit due on approval",
     refundWarn: "That's less than they've already paid, so we'd owe them {amount} back. Worth a call before you send it.",
     sendHint: "{name} gets a text with the change and a link. Their date doesn't move.",
-    // ── The preview, between composing a change and sending it ──
-    // A change order is built on the job's balance, and the balance is built on
-    // whatever the crew recorded as paid. If a deposit went in as the whole job,
-    // every figure the customer is about to read is wrong - so the step before
-    // sending shows the payments it was all worked from.
+    // The change is built on the balance, which is built on recorded payments; a deposit recorded as the whole
+    // job makes every figure wrong, so the review step shows those payments.
     review: "Review it before sending",
     reviewTitle: "This is what {name} will see",
     reviewBack: "Back to the change",
@@ -567,19 +527,15 @@ const en = {
     ledgerHint:
       "The balance above is worked out from these. If one of them is wrong, ask the office to correct it before you send this - the customer approves a balance, not just a total.",
     ledgerVoided: "voided, not counted",
-    // The exact shape of the bug this preview exists to catch.
+    // The case the review step exists to catch.
     paidInFullWarn:
       "Careful: this job already reads as paid in full and the work isn't finished. If only a deposit actually came in, the balance above is wrong. Ask the office to correct the payment before you send this.",
     confirmTick: "I've checked the payments above are right",
-    // No deposit. The tick is now a statement that nothing has been taken.
     confirmTickNone: "I've checked - they haven't paid anything yet",
     ledgerHintNone:
       "So they'll be asked for the whole new total. If they did hand over a deposit that was never recorded, record it first.",
     sendTo: "Send it to {name}",
-    // Agreed on the phone or on site: there is nobody to ask, so the job is
-    // updated now and the customer isn't texted.
-    // Ticked: they get a text and approve it. Unticked: they already agreed
-    // (phone or in person), so the job is updated now with no text.
+    // Ticked: customer gets a text to approve. Unticked: already agreed (phone or in person), job updates now.
     textTick: "Send text to customer for approval?",
     agreedHint: "No text - use this when {name} already agreed (phone or in person). The new total goes on the job right away.",
     paidTick: "{name} already paid for this change",
@@ -607,9 +563,7 @@ const en = {
     service: "Service",
     address: "Address",
     openInMaps: "Open in Maps",
-    // The label over the date at the top of the page. Once a work day is booked
-    // the pill above it already says "Installation scheduled", so this names
-    // what the date IS rather than repeating the state: the day of the pour.
+    // The pill already says "Installation scheduled", so this names the date: the day of the pour.
     scheduledJob: "Work day",
     quoteVisit: "Quote visit",
     preferredTime: "Preferred time",
@@ -628,9 +582,7 @@ const en = {
     schedNothing: "Nothing to schedule yet - the customer hasn't approved their quote.",
     reschedule: "Reschedule",
     reschedNewDay: "New day",
-    // Spelled back out under every date picker on this page: the boxes
-    // themselves are ordered by the phone, not by us, so this is the only
-    // place the crew can see which day they actually picked.
+    // The phone orders the date boxes, so this is the only place the crew see which day they picked.
     dateTooEarly: "{picked} has already passed. Pick {min} or later.",
     reschedSave: "Save the new time",
     reschedNoteJob: "The customer and the crew get a text with the new day.",
@@ -644,9 +596,7 @@ const en = {
     notScheduled: "No date set yet",
     jobScheduled: "Installation scheduled",
     noVisitNeeded: "No visit needed - quote from the photos",
-    // What has actually happened on this job, newest first. Deliberately not the
-    // office's full audit log: a contractor needs the handful of moments that
-    // change what they do next, not every note edit and internal price tweak.
+    // Not the office's full audit log: only moments that change what the crew do next.
     logTitle: "What's happened",
     logEmpty: "Nothing has happened on this job yet.",
     logMore: "Show earlier activity",
@@ -657,9 +607,7 @@ const en = {
       quoteOptionAdded: "Another option sent: {title}",
       customerViewed: "Customer opened the quote",
       customerAccepted: "Customer approved the quote",
-      // Never "Customer approved the quote" for one of these: on this log a
-      // crew member needs to know whether the yes came from the customer's own
-      // link or from somebody writing down a phone call.
+      // The crew must know whether the yes came from the customer's link or a recorded phone call.
       customerAcceptedPhone: "Approval recorded from a phone call",
       customerDeclined: "Customer declined the quote",
       visitConfirmed: "Quote visit confirmed",
@@ -705,9 +653,7 @@ const en = {
       "Nothing has changed yet. Edit the price, a section or the breakdown, otherwise this is the same quote they already have.",
     quoteFixSend: "Send the revised quote",
     quoteFixOk: "Revised quote texted to the customer.",
-    // What the customer actually bought on a quote with line items. The crew
-    // needs this before they load the truck: "approved" does not say whether
-    // there is a sidewalk to pour.
+    // The crew need this before loading the truck: "approved" doesn't say whether there's a sidewalk.
     approvedScope: "What they approved",
     approvedScopeHint: "Build these. Anything below them was turned down.",
     turnedDown: "Turned down",
@@ -740,10 +686,7 @@ const en = {
     quoteSend: "Send quote to customer",
     quoteSending: "Sending…",
     quoteOk: "Quote texted to the customer.",
-    // Quiet hours held the customer's text. Not a failure and not a delivery,
-    // so it gets its own line rather than borrowing either one's words - a
-    // contractor told their quote failed at 9pm either sends it again or spends
-    // the evening thinking the job is stuck.
+    // Held by quiet hours: neither a failure nor a delivery, so it has its own wording.
     quoteQueued: "Saved. Their text is scheduled for {when} - we don't text customers between 7pm and 8am.",
     quoteFailed: "Saved, but the text didn't send. Call the office.",
     finishTitle: "Mark the job done",
@@ -767,9 +710,8 @@ const en = {
     doneTitle: "Work completed",
     doneNote: "Thanks. The office takes it from here.",
   },
-  // The queued-text override. Quiet hours hold a customer's text until 8am,
-  // which is right for a reminder and wrong for a corrected price, so there is
-  // a way over the rule that names what it is doing rather than hiding it.
+  // Quiet hours hold texts until 8am: right for a reminder, wrong for a corrected price. This override says
+  // what it's doing.
   heldText: {
     title: "Waiting to send",
     lead: "These texts are written and queued. They go out on their own, or you can send one now.",
@@ -781,38 +723,29 @@ const en = {
     waitingUntil: "Waiting until {when}",
     queuedFor: "Queued for {when}",
   },
-  // Money on a job, as the crew sees it. Two facts and two actions: what the
-  // customer still owes, what the crew owes the office, text a card link, or
-  // record what was handed over.
   payments: {
     title: "Money on this job",
     total: "Job total",
     paid: "Paid so far",
     due: "Still to collect",
     settled: "Paid in full",
-    // A second deposit from an approved change, still waiting to come in.
     dueNow: "Second deposit due now: {now}. The other {rest} is due when the work is done.",
     noPrice: "No price on this job yet, so there's nothing to collect.",
-    // The office's cut on the job, laid out whole: what it is and why, what
-    // has already been paid and how, and what is left. A contractor should
-    // never be surprised by it at the end of a month.
+    // Laid out whole so a contractor is never surprised by it at month end.
     feeTitle: "Office fee",
     feeRate: "{rate} of the {total} job.",
-    // Before any money moves the rate is a preview - an intro-rate job can
-    // become a standard one if another job of theirs is paid first.
+    // Before money moves the rate is a preview: an intro-rate job can become standard if another job is paid first.
     feeRateLocks: "{rate} of the {total} job. The rate locks in when the first payment comes in.",
     feePaidCard: "Taken out of card payments",
     feePaidHand: "You sent the office",
     feeStillOwed: "Still owed",
-    // On a payment row: the part of it that went to the office.
     rowFee: "{amount} office fee",
-    // The same three numbers said in the office's voice rather than the crew's.
-    // "You owe" is right on a contractor's phone and wrong on the owner's desk.
+    // Office voice: "you owe" is right on a contractor's phone, wrong on the owner's desk.
     officeCut: "Office cut",
     feeTaken: "taken by card",
     feeLeft: "still owed",
     feeSettledLabel: "sent over by hand",
-    // Owner-only: part of the fee taken off this job by hand.
+    // Owner-only.
     feeWaivedLabel: "waived by you",
     feeWaivedCrew: "Less {amount} waived by the office.",
     waiveOpen: "Adjust your fee",
@@ -820,8 +753,7 @@ const en = {
     waiveNoteHint: "e.g. change order was materials only",
     waiveSave: "Save",
     owedNone: "Nothing owed - it came out of the card payment.",
-    // The fee was paid, by the crew, after the fact. Not "it came out of the
-    // card payment", which on a cash job is simply untrue.
+    // Not "it came out of the card payment", which is untrue on a cash job.
     owedSettled: "Paid - you sent the office its cut. Nothing owed on this job.",
     owedCard: "Comes out of card payments automatically.",
     owedCash: "Send this over by Zelle or Venmo when you get a chance.",
@@ -844,15 +776,10 @@ const en = {
     refunded: "refunded",
     refund: "Refund",
     refunding: "Refunding…",
-    // {amount} is the sum going back to the customer.
     refundAsk: "Send {amount} back to the customer? The office fee goes back with it.",
-    // ── Correcting a recorded payment (owner only) ──
-    // The crew took a deposit and recorded the whole job. Nothing refused it,
-    // and until now nothing could put it right outside the Supabase console.
     fixOpen: "Correct",
     fixTitle: "Correct what was recorded",
-    // Deliberately says what this is NOT. An owner reaching for this button
-    // while a customer is owed money needs to be sent to the refund instead.
+    // Says what this is NOT: if the customer is owed money, use a refund.
     fixLead:
       "Use this when the figure keyed in isn't what the customer actually handed over. It changes the record only - no money moves either way. If money needs to go BACK to the customer, refund it instead.",
     fixWas: "Recorded as",
@@ -865,7 +792,6 @@ const en = {
     fixCardOnly: "Card payments come from Stripe and can't be edited here.",
     fixZeroHint: "Nothing came in at all? Don't enter $0 - take it off the books below.",
     voidOpen: "Take this off the books",
-    // {amount} is the figure coming off.
     voidAsk:
       "Void {amount}? Use this when the payment never happened at all - a duplicate, or money recorded against the wrong job. The row stays visible as voided so the books can still be reconciled.",
     voidReason: "Why is it coming off?",
@@ -916,24 +842,17 @@ const en = {
   },
 };
 
-// The annotation is the point: TypeScript flags any key that's missing or
-// misspelled here, so a partially translated release can't ship.
+// TypeScript flags any missing or misspelled key.
 export type Dict = typeof en;
 
-// English only. The argument is still accepted so the call sites that pass a
-// staff member's stored locale keep compiling; every value gets English.
+// English only; the argument is accepted so callers passing a stored locale still compile.
 export function dict(_locale?: Locale | string | null): Dict {
   return en;
 }
 
 export const intlLocale = (_l?: Locale) => "en-US";
 
-/**
- * A stored YYYY-MM-DD spelled out, e.g. "Friday, January 9, 2026".
- *
- * Parsed at local midnight rather than with `new Date(ymd)`, which reads a bare
- * date as UTC and lands on the day before.
- */
+/** Parsed at local midnight; `new Date(ymd)` reads a bare date as UTC and lands a day early. */
 export function longDay(ymd: string, locale: Locale): string {
   return new Date(`${ymd}T00:00:00`).toLocaleDateString(intlLocale(locale), {
     weekday: "long",
@@ -943,14 +862,7 @@ export function longDay(ymd: string, locale: Locale): string {
   });
 }
 
-/**
- * Fills {placeholders} in a dictionary string:
- *   fill(t.pipeline.deleteConfirm, { name: "Jane" })
- *
- * Word order differs between languages, which is exactly why these strings keep
- * the placeholder inside the sentence instead of being glued together from
- * fragments at the call site.
- */
+/** Fills {placeholders}: fill(t.pipeline.deleteConfirm, { name: "Jane" }). */
 export function fill(template: string, values: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (whole, key: string) =>
     key in values ? String(values[key]) : whole,

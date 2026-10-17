@@ -1,12 +1,5 @@
-// Adds up quote-funnel events into the figures the CRM's Funnel page shows.
-//
-// Pure on purpose - no network, no database - so it can be tested with node
-// --test and the page stays a thin layer of markup over it.
-//
-// Everything is counted per ATTEMPT (one opening of the form), not per event.
-// A step is "reached" once however many times someone went back and forth
-// through it, and a server rejection that bounces them back to Contact does not
-// count Contact twice.
+// Pure (testable with node --test). Counted per ATTEMPT (one form open), not per event: a step is reached
+// once however often someone goes back and forth.
 import { FUNNEL_STEPS, type FunnelEvent, type FunnelStep } from "./funnel.ts";
 
 export type FunnelRow = Pick<FunnelEvent, "attempt_id" | "visitor_id" | "form" | "event" | "step" | "ms" | "mode" | "detail" | "path" | "device">;
@@ -15,11 +8,10 @@ export type StepStats = {
   step: FunnelStep;
   reached: number;
   completed: number;
-  /** Attempts whose form was closed while on this step. */
   closedHere: number;
-  /** Median time spent on the step by those who got past it. */
+  /** Among those who got past it. */
   medianMs: number | null;
-  /** Median time spent on the step by those who gave up on it. */
+  /** Among those who gave up on it. */
   medianCloseMs: number | null;
 };
 
@@ -35,9 +27,9 @@ export type FunnelStats = {
   byMode: SplitRow[];
   byDevice: SplitRow[];
   byPath: SplitRow[];
-  /** "contact · phone+address" - where they closed, and what was unfinished. */
+  /** "contact · phone+address": where they closed and what was unfinished. */
   closeReasons: Count[];
-  /** "schedule · day_full" - every time the form said no. */
+  /** "schedule · day_full": every time the form said no. */
   errors: Count[];
 };
 
@@ -112,8 +104,7 @@ export function funnelStats(rows: FunnelRow[]): FunnelStats {
         }
         break;
       case "close":
-        // Only the first close counts: a pagehide straight after the close
-        // button is the same person leaving once.
+        // Only the first close counts: a pagehide right after the close button is the same exit.
         if (r.step && !closedAt.has(r.attempt_id)) {
           closedAt.set(r.attempt_id, r.step);
           if (r.ms !== null) push(closeMs, r.step, r.ms);
@@ -130,9 +121,7 @@ export function funnelStats(rows: FunnelRow[]): FunnelStats {
     }
   }
 
-  // Every attempt seen at all counts as opened, not only those whose open
-  // event arrived: beacons get lost (ad blockers, a dropped connection), and an
-  // attempt with steps but no open still happened.
+  // Every attempt seen counts as opened: open beacons get lost (ad blockers, dropped connections).
   const list = [...attempts.values()];
 
   const closedCount = new Map<string, number>();
@@ -140,7 +129,7 @@ export function funnelStats(rows: FunnelRow[]): FunnelStats {
 
   const steps: StepStats[] = FUNNEL_STEPS.map((step) => ({
     step,
-    // Choice is where every attempt starts, whether or not its view landed.
+    // Every attempt starts at choice, whether or not its view landed.
     reached: step === "choice" ? list.length : list.filter((a) => a.viewed.has(step) || a.doneSteps.has(step)).length,
     completed: list.filter((a) => a.doneSteps.has(step) || (step === "schedule" && a.submitted)).length,
     closedHere: closedCount.get(step) ?? 0,

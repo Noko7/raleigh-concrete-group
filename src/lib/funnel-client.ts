@@ -1,8 +1,5 @@
-// Browser side of the quote funnel (see funnel.ts for what is recorded and why).
-//
-// Fire-and-forget: sendBeacon where it exists, because it survives the page
-// being closed - and "closed the page halfway through" is the event this whole
-// thing is for. Nothing here can throw into the form or hold it up.
+// Browser side of the quote funnel (see funnel.ts). sendBeacon where available because it survives the
+// page closing, which is the event that matters. Must never throw into the form or hold it up.
 import { scrubPath, type FunnelEvent } from "./funnel";
 
 declare global {
@@ -19,9 +16,8 @@ function randomId(): string {
   }
 }
 
-// One id per browser tab, so the page can tell "12 people opened it" from "one
-// person opened it 12 times". sessionStorage, not a cookie: it is gone when the
-// tab closes and is never sent to the server with anything else.
+// Per tab, to tell 12 people from one person 12 times. sessionStorage: gone with the tab, never sent
+// with anything else.
 let memVisitor = "";
 function visitorId(): string {
   try {
@@ -65,9 +61,7 @@ export function trackFunnel(input: TrackInput): void {
     };
     const body = JSON.stringify(event);
 
-    // Mirrored into Microsoft Clarity when it is loaded (see clarity.tsx), so
-    // its recordings can be filtered to "people who gave up on Contact" and
-    // watched. A no-op when Clarity isn't configured.
+    // Mirrored into Clarity (when loaded) so recordings can be filtered by funnel step.
     window.clarity?.("event", `quote_${event.event}${event.step ? `_${event.step}` : ""}`);
 
     const sent = typeof navigator.sendBeacon === "function" && navigator.sendBeacon("/api/funnel", new Blob([body], { type: "application/json" }));
@@ -75,6 +69,6 @@ export function trackFunnel(input: TrackInput): void {
       fetch("/api/funnel", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
     }
   } catch {
-    // Analytics never gets to break the form.
+    // Analytics never breaks the form.
   }
 }
