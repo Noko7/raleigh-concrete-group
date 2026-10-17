@@ -128,8 +128,8 @@ export type MoneyBoard = {
   entries: LedgerEntry[];
   /** Empty is the healthy state. */
   attention: AttentionRow[];
-  /** Payment tables missing (read returned 404). */
-  missingTables: boolean;
+  /** A payments or settlements read failed, so those figures are missing. */
+  paymentsReadFailed: boolean;
   /** Reads that hit their row ceiling. Non-empty means the totals cover only a slice. */
   truncated: string[];
   /**
@@ -144,8 +144,11 @@ export type MoneyBoard = {
 
 async function readRows<T>(session: Session, path: string): Promise<{ rows: T[]; ok: boolean }> {
   const res = await pgUser(path, session.accessToken);
-  // 404 = table missing, reported separately from "no rows".
-  if (!res.ok) return { rows: [], ok: false };
+  // A failed read is reported separately from "no rows".
+  if (!res.ok) {
+    console.error("[money] read failed", { path: path.split("?")[0], status: res.status });
+    return { rows: [], ok: false };
+  }
   return { rows: (await res.json()) as T[], ok: true };
 }
 
@@ -473,7 +476,7 @@ export async function moneyBoard(
     jobs,
     entries,
     attention,
-    missingTables: !paymentsRes.ok || !settlementsRes.ok,
+    paymentsReadFailed: !paymentsRes.ok || !settlementsRes.ok,
     truncated,
     quotesSentAllTime,
     testCount: allJobs.filter((j) => j.isTest).length,

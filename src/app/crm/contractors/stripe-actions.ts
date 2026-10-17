@@ -61,9 +61,7 @@ export async function linkStripeAccount(
     stripe_payouts_enabled: account.payouts_enabled,
     stripe_details_submitted: account.details_submitted,
   });
-  if (!ok) {
-    return { ok: false, error: "Could not save. If this keeps happening, run supabase/payments.sql." };
-  }
+  if (!ok) return { ok: false, error: "Could not save. Please try again." };
 
   revalidatePath("/crm/contractors");
   revalidatePath("/crm/money");

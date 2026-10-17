@@ -76,10 +76,10 @@ export default async function MoneyPage({
         />
       </div>
 
-      {board.missingTables && (
+      {board.paymentsReadFailed && (
         <p className="crm-empty">
-          The payments tables aren&apos;t there yet. Run <code>supabase/payments.sql</code> in the Supabase SQL editor
-          and this page fills itself in.
+          The payments could not be loaded just now, so the figures on this page leave them out. Reload to try
+          again.
         </p>
       )}
 
@@ -170,7 +170,7 @@ export default async function MoneyPage({
             </table>
           </div>
           <p className="crm-muted crm-sm cash-note">
-            <code>supabase/money-audit.sql</code> lists the same rows straight from the database, and has the
+            <code>supabase/queries/money-audit.sql</code> lists the same rows straight from the database, and has the
             statements to fix each kind once you have decided what each one should have been.
           </p>
         </section>

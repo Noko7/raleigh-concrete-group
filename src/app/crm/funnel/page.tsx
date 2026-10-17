@@ -75,7 +75,7 @@ function pct(part: number, whole: number): string {
   return whole ? `${Math.round((part / whole) * 100)}%` : "-";
 }
 
-async function loadRows(days: number): Promise<{ rows: FunnelRow[]; missingTable: boolean; truncated: boolean }> {
+async function loadRows(days: number): Promise<{ rows: FunnelRow[]; loadFailed: boolean; truncated: boolean }> {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const rows: FunnelRow[] = [];
   for (let page = 0; page < MAX_PAGES; page++) {
@@ -83,13 +83,15 @@ async function loadRows(days: number): Promise<{ rows: FunnelRow[]; missingTable
       `site_funnel_events?select=attempt_id,visitor_id,form,event,step,ms,mode,detail,path,device` +
         `&created_at=gte.${encodeURIComponent(since)}&order=id.asc&limit=${PAGE}&offset=${page * PAGE}`,
     );
-    // 404 / 42P01: table missing.
-    if (!res.ok) return { rows, missingTable: page === 0, truncated: false };
+    if (!res.ok) {
+      console.error("[funnel] events read failed", { page, status: res.status });
+      return { rows, loadFailed: page === 0, truncated: false };
+    }
     const batch = (await res.json()) as FunnelRow[];
     rows.push(...batch);
-    if (batch.length < PAGE) return { rows, missingTable: false, truncated: false };
+    if (batch.length < PAGE) return { rows, loadFailed: false, truncated: false };
   }
-  return { rows, missingTable: false, truncated: true };
+  return { rows, loadFailed: false, truncated: true };
 }
 
 // People who typed a name and number and never sent it: a list to call. Excludes anyone still on the form
@@ -116,8 +118,11 @@ async function loadDrafts(days: number): Promise<Draft[] | null> {
     `quote_drafts?select=submission_id,created_at,updated_at,name,phone,email,address,mode,service,step,left_at` +
       `&lead_id=is.null&dismissed_at=is.null&updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=200`,
   );
-  // 404: table missing.
-  if (!res.ok) return null;
+  // A failed read hides the card.
+  if (!res.ok) {
+    console.error("[funnel] drafts read failed", { status: res.status });
+    return null;
+  }
   const drafts = (await res.json()) as Draft[];
   if (!drafts.length) return drafts;
 
@@ -271,7 +276,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const days = WINDOWS.find((d) => String(d) === sp.days) ?? 30;
 
-  const [{ rows, missingTable, truncated }, drafts] = await Promise.all([loadRows(days), loadDrafts(days)]);
+  const [{ rows, loadFailed, truncated }, drafts] = await Promise.all([loadRows(days), loadDrafts(days)]);
   const s = funnelStats(rows);
   const clarityOn = Boolean(CLARITY_PROJECT_ID);
 
@@ -301,10 +306,9 @@ export default async function FunnelPage({ searchParams }: { searchParams: Promi
 
       {drafts && <DraftsCard drafts={drafts} />}
 
-      {missingTable ? (
+      {loadFailed ? (
         <div className="crm-empty">
-          Tracking isn&apos;t set up yet. Run <code>supabase/funnel.sql</code> once in Supabase → SQL Editor, and
-          visits to the quote form will start showing here.
+          The form tracking could not be loaded just now. Reload to try again.
         </div>
       ) : s.opened === 0 ? (
         <div className="crm-empty">Nobody has opened the quote form in the last {days} days yet.</div>

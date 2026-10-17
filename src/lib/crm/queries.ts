@@ -93,8 +93,7 @@ export async function getQuote(session: Session, id: string): Promise<Quote | nu
   return rows[0] ?? null;
 }
 
-// Like updateQuote, but says why it failed: a missing column and an RLS block
-// need different fixes, and neither is fixed by retrying.
+// Like updateQuote, but says why it failed.
 export async function updateQuoteResult(
   session: Session,
   id: string,
@@ -134,14 +133,6 @@ export async function updateQuoteResult(
     const body = await res.text().catch(() => "");
     console.error("[updateQuote] failed", { id, status: res.status, body, patch: Object.keys(patch) });
 
-    // PGRST204 = missing column: a migration hasn't been run, so name it.
-    const missing = body.match(/'([a-z_]+)' column/i)?.[1] ?? body.match(/column "([a-z_]+)"/i)?.[1];
-    if (body.includes("PGRST204") || /column .* does not exist/i.test(body)) {
-      return {
-        quote: null,
-        error: `The database is missing the "${missing ?? "scheduled"}" column. Run the SQL in supabase/ (see README) and try again.`,
-      };
-    }
     if (res.status === 409) {
       return { quote: null, error: "Another job is already booked on that day." };
     }
@@ -173,8 +164,11 @@ export async function listQuoteOptions(session: Session, quoteId: string): Promi
     `quote_options?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
     session.accessToken,
   );
-  // A missing table also lands here; "no line items" is right for every caller.
-  if (!res.ok) return [];
+  // Any failure reads as "no line items", which is right for every caller.
+  if (!res.ok) {
+    console.error("[quoteOptions] list failed", { quoteId, status: res.status });
+    return [];
+  }
   return (await res.json()) as QuoteOption[];
 }
 
@@ -183,7 +177,10 @@ export async function listQuoteOptionsAdmin(quoteId: string): Promise<QuoteOptio
   const res = await pgAdmin(
     `quote_options?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
   );
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.error("[quoteOptions] list failed", { quoteId, status: res.status });
+    return [];
+  }
   return (await res.json()) as QuoteOption[];
 }
 
@@ -301,13 +298,9 @@ export async function saveQuoteOptions(
   return { ok: true };
 }
 
-// A missing migration is the one failure retrying can't fix, so name it.
 async function optionError(res: Response, verb: string): Promise<string> {
   const body = await res.text().catch(() => "");
   console.error("[quoteOptions] failed", { status: res.status, body });
-  if (res.status === 404 || (/quote_options/.test(body) && /does not exist|schema cache/i.test(body))) {
-    return "Line items need one more migration: run supabase/quote-options.sql in Supabase, then try again.";
-  }
   return `Could not ${verb} the line items (error ${res.status}). Please try again.`;
 }
 
@@ -320,8 +313,11 @@ export async function listQuotePackages(session: Session, quoteId: string): Prom
     `quote_packages?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
     session.accessToken,
   );
-  // A missing table also lands here; "no choice offered" is right for every caller.
-  if (!res.ok) return [];
+  // Any failure reads as "no choice offered", which is right for every caller.
+  if (!res.ok) {
+    console.error("[quotePackages] list failed", { quoteId, status: res.status });
+    return [];
+  }
   return (await res.json()) as QuotePackage[];
 }
 
@@ -330,7 +326,10 @@ export async function listQuotePackagesAdmin(quoteId: string): Promise<QuotePack
   const res = await pgAdmin(
     `quote_packages?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
   );
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.error("[quotePackages] list failed", { quoteId, status: res.status });
+    return [];
+  }
   return (await res.json()) as QuotePackage[];
 }
 
@@ -458,19 +457,15 @@ export async function saveQuotePackages(
   return { ok: true };
 }
 
-// A missing migration is the one failure retrying can't fix, so name it.
 async function packageError(res: Response, verb: string): Promise<string> {
   const body = await res.text().catch(() => "");
   console.error("[quotePackages] failed", { status: res.status, body });
-  if (res.status === 404 || (/quote_packages/.test(body) && /does not exist|schema cache/i.test(body))) {
-    return "Offering a choice needs one more migration: run supabase/quote-packages.sql in Supabase, then try again.";
-  }
   return `Could not ${verb} the options (error ${res.status}). Please try again.`;
 }
 
 // A lead staff log themselves (a phone-in). Runs as the user (RLS); tokens come
-// from column defaults. Returns why it failed: RLS, a check constraint and a
-// missing column each need a different fix.
+// from column defaults. Returns why it failed: RLS and a check constraint need
+// different fixes.
 export async function insertQuoteResult(
   session: Session,
   row: Partial<Quote>,
@@ -487,20 +482,12 @@ export async function insertQuoteResult(
     // PostgREST puts the SQLSTATE in the body.
     const code = body.match(/"code"\s*:\s*"([^"]+)"/)?.[1] ?? "";
 
-    // 42501 = table grant or RLS policy; one migration adds both.
+    // 42501 = table grant or RLS policy.
     if (code === "42501" || /row-level security|permission denied/i.test(body)) {
       return {
         quote: null,
         code,
-        error: "The database is not letting this account create leads. Run supabase/manual-quote.sql in Supabase, then try again.",
-      };
-    }
-    if (code === "PGRST204" || /column .* does not exist/i.test(body)) {
-      const missing = body.match(/'([a-z_]+)' column/i)?.[1] ?? body.match(/column "([a-z_]+)"/i)?.[1];
-      return {
-        quote: null,
-        code,
-        error: `The database is missing the "${missing ?? "required"}" column. Run the SQL in supabase/ (see README) and try again.`,
+        error: "The database is not letting this account create leads.",
       };
     }
     // e.g. 23514 check violation; the caller knows which new field it sent.
@@ -808,10 +795,9 @@ export async function finishMessage(
         ? { sent_at: null, send_after: new Date(Date.now() + RETRY_BACKOFF_MINUTES * 60_000).toISOString() }
         : {}),
     });
-    // If the attempts column is missing the whole write is rejected. Recording
-    // the outcome matters more than the retry, so write it on its own.
     if (!res.ok) {
-      console.error("[sms-queue] could not record attempts; is supabase/queue-retry.sql run?", { status: res.status });
+      // Recording the outcome matters more than the retry bookkeeping, so try it on its own.
+      console.error("[sms-queue] could not record the result of a held message", { status: res.status });
       await patch(outcome);
     }
   } catch (e) {
@@ -1054,8 +1040,11 @@ export function conflictMessage(c: Commitment): string {
 export async function getWorkHours(staffId: string | null | undefined): Promise<WorkHours> {
   if (!staffId || !UUID_RE.test(staffId)) return DEFAULT_WORK_HOURS;
   const res = await pgAdmin(`staff?id=eq.${staffId}&select=work_start_hour,work_end_hour,work_days&limit=1`);
-  // Columns may be missing (appointments.sql); everyone gets the default window.
-  if (!res.ok) return DEFAULT_WORK_HOURS;
+  // On a failed read everyone gets the default window.
+  if (!res.ok) {
+    console.error("[getWorkHours] failed", { staffId, status: res.status });
+    return DEFAULT_WORK_HOURS;
+  }
   const rows = (await res.json()) as Parameters<typeof readWorkHours>[0][];
   return readWorkHours(rows[0]);
 }
@@ -1584,14 +1573,7 @@ export async function recordCustomerResponse(
       body: JSON.stringify(body),
     });
 
-  let upd = await savePatch(patch);
-  // If the preferred_times column is missing (appointments.sql), retry without
-  // it rather than failing an approval; the crew card has a fallback time.
-  if (!upd.ok && patch.preferred_times !== undefined) {
-    const { preferred_times: _dropped, ...withoutTimes } = patch;
-    console.error("[quote-response] preferred_times rejected - run supabase/appointments.sql");
-    upd = await savePatch(withoutTimes);
-  }
+  const upd = await savePatch(patch);
   if (!upd.ok) return { ok: false, error: "Could not save your response. Please call us." };
   const written = (await upd.json().catch(() => [])) as unknown[];
   if (written.length === 0) {
@@ -1757,13 +1739,7 @@ export async function recordOfflineAcceptance(
     return { rows: ((await res.json().catch(() => [])) as unknown[]).length };
   };
 
-  let saved = await save(patch);
-  // preferred_times may be missing (appointments.sql); retry without it rather
-  // than lose the approval.
-  if ("error" in saved && patch.preferred_times !== undefined) {
-    const { preferred_times: _dropped, ...withoutTimes } = patch;
-    saved = await save(withoutTimes);
-  }
+  const saved = await save(patch);
   if ("error" in saved) return { ok: false, error: saved.error };
   if (saved.rows === 0) {
     const now = await getQuote(session, id);
@@ -1918,7 +1894,7 @@ export async function requestChange(
   if (!quote) {
     return {
       ok: false,
-      error: error ?? "Could not send that change. Run the SQL in supabase/change-orders.sql and try again.",
+      error: error ?? "Could not send that change. Please try again or call the office.",
     };
   }
   return { ok: true, quote };
@@ -2010,15 +1986,7 @@ async function applyChange(
   const call = (args: Record<string, unknown>) =>
     pgAdmin("rpc/apply_change_response", { method: "POST", body: JSON.stringify(args) });
   const args = { p_id: quoteId, p_accept: accept };
-  let res = shownRequestedAt ? await call({ ...args, p_requested_at: shownRequestedAt }) : await call(args);
-  // PGRST202 = function signature missing (SQL not run); answer without the stale check.
-  if (!res.ok && shownRequestedAt) {
-    const code = await res.json().then((b: { code?: unknown }) => b?.code, () => null);
-    if (code === "PGRST202") {
-      console.error("[change-response] apply_change_response has no p_requested_at - run supabase/stage1-price-lockdown.sql");
-      res = await call(args);
-    }
-  }
+  const res = shownRequestedAt ? await call({ ...args, p_requested_at: shownRequestedAt }) : await call(args);
   if (!res.ok) return { ok: false, error: "Could not save your answer. Please call us." };
   const out = (await res.json()) as {
     status: "ok" | "none" | "stale";

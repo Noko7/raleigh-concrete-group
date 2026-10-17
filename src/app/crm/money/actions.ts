@@ -52,9 +52,7 @@ export async function recordFeeSettlement(_prev: SettleState, formData: FormData
     method,
     note: String(formData.get("note") ?? "").trim().slice(0, 500) || null,
   });
-  if (!saved.ok) {
-    return { ok: false, error: "Could not record that. If this keeps happening, run supabase/payments.sql." };
-  }
+  if (!saved.ok) return { ok: false, error: "Could not record that. Please try again." };
 
   revalidatePath("/crm/money");
   if (quoteId) {
