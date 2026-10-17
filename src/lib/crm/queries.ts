@@ -37,6 +37,7 @@ import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./en
 // Cents, for the two places a change order has to compare money to money.
 // fees.ts imports nothing of ours, so this edge only ever points one way.
 import { toCents } from "./fees";
+import { changeOrderRefusal, jobPatchRefusal } from "./permissions";
 import { pgUser, pgAdmin } from "./rest";
 import { MAX_SEND_ATTEMPTS, RETRY_BACKOFF_MINUTES, planRetry } from "./send-retry";
 
@@ -112,6 +113,16 @@ export async function updateQuoteResult(
   // instead, scoped to a job that is still assigned to them, which is exactly
   // what their own update rule allows.
   const losing = session.staff.role !== "owner" && patch.status === "lost";
+  // That write skips the database's guard on the money columns, because the
+  // service role is exempt from it. So the same rule is applied here, to the
+  // whole patch, against the row as the contractor can still see it: Lost is
+  // theirs to set, but it does not carry a new price or a Paid along with it.
+  if (losing) {
+    const before = await getQuote(session, id);
+    if (!before) return { quote: null, error: "You can't change this job. It may have been reassigned to someone else." };
+    const refusal = jobPatchRefusal(session.staff.role, before, patch);
+    if (refusal) return { quote: null, error: refusal };
+  }
   const path = `quote_requests?id=eq.${encodeURIComponent(id)}`;
   const init = { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(patch) };
   const res = losing
@@ -2259,6 +2270,10 @@ export async function recordChangeAgreed(
   session: Session,
   id: string,
 ): Promise<ChangeResponseResult> {
+  // Owner only, checked again here because this runs with the service role:
+  // nothing downstream of this line would stop a contractor's call.
+  const refusal = changeOrderRefusal(session.staff.role, { agreed: true });
+  if (refusal) return { ok: false, error: refusal };
   const by = session.staff.full_name || session.staff.email || "Staff";
   return applyChange(id, true, { recorded_by: by });
 }

@@ -341,7 +341,10 @@ there. So:
 1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/quote-packages.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql`, `supabase/appointments.sql`, `supabase/change-orders.sql` and `supabase/payment-corrections.sql` in the SQL Editor. Once
    `supabase/payments.sql` is in (see **Getting paid** below), run
    `supabase/least-privilege.sql` last - it is what stops a contractor rewriting
-   the money columns on their own jobs.
+   the money columns on their own jobs - and then `supabase/stage1-price-lockdown.sql`
+   (after `fee-waiver.sql`), which stops a contractor changing the price of a job
+   the customer has approved except through a change order the customer approves.
+   `stage1-price-lockdown.verify.sql` checks it; `stage1-price-lockdown.undo.sql` reverts it.
 
    `supabase/crew-reminders.sql` also (re)adds `scheduled_time`, so running just
    that one file is enough to fix "Could not save that date" when confirming a

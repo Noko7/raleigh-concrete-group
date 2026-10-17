@@ -435,6 +435,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             lines={changeStartLines(boughtLines(options), quote.quote_amount, quote.service)}
             jobHasLines={boughtLines(options).length > 0}
             canBreakDown={packages.length === 0}
+            canApplyAgreed={session.staff.role === "owner"}
             locale={locale}
             tone="light"
           />

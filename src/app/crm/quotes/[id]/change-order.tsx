@@ -60,6 +60,7 @@ export function ChangeOrder({
   lines = [],
   jobHasLines = false,
   canBreakDown = true,
+  canApplyAgreed = false,
   locale,
   tone = "dark",
 }: {
@@ -91,6 +92,13 @@ export function ChangeOrder({
   jobHasLines?: boolean;
   /** False on a job priced as a choice of ways, which stays one figure. */
   canBreakDown?: boolean;
+  /**
+   * Whether to offer "already agreed - don't text them", which puts the new
+   * total on the job with nobody asked. The owner's alone: for the crew a new
+   * total lands only when the customer approves it. sendChangeOrder refuses
+   * it from anybody else regardless.
+   */
+  canApplyAgreed?: boolean;
   locale: Locale;
   tone?: "dark" | "light";
 }) {
@@ -452,10 +460,12 @@ export function ChangeOrder({
             <span>{counted.length === 0 ? t.changeOrder.confirmTickNone : t.changeOrder.confirmTick}</span>
           </label>
 
-          <label className="co-check">
-            <input type="checkbox" checked={!agreed} onChange={(e) => setAgreed(!e.target.checked)} />
-            <span>{t.changeOrder.textTick}</span>
-          </label>
+          {canApplyAgreed && (
+            <label className="co-check">
+              <input type="checkbox" checked={!agreed} onChange={(e) => setAgreed(!e.target.checked)} />
+              <span>{t.changeOrder.textTick}</span>
+            </label>
+          )}
           {agreed && <p className="co-hint">{fill(t.changeOrder.agreedHint, { name: first })}</p>}
           {agreed && (
             <label className="co-check">
