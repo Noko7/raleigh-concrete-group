@@ -51,8 +51,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   const quote = await getQuoteByToken("public_token", token);
   if (!quote) notFound();
 
-  // Line items, if this quote was written as a list of choices. Fetched before
-  // the expired/responded branches below use them.
+  // Fetched before the expired/responded branches below use them.
   const [storedOptions, storedPackages] = await Promise.all([
     listQuoteOptionsAdmin(quote.id),
     listQuotePackagesAdmin(quote.id),
@@ -65,9 +64,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
     required: o.required,
     customer_response: o.customer_response,
   }));
-  // The ways of doing the job they were asked to pick between, on the quote
-  // that was written two ways. Empty on every ordinary quote, and every branch
-  // below then behaves exactly as it always has.
+  // Packages offered as a choice; empty on ordinary quotes.
   const packages = storedPackages.map((p) => ({
     id: p.id,
     title: p.title,
@@ -78,30 +75,25 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   }));
   const itemised = options.length > 0;
   const offersChoice = packages.length > 0;
-  // The one they went with, once they have answered. What the confirmation page
-  // leads with: "approved" on a driveway quoted two ways does not say which.
+  // The package they chose, which the confirmation leads with.
   const chosenPackage = packages.find((p) => p.customer_response === "accepted") ?? null;
 
   const hasPrice = quote.quote_amount != null;
   const amount = hasPrice ? dollars(quote.quote_amount) : null;
-  // A declined quote the office has moved off Lost is back on offer, so it
-  // shows as the quote rather than as "thanks for letting us know".
+  // A declined quote moved off Lost is back on offer, so show the quote.
   const responded = isOpenAgain(quote) ? null : quote.customer_response;
   const firstName = firstNameOf(quote.name, quote.name);
 
-  // Only the sections that were actually filled in. An owner can't send a
-  // quote with one blank, but a draft viewed early can have gaps and a
-  // half-empty list reads worse than the old single block.
+  // Only filled-in sections: sending requires all, but an early-viewed draft
+  // can have gaps.
   const sections = QUOTE_SECTION_FIELDS.map((f) => [f, quote[f]] as const).filter(
     (pair): pair is readonly [(typeof QUOTE_SECTION_FIELDS)[number], string] =>
       Boolean(pair[1] && pair[1].trim()),
   );
 
   // ── The offer ran out ──
-  // Shown instead of the price, never alongside it: a number on screen next
-  // to "this has expired" is an invitation to argue about whether it still
-  // stands. Recovering is one phone call, and re-sending the quote from the
-  // CRM puts a fresh QUOTE_TTL_DAYS on this same link.
+  // Instead of the price, never beside it (that invites argument). Re-sending
+  // from the CRM gives this same link a fresh QUOTE_TTL_DAYS.
   if (isQuoteExpired(quote)) {
     return (
       <main className="cq-wrap">
@@ -119,33 +111,25 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
     );
   }
 
-  // Whether the crew on this job can take a card. Asked once, here, and used
-  // both to offer the deposit at approval and to show the balance afterwards -
-  // a payment button that dies on tap is worse than never offering one.
+  // Whether this job's crew can take cards: used to offer the deposit and show
+  // the balance. A button that fails on tap is worse than none.
   const payee = await payeeState(quote);
 
   // ── Full-screen confirmation once the customer has responded ──
   if (responded === "accepted") {
-    // Approving no longer books a day - the crew confirms one of the customer's
-    // preferred days first. Until then this must not claim a date is locked in.
+    // Approving doesn't book a day; until the crew confirm one, don't claim a date.
     const awaitingDate = !quote.scheduled_date;
-    // Read back by index: preferred_times[i] is the start they asked for on
-    // preferred_dates[i], and is null on a quote accepted before we asked.
+    // Index-aligned: preferred_times[i] is the start for preferred_dates[i]; may be null.
     const preferredTimes = quote.preferred_times ?? [];
     const preferred = (quote.preferred_dates ?? [])
       .filter(Boolean)
       .map((d, i) => `${prettyDate(d)}${preferredTimes[i] ? ` at ${preferredTimes[i]}` : ""}`);
-    // What is still owed, so this page keeps being useful after the approval.
-    // It is the link the office texts when a balance is due, and a customer who
-    // opens their old quote expecting to pay should not have to ring for a new
-    // one.
+    // What's still owed, so this stays the page to pay from after approval
+    // (it's the link the office texts when a balance is due).
     const { ledger } = await jobLedger(quote);
-    // A change the crew has sent and the customer hasn't answered. It goes
-    // ABOVE the confirmation rather than inside it: the rest of this panel is a
-    // receipt for a decision already made, and an unanswered question buried
-    // under a receipt is a question nobody answers. The totals shown to them
-    // come off the row and the ledger, so the deposit on screen is the deposit
-    // in the bank.
+    // An unanswered change goes ABOVE the confirmation: the rest is a receipt,
+    // and a question buried under a receipt goes unanswered. Totals come from
+    // the row and the ledger.
     const pendingChange =
       quote.change_requested_at && quote.change_amount != null
         ? {
@@ -158,8 +142,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             depositCents: quote.change_deposit_cents,
           }
         : null;
-    // A second deposit from an approved change, still waiting to be paid. Clears
-    // itself once the money is recorded - see depositDueNowCents.
+    // Unpaid second deposit from an approved change; clears once recorded (depositDueNowCents).
     const dueNowCents = depositDueNowCents(quote.deposit_target_cents, ledger.paidCents, ledger.dueCents);
     const bookedFor = quote.scheduled_date
       ? `${prettyDate(quote.scheduled_date)}${quote.scheduled_time ? ` at ${quote.scheduled_time}` : ""}`
@@ -209,9 +192,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               </strong>
             </p>
           )}
-          {/* What they approved, item by item. This page is their record of the
-              job from here on, and on a quote with options "approved" on its
-              own doesn't say which ones. */}
+          {/* Item by item: this is their record, and "approved" alone doesn't say which. */}
           {(itemised || chosenPackage) && (
             <ul className="cq-confirm-items">
               {chosenPackage && (
@@ -245,10 +226,8 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             </div>
           )}
 
-          {/* Money, once there is any to talk about. A job nobody has paid
-              anything on says nothing here - the customer has just approved a
-              quote and does not need a second invoice-shaped thing in front of
-              them until they have chosen to pay. */}
+          {/* Only once something's been paid: right after approving they don't
+              need an invoice-shaped thing until they choose to pay. */}
           {ledger.paidCents > 0 && (
             <p className="cq-confirm-paid">
               {dueNowCents > 0 ? (
@@ -321,11 +300,10 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   }
 
   // ── Default: the quote with accept / decline actions ──
-  // A quote with line items or a choice of options: the decision is the page.
+  // With line items or a choice, the decision is the page.
   const built = hasPrice && (itemised || offersChoice);
-  // The five sections, in a fixed order, so every quote we send answers the
-  // same questions in the same places. Quotes written before the sections
-  // existed fall back to their old free text rather than an empty panel.
+  // Fixed section order so every quote answers the same questions in the same
+  // places. Legacy quotes fall back to their free-text summary.
   const hasDetails = sections.length > 0 || Boolean(quote.quote_summary);
   const details = (
     <>
@@ -344,9 +322,8 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
     )}
     </>
   );
-  // Trust markers echo the site's own published copy (clear pricing, on time,
-  // local) - no warranty or licensing claims per business policy in
-  // site-data.ts.
+  // Trust markers echo the site's published copy; no warranty or licensing
+  // claims, per policy in site-data.ts.
   const trust = (
     <ul className="cq-trust">
       <li>Local Raleigh crew</li>
@@ -371,24 +348,20 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               {offersChoice
                 ? "Here's your quote, priced both ways. Pick the one you'd like below and your total is worked out for you."
                 : itemised && options.every((o) => o.required)
-                  ? // A straight breakdown: every line is part of the job and
-                    // there is nothing to choose, so don't ask them to.
+                  ? // A straight breakdown: nothing to choose, so don't ask.
                     `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}, broken down line by line.`
                   : itemised
                   ? "Here's your quote. Some of it is up to you - say yes or no to each option below and your total updates as you go."
                   : `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We'd love to do the work for you.`}
             </p>
-            {/* On an itemised quote there is no single price to print here: the
-                number depends on what they pick, so it lives with the options
-                and moves as they answer. One price on the page, never two. */}
+            {/* Itemised/choice quotes print no single price here: it moves with
+                their answers below. One price on the page, never two. */}
             {!itemised && !offersChoice && (
               <div className="cq-price">
                 <span className="cq-price-label">Your price, all in</span>
                 <span className="cq-price-value">{amount}</span>
                 <span className="cq-price-sub">Free quote · no obligation until you approve</span>
-                {/* Under the price, because that is what the deadline is
-                    actually about. Only shown once the quote has been sent -
-                    a draft has no clock running. */}
+                {/* Under the price, which the deadline is about. Only once sent. */}
                 {quote.quote_expires_at && (
                   <span className="cq-expiry">Good through {prettyDate(quote.quote_expires_at.slice(0, 10))}</span>
                 )}
@@ -407,17 +380,14 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           </p>
         )}
 
-        {/* A quote with options leads with the options: which way, what to
-            add, the total, Approve. The job details are the same whichever
-            they pick, so they fold away underneath for whoever wants them.
-            A one-price quote keeps them above the decision, as before. */}
+        {/* Options quotes lead with the decision; details fold away below since
+            they're the same whichever is picked. One-price quotes keep details on top. */}
         {!built && details}
         {hasPrice ? (
           <QuoteActions
             token={token}
             amount={Number(quote.quote_amount)}
-            // The hours the crew who'd do this job actually work, so the
-            // customer isn't offered a 7am start by somebody who begins at 9.
+            // The assigned crew's real hours, so nobody is offered a 7am start by a 9am crew.
             slots={slotsFor(await getWorkHours(quote.assigned_to))}
             cardReady={payee.ok}
             options={options.map((o) => ({
@@ -448,10 +418,8 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
         )}
         {built && trust}
 
-        {/* Where the job is and what it is, under the decision rather than
-            over it. It is what somebody checks after they have decided they
-            like the number, and every line above the Approve button is another
-            screen of scrolling between reading the price and answering it. */}
+        {/* Below the decision: checked after liking the number, and every line
+            above Approve is more scrolling. */}
         <dl className="cq-meta">
           {quote.service && (
             <div>
@@ -467,9 +435,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           )}
         </dl>
 
-        {/* One real review from the site's testimonials, right below the
-            decision point - the moment a nervous customer looks for a reason
-            to trust the number above. */}
+        {/* One real testimonial, just below the decision point. */}
         {hasPrice && (
           <blockquote className="cq-review">
             <p>&ldquo;{testimonials[0].quote}&rdquo;</p>

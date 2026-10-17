@@ -42,13 +42,9 @@ function payDate(iso: string | null): string {
 }
 
 /**
- * The customer's payment page.
- *
- * Behind the same unguessable token as their quote, and deliberately the same
- * link for the whole life of the job: a deposit today, a balance in three
- * weeks, and a card payment finishing what a cash payment started all happen
- * here. One link the office can text again at any point beats a new link per
- * payment, which is how a customer ends up paying an old one twice.
+ * The customer's payment page. Same token as their quote and the same link for
+ * the whole job (deposit, balance, card after cash), so the office can re-text
+ * it any time; a link per payment invites paying an old one twice.
  */
 export default async function PayPage({
   params,
@@ -63,10 +59,9 @@ export default async function PayPage({
   const quote = await getQuoteByToken("public_token", token);
   if (!quote) notFound();
 
-  // Straight back from Stripe. The webhook is the real path, but the customer
-  // gets here within a second of paying and the two race - so ask Stripe
-  // ourselves rather than showing a paid job as unpaid. Also the safety net if
-  // the webhook is ever misconfigured: payments still land, just a beat later.
+  // Back from Stripe. The webhook is the real path but races the redirect, so
+  // ask Stripe directly rather than show a paid job as unpaid. Also a safety
+  // net if the webhook is misconfigured.
   const justPaid = done ? await reconcileCheckout(done) : null;
 
   const firstName = firstNameOf(quote.name, quote.name);
@@ -74,8 +69,7 @@ export default async function PayPage({
   const hasPrice = quote.quote_amount != null && Number(quote.quote_amount) > 0;
 
   // ── Nothing to pay ──
-  // A quote that was never approved, was declined, or has no price on it yet.
-  // Said plainly rather than shown as a $0 balance, which reads like a bug.
+  // Not approved, declined, or unpriced. Said plainly; a $0 balance looks like a bug.
   if (!accepted || !hasPrice) {
     return (
       <main className="cq-wrap">
@@ -99,8 +93,7 @@ export default async function PayPage({
   const paidRows = rows.filter((r) => r.status === "paid" || r.status === "refunded");
   const settled = ledger.dueCents <= 0;
   const deposit = Math.min(depositCents(ledger.totalCents, DEFAULT_DEPOSIT_PERCENT), ledger.dueCents);
-  // A second deposit an approved change asked for, still unpaid. When there is
-  // one it is the amount this page leads with.
+  // Unpaid second deposit from an approved change; leads the page when present.
   const dueNow = depositDueNowCents(quote.deposit_target_cents, ledger.paidCents, ledger.dueCents);
   const progress = ledger.totalCents > 0 ? Math.min(100, Math.round((ledger.paidCents / ledger.totalCents) * 100)) : 0;
   const payeeName = payee.ok ? payee.staff.full_name?.trim() || businessName : businessName;
@@ -113,10 +106,8 @@ export default async function PayPage({
           <p className="cq-eyebrow">{settled ? "Paid in full" : "Your payment"}</p>
         </header>
 
-        {/* The receipt, first, and only when they have just paid. Somebody
-            landing back from Stripe wants confirmation before anything else,
-            and a page that just quietly shows a smaller balance leaves them
-            wondering whether it went through. */}
+        {/* Receipt first, only right after paying: a quietly smaller balance
+            leaves them unsure it went through. */}
         {justPaid?.status === "paid" && (
           <div className="pay-receipt">
             <p className="pay-receipt-eyebrow">Payment received</p>
@@ -152,10 +143,8 @@ export default async function PayPage({
           </dl>
         </div>
 
-        {/* Every payment on the job, however it was made. The cash the crew
-            took on site belongs here as much as the card ones - this is the
-            customer's record of what they have handed over, and a list that
-            only showed card payments would understate it. */}
+        {/* Every payment however made, cash included: the customer's record of
+            what they've handed over. */}
         {paidRows.length > 0 && (
           <ul className="pay-history">
             {paidRows.map((r) => (
@@ -186,10 +175,8 @@ export default async function PayPage({
             payeeName={payeeName}
           />
         ) : (
-          // Card is not an option on this job. Never say why - "the contractor
-          // hasn't finished Stripe onboarding" is our problem, not something a
-          // customer standing with a phone can act on. Give them the way that
-          // does work instead.
+          // No card on this job. Never say why (e.g. unfinished Stripe
+          // onboarding); give them the way that works.
           <div className="pay-offline">
             <h2>Pay your crew directly</h2>
             <p>

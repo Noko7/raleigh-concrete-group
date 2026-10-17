@@ -43,8 +43,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   if (!quote) notFound();
   // Contractors only see jobs assigned to them; owners can see any job.
   if (session.staff.role !== "owner" && quote.assigned_to !== session.staff.id) notFound();
-  // Lost or archived: the contractor is done with this customer. They're locked
-  // out like everywhere else, and the owner sees that they tried.
+  // Lost or archived: contractors are locked out, and the owner sees they tried.
   if (session.staff.role !== "owner" && (quote.status === "lost" || quote.archived_at)) {
     // Not the refresh straight after they marked it Lost themselves.
     const justChanged = Date.now() - new Date(quote.updated_at ?? 0).getTime() < 2 * 60 * 1000;
@@ -52,44 +51,27 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
     notFound();
   }
 
-  // Anything this job has written but not yet sent. RLS-scoped to the reader,
-  // so a contractor only ever gets the rows for their own jobs.
+  // Queued texts for this job. RLS-scoped, so contractors see only their own jobs'.
   const messages = await listMessages(session, quote.id);
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
   const t = dict(locale);
   const base = await crmBase();
 
-  // This page is the crew's whole job: quote it, schedule it, finish it. Which
-  // cards appear is driven by where the job actually is, so there's only ever
-  // one obvious next action on screen.
-  //
-  // Booking and re-booking are split: the schedule card settles a date that
-  // doesn't exist yet, and once one does, changing it is the Reschedule button
-  // under the date at the top of the page. Two ways to move the same date on
-  // one screen is how a crew ends up not trusting either.
+  // Which cards appear follows where the job is, so there's one obvious next
+  // action. The schedule card sets a first date; after that, only the
+  // Reschedule button under the date moves it (two controls breed distrust).
   const accepted = quote.customer_response === "accepted" && quote.status !== "lost";
   const showSchedule = accepted && !quote.scheduled_date;
   const showQuote = !accepted && quote.status !== "lost" && quote.status !== "completed" && quote.status !== "paid";
   const showFinish = quote.status === "scheduled";
-  // The customer said yes on the phone and never opened their link. Without a
-  // way to write that down, the crew's only route to a schedule card was to
-  // send a fresh quote and ask them to tap it - which shows the customer a date
-  // picker that starts a week out, on a job everyone has just agreed to do on
-  // Thursday. Offered on any quote that has gone out and is still waiting for
-  // an answer; see the acceptOffline action for why the floor doesn't apply
-  // when it is the crew filling the day in.
+  // A verbal yes from a customer who never opened the link. Without it the crew
+  // would resend the quote, whose picker starts a week out. Offered on any sent,
+  // unanswered quote; acceptOffline explains why the lead-time floor doesn't apply.
   const showOfflineAccept = showQuote && Boolean(quote.quote_sent_at) && quote.quote_amount != null;
   const isDone = quote.status === "completed" || quote.status === "paid";
-  // The customer rang about a change to a job that is already agreed - usually
-  // days before the pour, with a deposit already in. Offered on any live agreed
-  // job, booked or not: a change that arrives before the day is settled is the
-  // same conversation, and making the crew wait for a date to exist before they
-  // can write it down is how it gets written on the back of a hand instead.
-  // `accepted` already excludes a lost job, and a closed-out one is an invoice
-  // dispute rather than a change order.
-  //
-  // A pending change keeps the card on screen in its waiting state, so the one
-  // place the crew look for "did we send that" is the place they sent it from.
+  // A change to an agreed job, booked or not, so it's written down when the
+  // call happens. `accepted` excludes Lost; closed-out jobs are invoice
+  // disputes. A pending change keeps the card visible in its waiting state.
   const showChange = accepted && !isDone;
   const pendingChange =
     quote.change_requested_at && quote.change_amount != null
@@ -101,44 +83,24 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         }
       : null;
 
-  // The same column read two ways: a booked appointment on an in-person request,
-  // or the slot an online customer offered in case photos aren't enough.
+  // Either a booked in-person visit or an online customer's offered slot.
   const visitDate = visitDateOf(quote);
-  // The visit card covers two different situations, both of which end in the
-  // crew putting a real appointment on the calendar:
-  //
-  //   online    they haven't decided whether the photos are enough, and the
-  //             customer offered a slot in case they aren't
-  //   schedule  an in-person request with no date on the books - either the
-  //             visit was cancelled off the calendar or it predates the form
-  //             asking - so somebody has to pick one
-  //
-  // It sits above the quote form rather than instead of it: on an online job,
-  // pricing it remotely is still the faster path and stays available below.
+  // The visit card covers two cases, both ending in a real appointment:
+  //   online    photos may not suffice; the customer offered a fallback slot
+  //   schedule  an in-person request with no date (cancelled, or never asked)
+  // It sits above the quote form, not instead of it: pricing remotely stays
+  // available on online jobs.
   const requestedVisit = requestedVisitOf(quote);
   const needsVisitDate = quote.quote_type === "inperson" && !visitDate;
   const showVisit = showQuote && (quote.quote_type === "online" || needsVisitDate);
 
-  // The crew books against their own schedule, so their picker starts today.
-  // The 7-day floor applies to what a customer may request, not to what the
-  // people doing the work are allowed to agree to.
+  // The crew book against their own schedule, so their picker starts today; the
+  // lead-time floor is for customers.
   const minJobDate = todayYmd();
-  // Four independent reads, in one wave rather than four.
-  //
-  // These used to be four awaits on consecutive lines, which reads fine and
-  // costs four sequential round-trips to Supabase before the page can render a
-  // single pixel. On a phone on a job site that is most of the delay between
-  // tapping a job and seeing it. Nothing here depends on anything else here.
-  //
-  // Service role on the line items rather than the session: this page is
-  // already gated above by the job token plus "assigned to you", and reading
-  // them through RLS would be a second, weaker copy of that same check. The
-  // events go the other way and use the session, because quote_events already
-  // has a policy that hands a contractor exactly their own jobs.
-  //
-  // Money only exists once the customer has agreed to a number. Before that
-  // there is nothing to collect and nothing to owe, and a card showing four
-  // zeroes is a card the crew learns to scroll past.
+  // Independent reads in parallel: sequential awaits were most of the load
+  // delay on a phone. Line items use the service role because this page already
+  // gates on token + assignment; events use the session (quote_events' policy
+  // scopes contractors). Money only once the customer has agreed a number.
   const [options, packages, money, payee, events] = await Promise.all([
     listQuoteOptionsAdmin(quote.id),
     listQuotePackagesAdmin(quote.id),
@@ -149,53 +111,39 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   const cardReady = payee?.ok ?? false;
   const chosen = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response !== "declined") : [];
   const rejected = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response === "declined") : [];
-  // The way of doing the job they picked, on a quote that offered a choice.
-  // First line of what the crew load the truck with, so it leads the scope card
-  // below rather than sitting under the extras.
+  // The package they picked leads the scope card: it's what goes on the truck.
   const chosenPackage =
     quote.customer_response === "accepted"
       ? (packages.find((p) => p.customer_response === "accepted") ?? null)
       : null;
 
-  // Photos go through the CRM's authenticated proxy rather than being signed
-  // one by one. Two fewer storage round-trips on every load, no expiry to
-  // outlive, and - the point of the exercise - the proxy can hand back a
-  // thumbnail instead of the four-megabyte original the grid was decoding on
-  // the main thread as you scrolled past it.
-  //
-  // Signed against this contractor. The page has already established that the
-  // job is theirs (the job_token plus the assigned_to check above), and the
-  // signature carries that decision to the proxy - so the same URL pasted into
-  // another crew member's browser is refused rather than served. The width is
-  // deliberately outside the signature: one signature covers both the 150px
-  // thumbnail and the full-size original the lightbox opens.
+  // Photos go through the authenticated proxy rather than per-file signed URLs:
+  // fewer round-trips, no expiry, and thumbnails instead of 4MB originals.
+  // Signed for this contractor, so a pasted URL is refused for anyone else.
+  // Width is outside the signature so one covers thumbnail and full size.
   const fileUrl = (path: string, w?: number) =>
     `${base}/api/file?${signMediaPath(path, session.staff.id)}${w ? `&w=${w}` : ""}`;
   const photos = quote.file_urls ?? [];
-  // What the crew has already put on this job, so the finish card can show
-  // counts rather than asking them to remember.
+  // The crew's own uploads, so the finish card shows counts.
   const ourPhotos = [...(quote.internal_urls ?? []), ...(quote.before_urls ?? []), ...(quote.after_urls ?? [])];
   const activity = events
     .map((e) => ({ id: e.id, text: crewEventText(e, t), at: e.created_at }))
     .filter((r): r is { id: string; text: string; at: string } => r.text !== null);
   // Every price this customer has been given, rebuilt from those same events.
   const sends = quoteSends(events, quote.quote_amount);
-  // Five is what fits before the section stops being a glance and starts being
-  // a document. The rest is one tap away rather than gone.
+  // Five fits at a glance; the rest is one tap away.
   const recentActivity = activity.slice(0, 5);
   const earlierActivity = activity.slice(5);
 
-  // Dates read in the contractor's own language, same as the rest of the page.
+  // Always en-US formatting, regardless of the contractor's locale.
   const fmtDay = (ymd: string) =>
     new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", {
       weekday: "long",
       month: "long",
       day: "numeric",
     });
-  // Raleigh time on the log, for the same reason the message log uses it: a
-  // stamp that disagrees with the phone in your hand is a stamp you stop
-  // trusting. Time included, because "this morning" and "last Tuesday" are
-  // different answers to "have they seen the quote yet?"
+  // Raleigh time, with the hour, so stamps match the phone in hand and "this
+  // morning" differs from "last Tuesday".
   const fmtStamp = (iso: string) =>
     new Date(iso).toLocaleString("en-US", {
       month: "short",
@@ -207,31 +155,15 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   const prettyVisit = visitDate ? fmtDay(visitDate) : null;
   const prettyJob = quote.scheduled_date ? fmtDay(quote.scheduled_date) : null;
 
-  // The two things a contractor needs off this page in one glance, standing
-  // outside holding a phone: what kind of appointment this is, and when it is.
-  // A booked work day always wins over a quote visit - once the job is on, the
-  // visit that produced it stops being the thing they're driving to.
-  //
-  // An online request's offered slot comes last and is flagged `pending`, which
-  // renders it in a different colour with "not booked" on it. A date shown the
-  // same way as a booking is a date somebody drives to.
-  //
-  // A booked work day gets the opposite treatment: a green "Installation
-  // scheduled". The customer accepted, the crew picked one of the days they
-  // offered, and that is the job settled - which is exactly what this line
-  // used to deny. It read "Customer hasn't confirmed yet" in red until they
-  // answered the reminder link two days before the pour, so a job that was
-  // agreed on both sides spent a fortnight looking like it was falling
-  // through. confirmed_at is still recorded; it just isn't a warning.
+  // The key block: what kind of appointment and when. A booked work day beats
+  // a quote visit. An online customer's offered slot comes last, flagged
+  // `pending` ("not booked") so nobody drives to it. A booked work day shows a
+  // green "Installation scheduled"; confirmed_at is recorded but isn't a warning.
   const isPlans = quote.quote_type === "plans";
   const isInPerson = !isPlans && quote.quote_type !== "online";
 
-  // The pill at the top of the key block used to say how the job was quoted -
-  // "In-person quote" - for the entire life of the job, which meant a booked
-  // installation announced itself as a quote visit and left the crew reading
-  // the small print underneath to find out otherwise. How it was quoted stops
-  // mattering the moment there is a work day on the books. What the job IS
-  // takes the slot from then on.
+  // Once a work day is booked the pill says what the job IS; until then, how
+  // it's being quoted.
   const bookedDay = Boolean(quote.scheduled_date) && quote.status !== "lost";
   const pill = bookedDay
     ? {
@@ -255,11 +187,9 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         ? { label: t.contractorJob.visitAsked, day: fmtDay(requestedVisit), time: quote.visit_time, pending: true }
         : null;
 
-  // Which appointment the Reschedule button moves: always the one the block
-  // above is showing, so the crew is changing the date they're looking at. A
-  // slot an online customer merely offered isn't an appointment yet - taking
-  // that one up, on a different day or not, is the visit card's job. A job
-  // that's finished or lost has nothing left to move.
+  // Reschedule moves whichever appointment the block shows. An offered slot
+  // isn't an appointment (that's the visit card's job); finished or lost jobs
+  // have nothing to move.
   const reschedule =
     isDone || quote.status === "lost"
       ? null
@@ -281,12 +211,8 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
 
         <div className="job-head">
           <h1 className="job-title">{t.contractorJob.title}</h1>
-          {/* The stage badge steps aside whenever the pill below is already
-              carrying the stage, which it does from the moment a work day is
-              booked. Two labels saying one thing is how a screen full of little
-              pills stops being read at all. Every other stage still shows it
-              here: New, Quoted, Needs scheduling and Lost have nothing else on
-              the page announcing them. */}
+          {/* Hidden once a work day is booked, since the pill then carries the
+              stage. Other stages have nothing else announcing them. */}
           {!bookedDay && (
             <span className={`crm-badge crm-badge-${quote.status}`}>
               {t.status[quote.status] ?? STATUS_LABELS[quote.status]}
@@ -297,9 +223,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           {t.contractorJob.backToJobs}
         </Link>
 
-        {/* Read on a phone at arm's length, often outdoors, so these two facts
-            are set large and heavy. They shout through size rather than through
-            a colour of their own - this is one card in a stack, not a banner. */}
+        {/* Read at arm's length outdoors: large and heavy, emphasis by size, not colour. */}
         <div className="job-key">
           <span className={`job-type job-type-${pill.tone}`}>{pill.text}</span>
           {when ? (
@@ -310,10 +234,8 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               {when.pending && <span className="job-when-tag">{t.contractorJob.visitNotBooked}</span>}
             </div>
           ) : (
-            // "No date set yet" on an online quote reads like something is
-            // missing. Nothing is: they didn't offer a time and none is needed
-            // unless the photos fall short. A plans job is the same, more so -
-            // nobody was ever going out on it.
+            // Nothing is missing: online quotes need no date unless the photos
+            // fall short, and plans jobs never get a visit.
             <span className="job-when-none">
               {isPlans
                 ? t.contractorJob.priceFromPlans
@@ -323,9 +245,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             </span>
           )}
 
-          {/* Under the date, inside the same block, because the date is what
-              it changes. Collapsed to one button so a settled job still reads
-              as settled. */}
+          {/* Here because the date is what it changes; one button so a settled job reads settled. */}
           {reschedule && (
             <>
               <JobReschedule
@@ -336,9 +256,8 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
                 minDate={minJobDate}
                 locale={locale}
               />
-              {/* The other answer to "I can't make it". Same date, same block,
-                  and the customer who rang about it is usually still on the
-                  phone - which is why the text is optional. */}
+              {/* The other answer to "I can't make it". The text is optional:
+                  the customer is often still on the phone. */}
               <CancelAppointment
                 id={quote.id}
                 kind={reschedule.kind}
@@ -349,17 +268,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           )}
         </div>
 
-        {/* Above the stage cards, and above the appointment ones, because it
-            outranks every decision below it: a text that has not gone out is
-            the customer not knowing something we think they know. It renders
-            nothing at all when the queue is empty, which is nearly always. */}
+        {/* Above everything: an unsent text is the customer not knowing
+            something we think they know. Renders nothing when the queue is empty. */}
         <JobHeldTexts quoteId={quote.id} messages={messages} quiet={inQuietHours()} locale={locale} />
 
-        {/* Appointments go at the top: they're the time-critical decisions and
-            they need nothing from further down the page. Pricing is the one
-            action that does need the photos and notes below, so it waits at the
-            bottom rather than sitting here asking for a number you can't give
-            yet. Which cards appear depends on the stage. */}
+        {/* Appointment cards first: time-critical and self-contained. Pricing
+            needs the photos and notes, so it's at the bottom. Cards depend on stage. */}
         {showSchedule && (
           <JobSchedule
             id={quote.id}
@@ -404,19 +318,15 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           />
         )}
 
-        {/* Changes sit with the other appointment-level decisions rather than down
-            by the pricing form: on a booked job this is the thing most likely to
-            have brought the crew to the page, and it has to be findable without
-            scrolling past the photos. */}
+        {/* With the appointment cards: on a booked job it's the likeliest reason
+            the crew are here, so it mustn't sit below the photos. */}
         {showChange && money && (
           <ChangeOrder
             id={quote.id}
             customerName={quote.name}
             totalCents={money.ledger.totalCents}
             paidCents={money.ledger.paidCents}
-            // The rows the balance is worked out from. The crew are the ones who
-            // recorded them, which is exactly why they are the ones who should be
-            // looking at them before a customer is asked to approve a balance.
+            // The crew recorded these, so they check them before a balance goes out.
             payments={money.rows.map((r) => ({
               id: r.id,
               method: r.method,
@@ -429,9 +339,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             bookedFor={prettyJob ? `${prettyJob}${quote.scheduled_time ? ` ${t.contractorJob.at} ${quote.scheduled_time}` : ""}` : null}
             workCompleted={Boolean(quote.completed_at)}
             pending={pendingChange}
-            // What the job is made of today, so a change starts from the lines
-            // the customer already agreed to. A job priced as a choice of ways
-            // carries its price outside the lines and stays one figure.
+            // Starts from the lines the customer agreed. Package jobs stay one figure.
             lines={changeStartLines(boughtLines(options), quote.quote_amount, quote.service)}
             jobHasLines={boughtLines(options).length > 0}
             canBreakDown={packages.length === 0}
@@ -457,10 +365,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           </section>
         )}
 
-        {/* Getting paid is an action like any other, so it sits with them
-            rather than in a separate place the crew has to remember exists.
-            Below the close-out card because on a finished job the last thing
-            anyone did was tick it off. */}
+        {/* Below the close-out card: on a finished job that was the last step. */}
         {money && (
           <JobPayments
             id={quote.id}
@@ -490,17 +395,15 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           />
         )}
 
-        {/* What they actually bought, above the customer details, because on a
-            quote with options it is the thing that decides what goes on the
-            truck. Only ever shown once they have answered. */}
+        {/* What they bought, above customer details: on an options quote it
+            decides what goes on the truck. Only after they answer. */}
         {(chosen.length > 0 || chosenPackage) && (
           <section className="js-card jo-scope">
             <h2 className="js-title">{t.contractorJob.approvedScope}</h2>
             <p className="js-hint">{t.contractorJob.approvedScopeHint}</p>
             <ul className="jo-scope-list">
-              {/* The option they picked first and marked as such: on a driveway
-                  quoted two ways it decides what turns up on the truck, and
-                  reading it as one more line item is how the wrong one does. */}
+              {/* The chosen package, marked: read as one more line item, the
+                  wrong one turns up on the truck. */}
               {chosenPackage && (
                 <li className="jo-scope-pick">
                   <strong>{chosenPackage.title}</strong>
@@ -557,10 +460,8 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               </dd>
             </div>
           )}
-          {/* The work day and the visit are in the block at the top of the
-              page, so they're not repeated here. This one still shows the
-              visit when a job is booked, since the block only has room for
-              whichever is the live appointment. */}
+          {/* The live appointment is in the top block. This still shows the
+              visit on a booked job, which the block has no room for. */}
           {prettyJob && prettyVisit && (
             <div>
               <dt>{t.contractorJob.quoteVisit}</dt>
@@ -599,8 +500,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           </div>
         )}
 
-        {/* Photos the crew has put on this job themselves, so they can see
-            what is already uploaded without opening the finish card. */}
+        {/* The crew's own uploads, visible without opening the finish card. */}
         {ourPhotos.length > 0 && (
           <>
             <h2 className="job-photos-title">{t.contractorJob.ourPhotos} ({ourPhotos.length})</h2>
@@ -615,9 +515,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           </>
         )}
 
-        {/* Pricing goes last on purpose. It needs the photos, the notes and the
-            address that sit above it, so putting it here means reading the job
-            and then quoting it, rather than scrolling past the form twice. */}
+        {/* Pricing last: it needs the photos, notes and address above. */}
         {showQuote && (
           <JobQuote
             id={quote.id}
@@ -648,18 +546,15 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               quote_cleanup: quote.quote_cleanup,
             }}
             alreadySent={Boolean(quote.quote_sent_at)}
-            // Sent and no answer yet: the crew's job is to wait, not to send it
-            // again, so the card says so instead of offering a button.
+            // Sent and unanswered: the card says to wait rather than offer a resend.
             awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
             sentAt={quote.quote_sent_at}
             customerFirstName={firstNameOf(quote.name, quote.name)}
           />
         )}
 
-        {/* What the customer has actually been quoted, above the history of
-            everything else. It answers the question that gets asked on the
-            phone - "which number are they looking at" - and the log below
-            answers the slower one about how it got there. */}
+        {/* What the customer has been quoted ("which number are they looking
+            at"), above the full history. */}
         <QuoteSends
           quoteId={quote.id}
           customerName={quote.name}
@@ -673,10 +568,8 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           tone="light"
         />
 
-        {/* Last on the page, because it is the only block nothing depends on.
-            It answers the question the crew used to have to ring the office
-            for: has the customer seen it, did they say yes, who moved the day.
-            Newest first, the way you would ask it. */}
+        {/* Last: nothing depends on it. Has the customer seen it, said yes, who
+            moved the day. Newest first. */}
         <section className="job-log">
           <h2 className="job-photos-title">{t.contractorJob.logTitle}</h2>
           {activity.length === 0 ? (

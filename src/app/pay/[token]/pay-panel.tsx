@@ -11,17 +11,10 @@ const initial: PayState = {};
 type Choice = { key: string; label: string; note: string; cents: number };
 
 /**
- * How much, and then go.
- *
- * The amount is a choice, not a text box. A customer who has just approved a
- * $12,000 job and is asked to type a number will either type the wrong one or
- * stop and ring the office; the two amounts anyone actually pays - the deposit
- * that starts the work, or everything - are buttons, with the free-text field
- * kept behind them for the person genuinely splitting it across two cards.
- *
- * One primary action on screen at a time. The button says the amount, because
- * that is the thing being agreed to, and the line under it says exactly what
- * happens next - nobody should be surprised by landing on Stripe.
+ * How much, and then go. Amounts are buttons (deposit or everything), with a
+ * free-text field behind them for splitting across cards: asked to type a
+ * number, people mistype or call the office. The button states the amount and
+ * the line under it says Stripe is next.
  */
 export function PayPanel({
   token,
@@ -34,19 +27,17 @@ export function PayPanel({
   token: string;
   dueCents: number;
   depositCents: number;
-  /** A second deposit from an approved change, still to pay. 0 when none. */
+  /** Unpaid second deposit from an approved change. 0 when none. */
   dueNowCents?: number;
   paidCents: number;
   payeeName: string;
 }) {
   const [state, action, pending] = useActionState(beginPayment, initial);
 
-  // Nothing paid yet: the deposit is what gets the job on the calendar, so it
-  // leads. Once something has been paid, there is only one sensible number
-  // left and offering a "deposit" again would be inviting them to underpay.
+  // Nothing paid yet: the deposit leads (it books the job). After any payment,
+  // offering a "deposit" again would invite underpaying.
   const fresh = paidCents === 0;
-  // A change asked for money up front (materials for the added work): that is
-  // what they came here to pay, so it leads, with the whole balance beside it.
+  // A change asked for money up front: that leads, with the full balance beside it.
   const secondDeposit = dueNowCents > 0 && dueNowCents < dueCents;
   const choices: Choice[] = secondDeposit
     ? [
@@ -75,7 +66,7 @@ export function PayPanel({
 
   const isCustom = choice === "other";
   const selected = choices.find((c) => c.key === choice);
-  // What the button will actually send. The server re-checks all of it.
+  // What the button will send. The server re-checks all of it.
   const amount = isCustom ? cleanAmount(custom) : String(fromCents(selected?.cents ?? 0));
   const customCents = Math.round(Number(amount) * 100);
   const customBad = isCustom && (!Number.isFinite(customCents) || customCents < 100 || customCents > dueCents);
@@ -138,9 +129,8 @@ export function PayPanel({
       <button type="submit" className="cq-btn cq-btn-accept pay-go" disabled={pending || customBad}>
         {pending ? "Taking you to checkout…" : `Pay ${isCustom && customCents > 0 ? usd(customCents) : (selected ? selected.label : "")}`}
       </button>
-      {/* Said before they tap, not after. A customer who lands on a Stripe page
-          without expecting one assumes something has gone wrong, and a customer
-          whose statement shows a name they don't recognise calls their bank. */}
+      {/* Said before they tap: an unexpected Stripe page looks like an error,
+          and an unrecognised statement name prompts a call to the bank. */}
       <p className="pay-fine">
         Card, Apple Pay and Google Pay, handled securely by Stripe. Your payment goes straight to your crew, and your
         statement will show {payeeName}.
