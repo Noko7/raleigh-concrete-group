@@ -185,8 +185,7 @@ end;
 $$;
 
 -- Re-stated so this file stands alone; identical to the live trigger.
-drop trigger if exists qr_guard_money_columns on public.quote_requests;
-create trigger qr_guard_money_columns
+create or replace trigger qr_guard_money_columns
   before update on public.quote_requests
   for each row execute function public.guard_quote_money_columns();
 
@@ -251,13 +250,11 @@ begin
 end;
 $$;
 
-drop trigger if exists qo_guard_line_prices on public.quote_options;
-create trigger qo_guard_line_prices
+create or replace trigger qo_guard_line_prices
   before insert or update or delete on public.quote_options
   for each row execute function public.guard_quote_line_prices();
 
-drop trigger if exists qp_guard_line_prices on public.quote_packages;
-create trigger qp_guard_line_prices
+create or replace trigger qp_guard_line_prices
   before insert or update or delete on public.quote_packages
   for each row execute function public.guard_quote_line_prices();
 
@@ -273,10 +270,18 @@ create trigger qp_guard_line_prices
 -- p_id and p_accept (a page opened before this ran, recordChangeAgreed) behaves
 -- exactly as before. Otherwise the body is the live one, verbatim.
 --
--- A new argument is a new signature, so the old one is dropped rather than
--- left beside it as an overload, and the grants are restated: a new function
--- is executable by PUBLIC, and this one must stay service-role only.
-drop function if exists public.apply_change_response(uuid, boolean);
+-- The live body is kept as it is, renamed apply_change_response_core with no
+-- API access, and the new three-argument apply_change_response wraps it: it
+-- takes the row lock, answers 'stale' on a mismatch, and otherwise hands over
+-- to the core, which re-takes the same lock in the same transaction. Renaming
+-- rather than dropping leaves no second overload for the API to choose between.
+do $$
+begin
+  if to_regprocedure('public.apply_change_response(uuid, boolean)') is not null then
+    alter function public.apply_change_response(uuid, boolean) rename to apply_change_response_core;
+    revoke all on function public.apply_change_response_core(uuid, boolean) from public, anon, authenticated, service_role;
+  end if;
+end $$;
 
 create or replace function public.apply_change_response(p_id uuid, p_accept boolean, p_requested_at timestamptz default null)
  returns jsonb
@@ -285,45 +290,13 @@ create or replace function public.apply_change_response(p_id uuid, p_accept bool
  set search_path to 'public'
 as $function$
 declare
-  q public.quote_requests;
-  v_from numeric; v_to numeric; v_note text; v_lines jsonb; v_old jsonb; v_sum numeric;
-  v_deposit integer; v_paid bigint;
+  v_at timestamptz;
 begin
-  select * into q from public.quote_requests where id = p_id for update;
-  if not found or q.change_requested_at is null or q.change_amount is null then
-    return jsonb_build_object('status', 'none');
-  end if;
-  if p_requested_at is not null and q.change_requested_at is distinct from p_requested_at then
+  select change_requested_at into v_at from public.quote_requests where id = p_id for update;
+  if found and v_at is not null and p_requested_at is not null and v_at is distinct from p_requested_at then
     return jsonb_build_object('status', 'stale');
   end if;
-  v_from := q.quote_amount; v_to := q.change_amount; v_note := q.change_note; v_lines := q.change_lines;
-  v_deposit := q.change_deposit_cents;
-  select coalesce(jsonb_agg(jsonb_build_object('title', o.title, 'description', o.description, 'amount', o.amount,
-           'required', o.required, 'customer_response', o.customer_response) order by o.sort_order, o.created_at), '[]'::jsonb)
-    into v_old from public.quote_options o where o.quote_id = p_id;
-  if p_accept and v_lines is not null then
-    if jsonb_array_length(v_lines) > 0 then
-      select coalesce(sum((l->>'amount')::numeric), 0) into v_sum from jsonb_array_elements(v_lines) l;
-      if round(v_sum, 2) <> round(v_to, 2) then
-        raise exception 'change lines (%) do not add up to the new total (%)', v_sum, v_to;
-      end if;
-    end if;
-    delete from public.quote_options where quote_id = p_id;
-    insert into public.quote_options (quote_id, title, description, amount, required, sort_order, customer_response, responded_at)
-    select p_id, l->>'title', nullif(l->>'description', ''), (l->>'amount')::numeric, true, (t.ord - 1)::int, 'accepted', now()
-    from jsonb_array_elements(v_lines) with ordinality as t(l, ord);
-  end if;
-  select coalesce(sum(p.amount_cents - p.refunded_cents), 0) into v_paid
-    from public.quote_payments p where p.quote_id = p_id and p.status in ('paid', 'refunded');
-  update public.quote_requests set
-    quote_amount = case when p_accept then v_to else quote_amount end,
-    deposit_target_cents = case when p_accept and v_deposit is not null then (v_paid + v_deposit)::int else deposit_target_cents end,
-    change_note = null, change_amount = null, change_requested_at = null, change_requested_by = null,
-    change_lines = null, change_deposit_cents = null
-  where id = p_id returning * into q;
-  return jsonb_build_object('status', 'ok', 'quote', to_jsonb(q), 'from', v_from, 'to', v_to, 'note', v_note,
-    'old_lines', v_old, 'new_lines', v_lines, 'deposit_cents', case when p_accept then v_deposit else null end,
-    'paid_cents', v_paid);
+  return public.apply_change_response_core(p_id, p_accept);
 end;
 $function$;
 
