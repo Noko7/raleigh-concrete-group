@@ -83,6 +83,7 @@ const en = {
     pillJob: "Job",
     pillVisit: "Visit",
     pillViewed: "Viewed",
+    pillTriedAfterLost: "Tried to open after Lost: {n}x",
     textBtn: "Text",
     deleteLead: "Delete",
     // {name} is replaced with the customer's name.
@@ -131,6 +132,8 @@ const en = {
     time: "time",
     times: "times",
     lastViewed: "last",
+    tryAfterLost: "try after it was marked Lost",
+    triesAfterLost: "tries after it was marked Lost",
     customerResponse: "Customer response",
     accepted: "Accepted",
     declined: "Declined",

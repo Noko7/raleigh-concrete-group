@@ -21,6 +21,8 @@ export type BoardQuote = {
   view_count: number;
   /** Owner only: times the assigned contractor opened this job. 0 for everyone else. */
   crew_views: number;
+  /** Owner only: tries to open it after it was marked Lost. */
+  crew_closed_views: number;
   quote_type: string | null;
   created_at: string;
   scheduled_date: string | null;
@@ -465,6 +467,11 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                             <span className="kb-pill kb-pill-assigned">
                               {nameMap[q.assigned_to] ?? t.pipeline.crew}
                               {q.crew_views > 0 && ` · ${t.pipeline.pillViewed} ${q.crew_views}x`}
+                            </span>
+                          )}
+                          {q.crew_closed_views > 0 && (
+                            <span className="kb-pill kb-pill-alert">
+                              {fill(t.pipeline.pillTriedAfterLost, { n: String(q.crew_closed_views) })}
                             </span>
                           )}
                         </div>

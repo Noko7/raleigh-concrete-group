@@ -568,6 +568,14 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                           <span key={v.staff_id} className="crm-crew-view">
                             {nameMap.get(v.staff_id) ?? "Staff"} · {v.view_count}{" "}
                             {v.view_count === 1 ? t.job.time : t.job.times} · {t.job.lastViewed} {fmt(v.last_viewed_at)}
+                            {/* The point of all this: trying to get back into a
+                                job after it was marked Lost. */}
+                            {v.closed_view_count > 0 && (
+                              <strong className="crm-crew-view-closed">
+                                {" "}· {v.closed_view_count} {v.closed_view_count === 1 ? t.job.tryAfterLost : t.job.triesAfterLost}
+                                {v.last_closed_view_at ? ` (${t.job.lastViewed} ${fmt(v.last_closed_view_at)})` : ""}
+                              </strong>
+                            )}
                           </span>
                         ))}
                   </dd>

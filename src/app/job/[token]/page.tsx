@@ -23,6 +23,7 @@ import { JobFinish } from "./job-finish";
 import { JobHeldTexts } from "./job-held-texts";
 import { JobPayments } from "./job-payments";
 import { CrewViewBeacon } from "./crew-view-beacon";
+import { bumpCrewView } from "@/lib/crm/crew-views";
 import { JobQuote } from "./job-quote";
 import { JobReschedule } from "./job-reschedule";
 import { JobSchedule } from "./job-schedule";
@@ -42,6 +43,14 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   if (!quote) notFound();
   // Contractors only see jobs assigned to them; owners can see any job.
   if (session.staff.role !== "owner" && quote.assigned_to !== session.staff.id) notFound();
+  // Lost or archived: the contractor is done with this customer. They're locked
+  // out like everywhere else, and the owner sees that they tried.
+  if (session.staff.role !== "owner" && (quote.status === "lost" || quote.archived_at)) {
+    // Not the refresh straight after they marked it Lost themselves.
+    const justChanged = Date.now() - new Date(quote.updated_at ?? 0).getTime() < 2 * 60 * 1000;
+    if (!justChanged) await bumpCrewView(quote.id, session.staff.id, true);
+    notFound();
+  }
 
   // Anything this job has written but not yet sent. RLS-scoped to the reader,
   // so a contractor only ever gets the rows for their own jobs.

@@ -28,7 +28,7 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
     listCrewViews(session),
   ]);
   // Opens of each job by its CURRENT contractor, for the owner's card pill.
-  const crewViewsOf = new Map(crewViews.map((v) => [`${v.quote_id}:${v.staff_id}`, v.view_count]));
+  const crewViewsOf = new Map(crewViews.map((v) => [`${v.quote_id}:${v.staff_id}`, v]));
   const contractors = staff.filter((s) => s.role === "contractor");
   const nameMap: Record<string, string> = {};
   for (const s of staff) nameMap[s.id] = s.full_name || s.email || "Staff";
@@ -44,7 +44,8 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
     assigned_to: q.assigned_to,
     quote_amount: q.quote_amount,
     view_count: q.view_count,
-    crew_views: q.assigned_to ? (crewViewsOf.get(`${q.id}:${q.assigned_to}`) ?? 0) : 0,
+    crew_views: q.assigned_to ? (crewViewsOf.get(`${q.id}:${q.assigned_to}`)?.view_count ?? 0) : 0,
+    crew_closed_views: q.assigned_to ? (crewViewsOf.get(`${q.id}:${q.assigned_to}`)?.closed_view_count ?? 0) : 0,
     quote_type: q.quote_type,
     created_at: q.created_at,
     scheduled_date: q.scheduled_date,

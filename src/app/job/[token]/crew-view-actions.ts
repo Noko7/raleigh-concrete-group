@@ -10,5 +10,5 @@ export async function recordCrewView(token: string): Promise<void> {
   if (!session || session.staff.role === "owner") return;
   const quote = await getQuoteByToken("job_token", token);
   if (!quote || quote.assigned_to !== session.staff.id) return;
-  await bumpCrewView(quote.id, session.staff.id);
+  await bumpCrewView(quote.id, session.staff.id, quote.status === "lost" || Boolean(quote.archived_at));
 }

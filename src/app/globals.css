@@ -4379,3 +4379,5 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 
 /* Owner-only crew views on the job page: one contractor per line. */
 .crm-crew-view { display: block; }
+.crm-crew-view-closed { color: #f87171; }
+.kb-pill-alert { background: rgba(248, 113, 113, 0.15); border: 1px solid #f87171; color: #fca5a5; }

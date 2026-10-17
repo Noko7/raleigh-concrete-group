@@ -105,11 +105,17 @@ export async function updateQuoteResult(
   id: string,
   patch: Partial<Quote>,
 ): Promise<{ quote: Quote | null; error?: string }> {
-  const res = await pgUser(`quote_requests?id=eq.${encodeURIComponent(id)}`, session.accessToken, {
-    method: "PATCH",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify(patch),
-  });
+  // A contractor marking their own job Lost. The database hides Lost jobs from
+  // contractors (supabase/crew-views.sql), so it refuses this through their own
+  // login - the row would vanish from them mid-update. The server writes it
+  // instead, scoped to a job that is still assigned to them, which is exactly
+  // what their own update rule allows.
+  const losing = session.staff.role !== "owner" && patch.status === "lost";
+  const path = `quote_requests?id=eq.${encodeURIComponent(id)}`;
+  const init = { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(patch) };
+  const res = losing
+    ? await pgAdmin(`${path}&assigned_to=eq.${encodeURIComponent(session.staff.id)}&archived_at=is.null`, init)
+    : await pgUser(path, session.accessToken, init);
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -550,11 +556,19 @@ export async function addEvent(
   type: string,
   meta?: Record<string, unknown>,
 ): Promise<void> {
-  await pgUser("quote_events", session.accessToken, {
+  const init = {
     method: "POST",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ quote_id: quoteId, type, meta: meta ?? null, actor: session.staff.id }),
-  });
+  };
+  const res = await pgUser("quote_events", session.accessToken, init);
+  // Refused for a contractor on a job they can no longer see - the Lost they
+  // just marked it. The history still has to say who did it, so the server
+  // writes it, for a job that is still theirs.
+  if (!res.ok && session.staff.role !== "owner" && /^[0-9a-fA-F-]{36}$/.test(quoteId)) {
+    const own = await pgAdmin(`quote_requests?id=eq.${quoteId}&assigned_to=eq.${session.staff.id}&select=id&limit=1`);
+    if (own.ok && ((await own.json()) as unknown[]).length > 0) await pgAdmin("quote_events", init);
+  }
 }
 
 export async function listEvents(session: Session, quoteId: string): Promise<QuoteEvent[]> {
@@ -1298,7 +1312,7 @@ export async function getStaffContactById(
 export async function listBookedForReminder(date: string): Promise<Quote[]> {
   if (!ISO_DATE.test(date)) return [];
   const res = await pgAdmin(
-    `quote_requests?status=eq.scheduled&scheduled_date=eq.${date}&reminder_sent_at=is.null&select=*`,
+    `quote_requests?status=eq.scheduled&scheduled_date=eq.${date}&reminder_sent_at=is.null&archived_at=is.null&select=*`,
   );
   if (!res.ok) return [];
   return (await res.json()) as Quote[];
@@ -1318,7 +1332,7 @@ export async function markReminderSent(id: string): Promise<void> {
 // have gone out is tracked per job in crew_reminders, checked by the caller.
 export async function listJobsOn(date: string): Promise<Quote[]> {
   if (!ISO_DATE.test(date)) return [];
-  const res = await pgAdmin(`quote_requests?status=eq.scheduled&scheduled_date=eq.${date}&select=*`);
+  const res = await pgAdmin(`quote_requests?status=eq.scheduled&scheduled_date=eq.${date}&archived_at=is.null&select=*`);
   if (!res.ok) return [];
   return (await res.json()) as Quote[];
 }
