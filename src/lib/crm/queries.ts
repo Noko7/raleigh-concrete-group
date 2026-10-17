@@ -1,6 +1,5 @@
-// Server-only data access for the CRM. Reads/writes that belong to a logged-in
-// user go through pgUser (RLS enforces owner/contractor scoping). Token-page
-// lookups, view tracking and signed URLs use pgAdmin (no user context).
+// Server-only CRM data access. User-scoped calls use pgUser (RLS scopes owner vs
+// contractor); token pages, view tracking and signed URLs use pgAdmin.
 import { offlineAcceptanceRefusal, repeatAnswer, unansweredFilter } from "./answered";
 import { todayYmd, ymdInDays } from "./clock";
 import {
@@ -35,14 +34,12 @@ import {
   VISIT_GRACE_DAYS,
 } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
-// Cents, for the two places a change order has to compare money to money.
-// fees.ts imports nothing of ours, so this edge only ever points one way.
+// fees.ts imports nothing local, so this can't form a cycle.
 import { toCents } from "./fees";
 import { changeOrderRefusal, jobPatchRefusal, refusalBasis } from "./permissions";
 import { pgUser, pgAdmin } from "./rest";
 import { MAX_SEND_ATTEMPTS, RETRY_BACKOFF_MINUTES, planRetry } from "./send-retry";
 
-// Re-exported so every queue caller reads the cap from one place.
 export { MAX_SEND_ATTEMPTS };
 import type {
   Agreement,
@@ -58,8 +55,7 @@ import type {
 
 export type QuoteFilters = { status?: string; assignedTo?: string; search?: string; archived?: boolean };
 
-// Archived (soft-deleted) leads are hidden from the pipeline/customers views by
-// default - pass { archived: true } to see only the ones someone deleted.
+// Archived (soft-deleted) leads are hidden unless { archived: true }.
 export async function listQuotes(session: Session, filters: QuoteFilters = {}): Promise<Quote[]> {
   const params = new URLSearchParams();
   params.set("select", "*");
@@ -77,9 +73,7 @@ export async function listQuotes(session: Session, filters: QuoteFilters = {}): 
   return (await res.json()) as Quote[];
 }
 
-// Everything with a date on it - booked work days (scheduled_date) and in-person
-// quote visits (visit_date) - for the CRM calendar. RLS scopes this to the
-// owner (all rows) or a contractor (only their assigned jobs).
+// Booked work days and in-person visits, for the calendar. RLS scopes the rows.
 export async function listScheduled(session: Session): Promise<Quote[]> {
   const res = await pgUser(
     "quote_requests?select=*&or=(scheduled_date.not.is.null,visit_date.not.is.null)&order=created_at.desc",
@@ -99,32 +93,25 @@ export async function getQuote(session: Session, id: string): Promise<Quote | nu
   return rows[0] ?? null;
 }
 
-// Same update, but it says why it failed. A bare null can't distinguish "the
-// database is missing a column" from "RLS blocked you", and both used to surface
-// to the crew as "Could not save that date. Please try again." - advice that
-// never works, for a problem retrying can't fix.
+// Like updateQuote, but says why it failed: a missing column and an RLS block
+// need different fixes, and neither is fixed by retrying.
 export async function updateQuoteResult(
   session: Session,
   id: string,
   patch: Partial<Quote>,
 ): Promise<{ quote: Quote | null; error?: string }> {
-  // A contractor marking their own job Lost. The database hides Lost jobs from
-  // contractors (supabase/crew-views.sql), so it refuses this through their own
-  // login - the row would vanish from them mid-update. The server writes it
-  // instead, scoped to a job that is still assigned to them, which is exactly
-  // what their own update rule allows.
+  // Contractors can't see Lost jobs (crew-views.sql), so their own login can't
+  // set Lost. The service role writes it, scoped to a job still assigned to them.
   const losing = session.staff.role !== "owner" && patch.status === "lost";
-  // That write skips the database's guard on the money columns, because the
-  // service role is exempt from it. So the same rule is applied here, to the
-  // whole patch, against the row as the contractor can still see it: Lost is
-  // theirs to set, but it does not carry a new price or a Paid along with it.
+  // That bypasses the DB's money-column guard, so the same rule is checked
+  // here: Lost doesn't carry a price or Paid change with it.
   let unchangedSince = "";
   if (losing) {
     const before = await getQuote(session, id);
     if (!before) return { quote: null, error: "You can't change this job. It may have been reassigned to someone else." };
     const refusal = jobPatchRefusal(session.staff.role, before, patch, session.staff.id);
     if (refusal) return { quote: null, error: refusal };
-    // Written only if the row still holds what that check read.
+  // Write only if the row still holds what that check read.
     for (const [column, value] of Object.entries(refusalBasis(before, patch))) {
       unchangedSince +=
         value === null
@@ -147,8 +134,7 @@ export async function updateQuoteResult(
     const body = await res.text().catch(() => "");
     console.error("[updateQuote] failed", { id, status: res.status, body, patch: Object.keys(patch) });
 
-    // PGRST204 = "column ... does not exist": a migration hasn't been run yet.
-    // Name the file, because that's the only thing that fixes it.
+    // PGRST204 = missing column: a migration hasn't been run, so name it.
     const missing = body.match(/'([a-z_]+)' column/i)?.[1] ?? body.match(/column "([a-z_]+)"/i)?.[1];
     if (body.includes("PGRST204") || /column .* does not exist/i.test(body)) {
       return {
@@ -163,8 +149,7 @@ export async function updateQuoteResult(
   }
 
   const rows = (await res.json()) as Quote[];
-  // A successful PATCH that changed nothing means RLS filtered the row out:
-  // the job isn't assigned to this user any more.
+  // A PATCH that matched nothing: RLS hid the row (no longer assigned).
   if (!rows[0]) {
     return {
       quote: null,
@@ -181,23 +166,19 @@ export async function updateQuote(session: Session, id: string, patch: Partial<Q
 }
 
 // ── Quote line items ────────────────────────────────────────────────────────
-// A quote either has none of these - the single-price quote the app has always
-// had - or a list of them, each answered on its own by the customer. Nothing
-// here runs for a quote without options, so the old shape is untouched.
+// A quote has none (single price) or several, each answered separately.
 
 export async function listQuoteOptions(session: Session, quoteId: string): Promise<QuoteOption[]> {
   const res = await pgUser(
     `quote_options?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
     session.accessToken,
   );
-  // An empty list is also what a database without the table yet returns, and
-  // that is the right answer for every caller: this quote has no line items.
+  // A missing table also lands here; "no line items" is right for every caller.
   if (!res.ok) return [];
   return (await res.json()) as QuoteOption[];
 }
 
-// Same list with the service-role key, for the two surfaces that have no user
-// session: the customer's own quote page and the endpoint behind its buttons.
+// Service-role version for the customer's quote page and its endpoint (no session).
 export async function listQuoteOptionsAdmin(quoteId: string): Promise<QuoteOption[]> {
   const res = await pgAdmin(
     `quote_options?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
@@ -206,9 +187,8 @@ export async function listQuoteOptionsAdmin(quoteId: string): Promise<QuoteOptio
   return (await res.json()) as QuoteOption[];
 }
 
-// Clean, capped values straight off the wire. Both editors post the same JSON
-// and neither is trusted: the title cap, the price ceiling and the row limit
-// are enforced here as well as in the check constraint.
+// Both editors post this JSON and neither is trusted: caps are enforced here as
+// well as by the check constraint.
 export function parseQuoteOptions(raw: unknown): { rows: QuoteOptionDraft[]; error?: string } {
   if (!Array.isArray(raw)) return { rows: [] };
   const rows: QuoteOptionDraft[] = [];
@@ -216,8 +196,7 @@ export function parseQuoteOptions(raw: unknown): { rows: QuoteOptionDraft[]; err
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const title = noEmDash(String(o.title ?? "").trim()).slice(0, OPTION_TITLE_MAX);
-    // A blank row is what an editor leaves behind when somebody adds one and
-    // changes their mind, so it's dropped rather than refused.
+    // A blank row is an abandoned add; drop it rather than refuse.
     if (!title) continue;
     const amount = Number(o.amount);
     if (!Number.isFinite(amount) || amount < 0 || amount > 99_999_999) {
@@ -235,9 +214,8 @@ export function parseQuoteOptions(raw: unknown): { rows: QuoteOptionDraft[]; err
   return { rows };
 }
 
-// Two drafts describe the same line item to the customer. Used to decide
-// whether a save changed anything they would read, which is what separates a
-// corrected quote from a second copy of the same one.
+// Same line items as the customer would read them; separates a correction from
+// a resend of the same quote.
 export function sameOptions(a: QuoteOptionDraft[], b: QuoteOptionDraft[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((x, i) => {
@@ -251,8 +229,7 @@ export function sameOptions(a: QuoteOptionDraft[], b: QuoteOptionDraft[]): boole
   });
 }
 
-// The stored rows in the shape parseQuoteOptions produces, so the two can be
-// compared directly.
+// Stored rows in parseQuoteOptions' shape, for comparison.
 export function optionsAsDrafts(rows: QuoteOption[]): QuoteOptionDraft[] {
   return rows.map((o) => ({
     id: o.id,
@@ -263,10 +240,8 @@ export function optionsAsDrafts(rows: QuoteOption[]): QuoteOptionDraft[] {
   }));
 }
 
-// Make the stored line items match what was just submitted. Rows keep their id
-// - and with it the customer's answer, once there is one - so this is an
-// update rather than a delete-and-recreate. Runs as the logged-in user, so RLS
-// is what stops a contractor editing somebody else's job.
+// Sync stored line items to the submission. Rows keep their id (and the
+// customer's answer). Runs as the user, so RLS stops edits to others' jobs.
 export async function saveQuoteOptions(
   session: Session,
   quoteId: string,
@@ -326,8 +301,7 @@ export async function saveQuoteOptions(
   return { ok: true };
 }
 
-// The one failure worth naming: the migration hasn't been run, which no amount
-// of trying again will fix.
+// A missing migration is the one failure retrying can't fix, so name it.
 async function optionError(res: Response, verb: string): Promise<string> {
   const body = await res.text().catch(() => "");
   console.error("[quoteOptions] failed", { status: res.status, body });
@@ -337,26 +311,21 @@ async function optionError(res: Response, verb: string): Promise<string> {
   return `Could not ${verb} the line items (error ${res.status}). Please try again.`;
 }
 
-// ── A choice of ways to do the job ──────────────────────────────────────────
-// Packages are the "or instead" to line items' "and also": a concrete driveway
-// or an asphalt one, and the customer picks exactly one. Everything here
-// mirrors the line-item block above on purpose - same scoping, same missing-
-// migration handling, same "empty list is the right answer" default - because
-// the two are read side by side on every screen that shows a quote.
+// ── Packages: pick exactly one ──────────────────────────────────────────────
+// "Or instead" to line items' "and also" (concrete vs asphalt). Mirrors the
+// line-item block deliberately: same scoping and error handling.
 
 export async function listQuotePackages(session: Session, quoteId: string): Promise<QuotePackage[]> {
   const res = await pgUser(
     `quote_packages?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
     session.accessToken,
   );
-  // An empty list is also what a database without the table yet returns, and
-  // that is the right answer for every caller: this quote offers no choice.
+  // A missing table also lands here; "no choice offered" is right for every caller.
   if (!res.ok) return [];
   return (await res.json()) as QuotePackage[];
 }
 
-// Same list with the service-role key, for the two surfaces that have no user
-// session: the customer's own quote page and the endpoint behind its buttons.
+// Service-role version for the customer's quote page and its endpoint (no session).
 export async function listQuotePackagesAdmin(quoteId: string): Promise<QuotePackage[]> {
   const res = await pgAdmin(
     `quote_packages?quote_id=eq.${encodeURIComponent(quoteId)}&select=*&order=sort_order.asc,created_at.asc`,
@@ -365,12 +334,9 @@ export async function listQuotePackagesAdmin(quoteId: string): Promise<QuotePack
   return (await res.json()) as QuotePackage[];
 }
 
-// Clean, capped values straight off the wire, same as parseQuoteOptions.
-//
-// One extra rule: at most one package may be marked recommended. The database
-// enforces it too (a partial unique index), but a browser that posts two would
-// otherwise get a constraint violation instead of a sentence, so the later one
-// simply loses the flag.
+// Same rules as parseQuoteOptions, plus: at most one recommended. The DB's
+// partial unique index enforces it too; later ones just lose the flag so the
+// browser gets a sentence, not a constraint error.
 export function parseQuotePackages(raw: unknown): { rows: QuotePackageDraft[]; error?: string } {
   if (!Array.isArray(raw)) return { rows: [] };
   const rows: QuotePackageDraft[] = [];
@@ -379,8 +345,7 @@ export function parseQuotePackages(raw: unknown): { rows: QuotePackageDraft[]; e
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const title = noEmDash(String(o.title ?? "").trim()).slice(0, PACKAGE_TITLE_MAX);
-    // A blank card is what an editor leaves behind when somebody adds one and
-    // changes their mind, so it is dropped rather than refused.
+    // A blank card is an abandoned add; drop it rather than refuse.
     if (!title) continue;
     const amount = Number(o.amount);
     if (!Number.isFinite(amount) || amount < 0 || amount > 99_999_999) {
@@ -397,17 +362,13 @@ export function parseQuotePackages(raw: unknown): { rows: QuotePackageDraft[]; e
       recommended: isRec,
     });
   }
-  // A lone card is kept rather than dropped: somebody has typed the first
-  // option and not yet the second, and throwing that away on a save is how an
-  // editor loses work for a rule it never explained. It is inert until there is
-  // a second one - isChoice() gates the pricing, the customer's page and the
-  // send - so nothing goes out asking a customer to pick from a list of one.
+  // A lone card is kept so a half-typed choice isn't lost on save. It's inert
+  // until there's a second: isChoice() gates pricing, the customer page and send.
   return { rows };
 }
 
-// Two drafts describe the same choice to the customer. Used to decide whether a
-// save changed anything they would read, which is what separates a corrected
-// quote from a second copy of the same one.
+// Same choice as the customer would read it; separates a correction from a
+// resend of the same quote.
 export function samePackages(a: QuotePackageDraft[], b: QuotePackageDraft[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((x, i) => {
@@ -421,8 +382,7 @@ export function samePackages(a: QuotePackageDraft[], b: QuotePackageDraft[]): bo
   });
 }
 
-// The stored rows in the shape parseQuotePackages produces, so the two can be
-// compared directly.
+// Stored rows in parseQuotePackages' shape, for comparison.
 export function packagesAsDrafts(rows: QuotePackage[]): QuotePackageDraft[] {
   return rows.map((p) => ({
     id: p.id,
@@ -433,10 +393,8 @@ export function packagesAsDrafts(rows: QuotePackage[]): QuotePackageDraft[] {
   }));
 }
 
-// Make the stored packages match what was just submitted. Rows keep their id -
-// and with it the customer's answer, once there is one - so this is an update
-// rather than a delete-and-recreate. Runs as the logged-in user, so RLS is what
-// stops a contractor editing somebody else's job.
+// Sync stored packages to the submission. Rows keep their id (and the
+// customer's answer). Runs as the user, so RLS stops edits to others' jobs.
 export async function saveQuotePackages(
   session: Session,
   quoteId: string,
@@ -455,9 +413,8 @@ export async function saveQuotePackages(
     if (!res.ok) return { ok: false, error: await packageError(res, "remove") };
   }
 
-  // Recommendations are cleared before any are set. One quote may only have one
-  // (a partial unique index says so), and moving the flag from the first card
-  // to the second would otherwise collide with the row still holding it.
+  // Clear recommendations first: the partial unique index allows one per
+  // quote, so moving the flag would otherwise collide.
   const stillRecommended = existing.filter((p) => p.recommended && keep.has(p.id)).map((p) => p.id);
   if (stillRecommended.length > 0) {
     await pgUser(`quote_packages?id=in.(${stillRecommended.join(",")})`, session.accessToken, {
@@ -501,8 +458,7 @@ export async function saveQuotePackages(
   return { ok: true };
 }
 
-// The one failure worth naming: the migration hasn't been run, which no amount
-// of trying again will fix.
+// A missing migration is the one failure retrying can't fix, so name it.
 async function packageError(res: Response, verb: string): Promise<string> {
   const body = await res.text().catch(() => "");
   console.error("[quotePackages] failed", { status: res.status, body });
@@ -512,15 +468,9 @@ async function packageError(res: Response, verb: string): Promise<string> {
   return `Could not ${verb} the options (error ${res.status}). Please try again.`;
 }
 
-// A lead a staff member logs themselves - a customer who called in - rather
-// than one that arrived through the public quote form. Runs as the signed-in
-// user (RLS), not the service role; public_token/job_token come back from the
-// row's own column defaults, same as every other insert into this table.
-//
-// Says why it failed, for the same reason updateQuoteResult does: the three
-// ways this insert realistically breaks (RLS, a check constraint, a column that
-// doesn't exist yet) all need a different fix, and none of them are fixed by
-// the "try again" a bare null forces the form to say.
+// A lead staff log themselves (a phone-in). Runs as the user (RLS); tokens come
+// from column defaults. Returns why it failed: RLS, a check constraint and a
+// missing column each need a different fix.
 export async function insertQuoteResult(
   session: Session,
   row: Partial<Quote>,
@@ -534,12 +484,10 @@ export async function insertQuoteResult(
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     console.error("[insertQuote] failed", { status: res.status, body, columns: Object.keys(row) });
-    // PostgREST puts the SQLSTATE in the body, so the specific failure is
-    // knowable rather than guessable.
+    // PostgREST puts the SQLSTATE in the body.
     const code = body.match(/"code"\s*:\s*"([^"]+)"/)?.[1] ?? "";
 
-    // 42501 covers both halves of a permission problem: the table grant and the
-    // RLS policy. One file adds both, so one message covers both.
+    // 42501 = table grant or RLS policy; one migration adds both.
     if (code === "42501" || /row-level security|permission denied/i.test(body)) {
       return {
         quote: null,
@@ -555,8 +503,7 @@ export async function insertQuoteResult(
         error: `The database is missing the "${missing ?? "required"}" column. Run the SQL in supabase/ (see README) and try again.`,
       };
     }
-    // 23514 = check violation. The caller knows which field it just sent that
-    // the constraint might not have heard of yet, so let it say so.
+    // e.g. 23514 check violation; the caller knows which new field it sent.
     return {
       quote: null,
       code,
@@ -566,8 +513,7 @@ export async function insertQuoteResult(
 
   const rows = (await res.json().catch(() => [])) as Quote[];
   if (!rows[0]) {
-    // Written, but not readable back. Saying "could not save" here would be a
-    // lie that gets the same customer entered twice.
+    // Written but not readable back. "Could not save" would get it entered twice.
     return { quote: null, error: "The lead saved but could not be read back. Check the pipeline before adding it again." };
   }
   return { quote: rows[0] };
@@ -590,9 +536,8 @@ export async function addEvent(
     body: JSON.stringify({ quote_id: quoteId, type, meta: meta ?? null, actor: session.staff.id }),
   };
   const res = await pgUser("quote_events", session.accessToken, init);
-  // Refused for a contractor on a job they can no longer see - the Lost they
-  // just marked it. The history still has to say who did it, so the server
-  // writes it, for a job that is still theirs.
+  // A contractor who just marked the job Lost can no longer see it, so the
+  // history row is written by the server, for a job still assigned to them.
   if (!res.ok && session.staff.role !== "owner" && /^[0-9a-fA-F-]{36}$/.test(quoteId)) {
     const own = await pgAdmin(`quote_requests?id=eq.${quoteId}&assigned_to=eq.${session.staff.id}&select=id&limit=1`);
     if (own.ok && ((await own.json()) as unknown[]).length > 0) await pgAdmin("quote_events", init);
@@ -626,10 +571,8 @@ export async function getStaffById(session: Session, id: string): Promise<Staff 
   return rows[0] ?? null;
 }
 
-// Self-service profile update. Uses the service role so a contractor can edit
-// their own row, but the server restricts the write to their own id and to the
-// name/phone/language/hours columns only - role and active can never be changed
-// here.
+// Service role so a contractor can edit their own row; restricted to their id
+// and to name/phone/locale/hours. Never role or active.
 export async function updateOwnProfile(
   session: Session,
   patch: {
@@ -657,14 +600,12 @@ export async function updateOwnProfile(
   return res.ok;
 }
 
-// Phones of every active owner - they receive all notifications. Service role so
-// this works from /api/quote (no user session) too.
+// Every active owner gets all notifications. Service role: /api/quote has no session.
 export async function getOwnerPhones(): Promise<string[]> {
   return (await getOwnerContacts()).map((o) => o.phone);
 }
 
-// Same list with the name attached, so the Settings panel can say which person
-// a number belongs to instead of showing a bare list you can't act on.
+// With names, so Settings can say whose number is whose.
 export async function getOwnerContacts(): Promise<{ name: string; phone: string }[]> {
   const res = await pgAdmin("staff?role=eq.owner&active=eq.true&select=full_name,email,phone");
   if (!res.ok) return [];
@@ -675,13 +616,10 @@ export async function getOwnerContacts(): Promise<{ name: string; phone: string 
 }
 
 // ── Message log ─────────────────────────────────────────────────────────────
-// Every text we attempt gets a row, sent or not. Sends are best-effort by design
-// - a texting outage must never fail a quote submission - but "best-effort" used
-// to mean "silent", and a lead could land with nobody notified and no trace of
-// why. This is that trace, and it sits next to the job rather than in a log file.
+// Every attempted text gets a row, sent or not. Sends are best-effort (an SMS
+// outage must never fail a submission), and this is the trace next to the job.
 
-// Context a send carries so its row can be attributed. `kind` names the
-// notification; `role` is who it was aimed at.
+// `kind` names the notification; `role` is who it was aimed at.
 export type SmsLog = { quoteId?: string | null; kind: string; role: "customer" | "owner" | "crew" };
 
 export type QuoteMessage = {
@@ -696,41 +634,30 @@ export type QuoteMessage = {
   provider: string | null;
   status: number | null;
   detail: string | null;
-  // Set on a text raised during quiet hours: when it may go out, and when the
-  // queue actually sent it. Both null on anything sent there and then, which is
-  // every row written before quiet-hours.sql was run.
+  // Quiet-hours hold: when it may go out, and when the queue sent it. Null on
+  // texts sent immediately.
   send_after?: string | null;
   sent_at?: string | null;
-  // Set when somebody called the text back before the queue got to it. See
-  // supabase/cancel-held-text.sql: the row stays, it just never sends.
+  // Staff called it back before it sent; the row stays.
   cancelled_at?: string | null;
-  // How many times the queue has handed this row to the provider. See
-  // supabase/queue-retry.sql - a failed send goes back on the queue until this
-  // reaches MAX_SEND_ATTEMPTS.
+  // Provider hand-offs so far; a failed send is requeued until MAX_SEND_ATTEMPTS.
   attempts?: number | null;
 };
 
-// Still waiting for the morning: due in the future, or due already and not yet
-// picked up by a flush. A cancelled row is no longer waiting for anything -
-// counting it as held would leave "goes out at 8:00 AM" on a text that never will.
+// Waiting for its send time, or due and not yet flushed. Cancelled rows aren't
+// held (they never will send).
 export function isHeld(m: QuoteMessage): boolean {
   return Boolean(m.send_after) && !m.sent_at && !m.cancelled_at;
 }
 
-// Called back by staff before it sent. Its own state, not a failure: nothing
-// went wrong, somebody decided against it.
+// Called back by staff before sending. Not a failure.
 export function isCancelled(m: QuoteMessage): boolean {
   return Boolean(m.cancelled_at) && !m.sent_at;
 }
 
 /**
- * Still stoppable: held, and its hour has not come round yet.
- *
- * Narrower than isHeld on purpose. A row whose send_after has passed is one the
- * next flush will pick up, and offering a Cancel button against it is offering
- * a race - it may win, and it may be a second behind a text already on
- * somebody's phone. Before 8am the answer is certain, so that is the only
- * window the button is offered in.
+ * Still stoppable: held, and send_after is still in the future. Narrower than
+ * isHeld: once due, the next flush may already have it, and Cancel would race.
  */
 export function isCancellable(m: QuoteMessage, now: Date = new Date()): boolean {
   if (!isHeld(m)) return false;
@@ -738,26 +665,12 @@ export function isCancellable(m: QuoteMessage, now: Date = new Date()): boolean 
   return Number.isFinite(due) && due > now.getTime();
 }
 
-// Service-role: sends happen from the public quote endpoint and from cron, where
 /**
- * Has this exact text already gone to this exact number, just now?
- *
- * The guard against sending the same thing twice. A server action that runs
- * twice - a double submit, a retried request, a component that mounts its form
- * twice - is invisible from inside the action: each run reads the same row,
- * decides the same thing, and sends. Nothing in the action can tell it is the
- * second one. The message log can, because the first run wrote to it.
- *
- * Matched on the number and the body rather than the kind, because that is what
- * the customer actually receives twice; two different kinds that happen to say
- * the same words are the same text as far as the phone is concerned.
- *
- * The window is short on purpose. Longer, and a deliberate second send - the
- * office re-sending a quote an hour later because the customer lost it - starts
- * silently doing nothing, which is a worse bug than the one this fixes.
- *
- * Counts a queued copy too: a held duplicate is a duplicate that hasn't
- * happened yet. Cancelled rows don't count, since nothing will come of them.
+ * Has this exact text gone to this number just now? Guards against a server
+ * action running twice (double submit, retry), which the action itself can't
+ * detect. Matched on number + body, since that's what the customer sees twice.
+ * The window is short so a deliberate later resend still works. Held copies
+ * count; cancelled ones don't.
  */
 export async function recentlySent(toPhone: string, body: string, withinSeconds = 90): Promise<boolean> {
   try {
@@ -771,14 +684,13 @@ export async function recentlySent(toPhone: string, body: string, withinSeconds 
     const rows = (await res.json()) as { body: string | null }[];
     return rows.some((r) => r.body === body);
   } catch {
-    // Never block a send on the guard failing. A duplicate is a nuisance; a
-    // text that never went because the check errored is a missed appointment.
+    // Never block a send on the guard failing; a missed text is worse than a duplicate.
     return false;
   }
 }
 
-// there is no session. Never throws - a logging failure must not take a send
-// down with it, which would be the tail wagging the dog.
+// Service-role: sends come from the public endpoint and cron, with no session.
+// Never throws, so a logging failure can't take a send down with it.
 export async function logMessage(row: {
   quote_id?: string | null;
   kind: string;
@@ -789,13 +701,10 @@ export async function logMessage(row: {
   provider?: string | null;
   status?: number | null;
   detail?: string | null;
-  // Set only by a quiet-hours hold: the row is the queue entry as well as the
-  // log line, and this is when it comes due.
+  // Quiet-hours hold only: this row is also the queue entry, due then.
   send_after?: string | null;
-  // Whether the row made it into the table. Ignored by the plain log-an-attempt
-  // path - a lost log line is a nuisance - but load-bearing for a HELD text,
-  // where the row IS the queue entry: if this comes back false, nothing is
-  // holding that message and nobody will ever send it.
+  // Resolves to whether the row was written. Load-bearing for a held text:
+  // false means nothing will ever send it.
 }): Promise<boolean> {
   try {
     const res = await pgAdmin("quote_messages", {
@@ -806,7 +715,7 @@ export async function logMessage(row: {
         kind: row.kind,
         role: row.role,
         to_phone: row.to_phone ?? null,
-        // Capped: a log row is for reading back, not for archiving an essay.
+        // Capped: for reading back, not archiving.
         body: row.body ? row.body.slice(0, 4000) : null,
         ok: row.ok,
         provider: row.provider ?? null,
@@ -816,8 +725,7 @@ export async function logMessage(row: {
       }),
     });
     if (!res.ok) {
-      // Worth a log line of its own: if the table is missing, every send looks
-      // fine in the app while nothing is being recorded.
+      // A missing table would otherwise make every send look fine while nothing is recorded.
       console.error("[sms-log] could not record message", { status: res.status, kind: row.kind });
     }
     return res.ok;
@@ -828,22 +736,16 @@ export async function logMessage(row: {
 }
 
 // ── The quiet-hours queue ───────────────────────────────────────────────────
-// Texts raised between 7pm and 8am wait in the message log with a send_after on
-// them. These three are what the flush in notify.ts drives: find what's due,
-// take one so nothing else can, then write down how it went.
+// Texts raised 7pm-8am wait here with a send_after. notify.ts's flush lists
+// what's due, claims one, then records the outcome.
 
 export async function listDueMessages(nowIso: string, limit = 25): Promise<QuoteMessage[]> {
   const res = await pgAdmin(
     `quote_messages?sent_at=is.null&cancelled_at=is.null&send_after=lte.${encodeURIComponent(nowIso)}` +
       `&select=*&order=send_after.asc&limit=${limit}`,
   );
-  // THROWS rather than returning an empty list, and the difference is the whole
-  // point. "Nothing is due" and "the question could not be asked" used to be
-  // the same answer here, so a missing column, an expired service key or a
-  // database outage read to every caller as an empty queue: the crons returned
-  // ok with `due: 0`, the logs said nothing, and held texts stopped going out
-  // with no symptom anywhere except customers not hearing from us. A queue that
-  // cannot be read is broken, and it has to say so.
+  // Throws rather than returning []: an unreadable queue must not look empty,
+  // or held texts silently stop going out.
   if (!res.ok) {
     const detail = (await res.text().catch(() => "")).slice(0, 300);
     throw new Error(`Could not read the held-message queue (HTTP ${res.status}). ${detail}`.trim());
@@ -852,18 +754,10 @@ export async function listDueMessages(nowIso: string, limit = 25): Promise<Quote
 }
 
 /**
- * Take a queued message, returning false if somebody already has it.
- *
- * The two crons, and every request that flushes on its way past, can all reach
- * the same row at the same moment. The `sent_at=is.null` in the filter is what
- * stops that being a duplicate text: whoever's UPDATE lands first gets the row
- * back, everyone else gets an empty list and moves on. Stamped before the send
- * rather than after, so a crash mid-send leaves a text unsent rather than sent
- * twice - the safer half of a choice that has to be made one way or the other.
- *
- * `cancelled_at is null` is in the filter for the same reason `sent_at` is: a
- * cancel landing between the list and the claim has to win, or a text somebody
- * stopped goes out anyway and the log says it was cancelled.
+ * Claim a queued message; false if someone else got it. Crons and passing
+ * requests can race for one row, so `sent_at=is.null` decides the winner.
+ * Stamped before sending: a crash leaves a text unsent rather than sent twice.
+ * `cancelled_at=is.null` lets a cancel landing between list and claim win.
  */
 export async function claimMessage(id: string, nowIso: string): Promise<boolean> {
   try {
@@ -909,16 +803,13 @@ export async function finishMessage(
     const res = await patch({
       ...outcome,
       attempts: plan.attempts,
-      // Releasing the claim is what makes the next drain see it again.
+      // Releasing the claim lets the next drain see it again.
       ...(plan.retrying
         ? { sent_at: null, send_after: new Date(Date.now() + RETRY_BACKOFF_MINUTES * 60_000).toISOString() }
         : {}),
     });
-    // queue-retry.sql may not have been run yet, and then the whole write is
-    // rejected for one unknown column - which would lose the outcome as well as
-    // the retry. Recording WHAT HAPPENED matters more than retrying, so on a
-    // rejection write the outcome on its own: exactly the old behaviour, plus a
-    // log line naming the migration to run.
+    // If the attempts column is missing the whole write is rejected. Recording
+    // the outcome matters more than the retry, so write it on its own.
     if (!res.ok) {
       console.error("[sms-queue] could not record attempts; is supabase/queue-retry.sql run?", { status: res.status });
       await patch(outcome);
@@ -929,12 +820,8 @@ export async function finishMessage(
 }
 
 /**
- * What the held-message queue looks like right now, for the Settings diagnostic.
- *
- * `overdue` is the number that matters: a text whose hour came and went and is
- * still sitting here means the thing that drains the queue is not running. That
- * was invisible until now - the rows were in the table, correctly marked
- * waiting, and nothing put the two facts together and called it a fault.
+ * Held-queue state for the Settings diagnostic. `overdue` > 0 means whatever
+ * drains the queue isn't running.
  */
 export type QueueHealth = { waiting: number; overdue: number; oldestDueIso: string | null; error?: string };
 
@@ -950,9 +837,8 @@ export async function queueHealth(at: Date = new Date()): Promise<QueueHealth> {
       return { ...empty, error: `HTTP ${res.status}. ${detail}`.trim() };
     }
     const rows = (await res.json()) as { send_after: string | null }[];
-    // Parsed, not string-compared. Postgres hands these back as
-    // "...T12:00:00+00:00" while toISOString() writes "...T12:00:00.000Z", and
-    // those two sort against each other on punctuation rather than on time.
+    // Parse, don't string-compare: Postgres returns "+00:00" while toISOString()
+    // writes ".000Z", and those sort on punctuation, not time.
     const cutoff = at.getTime();
     const due = rows.filter((r) => {
       const t = r.send_after ? new Date(r.send_after).getTime() : NaN;
@@ -969,23 +855,14 @@ export async function queueHealth(at: Date = new Date()): Promise<QueueHealth> {
 }
 
 /**
- * Call a queued text back. Returns the row it stopped, or null if it was too
- * late - or was never queued in the first place.
- *
- * Service-role, because staff only ever SELECT the message log - but scoped to
- * one job by the caller, which has already checked the session can reach it.
- * The row must still be queued: `sent_at=is.null` is what makes a cancel that
- * arrives a second after the flush claimed the row come back empty, rather than
- * marking a text cancelled that is already on somebody's phone.
+ * Call a queued text back; null if too late or never queued. Service role
+ * because staff can only SELECT the log; the caller has checked job access.
  */
 export async function cancelMessage(id: string, quoteId: string, nowIso: string): Promise<QuoteMessage | null> {
   try {
     const res = await pgAdmin(
-      // `send_after=gt.now` is the whole eligibility rule, enforced by the
-      // database rather than by the button: a text whose hour has arrived is
-      // one the flush may already be holding, and cancelling it is a race
-      // nobody can see the result of. Before then, nothing else is competing
-      // for the row and the answer is certain.
+      // send_after in the future is the eligibility rule, enforced by the DB:
+      // once due, the flush may already hold the row and a cancel would race.
       `quote_messages?id=eq.${encodeURIComponent(id)}&quote_id=eq.${encodeURIComponent(quoteId)}` +
         `&sent_at=is.null&cancelled_at=is.null&send_after=gt.${encodeURIComponent(nowIso)}`,
       {
@@ -995,8 +872,7 @@ export async function cancelMessage(id: string, quoteId: string, nowIso: string)
       },
     );
     if (!res.ok) return null;
-    // The cancelled row itself, so the caller can say in the activity log which
-    // text it was rather than logging that "a text" was stopped.
+    // Returned so the activity log can name which text was stopped.
     return ((await res.json()) as QuoteMessage[])[0] ?? null;
   } catch {
     return null;
@@ -1004,12 +880,8 @@ export async function cancelMessage(id: string, quoteId: string, nowIso: string)
 }
 
 /**
- * Cancel every text still queued for a job, in one write.
- *
- * Retracting a quote has to catch the text as well as the link: a quote raised
- * at 9pm is sitting in the queue until 8am, and killing the link while leaving
- * the text to go out sends the wrong customer a message about a quote that no
- * longer opens. Returns how many it stopped, so the caller can say so.
+ * Cancel every queued text for a job. Retracting a quote must also stop a text
+ * held overnight about it. Returns how many were stopped.
  */
 export async function cancelQueuedFor(quoteId: string, nowIso: string): Promise<number> {
   try {
@@ -1029,8 +901,7 @@ export async function cancelQueuedFor(quoteId: string, nowIso: string): Promise<
   }
 }
 
-// One message, scoped to the job it belongs to. Service-role like the rest of
-// the queue helpers, and the caller has already proved it can open that job.
+// Service role; the caller has already checked it can open the job.
 export async function getMessage(id: string, quoteId: string): Promise<QuoteMessage | null> {
   const res = await pgAdmin(
     `quote_messages?id=eq.${encodeURIComponent(id)}&quote_id=eq.${encodeURIComponent(quoteId)}&select=*&limit=1`,
@@ -1048,9 +919,7 @@ export async function listMessages(session: Session, quoteId: string): Promise<Q
   return (await res.json()) as QuoteMessage[];
 }
 
-// The most recent attempt of one kind, for deciding whether it's worth sending
-// again. "We already texted them" and "we tried to text them and it bounced"
-// look the same on the quote row; only the log can tell them apart.
+// Latest attempt of one kind. Only the log can tell "texted" from "tried and bounced".
 export async function lastMessageOf(session: Session, quoteId: string, kind: string): Promise<QuoteMessage | null> {
   const res = await pgUser(
     `quote_messages?quote_id=eq.${encodeURIComponent(quoteId)}&kind=eq.${encodeURIComponent(kind)}` +
@@ -1062,29 +931,17 @@ export async function lastMessageOf(session: Session, quoteId: string, kind: str
 }
 
 // ── Booking capacity ────────────────────────────────────────────────────────
-// One booked WORK day per day, for the whole business: a pour is a crew, a
-// truck and a day, and there is no second one to run alongside it.
-//
-// Quote visits have no per-day cap at all any more. They are an hour each on
-// one named contractor's calendar, so what limits them is that person's working
-// window and the hour of clearance either side - see visitAvailability below.
-// A business-wide count was the wrong shape for them twice over: it told a
-// customer a day was full while a second contractor sat idle, and it counted
-// against whoever happened to be the primary contractor rather than the person
-// the lead actually routes to.
+// One booked work day per day for the whole business: one crew, one truck.
+// Quote visits have no per-day cap; they're limited per contractor by working
+// hours and spacing (see visitAvailability).
 export const MAX_JOBS_PER_DAY = 1;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-fA-F-]{36}$/;
 
-// How many work jobs are already booked on a date (accepted quotes). Optionally
-// ignore one quote id (so re-accepting the same quote doesn't count against it).
-//
-// Lost jobs don't count, and didn't used to be excluded. A customer who
-// accepted, got a date, then pulled out leaves an accepted row with its
-// scheduled_date still on it if the lead was dragged to Lost rather than having
-// its appointment cancelled - and that day then read as full for the rest of
-// time, with nothing on any screen to explain why. supabase/appointments.sql
-// widens the matching unique index the same way, so the two agree.
+// Work jobs already booked on a date (accepted, not Lost). Optionally excludes
+// one quote so re-accepting doesn't count against itself. Lost is excluded so
+// an abandoned booking doesn't block the day forever; the unique index in
+// appointments.sql matches.
 export async function countJobsOn(date: string, excludeId?: string): Promise<number> {
   if (!ISO_DATE.test(date)) return 0;
   let path = `quote_requests?scheduled_date=eq.${date}&customer_response=eq.accepted&status=neq.lost&select=id`;
@@ -1095,10 +952,8 @@ export async function countJobsOn(date: string, excludeId?: string): Promise<num
 }
 
 // ── Double-booking: one contractor, one place at a time ─────────────────────
-// The per-day caps above are about the business as a whole. These are about a
-// person: whatever the caps allow, the same contractor cannot be on a pour and
-// at a quote across town, and two quote visits in one slot means one of them
-// gets missed. Every path that commits a date runs one of these first.
+// The per-day cap is business-wide; these stop one person being double-booked.
+// Every path that commits a date runs one of them first.
 
 export type Commitment = {
   id: string;
@@ -1107,17 +962,13 @@ export type Commitment = {
   time: string | null;
 };
 
-// Everything one contractor is already committed to on a date.
+// Everything one contractor is committed to on a date.
 //
-// A null staffId is the unassigned pile, read as one shared calendar rather
-// than as "nobody, so anything goes". Routing can fail to name a contractor -
-// no rule matches the service and no primary is set - and when it does, two
-// customers booking the same 10am still have to be stopped: somebody will end
-// up owning both, and it will be the same somebody.
+// A null staffId is the unassigned pile, treated as one shared calendar:
+// routing can fail to pick anyone, and whoever ends up owning two 10am bookings
+// is the same person.
 //
-// Two things deliberately don't count. An online request's visit_date is a slot
-// the customer offered, not an appointment anyone agreed to, so it can't block
-// a real booking. And a lost job isn't happening at all.
+// Not counted: an online request's visit_date (only an offered slot) and Lost jobs.
 export async function contractorCommitments(
   staffId: string | null,
   date: string,
@@ -1149,8 +1000,7 @@ export async function contractorCommitments(
     if (r.scheduled_date === date && r.customer_response === "accepted") {
       out.push({ id: r.id, name: r.name, kind: "job", time: r.scheduled_time });
     }
-    // visitDateOf's rule, applied to the narrow row this query selects: only
-    // an in-person visit (or a legacy null) is somewhere a person has to be.
+    // visitDateOf's rule: only an in-person (or legacy null) visit is a commitment.
     if (r.visit_date === date && visitDateOf(r)) {
       out.push({ id: r.id, name: r.name, kind: "visit", time: r.visit_time });
     }
@@ -1160,13 +1010,9 @@ export async function contractorCommitments(
 
 const clockKey = (t?: string | null) => (t ?? "").trim().toUpperCase().replace(/\s+/g, " ");
 
-// Do two appointments sit too close together on one person's day?
-//
-// The rule is a distance between start times, not two slots overlapping, which
-// is what lets an odd time booked from the job page behave correctly: a 9:30
-// visit is within the hour of both the 9:00 and the 10:00 slot and blocks both.
-// A time we can't parse falls back to an exact string match rather than
-// silently letting everything through.
+// Too close on one person's day? Distance between start times (not slot
+// overlap), so an odd 9:30 blocks both 9:00 and 10:00. Unparseable times fall
+// back to exact string match rather than letting everything through.
 function tooClose(a: string | null | undefined, b: string | null | undefined): boolean {
   const x = minutesOfTime(a);
   const y = minutesOfTime(b);
@@ -1174,13 +1020,8 @@ function tooClose(a: string | null | undefined, b: string | null | undefined): b
   return Math.abs(x - y) < VISIT_GAP_MINUTES;
 }
 
-// A booked work day is a full day on site, so anything else already on that
-// contractor's date blocks it - including a quote visit, which would otherwise
-// sit in the middle of a pour.
-//
-// Nobody assigned means nobody to double-book, and the one-job-per-day cap
-// above already covers the business, so this answers null rather than reading
-// the unassigned pile the way the visit check does.
+// A work day is a full day on site, so anything else on that date blocks it.
+// No assignee means nobody to double-book (the per-day cap covers the business).
 export async function findJobConflict(
   staffId: string | null | undefined,
   date: string,
@@ -1190,9 +1031,7 @@ export async function findJobConflict(
   return (await contractorCommitments(staffId, date, excludeId))[0] ?? null;
 }
 
-// A visit is an hour of somebody's day plus the drive either side, so another
-// visit clashes if it starts within VISIT_GAP_MINUTES. A booked work day that
-// day still blocks every slot on it.
+// A visit clashes with another starting within VISIT_GAP_MINUTES, or any work day.
 export async function findVisitConflict(
   staffId: string | null | undefined,
   date: string,
@@ -1203,8 +1042,7 @@ export async function findVisitConflict(
   return busy.find((c) => c.kind === "job" || tooClose(c.time, time)) ?? null;
 }
 
-// For staff-facing screens only. Names the customer already in that slot, which
-// is what makes the clash resolvable - never show this to the public.
+// Staff-facing only: names the other customer. Never show to the public.
 export function conflictMessage(c: Commitment): string {
   const when = c.time ? ` at ${c.time}` : "";
   return c.kind === "job"
@@ -1212,31 +1050,24 @@ export function conflictMessage(c: Commitment): string {
     : `That crew has a quote visit with ${c.name}${when}, and visits need an hour between them. Pick another time, or assign this to someone else first.`;
 }
 
-// One contractor's working window, for the public booking form and for the
-// server checks that back it. Missing or nonsense values fall back to the
-// shared default rather than leaving somebody unbookable.
+// One contractor's working window; bad or missing values fall back to the default.
 export async function getWorkHours(staffId: string | null | undefined): Promise<WorkHours> {
   if (!staffId || !UUID_RE.test(staffId)) return DEFAULT_WORK_HOURS;
   const res = await pgAdmin(`staff?id=eq.${staffId}&select=work_start_hour,work_end_hour,work_days&limit=1`);
-  // The columns arrive with supabase/appointments.sql. Until it is run,
-  // PostgREST 400s on the select and everyone keeps the default window, which
-  // is exactly the behaviour that shipped before hours were editable.
+  // Columns may be missing (appointments.sql); everyone gets the default window.
   if (!res.ok) return DEFAULT_WORK_HOURS;
   const rows = (await res.json()) as Parameters<typeof readWorkHours>[0][];
   return readWorkHours(rows[0]);
 }
 
 /**
- * What a contractor's day looks like to somebody trying to book a visit on it.
+ * A contractor's day as seen by someone booking a visit. Times only, never
+ * names: the endpoint is public (staff use findVisitConflict).
  *
- * Times only, never names: this feeds an endpoint that answers to anyone, so it
- * must not leak who is on the calendar. The staff-facing version of the same
- * question is findVisitConflict + conflictMessage.
- *
- *   slots     every start time they offer that day, from their own hours
- *   taken     the ones within an hour of something already booked
- *   wholeDay  they're on a pour; nothing on this day is bookable
- *   works     they don't work this weekday at all
+ *   slots     start times offered that day, from their hours
+ *   taken     those within an hour of something booked
+ *   wholeDay  on a pour; nothing bookable
+ *   works     false if they don't work that weekday
  */
 export async function visitAvailability(
   staffId: string | null | undefined,
@@ -1254,8 +1085,7 @@ export async function visitAvailability(
   return { slots, taken, wholeDay: false, works: true };
 }
 
-// Service-role phone lookup for one staff member (used by token-gated server code
-// that has no session, e.g. notifying an assigned contractor on customer accept).
+// Service-role, for token-gated code with no session.
 export async function getStaffPhoneById(id: string): Promise<string | null> {
   if (!/^[0-9a-fA-F-]{36}$/.test(id)) return null;
   const res = await pgAdmin(`staff?id=eq.${id}&select=phone&limit=1`);
@@ -1265,7 +1095,7 @@ export async function getStaffPhoneById(id: string): Promise<string | null> {
 }
 
 // ── Owner settings (app_integrations, provider='settings') ──────────────────
-// Currently just the primary contractor every new quote auto-assigns to.
+// Holds the primary contractor new quotes fall back to.
 export async function getPrimaryContractorId(): Promise<string | null> {
   const res = await pgAdmin("app_integrations?provider=eq.settings&select=data&limit=1");
   if (!res.ok) return null;
@@ -1287,15 +1117,9 @@ export async function setPrimaryContractorId(id: string | null): Promise<boolean
 }
 
 // ── Routing a lead to the right contractor ──────────────────────────────────
-// An owner gives each contractor the job types they take (staff.service_types).
-// A lead goes to the first active contractor who takes its service; if nobody
-// claims it - no rules set anywhere, an unrecognised service, or a lead with
-// no service at all - it falls back to the primary contractor, which is
-// exactly what happened before routing existed.
-//
-// `service` is free text on the wire (the public form uses a select, but the
-// CRM's own lead form is a text box and the endpoint accepts anything), so
-// matching is case- and space-insensitive.
+// A lead goes to the first active contractor whose service_types include its
+// service, else the primary contractor. `service` is free text (the CRM form
+// and endpoint accept anything), so matching ignores case and spaces.
 const normalizeService = (s?: string | null) => (s ?? "").trim().toLowerCase();
 
 export async function listActiveContractors(): Promise<Staff[]> {
@@ -1304,15 +1128,13 @@ export async function listActiveContractors(): Promise<Staff[]> {
   return (await res.json()) as Staff[];
 }
 
-// Who a lead for `service` should go to. Returns null only when there is no
-// primary contractor set either, in which case the lead stays unassigned and
-// the owner still gets the new-lead alert.
+// null only when there's no primary contractor either; the lead stays
+// unassigned and the owner still gets the alert.
 export async function resolveAssignee(service?: string | null): Promise<string | null> {
   const wanted = normalizeService(service);
 
   if (wanted) {
-    // Ordered by created_at, so when two contractors both take a job type the
-    // longer-standing one wins and the choice is at least predictable.
+    // created_at order: the longer-standing contractor wins ties, predictably.
     const contractors = await listActiveContractors();
     const match = contractors.find((c) =>
       (c.service_types ?? []).some((t) => normalizeService(t) === wanted),
@@ -1323,8 +1145,7 @@ export async function resolveAssignee(service?: string | null): Promise<string |
   return getPrimaryContractorId();
 }
 
-// Service-role lookup of a contractor's contact info (no session) - used by the
-// public submission endpoint when auto-assigning the primary contractor.
+// Service-role (no session), for the public submission endpoint.
 export async function getStaffContactById(
   id: string,
 ): Promise<{ phone: string | null; email: string | null; full_name: string | null } | null> {
@@ -1355,9 +1176,8 @@ export async function markReminderSent(id: string): Promise<void> {
 }
 
 // ── Crew reminders (cron) ───────────────────────────────────────────────────
-// Booked jobs landing on `date`, whatever their confirmation state. Unlike the
-// customer reminder there's no "sent" column to filter on here: which stages
-// have gone out is tracked per job in crew_reminders, checked by the caller.
+// Booked jobs on `date`. Which stages went out is in crew_reminders, checked by
+// the caller.
 export async function listJobsOn(date: string): Promise<Quote[]> {
   if (!ISO_DATE.test(date)) return [];
   const res = await pgAdmin(`quote_requests?status=eq.scheduled&scheduled_date=eq.${date}&archived_at=is.null&select=*`);
@@ -1365,8 +1185,7 @@ export async function listJobsOn(date: string): Promise<Quote[]> {
   return (await res.json()) as Quote[];
 }
 
-// Wipe the countdown so a newly booked (or moved) date gets its own full run of
-// crew reminders. Best-effort by design - see confirmSchedule.
+// Reset so a new or moved date gets its own full run of crew reminders. Best-effort.
 export async function clearCrewReminders(id: string): Promise<void> {
   await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
@@ -1375,9 +1194,8 @@ export async function clearCrewReminders(id: string): Promise<void> {
   }).catch(() => {});
 }
 
-// Record that the crew has had the reminder for this stage ("3", "1", "0").
-// Stored as an array rather than three columns so adding a stage later is a
-// constant change, not a migration. Re-confirming a date clears it.
+// Record a reminder stage ("3", "1", "0"). An array, so adding a stage needs no
+// migration. Re-confirming a date clears it.
 export async function markCrewReminded(quote: Quote, stage: string): Promise<void> {
   const already = quote.crew_reminders ?? [];
   if (already.includes(stage)) return;
@@ -1388,15 +1206,9 @@ export async function markCrewReminded(quote: Quote, stage: string): Promise<voi
   }).catch(() => {});
 }
 
-// How far back a reminder will chase something. Both nudges below are for
-// work that is still live, and neither should reach into the archive: a lead
-// that has sat untouched for two months is a pipeline problem to clean up, not
-// something to text the crew about, and a customer who never answered a quote
-// from months ago should not suddenly be told it is "waiting".
-//
-// It also stops the first run after deploy being a blast. Every qualifying row
-// in the table is unreminded on day one, so without a floor the first cron
-// would text every historical lead and every old unanswered quote at once.
+// Reminders never chase anything older than this: stale leads are a pipeline
+// cleanup, not a crew text, and old quotes shouldn't suddenly be "waiting". It
+// also stops the first run after deploy texting every historical row.
 export const REMINDER_MAX_AGE_DAYS = 14;
 
 function ageWindow(column: string, hours: number): string {
@@ -1405,34 +1217,24 @@ function ageWindow(column: string, hours: number): string {
   return `&${column}=lt.${encodeURIComponent(newest)}&${column}=gt.${encodeURIComponent(oldest)}`;
 }
 
-// A lead with a confirmed visit still ahead of it is not being ignored -
-// somebody is driving out on that day, and the price is supposed to wait
-// until they have seen the job. Chasing it would be telling a contractor off
-// for following the process.
-//
-// Once the visit has passed they get VISIT_GRACE_DAYS to send the price; after
-// that no price has come back, which is exactly the lead worth chasing. A visit
-// on the 10th holds the lead back through the 12th.
+// A lead with a confirmed visit ahead isn't being ignored: the price waits for
+// the visit. After it, they get VISIT_GRACE_DAYS (a visit on the 10th holds the
+// lead through the 12th).
 export function hasUpcomingVisit(q: Quote, graceFrom = ymdInDays(-VISIT_GRACE_DAYS)): boolean {
   const booked = visitDateOf(q);
   return Boolean(booked && booked >= graceFrom);
 }
 
 // ── Stale-lead nudge (cron) ──────────────────────────────────────────────────
-// New leads nobody has quoted, more than `hours` old (and inside the window
-// above), minus the ones with a visit still to come. Status stays "new" until
-// a price is sent, which is the right test for "nothing has gone out" but not
-// on its own for "nobody is on this".
+// "new" leads older than `hours` (within the window above) with no upcoming
+// visit. Status stays "new" until a price is sent.
 export async function listStaleLeads(hours: number): Promise<Quote[]> {
   const res = await pgAdmin(
     `quote_requests?status=eq.new${ageWindow("created_at", hours)}` +
       `&stale_lead_reminded_at=is.null&archived_at=is.null&select=*`,
   );
   if (!res.ok) return [];
-  // Filtered here rather than in the query: "a booked visit" means
-  // quote_type and visit_date read together (visitDateOf), and expressing
-  // that as nested PostgREST or-filters would be a second, silently
-  // divergent definition of the rule.
+  // Filtered in JS so visitDateOf stays the single definition of a booked visit.
   return ((await res.json()) as Quote[]).filter((q) => !hasUpcomingVisit(q));
 }
 
@@ -1445,11 +1247,8 @@ export async function markStaleLeadReminded(id: string): Promise<void> {
 }
 
 // ── Quote-visit night-before reminders (cron) ───────────────────────────────
-// Confirmed in-person visits landing on `date` - quote_type must be inperson,
-// so an online row's unconfirmed fallback slot never counts here. Lost leads
-// are excluded for the same reason contractorCommitments excludes them: the
-// visit isn't happening, and "we'll be out tomorrow" to someone who already
-// said no is worse than saying nothing.
+// Confirmed in-person visits on `date` (an online row's fallback slot never
+// counts). Lost leads excluded: the visit isn't happening.
 export async function listVisitsOn(date: string): Promise<Quote[]> {
   if (!ISO_DATE.test(date)) return [];
   const res = await pgAdmin(
@@ -1477,8 +1276,7 @@ export async function markVisitCrewReminded(id: string): Promise<void> {
 }
 
 // ── 48h no-response follow-up (cron) ────────────────────────────────────────
-// A quote that's been sent, sat unanswered for `hours` (and is still inside
-// the window above), and hasn't had a follow-up yet.
+// Sent quotes unanswered for `hours` (within the window above), not yet followed up.
 export async function listUnansweredQuotes(hours: number): Promise<Quote[]> {
   const res = await pgAdmin(
     `quote_requests?status=eq.quoted${ageWindow("quote_sent_at", hours)}` +
@@ -1496,7 +1294,7 @@ export async function markQuoteFollowupSent(id: string): Promise<void> {
   });
 }
 
-// Activity-log entry written by automatic/server-only processes (no session).
+// Activity-log entry from server-only processes (no session).
 export async function addAdminEvent(quoteId: string, type: string, meta?: Record<string, unknown>): Promise<void> {
   await pgAdmin("quote_events", {
     method: "POST",
@@ -1516,8 +1314,7 @@ export async function recordJobConfirmation(
   const q = ((await res.json()) as Quote[])[0];
   if (!q) return { ok: false, error: "Job not found." };
 
-  // Confirmation is now a flag on a Scheduled job (we keep the timestamp) rather
-  // than its own pipeline stage, so the board stays simple.
+  // Confirmation is a flag (timestamp) on a Scheduled job, not a pipeline stage.
   const patch: Partial<Quote> =
     action === "confirm" ? { confirmed_at: new Date().toISOString() } : {};
 
@@ -1569,15 +1366,9 @@ export async function getQuoteByToken(column: "public_token" | "job_token", toke
   return rows[0] ?? null;
 }
 
-// Has this quote's offer run out?
-//
-// Only ever true while the customer still has a decision to make. Once they
-// have accepted or declined, the page stops being an offer and becomes their
-// record of the job - the booked date, the amount they approved, the link the
-// payment text points at - so it never expires from under them.
-//
-// A null quote_expires_at is valid too: that's every quote sent before
-// expiry existed, and killing those retroactively would strand live links.
+// Has this quote's offer run out? Only while the customer still has to decide:
+// once answered, the page is their record of the job and never expires. A null
+// quote_expires_at never expires.
 export function isQuoteExpired(q: Pick<Quote, "quote_expires_at" | "customer_response">): boolean {
   if (q.customer_response) return false;
   if (!q.quote_expires_at) return false;
@@ -1607,25 +1398,21 @@ export async function recordCustomerView(token: string): Promise<void> {
   });
 }
 
-// Customer accepts (with a scheduled date, optionally taking the $150 save offer)
-// or declines, straight from the branded quote page. Service role; token-gated.
+// Customer accepts (with preferred dates, optionally the $150 credit) or
+// declines from the quote page. Service role; token-gated.
 export type OptionChoice = "accepted" | "declined";
 
 export type CustomerResponseResult = {
   ok: boolean;
   error?: string;
-  // This answer was already on file and nothing was written. The caller uses it
-  // to skip the texts: the owner and the crew heard the first time, and a
-  // second "QUOTE APPROVED" for the same quote reads as a second job.
+  // The answer was already on file and nothing was written; the caller skips
+  // the texts so nobody hears about the same job twice.
   duplicate?: boolean;
-  // What they said yes and no to, in the order they read them. Only the texts
-  // to the owner and crew use these - the customer already knows.
+  // What they said yes and no to, in page order, for the owner and crew texts.
   accepted?: QuoteOption[];
   declined?: QuoteOption[];
-  // Which way of doing the job they picked, on a quote that offered a choice.
-  // Null on every other quote. The crew needs this before anything else: on a
-  // driveway quoted both ways, "approved" does not say what to load the truck
-  // with.
+  // The package they picked, if a choice was offered; else null. The crew needs
+  // it: "approved" doesn't say what to load the truck with.
   package?: QuotePackage | null;
 };
 
@@ -1660,16 +1447,13 @@ export async function recordCustomerResponse(
     action: "accept" | "decline";
     discount?: boolean;
     preferredDates?: string[];
-    // The start time the customer wants on each of those days, index-aligned
-    // with preferredDates. Anything missing or malformed becomes null and the
-    // crew's card falls back to its own default.
+    // Start time per preferred date, index-aligned. Invalid entries become null
+    // and the crew card uses its default.
     preferredTimes?: (string | null)[];
-    // One answer per optional line item, keyed by option id. Ignored on a quote
-    // that has no line items, required on one that does.
+    // Per optional line item, keyed by option id. Required if the quote has items.
     options?: Record<string, OptionChoice>;
-    // Which way of doing the job they picked, by package id. Ignored on a quote
-    // that offers no choice, required on one that does - there is no sensible
-    // default, and picking one for them would be picking a price for them.
+    // Package id. Required if a choice is offered; no default, since picking one
+    // would pick their price.
     packageId?: string;
   },
 ): Promise<CustomerResponseResult> {
@@ -1686,28 +1470,16 @@ export async function recordCustomerResponse(
   const q = rows[0];
   if (!q) return { ok: false, error: "Quote not found." };
 
-  // Checked here as well as on the page: the page could have been open in a
-  // tab since before the quote ran out, and the button would still POST.
+  // Also checked here: a tab opened before expiry can still POST.
   if (isQuoteExpired(q)) {
     return { ok: false, error: "This quote has expired. Please call us and we'll send you an updated one." };
   }
 
   // ── Already answered ──
-  // A double tap, a retried request, a link opened in two tabs. This used to
-  // fall straight through and run the whole block below again, which was not
-  // harmless: on an itemised quote the second pass recomputed quote_amount from
-  // the line items, while the $150 credit was correctly guarded against being
-  // applied twice - so a duplicate submit put the customer's price back UP by
-  // $150 and re-texted the office about a job it already knew about.
-  //
-  // The same answer is therefore reported as the success it is, with nothing
-  // written. A DIFFERENT answer is refused rather than quietly applied: flipping
-  // an accepted quote to declined from a stale tab would strand a booked day and
-  // a crew who had already been told to turn up.
-  //
-  // A decline on a job the office has since moved off Lost is not an answer
-  // any more: the quote was put back in front of them, and saying yes to it
-  // now is the whole point of reopening it. See isOpenAgain.
+  // Double tap, retry or two tabs. The same answer is reported as success with
+  // nothing written; re-running would recompute an itemised total and undo the
+  // $150 credit. A different answer is refused, so a stale tab can't flip a
+  // booked job. A decline on a job moved off Lost is no longer an answer (isOpenAgain).
   const openAgain = isOpenAgain(q);
   const already = openAgain ? null : q.customer_response;
   if (already) return repeatAnswer(already, input.action);
@@ -1719,8 +1491,7 @@ export async function recordCustomerResponse(
   const patch: Partial<Quote> = { customer_responded_at: new Date().toISOString() };
   let accepted: QuoteOption[] = [];
   let declined: QuoteOption[] = [];
-  // The way of doing the job they picked. Null on a quote that offered no
-  // choice, which is most of them.
+  // Null unless the quote offered a choice.
   let chosenPackage: QuotePackage | null = null;
   let eventType: string;
 
@@ -1730,16 +1501,13 @@ export async function recordCustomerResponse(
     declined = options;
     eventType = "customer_declined";
   } else {
-    // Approving no longer books a day. The customer proposes dates that suit
-    // them and the job parks in "approved" until the crew confirms one against
-    // their own schedule - that confirmation is what puts it on the calendar.
-    // Raleigh calendar dates on both sides, so this is a day count rather than
-    // a millisecond comparison that had to be lenient to survive time zones.
+    // Approving doesn't book a day: the customer proposes dates and the job
+    // stays "approved" until the crew confirms one. Both sides are Raleigh
+    // calendar dates, so this is a plain string comparison.
     const min = ymdInDays(LEAD_TIME_DAYS);
     const seen = new Set<string>();
     const dates: string[] = [];
-    // Kept index-aligned with `dates` as they're filtered, so a day rejected
-    // for being too early doesn't shunt every later day onto the wrong time.
+    // Index-aligned with `dates`, so a rejected day doesn't shift later times.
     const times: (string | null)[] = [];
     const rawTimes = input.preferredTimes ?? [];
     for (const [i, raw] of (input.preferredDates ?? []).entries()) {
@@ -1748,8 +1516,7 @@ export async function recordCustomerResponse(
       if (date < min) continue;
       seen.add(date);
       dates.push(date);
-      // Shape-checked the same way every other stored time is, so a tampered
-      // form can't put a paragraph in the text the crew reads.
+      // Shape-checked so a tampered form can't put arbitrary text in the crew's message.
       const t = typeof rawTimes[i] === "string" ? (rawTimes[i] as string).trim().toUpperCase().replace(/\s+/, " ") : "";
       times.push(t && TIME_RE.test(t) ? t : null);
       if (dates.length >= MAX_PREFERRED_DATES) break;
@@ -1758,9 +1525,7 @@ export async function recordCustomerResponse(
       return { ok: false, error: `Please pick at least one date ${LEAD_TIME_DAYS} days from now or later.` };
     }
 
-    // Which way of doing the job, if this quote offered a choice. Exactly one,
-    // and it has to be one of the packages actually on this quote - an id from
-    // somebody else's quote would otherwise set the price of this one.
+    // Exactly one, and from this quote: another quote's package id would set this price.
     if (isChoice(packages)) {
       chosenPackage = packages.find((p) => p.id === input.packageId) ?? null;
       if (!chosenPackage) {
@@ -1768,9 +1533,8 @@ export async function recordCustomerResponse(
       }
     }
 
-    // Line items, if this quote has any. Every optional one needs an answer:
-    // a blank is not a no, it is a customer who scrolled past it, and billing
-    // either way from silence is how a dispute starts.
+    // Every optional item needs an answer: a blank isn't a no, and billing from
+    // silence starts disputes.
     if (options.length > 0) {
       const answers = input.options ?? {};
       const unanswered = options.filter((o) => !o.required && !answers[o.id]);
@@ -1779,9 +1543,7 @@ export async function recordCustomerResponse(
       }
       accepted = options.filter((o) => o.required || answers[o.id] === "accepted");
       declined = options.filter((o) => !o.required && answers[o.id] === "declined");
-      // Only a quote with nothing else on it. Where a package carries the job,
-      // saying no to every add-on is a perfectly ordinary answer - they want
-      // the driveway and none of the extras.
+      // Only refused when nothing else is bought; with a package, no add-ons is normal.
       if (accepted.length === 0 && !chosenPackage) {
         return {
           ok: false,
@@ -1790,9 +1552,8 @@ export async function recordCustomerResponse(
       }
     }
 
-    // The price follows the answers: the option they picked plus what they said
-    // yes to, and every downstream reader (the owner's text, the payment
-    // request, the calendar) goes on reading quote_amount as it always has.
+    // The price follows the answers: chosen package plus accepted items.
+    // Downstream readers keep using quote_amount.
     if (options.length > 0 || chosenPackage) {
       patch.quote_amount =
         Math.round((optionAmount(chosenPackage ?? { amount: 0 }) + optionsTotal(accepted)) * 100) / 100;
@@ -1801,13 +1562,11 @@ export async function recordCustomerResponse(
     patch.customer_response = "accepted";
     patch.status = "approved";
     patch.preferred_dates = dates;
-    // Written even when every entry is null, so the two arrays always have the
-    // same length and the crew's card can index straight into it.
+    // Written even if all null, so it always aligns with preferred_dates.
     patch.preferred_times = times;
     if (input.discount && !q.discount_accepted) {
       patch.discount_accepted = true;
-      // Off whatever they actually bought, not off the all-in figure they
-      // didn't take.
+      // Off what they actually bought, not the all-in figure.
       const base = patch.quote_amount ?? q.quote_amount;
       if (base != null) {
         patch.quote_amount = Math.max(0, Math.round((Number(base) - DECLINE_CREDIT) * 100) / 100);
@@ -1816,8 +1575,8 @@ export async function recordCustomerResponse(
     eventType = "customer_accepted";
   }
 
-  // Conditional on the row still holding the state checked above. Two submissions can both pass that
-  // check; the second then matches no row here and is answered from what the first one wrote.
+  // Conditional on the row still being unanswered. Of two racing submissions the
+  // second matches nothing and is answered from what the first wrote.
   const savePatch = (body: Partial<Quote>) =>
     pgAdmin(`quote_requests?id=eq.${q.id}${unansweredFilter(openAgain)}&select=id`, {
       method: "PATCH",
@@ -1826,12 +1585,8 @@ export async function recordCustomerResponse(
     });
 
   let upd = await savePatch(patch);
-  // preferred_times arrives with supabase/appointments.sql, and code deploys
-  // before SQL gets run. Without this retry, the window between the two turns
-  // every approval into "Could not save your response. Please call us." for a
-  // customer who has just decided to give us the job - the single worst moment
-  // in the funnel to fail. Their day is still recorded; only the hour they
-  // asked for is lost, and the crew's card has a fallback for exactly that.
+  // If the preferred_times column is missing (appointments.sql), retry without
+  // it rather than failing an approval; the crew card has a fallback time.
   if (!upd.ok && patch.preferred_times !== undefined) {
     const { preferred_times: _dropped, ...withoutTimes } = patch;
     console.error("[quote-response] preferred_times rejected - run supabase/appointments.sql");
@@ -1849,10 +1604,8 @@ export async function recordCustomerResponse(
     return { ok: false, error: "Could not save your response. Please call us." };
   }
 
-  // Stamp each line item with its own answer, so the record of what was bought
-  // survives any later edit to the quote and the crew can read it off the job
-  // page. After the quote row, deliberately: the customer's decision is
-  // recorded even if this second write fails.
+  // Stamp each line item's answer so the record survives later edits. After the
+  // quote row on purpose: the decision is saved even if this fails.
   const stamp = new Date().toISOString();
   for (const [response, rows] of [
     ["accepted", accepted],
@@ -1866,10 +1619,8 @@ export async function recordCustomerResponse(
     }).catch(() => {});
   }
 
-  // And the same for the choice of approach: the one they picked is stamped
-  // accepted, every other one on the quote declined. Recording the ones they
-  // turned down is what lets anybody later see that a choice was offered at
-  // all, rather than a quote that only ever had one price on it.
+  // Likewise for packages: chosen accepted, others declined, so it stays visible
+  // that a choice was offered.
   if (isChoice(packages)) {
     for (const [response, rows] of [
       ["accepted", chosenPackage ? [chosenPackage] : []],
@@ -1905,39 +1656,22 @@ export async function recordCustomerResponse(
 }
 
 // ── The customer said yes on the phone ──────────────────────────────────────
-// The other half of recordCustomerResponse above, and deliberately a different
-// function rather than a flag on it.
-//
-// That one is the customer's own hand: it runs behind the public token with the
-// service role, checks the quote hasn't expired, and refuses a second answer
-// because the person tapping might be tapping twice. This one is a member of
-// staff writing down something that happened out loud, so it runs as THEM -
-// pgUser, not pgAdmin - and RLS is what keeps a contractor to their own jobs.
-//
-// Everything else is kept identical on purpose, because the rest of the app
-// reads one pair of columns for "have they agreed": customer_response and
-// status. A verbal yes that wrote a third state would have to be taught to the
-// calendar, the money page, the reminders and both job pages one at a time.
-// It writes the same two values and the whole system turns on, exactly as it
-// does when they tap the link themselves. What is different is the audit trail:
-// the event carries who recorded it and that it came by phone, so nothing ever
-// claims the customer clicked something they didn't.
+// Separate from recordCustomerResponse on purpose: that one is the customer's
+// own tap (token, service role, expiry check). This is staff recording a call,
+// so it runs as them (pgUser) and RLS keeps contractors to their own jobs.
+// It writes the same customer_response/status everything else reads; only the
+// event differs, recording who entered it and that it came by phone.
 export async function recordOfflineAcceptance(
   session: Session,
   id: string,
   input: {
-    // One answer per optional line item, keyed by option id - the crew reading
-    // the list back down the phone. Same rule as the customer's own path: on an
-    // itemised quote every optional line needs a yes or a no, because silence
-    // is not consent to bill for a sidewalk.
+    // Per optional line item, keyed by option id. Same rule as the customer
+    // path: silence is not consent to bill.
     options?: Record<string, OptionChoice>;
-    // Which way of doing the job they agreed to, on a quote that offered a
-    // choice. Same rule as the customer's own path: one of the packages on this
-    // quote, and no default - "they said yes" does not say yes to what.
+    // Package id, required if a choice is offered. No default.
     packageId?: string;
-    // The day and start time they agreed to, if they got that far in the same
-    // conversation. Recorded here as what the customer asked for; booking it is
-    // confirmSchedule's job, the same as on every other path.
+    // Day/time agreed on the call, recorded as their preference; booking is
+    // confirmSchedule's job.
     agreedDate?: string | null;
     agreedTime?: string | null;
   },
@@ -1951,17 +1685,13 @@ export async function recordOfflineAcceptance(
   const q = await getQuote(session, id);
   if (!q) return { ok: false, error: "You don't have access to this quote." };
 
-  // Already answered, or closed out. See offlineAcceptanceRefusal.
+  // Already answered or closed out (offlineAcceptanceRefusal).
   const refusal = offlineAcceptanceRefusal(q);
   if (refusal) return { ok: false, error: refusal };
-  // There has to be a number for them to have agreed to.
   if (q.quote_amount == null || Number(q.quote_amount) <= 0) {
     return { ok: false, error: "Put a price on this quote before recording an approval." };
   }
-  // Deliberately NOT checked: whether the quote has expired. The link the
-  // customer is holding may have run out, but they have just said yes on the
-  // phone to a price a member of staff has in front of them, and refusing that
-  // would be the app arguing with a conversation it wasn't part of.
+  // Expiry deliberately not checked: they just agreed to a price staff can see.
 
   const [options, packages] = await Promise.all([
     listQuoteOptions(session, id),
@@ -1991,32 +1721,28 @@ export async function recordOfflineAcceptance(
     }
     accepted = options.filter((o) => o.required || answers[o.id] === "accepted");
     declined = options.filter((o) => !o.required && answers[o.id] === "declined");
-    // Only where nothing else carries the job. With a package chosen, no to
-    // every add-on is an ordinary answer rather than a declined quote.
+    // With a package chosen, no to every add-on is ordinary.
     if (accepted.length === 0 && !chosenPackage) {
       return { ok: false, error: "They said no to every line. That's a declined quote, not an approved one." };
     }
   }
 
-  // The price follows the answers, same as the customer's own path.
+  // Price follows the answers, as on the customer path.
   if (options.length > 0 || chosenPackage) {
     patch.quote_amount =
       Math.round((optionAmount(chosenPackage ?? { amount: 0 }) + optionsTotal(accepted)) * 100) / 100;
   }
 
-  // A day agreed on the call is recorded as what the customer asked for, which
-  // is what it is. The seven-day floor is not applied and must not be: that
-  // rule exists to stop a customer committing a crew to a date nobody checked,
-  // and the person entering this IS the crew. They agreed to Thursday with the
-  // customer on the phone; the app's job is to write down Thursday.
+  // The lead-time floor deliberately doesn't apply: it stops customers
+  // committing a crew unchecked, and the person entering this is the crew.
   if (input.agreedDate && ISO_DATE.test(input.agreedDate)) {
     patch.preferred_dates = [input.agreedDate];
     const time = (input.agreedTime ?? "").trim().toUpperCase().replace(/\s+/, " ");
     patch.preferred_times = [time && TIME_RE.test(time) ? time : null];
   }
 
-  // Conditional on no answer being on file, so two people recording the same call (or the customer
-  // tapping their link meanwhile) can't both write. Zero rows: someone got there first, or RLS hid it.
+  // Conditional on no answer on file, so two people (or the customer's own tap)
+  // can't both write. Zero rows: someone got there first, or RLS hid it.
   const save = async (body: Partial<Quote>): Promise<{ rows: number } | { error: string }> => {
     const res = await pgUser(
       `quote_requests?id=eq.${encodeURIComponent(id)}&customer_response=is.null&select=id`,
@@ -2032,9 +1758,8 @@ export async function recordOfflineAcceptance(
   };
 
   let saved = await save(patch);
-  // preferred_times predates nothing here, but it is the one column in this
-  // patch that a database can be missing (supabase/appointments.sql), and the
-  // retry costs nothing next to losing a recorded approval over an hour.
+  // preferred_times may be missing (appointments.sql); retry without it rather
+  // than lose the approval.
   if ("error" in saved && patch.preferred_times !== undefined) {
     const { preferred_times: _dropped, ...withoutTimes } = patch;
     saved = await save(withoutTimes);
@@ -2050,9 +1775,7 @@ export async function recordOfflineAcceptance(
     };
   }
 
-  // Stamp the line items with their answers, after the quote row and
-  // best-effort for the same reason the customer's path does it in that order:
-  // the decision is recorded even if this second write fails.
+  // Stamp line items after the quote row, best-effort, as on the customer path.
   const stamp = new Date().toISOString();
   for (const [response, rows] of [
     ["accepted", accepted],
@@ -2084,29 +1807,15 @@ export async function recordOfflineAcceptance(
 
 
 // ── Change orders ───────────────────────────────────────────────────────────
-// The price moving on a job that is already agreed, and usually already booked.
+// A price change on an agreed (usually booked) job is a small quote of its own:
+// the price only moves when the customer says yes. Sent, withdrawn, answered.
 //
-// Before this there was one way to change the price of an accepted job: an
-// owner editing quote_amount in the editor. That works, in that the number
-// changes - but it changes what the customer owes without the customer having
-// agreed to it, and leaves nothing on the job saying they did. A week before a
-// pour, with a deposit already banked, that is the wrong shape entirely.
-//
-// So a change is a small quote of its own: what is changing, what the job is
-// worth now, out to the customer, and the price only actually moves when they
-// say yes. Three functions, matching the three things that can happen to one:
-// it is sent, it is withdrawn, it is answered.
-//
-// Money needs nothing special here, which is worth saying plainly because it is
-// the part everyone expects to be hard. The ledger has always read "what the
-// job is worth now, minus what has been collected" (readLedger in fees.ts), and
-// the office's cut is re-derived from the frozen RATE against the current total.
-// So a deposit keeps counting by itself: a $4,125 deposit on an $8,250 job that
-// becomes $9,400 leaves $5,275 to collect, and nobody has to tell it to.
+// Money needs nothing special: the ledger is "current total minus collected"
+// (readLedger in fees.ts) and the office cut is re-derived from the frozen rate,
+// so a $4,125 deposit on an $8,250 job that becomes $9,400 leaves $5,275 owed.
 
-// Written as one object so every path that ends a change clears all four
-// columns. A pending change that is half cleared is a job the customer page
-// thinks is waiting on them forever.
+// One object so every path that ends a change clears every change column; a
+// half-cleared change leaves the customer page waiting forever.
 const CLEAR_CHANGE: Partial<Quote> = {
   change_note: null,
   change_amount: null,
@@ -2119,10 +1828,8 @@ const CLEAR_CHANGE: Partial<Quote> = {
 export type ChangeRequestResult = { ok: boolean; error?: string; quote?: Quote };
 
 /**
- * Send a change for the customer to approve.
- *
- * Runs as the logged-in user, so RLS keeps a contractor to their own assigned
- * jobs - the crew take these calls, so the crew have to be able to act on them.
+ * Send a change for the customer to approve. Runs as the user, so RLS keeps a
+ * contractor to their own jobs (the crew take these calls).
  */
 export async function requestChange(
   session: Session,
@@ -2132,16 +1839,12 @@ export async function requestChange(
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
 
-  // Only on a job the customer has actually agreed to. Before that there is
-  // nothing to change - the quote itself is still editable, and sending a
-  // "change" against a price nobody accepted would be two offers in flight at
-  // once with the customer deciding between them.
+  // Only on an accepted job. Before that the quote itself is editable, and a
+  // "change" would put two offers in front of the customer.
   if (current.customer_response !== "accepted" || current.status === "lost") {
     return { ok: false, error: "This job isn't approved yet. Change the quote itself instead." };
   }
-  // A closed-out job is history. Re-opening the price on work that is finished
-  // and settled is an invoice dispute, not a change order, and it is the
-  // office's to sort out rather than this form's.
+  // Closed-out work is an invoice dispute for the office, not a change order.
   if (current.status === "completed" || current.status === "paid") {
     return { ok: false, error: "This job is already closed out. Give the office a call to sort out the price." };
   }
@@ -2152,26 +1855,22 @@ export async function requestChange(
   const note = noEmDash(input.note.trim()).slice(0, CHANGE_NOTE_MAX);
   if (note.length < 3) return { ok: false, error: "Say what's changing, so the customer knows what they're approving." };
 
-  // The breakdown that comes with it, if any. When there are lines they ARE the
-  // price: the new total is their sum, whatever was typed in the box, so the
-  // customer can never be shown lines that add up to something else.
+  // When lines are given they ARE the price: the total is their sum, so the
+  // customer never sees lines that add up to something else.
   const lines = (input.lines ?? []).map((l) => ({
     title: l.title,
     description: l.description || null,
     amount: l.amount,
   }));
   const [existing, packages] = await Promise.all([listQuoteOptions(session, id), listQuotePackages(session, id)]);
-  // A job priced as a choice of ways to do it carries the chosen way's price
-  // outside the line items, so a breakdown here could not add up to the total.
-  // Rare enough to leave as one figure.
+  // A package job's price sits outside the line items, so a breakdown couldn't
+  // add up. Rare; change it as one figure.
   if (lines.length > 0 && packages.length > 0) {
     return { ok: false, error: "This job was priced as a choice of options, so change the total as one figure." };
   }
-  // Lines on the change replace the job's lines on approval. A job that already
-  // HAS lines always gets a list, even an empty one: leaving its old lines in
-  // place under a new total would show the customer sums that don't add up.
-  // Except a package job, whose lines are extras on top of the chosen way:
-  // those are left exactly as they are and only the figure moves.
+  // Change lines replace the job's lines on approval. A job that already has
+  // lines always gets a list (even empty), or old lines would sit under a new
+  // total. Package jobs keep their extras untouched; only the figure moves.
   const changeLines = packages.length > 0 ? null : lines.length > 0 || existing.length > 0 ? lines : null;
 
   const amount =
@@ -2179,11 +1878,9 @@ export async function requestChange(
   if (!Number.isFinite(amount) || amount < 0 || amount > 99_999_999) {
     return { ok: false, error: "Enter a valid new total for the job." };
   }
-  // Same total is fine when the breakdown is what's changing: "the same price,
-  // but show me where it goes" is a real change for the customer to approve.
-  // Compared against where the crew's breakdown started (changeStartLines), so
-  // a one-price job sent back with just its own "as approved" line is not a
-  // change either.
+  // Same total is fine when the breakdown changes. Compared with where the
+  // crew's breakdown started (changeStartLines), so a one-price job's own
+  // "as approved" line isn't a change.
   const linesChanged =
     changeLines !== null &&
     !sameChangeLines(changeLines, changeStartLines(boughtLines(existing), current.quote_amount, current.service));
@@ -2191,9 +1888,8 @@ export async function requestChange(
     return { ok: false, error: "That's the same total they already agreed to. Change the figure, or just call them." };
   }
 
-  // A second deposit, if the change asks for one: whole cents, at least a
-  // dollar, and no more than the balance the change leaves them with - asking
-  // for more up front than the job will be owed is a mistake, not a deposit.
+  // Optional second deposit: whole cents, at least $1, and no more than the
+  // balance after the change.
   let deposit: number | null = null;
   if (input.depositCents != null) {
     deposit = Math.round(Number(input.depositCents));
@@ -2229,11 +1925,8 @@ export async function requestChange(
 }
 
 /**
- * Take a change back before the customer answers it.
- *
- * The crew got the figure wrong, or rang the customer and settled it another
- * way. Clears the four columns together; the quote's price never moved, so
- * there is nothing to undo.
+ * Withdraw a change before the customer answers. The price never moved, so
+ * clearing the change columns is all there is to undo.
  */
 export async function cancelChange(session: Session, id: string): Promise<ChangeRequestResult> {
   const current = await getQuote(session, id);
@@ -2264,20 +1957,14 @@ export type ChangeResponseResult = {
 const STALE_CHANGE_ERROR ="This change was updated, please reload the page.";
 
 /**
- * The customer's answer, from behind their own quote link.
- *
- * Service role, like recordCustomerResponse: there is no session on the
- * customer's page and the unguessable token is what authorises this.
- *
- * Accepting is the only thing in the app that moves the price of an agreed job,
- * and it does exactly one thing to the money: sets quote_amount. Everything
- * downstream re-reads itself from there - the balance, the office's cut, the
- * payment page, the deposit that is already in the bank.
+ * The customer's answer from their quote link. Service role: no session, the
+ * token authorises it. Accepting only sets quote_amount; balance, office cut,
+ * payment page and existing deposits all re-derive from it.
  */
 export async function recordChangeResponse(
   token: string,
   action: "accept" | "decline",
-  /** The change_requested_at the customer's page displayed; null from a page opened before it sent one. */
+  /** The change_requested_at the customer's page displayed; null if it showed none. */
   shownRequestedAt: string | null = null,
 ): Promise<ChangeResponseResult> {
   if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
@@ -2285,30 +1972,23 @@ export async function recordChangeResponse(
   const q = await getQuoteByToken("public_token", token);
   if (!q) return { ok: false, error: "Quote not found." };
 
-  // No change waiting. Reported as success rather than an error: the usual way
-  // to get here is a second tap, or a tab left open while the crew withdrew it,
-  // and from the customer's side their button worked and there is nothing left
-  // for them to do - which is the truth.
+  // Nothing waiting: usually a second tap or a change withdrawn while the tab
+  // was open. Success, because there's nothing left for them to do.
   if (!q.change_requested_at || q.change_amount == null) return { ok: true, duplicate: true };
 
   return applyChange(q.id, action === "accept", {}, shownRequestedAt);
 }
 
 /**
- * Apply a change the customer already agreed to, on the phone or on site.
- *
- * Same columns, same transaction and same log row as the customer tapping
- * approve on their link - the only difference is who says they agreed, which
- * goes in the log as `recorded_by` so the trail shows it wasn't the customer's
- * own button. The caller has already written the change (requestChange), which
- * is where access and the figures are checked.
+ * Apply a change the customer agreed to by phone or on site. Same transaction
+ * and log row as their own tap, plus `recorded_by`. requestChange has already
+ * checked access and figures.
  */
 export async function recordChangeAgreed(
   session: Session,
   id: string,
 ): Promise<ChangeResponseResult> {
-  // Owner only, checked again here because this runs with the service role:
-  // nothing downstream of this line would stop a contractor's call.
+  // Owner only, rechecked because applyChange runs with the service role.
   const refusal = changeOrderRefusal(session.staff.role, { agreed: true });
   if (refusal) return { ok: false, error: refusal };
   const by = session.staff.full_name || session.staff.email || "Staff";
@@ -2323,20 +2003,15 @@ async function applyChange(
 ): Promise<ChangeResponseResult> {
   const action = accept ? "accept" : "decline";
 
-  // The price, the breakdown and the cleared change, in one transaction (see
-  // supabase/change-order-lines.sql). Two separate writes could leave a job
-  // showing the new lines against the old total if the second one failed.
-  //
-  // Whether the job still counts as paid afterwards is resyncJobPaidState's
-  // call, made by the caller once this has landed: a change can push a paid job
-  // back into owing money OR finish paying one off, and both directions have to
-  // come from the same function or they drift. See /api/change-response.
-  // The page's change_requested_at is checked under the row lock (stage1-price-lockdown.sql).
+  // Price, breakdown and cleared change in one transaction, so a failed second
+  // write can't leave new lines against an old total. The page's
+  // change_requested_at is checked under the row lock. Paid state is
+  // resyncJobPaidState's call, made by the caller afterwards (both directions).
   const call = (args: Record<string, unknown>) =>
     pgAdmin("rpc/apply_change_response", { method: "POST", body: JSON.stringify(args) });
   const args = { p_id: quoteId, p_accept: accept };
   let res = shownRequestedAt ? await call({ ...args, p_requested_at: shownRequestedAt }) : await call(args);
-  // PGRST202 = no such function signature: code deployed before the SQL. Answer as before rather than fail.
+  // PGRST202 = function signature missing (SQL not run); answer without the stale check.
   if (!res.ok && shownRequestedAt) {
     const code = await res.json().then((b: { code?: unknown }) => b?.code, () => null);
     if (code === "PGRST202") {
@@ -2356,7 +2031,7 @@ async function applyChange(
     deposit_cents?: number | null;
   };
   if (out.status === "stale") return { ok: false, stale: true, error: STALE_CHANGE_ERROR };
-  // Answered in another tab between the read above and the lock.
+  // Answered in another tab between the read and the lock.
   if (out.status !== "ok" || !out.quote) return { ok: true, duplicate: true };
 
   const from = out.from ?? null;
@@ -2369,8 +2044,7 @@ async function applyChange(
     body: JSON.stringify({
       quote_id: quoteId,
       type: action === "accept" ? "change_accepted" : "change_declined",
-      // The breakdown either side of the change, so "what did this job include
-      // before they asked for the bigger pad" is answerable from the log.
+      // Breakdown before and after, so the log shows what the job used to include.
       meta: {
         from,
         to,
@@ -2385,10 +2059,9 @@ async function applyChange(
   return { ok: true, quote: out.quote, from, to, note, depositCents: out.deposit_cents ?? null };
 }
 
-// Confirm (or move) the work day. Runs as the logged-in user so RLS keeps a
-// contractor to their own assigned jobs, which is what lets the crew - not just
-// the owner - lock in a date. Returns the previous date so the caller can tell a
-// first booking apart from a reschedule when it sends the texts.
+// Confirm (or move) the work day. Runs as the user, so RLS lets the assigned
+// crew book their own jobs. Returns the previous date/time so the caller can
+// tell a first booking from a reschedule.
 export async function confirmSchedule(
   session: Session,
   id: string,
@@ -2396,28 +2069,23 @@ export async function confirmSchedule(
   time: string,
 ): Promise<{ ok: boolean; error?: string; previous?: string | null; previousTime?: string | null; unchanged?: boolean }> {
   if (!ISO_DATE.test(date)) return { ok: false, error: "Pick a valid date." };
-  // Display copy like "9:00 AM" - validated by shape so a tampered form can't
-  // inject a paragraph into every text we send afterwards.
+  // e.g. "9:00 AM"; shape-checked so a tampered form can't inject text into SMS.
   if (!TIME_RE.test(time.trim())) return { ok: false, error: "Pick a start time." };
   const cleanTime = time.trim().toUpperCase().replace(/\s+/, " ");
 
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
-  // A changed time on the same day is still a real change the customer needs to
-  // hear about, so only short-circuit when both halves match.
+  // A new time on the same day is still a change the customer must hear about.
   if (current.scheduled_date === date && current.scheduled_time === cleanTime) {
     return { ok: true, previous: date, previousTime: cleanTime, unchanged: true };
   }
 
-  // One job per day for the business - the DB enforces this too, but checking
-  // here gives a clear message instead of a constraint violation.
+  // One job per day; the DB enforces it too, but this gives a clear message.
   if ((await countJobsOn(date, id)) >= MAX_JOBS_PER_DAY) {
     return { ok: false, error: "Another job is already booked that day." };
   }
 
-  // ...and one place at a time for the person doing it. The cap above is about
-  // the business; this is about the crew, and it catches the case the cap can't:
-  // a quote visit already sitting on their calendar that day.
+  // ...and one place at a time for the crew, e.g. a quote visit that day.
   const clash = await findJobConflict(current.assigned_to, date, id);
   if (clash) return { ok: false, error: conflictMessage(clash) };
 
@@ -2433,18 +2101,15 @@ export async function confirmSchedule(
   });
   if (!updated) return { ok: false, error: error ?? "Could not save that date. Please try again." };
 
-  // Re-arm the crew countdown for the new date. Deliberately a separate,
-  // best-effort write: booking the job is the thing that must not fail, and it
-  // shouldn't start depending on a column added later for reminders.
+  // Separate best-effort write: booking must not fail on the reminder column.
   await clearCrewReminders(id);
 
   return { ok: true, previous: current.scheduled_date, previousTime: current.scheduled_time };
 }
 
 // ── Quote visits (the in-person/online appointment, not the work day) ───────
-// Booked work days go through confirmSchedule; this is the other kind of date
-// on a quote. Kept separate because the rules differ: several visits can share
-// a day, and moving one never touches the pipeline status.
+// Separate from confirmSchedule: visits can share a day and moving one never
+// touches pipeline status.
 export async function rescheduleVisit(
   session: Session,
   id: string,
@@ -2461,18 +2126,14 @@ export async function rescheduleVisit(
     return { ok: true, previous: date, previousTime: cleanTime, unchanged: true };
   }
 
-  // Visits have no per-day cap any more: they stack an hour apart on one
-  // person's calendar, so the only thing that can be full is that person. A
-  // visit within the hour clashes; a booked work day blocks every slot on it.
+  // No per-day cap: visits stack an hour apart per person, and a work day blocks all slots.
   const clash = await findVisitConflict(current.assigned_to, date, cleanTime, id);
   if (clash) return { ok: false, error: conflictMessage(clash) };
 
   const { quote: updated, error } = await updateQuoteResult(session, id, {
     visit_date: date,
     visit_time: cleanTime || null,
-    // Re-arm the night-before reminders for the new day, the same way
-    // confirmSchedule re-arms the crew countdown. Without this a visit moved
-    // after its reminder had gone out would never be reminded again.
+    // Re-arm night-before reminders, or a moved visit is never reminded again.
     visit_reminder_sent_at: null,
     visit_crew_reminded_at: null,
   });
@@ -2481,10 +2142,8 @@ export async function rescheduleVisit(
   return { ok: true, previous: current.visit_date, previousTime: current.visit_time };
 }
 
-// Take an appointment off the calendar. `kind` decides which pair of columns is
-// cleared. A booked job also drops back to "approved" (needs scheduling) so it
-// resurfaces in the pipeline rather than vanishing into a dateless "scheduled"
-// state nobody looks at.
+// Take an appointment off the calendar. A booked job drops back to "approved"
+// so it resurfaces in the pipeline instead of sitting dateless in "scheduled".
 export async function clearAppointment(
   session: Session,
   id: string,
@@ -2540,9 +2199,8 @@ export async function signFiles(paths: string[], expiresIn = 3600): Promise<{ pa
 }
 
 // ── Contractor invites ──────────────────────────────────────────────────────
-// The token is a capability: whoever holds it can create one contractor
-// account. It is long, random, single-use and expiring, and every lookup below
-// re-checks all three conditions rather than trusting the caller.
+// The token is a capability (whoever holds it can create one contractor
+// account): long, random, single-use, expiring, and every lookup rechecks all three.
 
 export const INVITE_TTL_DAYS = 7;
 const INVITE_TOKEN_RE = /^[a-f0-9]{32}$/;
@@ -2572,10 +2230,8 @@ export async function createInvite(input: {
   return res.ok;
 }
 
-// Service-role lookup for the public onboarding page - there is no session at
-// that point. Returns null for anything unusable (unknown, revoked, already
-// used, expired) so the caller can't tell those cases apart and probe for
-// valid tokens.
+// Service-role (the onboarding page has no session). null for every unusable
+// state alike, so callers can't probe which tokens exist.
 export async function getUsableInvite(token: string): Promise<ContractorInvite | null> {
   if (!INVITE_TOKEN_RE.test(token)) return null;
   const res = await pgAdmin(`contractor_invites?token=eq.${token}&select=*&limit=1`);
@@ -2588,9 +2244,8 @@ export async function getUsableInvite(token: string): Promise<ContractorInvite |
   return invite;
 }
 
-// Burn the invite. Conditional on used_at still being null so two submissions
-// racing each other can't both create an account: PostgREST returns the rows it
-// actually changed, so an empty result means someone else got there first.
+// Burn the invite. used_at=is.null makes racing submissions lose: an empty
+// result means someone else got there first.
 export async function consumeInvite(id: string, staffId: string): Promise<boolean> {
   const res = await pgAdmin(`contractor_invites?id=eq.${encodeURIComponent(id)}&used_at=is.null`, {
     method: "PATCH",
@@ -2602,8 +2257,7 @@ export async function consumeInvite(id: string, staffId: string): Promise<boolea
   return rows.length > 0;
 }
 
-// Record that the link was opened. Best-effort and fire-and-forget: this is
-// telemetry for the owner, so it must never stop a contractor from onboarding.
+// Telemetry for the owner; best-effort so it never blocks onboarding.
 export async function markInviteOpened(invite: ContractorInvite): Promise<void> {
   await pgAdmin(`contractor_invites?id=eq.${encodeURIComponent(invite.id)}`, {
     method: "PATCH",
@@ -2634,9 +2288,8 @@ export async function revokeInvite(id: string): Promise<boolean> {
 }
 
 // ── Agreements (contracts sent for signature through DocuSeal) ──────────────
-// All of these go through pgUser so RLS does the authorization: an owner sees
-// every agreement, a contractor only their own onboarding doc and the customer
-// agreements for jobs assigned to them.
+// pgUser so RLS authorizes: owners see all; contractors their own onboarding
+// doc and agreements for their assigned jobs.
 
 export async function listAgreementsForQuote(session: Session, quoteId: string): Promise<Agreement[]> {
   const res = await pgUser(
@@ -2704,8 +2357,7 @@ export async function deleteAgreement(session: Session, id: string): Promise<boo
   return res.ok;
 }
 
-// Remove the stored file for an agreement. Best-effort: the row is the source of
-// truth, an orphaned object in the bucket is harmless.
+// Best-effort: the row is the source of truth; an orphaned object is harmless.
 export async function deleteAgreementFile(path: string): Promise<void> {
   const prefix = `${AGREEMENT_BUCKET}/`;
   const obj = path.startsWith(prefix) ? path.slice(prefix.length) : path;
@@ -2718,8 +2370,7 @@ export async function deleteAgreementFile(path: string): Promise<void> {
 }
 
 // ── Login attempts (owner-visible security log) ─────────────────────────────
-// Written from /crm/api/login with the service-role key - there's no user
-// session yet at login time, success or failure.
+// Service role: written at login, before any session exists.
 export async function logLoginAttempt(input: {
   email: string;
   success: boolean;
@@ -2742,17 +2393,9 @@ export async function logLoginAttempt(input: {
   });
 }
 
-// How many times in a row this ACCOUNT has failed to sign in.
-//
-// The IP limiter in the middleware answers a different question. It stops one
-// machine hammering the form; it does nothing about the same password list
-// tried against noah@ from a hundred addresses, which is the shape a real
-// attempt on an owner account takes. This table was already recording every
-// one of those and nothing ever read it back.
-//
-// Counted since the last SUCCESS, so signing in correctly clears the streak -
-// somebody who mistypes their password four times, gets in, and mistypes it
-// again tomorrow is never locked out. Service role: there is no session yet.
+// Consecutive failed sign-ins for this ACCOUNT since its last success. The
+// middleware's IP limiter can't see one password list tried from many
+// addresses. A success clears the streak. Service role: no session yet.
 export async function recentFailuresFor(email: string, windowMs: number): Promise<number> {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return 0;
@@ -2761,18 +2404,14 @@ export async function recentFailuresFor(email: string, windowMs: number): Promis
     select: "success,created_at",
     email: `eq.${normalized}`,
     created_at: `gte.${since}`,
-    // A refusal is not an attempt. Counting the rows the lockout itself writes
-    // would mean somebody who keeps clicking during the cool-off never gets
-    // back in - each click would push the window forward. So the clock runs
-    // from the last real password attempt.
+    // Lockout refusals aren't attempts; counting them would let repeated
+    // clicks during the cool-off extend it forever.
     reason: "neq.locked_out",
     order: "created_at.desc",
     limit: "40",
   });
   const res = await pgAdmin(`login_attempts?${params.toString()}`);
-  // A failure to read the log must not become a failure to sign in. This is a
-  // throttle, not the authorization itself - the password still has to be
-  // right - so the safe direction here is to let the attempt through.
+  // Fail open: this is a throttle, not authorization (the password still has to match).
   if (!res.ok) return 0;
   const rows = (await res.json()) as { success: boolean }[];
   let streak = 0;
@@ -2783,8 +2422,7 @@ export async function recentFailuresFor(email: string, windowMs: number): Promis
   return streak;
 }
 
-// `since` (ISO timestamp) bounds the window so the per-person sign-in stats on
-// the Security dashboard aren't silently truncated by the row limit.
+// `since` bounds the window so dashboard stats aren't truncated by the row limit.
 export async function listLoginAttempts(
   session: Session,
   limit = 300,
@@ -2798,8 +2436,7 @@ export async function listLoginAttempts(
 }
 
 // ── Platform activity (who did what, across every job) ──────────────────────
-// RLS scopes this the same way as the per-job timeline: owners see everything,
-// a contractor only events on jobs assigned to them.
+// RLS: owners see everything, contractors only their assigned jobs' events.
 export async function listRecentActivity(session: Session, limit = 250): Promise<QuoteEvent[]> {
   const res = await pgUser(
     `quote_events?select=*&order=created_at.desc&limit=${limit}`,
@@ -2809,9 +2446,8 @@ export async function listRecentActivity(session: Session, limit = 250): Promise
   return (await res.json()) as QuoteEvent[];
 }
 
-// Resolve job names for an activity feed in one round trip. Done as an explicit
-// second query rather than a PostgREST embed so it still works for events whose
-// job has since been archived.
+// Job names for an activity feed in one query. Not an embed, so archived jobs
+// still resolve.
 export async function getQuoteNames(session: Session, ids: string[]): Promise<Map<string, string>> {
   const unique = [...new Set(ids.filter(Boolean))];
   if (unique.length === 0) return new Map();

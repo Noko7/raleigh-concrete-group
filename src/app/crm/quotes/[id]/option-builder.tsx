@@ -6,22 +6,19 @@ import { dollarsOrZero as usd, MAX_QUOTE_OPTIONS, OPTION_TITLE_MAX } from "@/lib
 import type { dict } from "@/lib/crm/i18n";
 import { AutoTextarea } from "@/components/auto-textarea";
 
-// The line-item builder, shared by the CRM editor and the crew's job page so a
-// quote written from a truck can offer the same choices as one written at a
-// desk. Controlled: the parent owns the rows, because it also needs the total
-// (for the amount it shows) and the JSON (for the hidden input the action reads).
+// The line-item builder, shared by the CRM editor and the crew's job page.
+// Controlled: the parent owns the rows, since it also needs the total and the
+// JSON for the action's hidden input.
 export type OptionLabels = ReturnType<typeof dict>["quoteOptions"];
 
-// A row being edited. `key` is a client-side identity so React can track a row
-// that has no database id yet; `id` is the stored row this one came from, and
-// keeping it is what preserves the customer's answer across an edit.
+// A row being edited. `key` is client-side identity for rows with no DB id yet;
+// `id` is the stored row, and keeping it preserves the customer's answer.
 export type OptionRow = {
   key: string;
   id?: string;
   title: string;
   description: string;
-  // Held as a string, not a number: an empty box and a zero are different
-  // things while somebody is typing, and only one of them is a price.
+  // A string: while typing, empty and zero differ, and only zero is a price.
   amount: string;
   required: boolean;
 };
@@ -58,8 +55,7 @@ export const rowAmount = (r: OptionRow): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// Blank rows are dropped rather than refused: adding one and thinking better of
-// it is not a mistake anybody should have to go back and clear.
+// Blank rows are dropped rather than refused.
 export const filledRows = (rows: OptionRow[]) => rows.filter((r) => r.title.trim() !== "");
 
 export const rowsTotal = (rows: OptionRow[]): number =>
@@ -77,9 +73,8 @@ export const rowsToJson = (rows: OptionRow[]): string =>
     })),
   );
 
-// What the customer preview needs from the rows: the breakdown lines exactly as
-// they will be saved (blank ones dropped, same rounding), and how many extras
-// the customer will be asked about. One helper, so all three previews agree.
+// The breakdown lines exactly as saved (blanks dropped, same rounding) and the
+// count of extras, for the customer preview. Shared so all three previews agree.
 export function previewOf(rows: OptionRow[]) {
   const filled = filledRows(rows);
   return {
@@ -90,8 +85,7 @@ export function previewOf(rows: OptionRow[]) {
   };
 }
 
-// Two lists describe the same offer. Used by both editors to tell a correction
-// apart from a re-send of the same quote.
+// Same offer? Used by both editors to tell a correction from a re-send.
 export function rowsMatch(a: OptionRow[], b: OptionRow[]): boolean {
   const norm = (rows: OptionRow[]) =>
     filledRows(rows).map((r) => `${r.title.trim()}|${r.description.trim()}|${rowAmount(r)}|${r.required}`);
@@ -100,24 +94,20 @@ export function rowsMatch(a: OptionRow[], b: OptionRow[]): boolean {
   return x.length === y.length && x.every((v, i) => v === y[i]);
 }
 
-// The everyday parts of a concrete job, one tap each. A label, not a category
-// the system knows about: the crew can rename any of them, and a breakdown that
-// needs "Rebar" as its own line just types it.
+// Common parts of a concrete job, one tap each. Just labels: the crew can rename them.
 export const BREAKDOWN_PRESETS = ["Materials", "Labor", "Equipment", "Permits", "Hauling & disposal"] as const;
 
 /**
- * Who this builder is showing.
+ * What this builder shows:
  *
- *   breakdown  the lines that make up the price. Always included, so there is
- *              no "let them say no" switch - a refusable line is an extra, and
- *              extras have their own section.
- *   extras     the optional add-ons the customer answers yes or no to.
- *   all        both, in one list. The locked record of an answered quote, and
- *              any caller that has not been split yet.
+ *   breakdown  lines that make up the price; always included (a refusable
+ *              line is an extra)
+ *   extras     optional add-ons the customer answers yes/no
+ *   all        both in one list: an answered quote's locked record, and any
+ *              caller not yet split
  *
- * All three edit the SAME rows array, filtered for display. There is one list
- * of lines on a quote, one place it is saved, and one total it adds up to; the
- * two sections are two views of it, never two copies that can disagree.
+ * All three edit the SAME rows array, filtered for display, so the sections
+ * can never disagree.
  */
 export type BuilderMode = "breakdown" | "extras" | "all";
 
@@ -136,24 +126,21 @@ export function OptionBuilder({
   labels: OptionLabels;
   mode?: BuilderMode;
   /**
-   * The price the customer is already holding, when there is one. A crew
-   * breaking an existing quote down into materials and labor usually wants the
-   * lines to land on the figure the customer has seen, so the gap is shown as
-   * they type rather than discovered on the customer's phone.
+   * The price the customer already holds, if any, so the gap is shown while
+   * breaking it down rather than found on the customer's phone.
    */
   target?: number | null;
-  /** Two prices are on offer, so required lines sit on top of either one. */
+  /** A choice is on offer, so required lines sit on top of either option. */
   choiceActive?: boolean;
-  // The customer has answered. The rows are the record of what they bought, so
-  // they are shown and not edited.
+  // Answered: the rows are the record of what they bought, so read-only.
   locked?: boolean;
-  // Their answer per stored row, for that locked view.
+  // Their answer per stored row, for the locked view.
   answers?: Record<string, "accepted" | "declined" | null>;
 }) {
   const t = labels;
   const total = rowsTotal(rows);
-  // The rows this view owns. Everything below reads `shown`; every write goes
-  // back through the full array so the other section's rows are never touched.
+  // Rows this view owns. Writes go through the full array so the other
+  // section's rows are untouched.
   const owns = (r: OptionRow) => (mode === "breakdown" ? r.required : mode === "extras" ? !r.required : true);
   const shown = rows.filter(owns);
   const shownTotal = rowsTotal(shown);
@@ -162,8 +149,8 @@ export function OptionBuilder({
     onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const remove = (key: string) => onChange(rows.filter((r) => r.key !== key));
   const add = (required: boolean, title = "") => onChange([...rows, { ...blankRow(required), title }]);
-  // Up and down within THIS section: swaps with the nearest row of the same
-  // kind, so moving a breakdown line never hops it over an extra.
+  // Moves swap with the nearest row of the same kind, so a breakdown line never
+  // hops over an extra.
   const move = (key: string, by: -1 | 1) => {
     const order = rows.map((r, i) => ({ r, i })).filter(({ r }) => owns(r));
     const at = order.findIndex(({ r }) => r.key === key);
@@ -226,7 +213,7 @@ export function OptionBuilder({
         : rows.length === 0
           ? t.emptyHint
           : t.hint;
-  // What is left to put on a line, against the price the customer already has.
+  // What's left to allocate against the customer's existing price.
   const gap =
     mode === "breakdown" && !choiceActive && target != null && target > 0 && shown.length > 0
       ? Math.round((target - shownTotal) * 100) / 100
@@ -240,16 +227,14 @@ export function OptionBuilder({
       {shown.map((r, i) => (
         <div key={r.key} className={`qo-row${r.required ? " qo-row-required" : ""}`}>
           <div className="qo-row-head">
-            {/* In a split view the section heading already says what kind of
-                line this is; a tag on every row would just repeat it. */}
+            {/* In a split view the heading already says the kind. */}
             {!split && (
               <span className={`qo-kind qo-kind-${r.required ? "required" : "optional"}`}>
                 {r.required ? t.kindRequired : t.kindOptional}
               </span>
             )}
             <div className="qo-row-tools">
-              {/* The order the customer reads them in. Worth controlling: the
-                  thing they asked for goes first, the extra second. */}
+              {/* The customer's reading order: what they asked for first. */}
               <button type="button" onClick={() => move(r.key, -1)} disabled={i === 0} aria-label={t.moveUp}>
                 &uarr;
               </button>
@@ -302,11 +287,9 @@ export function OptionBuilder({
             />
           </label>
 
-          {/* One switch, worded as what it actually decides. "Required" on its
-              own reads as a form validation rule rather than as the thing it
-              is: whether the customer is allowed to say no to this. Only in the
-              combined view: when the sections are split, which section a line
-              is in IS the answer, and moving it means adding it to the other. */}
+          {/* Worded as what it decides (can the customer say no?); "Required"
+              reads like validation. Combined view only: split, the section is
+              the answer. */}
           {!split && (
             <>
               <label className="qo-toggle">
@@ -326,9 +309,7 @@ export function OptionBuilder({
       {rows.length < MAX_QUOTE_OPTIONS &&
         (mode === "breakdown" ? (
           <div className="qo-add">
-            {/* The usual parts of a concrete job, one tap each, then a blank line
-                for anything else. Presets already on the quote drop out, so the
-                row reads as "what's left to add". */}
+            {/* Presets then a blank line; presets already used drop out. */}
             <div className="qo-presets">
               {BREAKDOWN_PRESETS.filter((name) => !shown.some((r) => r.title.trim() === name)).map((name) => (
                 <button key={name} type="button" className="qo-preset" onClick={() => add(true, name)}>
@@ -348,8 +329,7 @@ export function OptionBuilder({
           </div>
         ) : (
           <div className="qo-add">
-            {/* A line of the job first: breaking the price down is the common
-                ask, and an extra the customer can refuse is the special case. */}
+            {/* A job line first: breakdowns are common, refusable extras special. */}
             <button type="button" className="qo-add-btn" onClick={() => add(true)}>
               {t.addRequired}
             </button>
@@ -365,9 +345,8 @@ export function OptionBuilder({
             <span>{t.total}</span>
             <strong>{usd(shownTotal)}</strong>
           </p>
-          {/* Against the price they already have. Said in plain money, both
-              directions, so "make it add up to what we quoted" is a matter of
-              reading one line rather than doing sums on a phone. */}
+          {/* The gap in plain money, either direction, so matching the quote is
+              reading one line, not doing sums. */}
           {gap != null && gap !== 0 && (
             <p className={`qo-gap${gap < 0 ? " qo-gap-over" : ""}`}>
               {(gap > 0 ? t.breakdownUnder : t.breakdownOver)
@@ -395,13 +374,9 @@ export function OptionBuilder({
 }
 
 /**
- * The second section of a quote's pricing: optional extras and pricing the job
- * two ways, folded away under one heading.
- *
- * Most quotes are a price and a breakdown, and these are a paragraph each of
- * reading to scroll past on the way to Send. Folded, they are one line. It
- * opens by itself when the quote already uses either, so nobody editing an
- * extra has to hunt for it - and stays however the person left it after that.
+ * Second pricing section: optional extras and pricing two ways, folded under
+ * one heading since most quotes don't use them. Opens by itself when the quote
+ * already uses either, then stays as the user left it.
  */
 export function MoreWaysToPrice({
   labels,

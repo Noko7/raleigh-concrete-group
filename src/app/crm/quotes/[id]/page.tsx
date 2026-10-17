@@ -47,8 +47,7 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: BUSINESS_TZ });
 }
 
-// The six places a job can be, left to right. "Lost" is not one of them: it is
-// a way out of the line, shown instead of it.
+// The six stages, left to right. "Lost" is an exit shown in place of the line.
 const STAGES = [
   { key: "new", label: "Lead" },
   { key: "quoted", label: "Quoted" },
@@ -75,17 +74,12 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   if (!quote) notFound();
 
   const isOwner = session.staff.role === "owner";
-  // The crew has one job page, not two. Everything a contractor can do lives on
-  // /job/<token> - the URL that's already in every text we send them - so this
-  // page is the owner's view and anyone else gets sent to theirs. Without this
-  // the same job has two different-looking screens depending on how you got to
-  // it, which is exactly the confusion this removes.
+  // Contractors have one job page, /job/<token> (the URL in their texts); this
+  // is the owner's view, so anyone else is redirected there.
   if (!isOwner && quote.job_token) redirect(`/job/${quote.job_token}`);
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
   const t = dict(locale);
-  // Four independent queries that used to run one after another, so opening a
-  // job cost four sequential round-trips to Supabase before anything rendered.
-  // None of them depends on another's result.
+  // Independent queries, run in parallel.
   const [allStaff, events, messages, agreements, options, packages, crewViews] = await Promise.all([
     listStaff(session),
     listEvents(session, id),
@@ -96,20 +90,12 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
     // Owner only - an empty list for anybody else.
     listCrewViews(session, id),
   ]);
-  // Only reachable by a contractor on a job with no crew link (the redirect
-  // above catches every other case), so it stays out of the batch.
+  // Only for a contractor on a job with no crew link (the redirect catches the
+  // rest), so it stays out of the batch.
   const contractors = (isOwner ? allStaff : await listContractors(session)).filter((s) => s.role === "contractor");
   const nameMap = new Map(allStaff.map((s) => [s.id, s.full_name || s.email || "Staff"]));
-  // Every photo on this page is served through the same authenticated proxy,
-  // so a signed URL never leaves the CRM.
-  //
-  // Signed against whoever is looking. This page has already decided they may
-  // see this job - getQuote ran as them, through RLS - and the signature is
-  // that decision travelling with the URL, so the proxy can honour it without
-  // asking the database again per thumbnail.
-  // Another option can go out while the quote is live and unanswered. Approved,
-  // declined or closed out are all different conversations, and each one has
-  // its own door elsewhere on this page.
+  // Another option may go out only while the quote is live and unanswered;
+  // other states have their own controls on this page.
   const canAddOption =
     Boolean(quote.quote_sent_at) &&
     !quote.customer_response &&
@@ -117,28 +103,26 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
     quote.status !== "completed" &&
     quote.status !== "paid";
 
+  // Photos go through the authenticated proxy, signed for whoever is viewing:
+  // getQuote already passed RLS as them, and the signature carries that
+  // decision so the proxy needn't re-check per thumbnail.
   const viaProxy = (paths: string[] | null) =>
     (paths ?? []).map((p) => `${base}/api/file?${signMediaPath(p, session.staff.id)}`);
   const photoUrls = viaProxy(quote.file_urls);
   const internalUrls = viaProxy(quote.internal_urls);
   const beforeUrls = viaProxy(quote.before_urls);
   const afterUrls = viaProxy(quote.after_urls);
-  // The same column, read two ways: a booked visit on an in-person request, or
-  // the slot an online customer offered in case photos aren't enough. Only one
-  // of these is ever set, and they are never labelled the same.
+  // Either a booked in-person visit or an online customer's offered slot; only
+  // one is ever set, and they're labelled differently.
   const visitDate = visitDateOf(quote);
   const offeredVisit = requestedVisitOf(quote);
 
-  // The lead time governs what a CUSTOMER may request, not what the business
-  // may agree to. You can book any day from today, including a rush job someone
-  // arranged over the phone.
+  // The lead time limits customers, not the business: any day from today.
   const minJobDate = todayYmd();
-  // Scheduling only makes sense once the customer has actually said yes.
+  // Scheduling only once the customer has said yes.
   const showSchedule = quote.customer_response === "accepted" && quote.status !== "lost";
-  // ...and until they have, the office needs the other way of saying yes: the
-  // customer who agreed on the phone and never touched their link. Offered only
-  // on a quote that has actually gone out and carries a price, so what is being
-  // approved is something the customer has in front of them.
+  // ...and until then, a way to record a verbal yes. Only on a sent, priced
+  // quote, so they're approving something they have in front of them.
   const showOfflineAccept =
     !quote.customer_response &&
     quote.status !== "lost" &&
@@ -147,21 +131,15 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
     Boolean(quote.quote_sent_at) &&
     quote.quote_amount != null;
 
-  // Same gate for the money: there is nothing to collect against a price the
-  // customer hasn't agreed to.
-  // One wave, not two: neither of these needs the other's answer, and on a
-  // page that already waits on a batch of five they were two more round-trips
-  // stacked end to end before anything could render.
+  // Money only once a price is agreed. Both reads in parallel.
   const [money, payee] = await Promise.all([
     showSchedule ? jobLedger(quote) : Promise.resolve(null),
     showSchedule ? payeeState(quote) : Promise.resolve(null),
   ]);
   const cardReady = money ? (payee?.ok ?? false) : false;
 
-  // A change to a job that is already agreed. The crew usually take the call,
-  // but the office takes it as often as not, so the same card is on both pages.
-  // Not on a closed-out job: re-opening the price on finished, settled work is
-  // an invoice dispute and belongs on the phone.
+  // Change orders: on both pages, since office and crew both take these calls.
+  // Not on closed-out work (an invoice dispute).
   const showChange = showSchedule && quote.status !== "completed" && quote.status !== "paid";
   const pendingChange =
     quote.change_requested_at && quote.change_amount != null
@@ -180,8 +158,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
     : null;
 
   // ── What to do next ──
-  // One card, one sentence, one button, worked out from where the job is. The
-  // page has fifteen things on it; this is the one that moves the job along.
+  // One card, one sentence, one button, from where the job is.
   const firstName = firstNameOf(quote.name, quote.name);
   const stageIndex = Math.max(0, STAGES.findIndex((st) => st.key === quote.status));
   const dueCents = money?.ledger.dueCents ?? 0;
@@ -345,8 +322,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             </div>
           )}
 
-          {/* A change to a job that is already agreed - usually booked, often
-              with a deposit in. Straight after the day it would change. */}
+          {/* Change to an agreed job, right after the day it would change. */}
           {showChange && money && (
             <div className="jb-o-step" id="change">
               <ChangeOrder
@@ -354,8 +330,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 customerName={quote.name}
                 totalCents={money.ledger.totalCents}
                 paidCents={money.ledger.paidCents}
-                // The rows the balance is worked out from, so the review step can
-                // show them rather than ask anyone to trust the total.
+                // Shown on the review step so nobody has to trust the total.
                 payments={money.rows.map((r) => ({
                   id: r.id,
                   method: r.method,
@@ -387,9 +362,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 id={quote.id}
                 title={t.finish.title}
                 hint={t.finish.hint}
-                // Not a warning. The reminder two days out is a courtesy
-                // check-in, and a job that hasn't had one yet is not a job in
-                // trouble.
+                // Not a warning: the two-day reminder is a courtesy check-in.
                 statusNote={quote.confirmed_at ? t.finish.confirmed : t.finish.scheduledNote}
                 statusIsWarning={false}
                 buttonLabel={t.finish.markCompleted}
@@ -399,8 +372,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             </div>
           )}
 
-          {/* The money on this job, from the moment they approve: a deposit is
-              collected long before the work is finished. */}
+          {/* From approval on: deposits come long before the work is done. */}
           {money && (
             <div className="jb-o-step" id="payments">
               <QuotePayments
@@ -427,13 +399,11 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   status: r.status,
                   paid_at: r.paid_at,
                   created_at: r.created_at,
-                  // Only a settled card payment has anything on Stripe's side
-                  // to reverse.
+                  // Only a settled card payment has anything on Stripe to reverse.
                   refundable:
                     r.method === "card" && r.status !== "pending" && Boolean(r.payment_intent_id && r.stripe_account_id),
-                  // The mirror image: only a HAND-recorded row can be restated,
-                  // and the same function the action uses decides it - so the
-                  // button is never offered for something the server would refuse.
+                  // Only hand-recorded rows; same check as the action, so the
+                  // button never offers what the server would refuse.
                   correctable: correctableReason(r) === null,
                   note: r.note,
                   fee_cents: r.fee_cents,
@@ -476,9 +446,8 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             }}
           />
 
-          {/* Every price this customer has been given, under the quote it is
-              the history of. Where a sent quote is taken back or another
-              option goes out. */}
+          {/* Every price this customer has been given; where a quote is
+              retracted or another option goes out. */}
           <QuoteSends
               quoteId={quote.id}
               customerName={quote.name}
@@ -569,8 +538,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                           <span key={v.staff_id} className="crm-crew-view">
                             {nameMap.get(v.staff_id) ?? "Staff"} · {v.view_count}{" "}
                             {v.view_count === 1 ? t.job.time : t.job.times} · {t.job.lastViewed} {fmt(v.last_viewed_at)}
-                            {/* The point of all this: trying to get back into a
-                                job after it was marked Lost. */}
+                            {/* Trying to get back into a job after it was marked Lost. */}
                             {v.closed_view_count > 0 && (
                               <strong className="crm-crew-view-closed">
                                 {" "}· {v.closed_view_count} {v.closed_view_count === 1 ? t.job.tryAfterLost : t.job.triesAfterLost}
@@ -613,12 +581,11 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             )}
           </div>
 
-          {/* Everything that is looked at now and then rather than every
-              visit. Closed by default so the page stays about the next step;
-              the count on each says whether there is anything inside. */}
+          {/* Occasionally used things, closed by default; each count says
+              whether anything's inside. */}
           <div className="jb-more">
-            {/* Ours, kept apart from the customer's uploads above: the
-                before/after pair is the record of the work. */}
+            {/* Ours, apart from the customer's uploads: before/after is the
+                record of the work. */}
             <details className="jb-fold">
               <summary>
                 Our photos <span className="jb-count">{photoCount}</span>
@@ -637,8 +604,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               </div>
             </details>
 
-            {/* Whether anyone was actually told, then everything that ever
-                happened to the job. */}
+            {/* Whether anyone was told, then the job's full history. */}
             <details className="jb-fold">
               <summary>
                 Texts sent <span className="jb-count">{messages.length}</span>
@@ -696,8 +662,8 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             {(quote.scheduled_date || visitDate) && quote.status !== "completed" && quote.status !== "paid" && (
               <details className="jb-fold">
                 <summary>{t.calendar.cancelAppt}</summary>
-                {/* One control per appointment the job has: a booked work day
-                    and a quote visit are different days and different texts. */}
+                {/* One control per appointment: work day and visit are
+                    different days and different texts. */}
                 <div className="jb-fold-body">
                   {quote.scheduled_date && (
                     <CancelAppointment id={quote.id} kind="job" customerName={quote.name} locale={locale} />
@@ -725,9 +691,8 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               </div>
             </details>
 
-            {/* The least-used control here and the only one that changes what
-                the business thinks it earned. A practice lead behaves exactly
-                like a real one and stays out of every figure on Money. */}
+            {/* Rarely used, and the only control that changes what the business
+                thinks it earned: practice leads stay out of every Money figure. */}
             {isOwner && (
               <details className="jb-fold">
                 <summary>

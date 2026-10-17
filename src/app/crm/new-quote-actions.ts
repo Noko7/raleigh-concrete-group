@@ -16,20 +16,14 @@ import {
 import type { Quote } from "@/lib/crm/types";
 
 export type NewQuoteState = { ok: boolean; error?: string; id?: string };
-// Matches the public form's own check (src/app/api/quote/route.ts) - the DB's
-// qr_chk constraint validates this too, but failing here gives a real error
-// instead of a generic "could not save".
+// Same check as /api/quote. The DB's qr_chk validates it too, but this gives a
+// real error instead of "could not save".
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// A lead logged from the phone, straight into the CRM - name and phone are
-// the only things the database actually requires (see supabase/schema.sql's
-// qr_chk), so everything else here is optional. Owner-only, enforced here and
-// by the "owner inserts quotes" RLS policy (supabase/manual-quote.sql) -
-// contractors work leads, they don't create them. Auto-assigns to the same
-// primary contractor the public form uses, so a phoned-in lead is followed up
-// on exactly like a web one. Deliberately doesn't text the customer anything
-// (notifyCustomerReceived is for an unattended web submission - the staff
-// member creating this row is on the phone with them right now).
+// A lead logged from a phone call. Only name and phone are required (qr_chk).
+// Owner-only, here and by RLS (manual-quote.sql): contractors work leads, they
+// don't create them. Auto-assigns like the public form. Doesn't send the
+// web-submission receipt: staff are on the phone with the customer.
 export async function createQuote(_prev: NewQuoteState, formData: FormData): Promise<NewQuoteState> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
@@ -54,10 +48,8 @@ export async function createQuote(_prev: NewQuoteState, formData: FormData): Pro
 
   const customMessage = String(formData.get("custom_message") ?? "").trim().slice(0, 1000);
 
-  // An in-person call-in books the estimate then and there, while the
-  // customer is still on the phone to agree to it. Stored the same way a web
-  // booking is: quote_type "inperson" is what makes visit_date a real
-  // appointment rather than a slot somebody offered.
+  // An in-person call-in books the estimate on the call. quote_type "inperson"
+  // makes visit_date a real appointment rather than an offered slot.
   let visitDate: string | null = null;
   let visitTime: string | null = null;
   if (quoteType === "inperson") {
@@ -80,23 +72,19 @@ export async function createQuote(_prev: NewQuoteState, formData: FormData): Pro
     quote_type: quoteType,
     visit_date: visitDate,
     visit_time: visitTime,
-    // Marks how this lead came in, same field the public form stamps with the
-    // page it was submitted from - the pipeline can tell the two apart.
+    // How the lead came in; the public form stamps its page path here.
     source_path: "crm:manual",
   };
 
-  // An explicit pick wins over the job-type rules. Commercial work in
-  // particular is often a specific person's regardless of what the service
-  // says, and the office knows that on the call.
+  // An explicit pick beats the job-type rules (commercial work often belongs to
+  // a specific person).
   const pickedAssignee = String(formData.get("assigned_to") ?? "").trim();
   if (pickedAssignee && !/^[0-9a-fA-F-]{36}$/.test(pickedAssignee)) {
     return { ok: false, error: "Pick a valid contractor." };
   }
   const assigneeId = pickedAssignee || (await resolveAssignee(service).catch(() => null));
 
-  // Don't put whoever gets this job in two places at once. Checked before the
-  // row is written so the office can offer another time while still on the
-  // call, rather than finding out on the morning.
+  // Check before writing, so the office can offer another time while still on the call.
   if (assigneeId && visitDate && visitTime) {
     const clash = await findVisitConflict(assigneeId, visitDate, visitTime);
     if (clash) return { ok: false, error: conflictMessage(clash) };
@@ -107,10 +95,8 @@ export async function createQuote(_prev: NewQuoteState, formData: FormData): Pro
   const result = await insertQuoteResult(session, row);
   const created = result.quote;
   if (!created) {
-    // A check violation on a "From plans" lead has exactly one cause worth
-    // naming: qr_chk still only knows the two types the public form can send,
-    // because supabase/quote-type-plans.sql hasn't been run. Every other field
-    // on this form was already validated above.
+    // On a "From plans" lead, a check violation means qr_chk doesn't know the
+    // type yet (quote-type-plans.sql); every other field was validated above.
     if (result.code === "23514" && quoteType === "plans") {
       return {
         ok: false,
@@ -141,26 +127,22 @@ export async function createQuote(_prev: NewQuoteState, formData: FormData): Pro
     ).catch(() => {});
   }
 
-  // Whatever the office promised on the call, in writing. Sent before the
-  // appointment confirmation below so the two arrive in the order they were
-  // discussed.
+  // What the office promised on the call, in writing, sent before the
+  // appointment text so they arrive in the order discussed.
   if (customMessage) {
     const res = await notifyCustomMessage(
       { id: created.id, name: created.name, phone: created.phone },
       customMessage,
     ).catch(() => null);
-    // A text raised in the evening is held until 8am rather than sent, so the
-    // activity log records which of the two happened.
+    // Evening texts are held until 8am; the log records which happened.
     await addEvent(session, created.id, "custom_message_sent", {
       delivered: Boolean(res?.ok),
       held_until: res?.sendAfter ?? null,
     });
   }
 
-  // A booked estimate goes to the customer in writing. Everything else about
-  // this lead was agreed out loud on the call and needs no text, but an
-  // appointment does: they have to put it somewhere, and "some time Tuesday"
-  // remembered from a phone call is how a crew arrives to an empty house.
+  // A booked estimate gets a text: they need it written down somewhere, or the
+  // crew arrive at an empty house.
   if (created.visit_date) {
     await notifyVisitBooked({
       id: created.id,

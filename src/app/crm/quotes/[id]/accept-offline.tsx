@@ -10,22 +10,14 @@ import type { ScheduleState } from "./types";
 
 // "They said yes on the phone."
 //
-// Everything past the quote waits on the customer pressing accept on their own
-// link: the schedule card, the deposit, the money page, the calendar. When they
-// say yes out loud instead - which is most of them - the crew were left sending
-// a second quote purely to get the button pressed, and that second quote puts
-// the CUSTOMER'S date picker in front of them, which will not offer a day
-// sooner than a week out. So a customer who agreed to Thursday gets shown a
-// calendar starting the following Tuesday, and whatever comes back is not the
-// day anybody agreed to.
+// Everything after the quote waits on the customer's own accept. Without this
+// the crew resend the quote just to get it pressed, and the customer's picker
+// starts a week out, past the day already agreed. This records the approval as
+// staff (named, logged, never passed off as the customer's click) and books the
+// agreed day in the same submit, from a picker starting today.
 //
-// This card is the other way in. It records the approval as staff - named,
-// logged, and never dressed up as the customer's own click - and takes the day
-// they agreed to in the same submit, off a picker that starts today.
-//
-// Two tones, one component, same reason as QuoteSends: the office's page is
-// dark and the crew's is a white card, and two copies of a form this fiddly
-// would drift the first time somebody fixed a bug in one of them.
+// One component, two tones (dark office page, white crew card), so one copy of
+// a fiddly form.
 export function AcceptOffline({
   id,
   customerName,
@@ -39,13 +31,11 @@ export function AcceptOffline({
   id: string;
   customerName: string;
   amount: number | null;
-  // The line items, if this quote was written as a list. Each optional one
-  // needs its own answer before anything is recorded - the same rule the
-  // customer's own page runs on, for the same reason: a blank is not a yes.
+  // Each optional line needs an answer before recording, as on the customer
+  // page: a blank is not a yes.
   options: { id: string; title: string; description: string | null; amount: number; required: boolean }[];
-  // The ways of doing the job they were offered, if this quote was written two
-  // ways. One of them has to be picked before anything is recorded: "they said
-  // yes" does not say yes to what, and the price depends on the answer.
+  // A package must be picked first: "they said yes" doesn't say to what, and
+  // the price depends on it.
   packages: { id: string; title: string; amount: number; recommended: boolean }[];
   minDate: string;
   locale: Locale;
@@ -56,18 +46,13 @@ export function AcceptOffline({
 
   const [open, setOpen] = useState(false);
   const [choices, setChoices] = useState<Record<string, "accepted" | "declined">>({});
-  // Which of the ways of doing it they agreed to. Nothing preselected, for the
-  // same reason the customer's own page preselects nothing: a default here is
-  // somebody else's memory of the call.
+  // Nothing preselected, as on the customer page: a default is someone's memory of the call.
   const [picked, setPicked] = useState<string | null>(null);
-  // On by default. The whole point of this card is a job agreed on a call, and
-  // the day is the half of that conversation the crew most needs written down
-  // while they still have it in front of them.
+  // On by default: the day is what the crew most need written down while it's fresh.
   const [withDate, setWithDate] = useState(true);
   const [time, setTime] = useState("9:00 AM");
-  // On by default: a text is the written record of a verbal agreement, which is
-  // the thing that protects everybody if the day is later disputed. Turned off
-  // when the customer asked not to be texted, or is still on the phone.
+  // On by default: the text is the written record if the day is disputed. Off
+  // when the customer asked, or is still on the phone.
   const [notify, setNotify] = useState(true);
 
   const first = firstNameOf(customerName, customerName);
@@ -76,14 +61,12 @@ export function AcceptOffline({
   const answered = optional.every((o) => choices[o.id]);
   const offersChoice = packages.length > 0;
   const chosen = packages.find((p) => p.id === picked) ?? null;
-  // What the job is worth given the answers so far, so the crew can read the
-  // number back down the phone before they commit to it.
+  // Live total, so the crew can read it back before committing.
   const total = useMemo(
     () => (options.length > 0 || chosen ? quoteTotal(chosen, options, choices) : amount),
     [options, choices, chosen, amount],
   );
-  // Only a quote with nothing else on it. Where one of the options carries the
-  // job, no to every add-on is an ordinary answer rather than a declined quote.
+  // Only when nothing else carries the job; with a package, no to all add-ons is fine.
   const nothingTaken =
     options.length > 0 &&
     !chosen &&
@@ -92,13 +75,11 @@ export function AcceptOffline({
   const ready =
     answered && !nothingTaken && (!offersChoice || Boolean(chosen)) && (!withDate || TIME_RE.test(time));
 
-  // The crew's page is a white card and the office's is dark. Same markup, one
-  // modifier on the outside; every rule inside keys off it.
+  // White card on the crew page, dark on the office's; one outer modifier.
   const card = tone === "light" ? "ao ao-light" : "ao";
 
-  // Recorded: fold away. The page behind it has re-rendered into an approved
-  // job - the schedule card, or the booked date at the top - so a form still
-  // sitting open would be offering to approve something already approved.
+  // Recorded: fold away. The page re-renders as approved, so a still-open form
+  // would offer to approve it again.
   if (state.ok) {
     return (
       <section className={card}>
@@ -131,9 +112,7 @@ export function AcceptOffline({
           fd.set("options", JSON.stringify(choices));
           fd.set("package", picked ?? "");
           fd.set("notify", notify ? "yes" : "no");
-          // The date fields are only in the DOM when the toggle is on, but a
-          // stale value from a browser restoring the form would still post, so
-          // the off state clears them rather than trusting them to be absent.
+          // A browser-restored stale date would still post, so clear it when off.
           if (!withDate) {
             fd.delete("date");
             fd.set("time", "");
@@ -141,8 +120,7 @@ export function AcceptOffline({
           formAction(fd);
         }}
       >
-        {/* Which way of doing it, before anything else. Every number on this
-            form is wrong until it has been answered. */}
+        {/* Package first: every number on the form depends on it. */}
         {offersChoice && (
           <div className="ao-options ao-picks">
             <p className="ao-label">{t.acceptOffline.whichOption}</p>
@@ -178,9 +156,8 @@ export function AcceptOffline({
                 <span className="ao-opt-title">{o.title}</span>
                 <span className="ao-opt-amount">{dollars(optionAmount(o))}</span>
                 <span className="ao-opt-pick">
-                  {/* Two explicit buttons rather than a checkbox, because an
-                      unticked box and "they said no" look identical and only
-                      one of them is an answer. */}
+                  {/* Two buttons, not a checkbox: unticked and "they said no"
+                      look identical. */}
                   <button
                     type="button"
                     className={choices[o.id] === "accepted" ? "ao-yes ao-on" : "ao-yes"}
@@ -204,10 +181,8 @@ export function AcceptOffline({
           </div>
         )}
 
-        {/* The total lives with the line items when there are any. With only a
-            choice of options on the quote it needs a home of its own, or the
-            figure the crew are about to read back down the phone is nowhere on
-            the form. */}
+        {/* With only packages, the total needs its own line so the crew have a
+            figure to read back. */}
         {offersChoice && options.length === 0 && (
           <p className="ao-total">
             {t.acceptOffline.agreedTotal} <strong>{dollars(total) ?? "-"}</strong>
@@ -231,13 +206,10 @@ export function AcceptOffline({
                 value={to24Hour(time, "09:00")}
                 onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
               />
-              {/* The action reads FormData, not component state, so the picked
-                  time needs its own field carrying the display copy. */}
+              {/* The action reads FormData, so the time needs a named field. */}
               <input type="hidden" name="time" value={time} />
             </label>
-            {/* minDate is today, not a week out. See the comment on the action:
-                the floor exists to stop a CUSTOMER committing an unchecked
-                crew, and the person filling this in is the crew. */}
+            {/* minDate is today: the lead-time floor is for customers (see acceptOffline). */}
             <DateField name="date" minDate={minDate} locale={locale} className="ao-date" />
           </div>
         )}

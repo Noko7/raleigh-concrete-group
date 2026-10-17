@@ -7,16 +7,14 @@
 //   Custom:           SMS_API_URL, SMS_API_KEY, SMS_FROM  (POSTs { to, from, message })
 // OWNER_PHONE receives the owner alerts ("my number").
 //
-// Every send is best-effort: it is wrapped so a texting outage can never break a
-// quote submission or a CRM save. Failures are logged (Vercel → Logs) with an
-// [sms] prefix so they can be diagnosed.
+// Every send is best-effort so an SMS outage can't break a submission or save.
+// Failures log with an [sms] prefix.
 import { phoneDisplay } from "@/lib/site-data";
 import { clockLabel, hourLabel, inQuietHours, nextSendableAt, now, QUIET_FROM_HOUR, QUIET_UNTIL_HOUR } from "./clock";
 import { firstNameOf, dollars, noEmDash, QUOTE_TTL_DAYS, STALE_LEAD_HOURS, visitDateOf } from "./constants";
 import { SITE_ORIGIN } from "./env";
-// Named apart from the local dollars-only `usd` below: money that came from the
-// ledger is in cents and must be printed with them, or a $6,172.50 deposit goes
-// out as "$6,172.5".
+// Ledger money is in cents and must print with them ("$6,172.50", not
+// "$6,172.5"), unlike the local dollars-only `usd`.
 import { usd as money } from "./fees";
 import {
   claimMessage,
@@ -38,37 +36,29 @@ export type SendResult = {
   ok: boolean;
   provider: string;
   to?: string;
-  // The number we sent from, so a failure log shows both ends of the attempt.
+  // Sending number, so a failure log shows both ends.
   from?: string;
   status?: number;
   detail?: string;
-  // Quiet hours: not sent, not lost. `ok` stays false because nothing reached
-  // the provider, so anything counting successful sends still counts honestly -
-  // but a screen showing this to a person needs to say "waiting", not "failed".
+  // Queued (quiet hours), not lost. `ok` stays false since nothing reached the
+  // provider; UIs should say "waiting", not "failed".
   held?: boolean;
-  // Held because a run deliberately spread its texts out, not because of the
-  // hour. Both wait in the same queue; only quiet hours is a rule anybody needs
-  // explaining to them.
+  // Held by deliberate spacing rather than quiet hours. Same queue; only quiet
+  // hours needs explaining to anyone.
   spaced?: boolean;
-  // We never made the request at all - a missing API key, an unset from-number.
-  // Distinct from a call that threw, where the message may well have arrived:
-  // here nothing was sent, we know it, and the queue can retry without any risk
-  // of a second copy. Set only where the provider function returns BEFORE its
-  // fetch.
+  // The request was never made (missing key or from-number), so a retry can't
+  // duplicate. Unlike a throw, where it may have arrived. Set only before fetch.
   unsent?: boolean;
   // Suppressed: the identical text went to this number seconds ago. `ok` is
-  // true because the customer has the message - which is what every caller is
-  // really asking - but nothing left the building on this call.
+  // true because the customer has it; nothing was sent on this call.
   duplicate?: boolean;
-  // When it will go out, ISO, and the same in words: "tomorrow at 8:00 AM".
+  // When it will go out: ISO, and in words ("tomorrow at 8:00 AM").
   sendAfter?: string;
   sendAfterLabel?: string;
 };
 
-// Is this the same person? Numbers reach here in whatever shape somebody typed
-// them into their profile, so they are compared normalised rather than as
-// strings. Used to answer one question throughout: did the person about to be
-// texted just do this thing themselves?
+// Same person? Numbers are compared normalised, since profiles hold whatever
+// was typed. Used to skip texting someone about their own action.
 export function samePhone(a?: string | null, b?: string | null): boolean {
   if (!a || !b) return false;
   const x = toE164(a);
@@ -94,8 +84,7 @@ async function sendQuo(to: string, message: string): Promise<SendResult> {
   const userId = process.env.QUO_USER_ID || "";
   if (!key) return { ok: false, provider: "quo", unsent: true, detail: "QUO_API_KEY is not set" };
   if (!from) return { ok: false, provider: "quo", unsent: true, detail: "QUO_FROM is not set" };
-  // Quo can't text a number from itself; it fails as an opaque 500 rather than a
-  // validation error, so catch it here where we can say what's actually wrong.
+  // Quo can't text a number from itself and returns an opaque 500, so say why here.
   if (to === from) {
     return {
       ok: false,
@@ -110,8 +99,7 @@ async function sendQuo(to: string, message: string): Promise<SendResult> {
     body: JSON.stringify({ content: message, from, to: [to], ...(userId ? { userId } : {}) }),
   });
   let detail = res.ok ? undefined : await res.text().catch(() => "");
-  // Their 500 "Unknown" says nothing useful on its own; add the two things that
-  // actually cause it so the message is actionable.
+  // Their 500 "Unknown" is useless alone; name the usual causes.
   if (!res.ok && res.status >= 500) {
     detail = `${detail ?? ""}\n\nQuo returned a server error. Usually this means the destination number can't receive texts (landline/VoIP), or your workspace can't message it. Check the number, then try another one in Settings → Text notifications.`;
   }
@@ -150,10 +138,9 @@ async function sendCustom(to: string, message: string): Promise<SendResult> {
   return { ok: res.ok, provider: "custom", to, status: res.status, detail };
 }
 
-// Write the attempt to the message log. Every exit path from sendSmsResult goes
-// through here, including the ones that never reach the provider: "we never
-// tried, the number was unparseable" is exactly the kind of failure that used to
-// vanish, and it looks identical to success from the outside.
+// Log the attempt. Every exit from sendSmsResult comes here, including ones that
+// never reach the provider (e.g. an unparseable number), which look like success
+// from outside.
 async function record(log: SmsLog | undefined, r: SendResult, to: string, body: string): Promise<void> {
   if (!log) return;
   await logMessage({
@@ -169,9 +156,8 @@ async function record(log: SmsLog | undefined, r: SendResult, to: string, body: 
   });
 }
 
-// The provider call on its own, with no quiet-hours gate in front of it. Used
-// by sendSmsResult during the day and by the queue flush in the morning; those
-// are the only two ways a text is allowed to leave.
+// The provider call with no quiet-hours gate. Only sendSmsResult (daytime) and
+// the queue flush may call it.
 async function deliver(to: string, message: string): Promise<SendResult> {
   if (SMS_PROVIDER === "quo" || SMS_PROVIDER === "openphone") return sendQuo(to, message);
   if (SMS_PROVIDER === "custom") return sendCustom(to, message);
@@ -179,40 +165,28 @@ async function deliver(to: string, message: string): Promise<SendResult> {
 }
 
 /**
- * Send now, or hold it until the morning.
+ * Send now, or hold until morning.
  *
- * Quiet hours are a courtesy to CUSTOMERS, not a shift pattern. Between 7pm and
- * 8am Eastern a customer text isn't sent: it's written to the message log with
- * a `send_after` on it and delivered by the flush below, which every send and
- * both crons run on their way past. So an 11pm booking still texts the
- * customer - at 8am, when a phone buzzing is a phone buzzing rather than
- * somebody being woken up by a business they bought concrete from.
+ * Quiet hours (7pm-8am Eastern) are a courtesy to CUSTOMERS: their texts are
+ * written to the log with a `send_after` and delivered by the flush, which
+ * every send and both crons run on their way past.
  *
- * The owner and the crew are on the job and get everything the moment it
- * happens, whatever the hour. That's what `role` decides here: "customer" waits,
- * "owner" and "crew" don't, and a send with no log at all (a contractor's login
- * text, the Settings test) is staff-facing by definition and goes straight out.
+ * Owner and crew texts always go immediately; `role` decides. A send with no
+ * log (login text, Settings test) is staff-facing and goes straight out.
  *
- * `force` is the one exception on the customer side: a text that is itself the
- * answer to something the customer just did. Today that is only the receipt for
- * a quote request, sent seconds after they pressed the button - see
- * notifyCustomerReceived. Anything that arrives out of the blue does not belong
- * here; that is the whole thing quiet hours are for.
+ * `force` is only for a customer text answering something they just did (the
+ * quote-request receipt, notifyCustomerReceived). Nothing unsolicited.
  */
 export async function sendSmsResult(
   toRaw: string,
   messageRaw: string,
   log?: SmsLog,
-  // `delayMinutes` parks a text in the same queue quiet hours use, due that
-  // many minutes from now. It is how a cron run that has six things to tell one
-  // contractor spreads them out instead of firing all six into their pocket at
-  // 10:00:03 - see spacer() below.
+  // `delayMinutes` parks a text in the same queue, due that many minutes out,
+  // so one cron run doesn't fire six texts at one contractor at once (spacer()).
   opts?: { force?: boolean; delayMinutes?: number },
 ): Promise<SendResult> {
-  // Every text goes through the dash guard, not just the ones written today.
-  // Doing it here rather than in each builder means a message assembled from
-  // owner-typed content (a quote summary, a service name) is covered too.
-  // Normalised before the log is written, so the log shows what was sent.
+  // Dash guard on every text, including owner-typed content. Applied before
+  // logging so the log shows what was sent.
   const message = noEmDash(messageRaw);
   const to = toE164(toRaw);
   if (!to) {
@@ -226,12 +200,8 @@ export async function sendSmsResult(
     return empty;
   }
 
-  // Already said, seconds ago? Then this is the second run of something that
-  // should only have run once, and the customer does not need telling twice.
-  //
-  // Only for sends that belong to a job. A send with no log - the Settings test
-  // text - is one somebody is deliberately firing, and firing twice to compare
-  // is a reasonable thing to want.
+  // Same text seconds ago means a double run; don't tell them twice. Only for
+  // job sends: the Settings test (no log) may be fired twice on purpose.
   if (log && (await recentlySent(to, message))) {
     const dupe: SendResult = {
       ok: true,
@@ -244,10 +214,8 @@ export async function sendSmsResult(
     return dupe;
   }
 
-  // Two reasons a text waits, and they use one queue: quiet hours (customers
-  // only, see the note above) and deliberate spacing (anyone). When both apply
-  // the later of the two wins - spacing must never be the thing that sneaks a
-  // customer text out at 11pm.
+  // One queue, two reasons: quiet hours (customers only) and spacing (anyone).
+  // The later wins, so spacing can never push a customer text out at 11pm.
   const quietHold = !opts?.force && log?.role === "customer" && inQuietHours();
   const delayMinutes = Math.max(0, Math.trunc(opts?.delayMinutes ?? 0));
   if (quietHold || delayMinutes > 0) {
@@ -270,10 +238,8 @@ export async function sendSmsResult(
       detail,
       send_after: due.toISOString(),
     });
-    // The row IS the queue entry, so a failed insert is not a missing log line -
-    // it is a text that no longer exists anywhere. Reported as a failure rather
-    // than as "held", because "held" tells the person who pressed Send that it
-    // is coming, and it is not.
+    // The row IS the queue entry: a failed insert means the text exists nowhere.
+    // Report failure, not "held", which would promise it's coming.
     if (!queued) {
       const lost: SendResult = {
         ok: false,
@@ -289,9 +255,7 @@ export async function sendSmsResult(
     return {
       ok: false,
       held: true,
-      // Spaced rather than held by the clock. The two read differently to a
-      // person: one is a rule about the hour, the other is us being polite
-      // about volume, and only the first is worth explaining to anybody.
+      // Spaced, not held by the clock; only quiet hours is worth explaining.
       spaced: !quietDue,
       provider: SMS_PROVIDER,
       to,
@@ -301,10 +265,8 @@ export async function sendSmsResult(
     };
   }
 
-  // Anything the night left behind goes out alongside this one, so the first
-  // text of the morning drags the queue out with it rather than leaving it for
-  // the cron. Deliberately not part of this send's own result: a stuck queue
-  // must not hold up the text somebody is waiting on right now.
+  // The first text of the morning drags the night's queue out with it. Not part
+  // of this result: a stuck queue mustn't delay this send.
   await flushInBackground();
 
   try {
@@ -339,31 +301,19 @@ export async function sendSms(
 
 // ── Spreading a run's texts out ─────────────────────────────────────────────
 //
-// A daily cron does all of its thinking in one second, and without this every
-// conclusion it reaches about one contractor lands on their phone in that same
-// second. Six buzzes at 10:00:03 is read as one interruption and answered like
-// one: the crew skim the last and lose the other five.
-//
-// So each person's texts from a single run are handed out slots, and the slot
-// becomes a `send_after` on the queue. The FIRST is never delayed - whatever a
-// run has to say to somebody, the most urgent thing reaches them exactly as
-// fast as it did before, and only the pile behind it is spread.
-//
-// Set REMINDER_SPACING_MINUTES to 0 to turn this off and go back to sending
-// everything at once.
+// A cron reaches all its conclusions in one second; six buzzes at once get
+// skimmed as one. Each person's texts from one run get slots that become
+// `send_after`. The first is never delayed, only the pile behind it.
+// REMINDER_SPACING_MINUTES=0 disables it.
 export const REMINDER_SPACING_MINUTES = (() => {
   const raw = Number(process.env.REMINDER_SPACING_MINUTES);
   return Number.isFinite(raw) && raw >= 0 ? Math.trunc(raw) : 15;
 })();
 
 /**
- * Hands out "how many minutes should this one wait" per phone number, for the
- * length of one cron run. First text to a given person: 0. Second: 15. Third:
- * 30. Somebody else's first is still 0 - the queue is per person, because two
- * contractors are not interrupting each other.
- *
- * Call it once per run and pass the result down; a fresh spacer per section
- * would restart everybody at 0 and undo the spacing between sections.
+ * Per-phone delay in minutes for one cron run: 0, 15, 30... per person, each
+ * person independent. Create once per run and pass it down; a fresh spacer per
+ * section would reset everyone to 0.
  */
 export function spacer(minutes = REMINDER_SPACING_MINUTES): (phone?: string | null) => number {
   const used = new Map<string, number>();
@@ -383,31 +333,20 @@ export type FlushResult = {
   sent: number;
   failed: number;
   skipped?: string;
-  // The drain could not read the queue at all. Distinct from `due: 0`, which
-  // means it looked and there was nothing there - the two used to be reported
-  // identically, which is how a queue that had stopped draining kept answering
-  // "all clear" to everybody who asked.
+  // The queue couldn't be read at all. Distinct from `due: 0` (looked, empty),
+  // so a stalled queue doesn't report "all clear".
   error?: string;
 };
 
 /**
- * Deliver everything the night held back.
- *
- * Runs from three places, all of them "on the way past" rather than a timer of
- * their own: both daily crons, and every send made during business hours. That
- * spread is deliberate - a serverless app has no process sitting around to wake
- * up at 8am, so instead the queue drains on the first thing that happens after
- * it, and the 10am cron is the floor if nothing else happens at all.
- *
- * Each row is claimed before it's sent (see claimMessage), so all three racing
- * at once still texts each person once.
+ * Deliver everything held back. Runs on the way past (both daily crons and
+ * every daytime send), since serverless has no process to wake at 8am; the
+ * 10am cron is the floor. Rows are claimed first (claimMessage), so concurrent
+ * flushes still text each person once.
  */
 export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<FlushResult> {
-  // Quiet hours is a rule about CUSTOMERS, so it is checked per row rather than
-  // used to abandon the whole flush. It used to stop the run outright, which
-  // was right while the queue only ever held customer texts; a spaced crew
-  // reminder queued at 6:50pm would have sat there until morning for a rule
-  // that was never about them. The crew get everything, any hour.
+  // Quiet hours apply to customers only, so checked per row; spaced crew
+  // texts go out any hour.
   const quiet = inQuietHours();
 
   const startedAt = now().getTime();
@@ -415,10 +354,8 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
   try {
     due = await listDueMessages(now().toISOString(), limit);
   } catch (e) {
-    // Loud, and returned rather than thrown: the crons report this in their
-    // response body, so hitting the cron URL by hand says what is wrong instead
-    // of cheerfully reporting an empty queue. A send that flushes on its way
-    // past still must not fail because of it, which is why this is not a throw.
+    // Returned, not thrown: crons report it in their response, and a send that
+    // flushes on its way past mustn't fail because of it.
     const error = String(e);
     console.error("[sms-queue] could not read the queue", error);
     return { due: 0, sent: 0, failed: 0, error };
@@ -434,8 +371,7 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
       continue;
     }
     if (!m.to_phone || !m.body) {
-      // Terminal by nature, so it is spent straight to the cap: retrying a row
-      // with nothing in it to send would only fail the same way twice more.
+      // Terminal, so spend it straight to the cap; retrying an empty row can't help.
       await finishMessage(
         m.id,
         { ok: false, provider: SMS_PROVIDER, detail: "Held with no number or body to send." },
@@ -457,9 +393,7 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
         detail: r.ok ? null : (r.detail ?? "Send failed."),
         unsent: r.unsent,
       },
-      // A failure releases the claim so the next drain retries it, until this
-      // reaches the cap. Without the count the row would either be retried for
-      // ever or, as before, never.
+      // A failure releases the claim so the next drain retries, up to the cap.
       m.attempts ?? 0,
     );
     if (r.ok) sent += 1;
@@ -476,19 +410,12 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
 }
 
 /**
- * Send one queued text right now, ahead of the hour it was promised for.
+ * Send one queued text now, ahead of its hour. Quiet hours are a default a
+ * person can override, e.g. correcting a price at 6:30am before the customer
+ * approves the wrong one.
  *
- * Quiet hours are a courtesy, and a courtesy has to be overridable by the
- * person whose money is on the other end of it. A contractor who corrects a
- * price at 6:30am is not sending a marketing blast - they are stopping a
- * customer approving a wrong number, and "it goes out at 8" is the wrong answer
- * to that. So the rule still holds by default and a person can step over it,
- * deliberately, one text at a time.
- *
- * Deliberately built from the same three pieces the drain uses - claim,
- * deliver, finish - rather than a second send path of its own. The claim is
- * what makes pressing this at the same moment a cron arrives safe: one of them
- * gets the row and the other finds it taken, so the customer gets one text.
+ * Built from the drain's claim/deliver/finish, so racing a cron still sends
+ * one text.
  */
 export async function sendHeldMessageNow(m: QuoteMessage): Promise<SendResult> {
   if (!m.to_phone || !m.body) {
@@ -508,9 +435,7 @@ export async function sendHeldMessageNow(m: QuoteMessage): Promise<SendResult> {
   const r = await deliver(m.to_phone, m.body).catch(
     (e) => ({ ok: false, provider: SMS_PROVIDER, detail: String(e) }) as SendResult,
   );
-  // Same bookkeeping as the drain, so a hand-sent text is recorded exactly like
-  // one the queue sent - including going back on the queue if the provider
-  // refused it, which is what stops a failed tap losing the message.
+  // Same bookkeeping as the drain, including requeueing on a provider refusal.
   await finishMessage(
     m.id,
     {
@@ -526,11 +451,9 @@ export async function sendHeldMessageNow(m: QuoteMessage): Promise<SendResult> {
   return r;
 }
 
-// Drain the queue without making the caller wait for it. `after` runs the work
-// once the response is out but before the function is torn down, which is the
-// only way a serverless request can leave something running. Outside a request
-// (a script, a test) it throws, and then a short awaited flush is the fallback -
-// bounded, because it's on somebody's critical path at that point.
+// Drain without making the caller wait. `after` runs once the response is out,
+// the only way serverless can leave work running. Outside a request it throws,
+// so fall back to a short, bounded awaited flush.
 export async function flushInBackground(): Promise<void> {
   try {
     const { after } = await import("next/server");
@@ -540,16 +463,12 @@ export async function flushInBackground(): Promise<void> {
   }
 }
 
-// Everyone who receives an owner alert: the OWNER_PHONE env plus every active
-// owner's saved number, de-duplicated in E.164. Exported so the Settings
-// diagnostics can show exactly who a real alert would reach, rather than
-// re-deriving the list and drifting from what alertOwner actually does.
-// One or more numbers to leave out. Every caller here is answering the same
-// question - who already knows, because they are the one who did it - and on
-// several events that is two different people (the crew member who pressed the
-// button, and the office copy of a text they have already had).
+// Phones to leave out: whoever already knows because they did it (often two:
+// the crew member who acted and the office copy they already got).
 export type PhoneExclusion = string | null | undefined | (string | null | undefined)[];
 
+// Everyone who gets an owner alert, de-duplicated in E.164. Exported so Settings
+// shows exactly who a real alert reaches.
 export async function ownerRecipients(excludeRaw?: PhoneExclusion): Promise<string[]> {
   const recipients = new Map<string, string>();
   const add = (raw?: string | null) => {
@@ -557,14 +476,12 @@ export async function ownerRecipients(excludeRaw?: PhoneExclusion): Promise<stri
     if (e) recipients.set(e, e);
   };
 
-  // Saved owner profiles win outright. OWNER_PHONE is a bootstrap for before
-  // anyone has saved a number, not a permanent extra recipient: previously the
-  // two were unioned, so a stale env var kept texting a number nobody could see
-  // or remove from inside the app.
+  // Saved owner profiles win outright; OWNER_PHONE is only a bootstrap until
+  // someone saves a number, so a stale env var can't keep texting.
   try {
     for (const p of await getOwnerPhones()) add(p);
   } catch {
-    // ignore - the env fallback below still applies
+    // ignore: the env fallback below still applies
   }
   if (recipients.size === 0) add(OWNER_PHONE);
 
@@ -575,14 +492,9 @@ export async function ownerRecipients(excludeRaw?: PhoneExclusion): Promise<stri
   return [...recipients.values()];
 }
 
-// The same list, but each number says where it came from. A bare list of digits
-// can't tell you which knob to turn when a number you don't recognise is
-// receiving your alerts: one lives in a Vercel env var, the others are staff
-// profiles you can edit in the CRM.
-// `active` is false for a number that is configured but no longer used, which
-// is the case for OWNER_PHONE once any owner has saved a number in their
-// profile. Showing it greyed out beats hiding it: a number in an env var you've
-// forgotten about is exactly the thing you want the app to point at.
+// Each number with its source (env var vs editable profile), so an unknown
+// recipient can be traced. `active` is false for OWNER_PHONE once any owner
+// has a saved number; shown greyed out rather than hidden.
 export type OwnerRecipient = { phone: string; source: "env" | "profile"; who: string; active: boolean };
 
 export async function ownerRecipientDetails(): Promise<OwnerRecipient[]> {
@@ -594,7 +506,7 @@ export async function ownerRecipientDetails(): Promise<OwnerRecipient[]> {
       if (e) byPhone.set(e, { phone: e, source: "profile", who: o.name, active: true });
     }
   } catch {
-    // ignore - the env entry below still applies
+    // ignore: the env entry below still applies
   }
 
   const envPhone = OWNER_PHONE ? toE164(OWNER_PHONE) : null;
@@ -611,8 +523,7 @@ export async function ownerRecipientDetails(): Promise<OwnerRecipient[]> {
   return [...byPhone.values()];
 }
 
-// Every active owner gets a copy, with the acting user excluded so they aren't
-// texted about their own clicks.
+// Every active owner gets a copy, minus the acting user(s).
 export async function alertOwner(
   message: string,
   excludeRaw?: PhoneExclusion,
@@ -621,8 +532,7 @@ export async function alertOwner(
   const recipients = await ownerRecipients(excludeRaw);
   if (recipients.length === 0) {
     console.error("[sms] alertOwner: no owner recipients (set OWNER_PHONE or an owner's phone in Settings)");
-    // Record the miss. An alert that was never addressed to anyone is the
-    // hardest failure to notice, because nothing errored and nothing arrived.
+    // Record the miss: an alert addressed to nobody errors nowhere and arrives nowhere.
     if (log) {
       await logMessage({
         quote_id: log.quoteId ?? null,
@@ -642,9 +552,8 @@ export async function alertOwner(
   );
 }
 
-// What's configured right now, for the Settings → Notifications panel. Never
-// returns a key or token: only whether each one is present, so this is safe to
-// render in the CRM.
+// Settings → Notifications. Reports only whether each secret is present, never
+// its value.
 export type SmsDiagnostics = {
   provider: string;
   from: string | null;
@@ -682,48 +591,35 @@ export function quoteLink(token: string): string {
 export function confirmLink(token: string): string {
   return `${SITE_ORIGIN}/confirm/${token}`;
 }
-// The customer's payment page. Same token as their quote, and the same link for
-// the life of the job - deposit, balance and anything in between - so the
-// office can text it again at any point without minting a new one.
+// The customer's payment page. Same token and link for the life of the job, so
+// it can be re-sent any time.
 export function payLink(token: string): string {
   return `${SITE_ORIGIN}/pay/${token}`;
 }
 
-// Used to introduce the business in the FIRST text a customer ever gets, and
-// nowhere else. A name on that one message is a person saying hello; a name on
-// every message afterwards ties the whole thread to one individual, which stops
-// being true the moment anyone else picks up the phone. Everything after the
-// introduction speaks as the business.
+// Used only in the FIRST text a customer gets. After that the business speaks,
+// since anyone may pick up the phone.
 const OWNER_NAME = (process.env.OWNER_NAME || "Noah").trim();
-// The Google review link in the job-complete thank-you. GOOGLE_REVIEW_URL
-// overrides it without a deploy.
+// Google review link for the job-complete thank-you; env overrides without a deploy.
 const REVIEW_URL = (process.env.GOOGLE_REVIEW_URL || "https://g.page/r/Cf1V-s7AJLEaEAI/review").trim();
 const BUSINESS = "Raleigh Concrete Group";
 
-// The opt-out notice goes in the FIRST message we ever send someone, and only
-// there. It has to be stated plainly at least once; repeating it on every text
-// trains people to skip past it and makes each message longer for nothing.
-//
-// STOP works on every message regardless of whether we print this line: the
-// carrier and the SMS provider honour it before it ever reaches this app, so a
-// customer is never stuck receiving texts because a later message didn't say so.
+// Opt-out notice: only in the FIRST message to someone; repeating it trains
+// people to skip it. STOP works on every message regardless, since the carrier
+// and provider handle it before it reaches us.
 const OPT_OUT_LINE = "Reply STOP any time to stop these texts.";
-// The number the crew should call when they can't make an appointment. Falls
-// back to the main business line from site-data rather than a second copy of
-// the digits, so there's one place a phone number is ever written down.
+// Number the crew call when they can't make it. Defaults to site-data's main
+// line, so the digits live in one place.
 const CALL_NUMBER = (process.env.OWNER_CALL_NUMBER || phoneDisplay).trim();
 
-// Every message in this file is built from lines, not sentences. A text arrives
-// as one wall of grey on a phone unless the important parts are given their own
-// line, and the crew reads these on a job site while holding something else.
-// `block("Label:", value)` is the shape used throughout: label, value, blank.
+// Messages are built from lines, not sentences: the crew read these on site.
+// `block("Label:", value)` is the shape throughout: label, value, blank.
 function block(label: string, ...values: (string | null | undefined)[]): string[] {
   const clean = values.filter((v): v is string => Boolean(v && v.trim()));
   return clean.length ? [label, ...clean, ""] : [];
 }
 
-// Joins lines and collapses any run of blank lines to one, so an omitted block
-// never leaves a gap in the middle of a message.
+// Joins lines and collapses blank runs, so an omitted block leaves no gap.
 function text(lines: (string | null | undefined)[]): string {
   return lines
     .filter((l): l is string => l !== null && l !== undefined)
@@ -733,9 +629,7 @@ function text(lines: (string | null | undefined)[]): string {
 }
 
 type QuoteInfo = {
-  // The job this message belongs to, so the send can be logged against it and
-  // read back on the job page. Optional only because a couple of callers text
-  // about something that isn't a job yet.
+  // For logging against the job. Optional: a few texts precede a job.
   id?: string | null;
   name: string;
   phone: string;
@@ -747,15 +641,14 @@ type QuoteInfo = {
   scheduled_date?: string | null;
   scheduled_time?: string | null;
   preferred_dates?: string[] | null;
-  // Index-aligned with preferred_dates: the start time they asked for on each
-  // of those days. Null entries are quotes accepted before we asked for one.
+  // Start time per preferred date, index-aligned. Entries may be null.
   preferred_times?: (string | null)[] | null;
   visit_date?: string | null;
   visit_time?: string | null;
   public_token?: string;
   job_token?: string;
-  // What the customer said yes and no to, on a quote that was written as line
-  // items. Only set on the messages sent the moment they answer.
+  // What the customer said yes/no to on an itemised quote. Only on texts sent
+  // as they answer.
   chosen?: { accepted: ChosenOption[]; declined: ChosenOption[] } | null;
 };
 
@@ -763,12 +656,8 @@ export type ChosenOption = { title: string; amount: number };
 
 const firstName = (full: string) => firstNameOf(full, "there");
 
-// The line items on a crew or owner text, with their prices. "Approved" on a
-// quote with options does not say what to build, and a crew reading only the
-// total has no way to tell whether the sidewalk is in it.
-//
-// Never used in a customer message: it carries money. The customer-facing
-// version below is titles only.
+// Line items with prices for crew/owner texts: "approved" alone doesn't say
+// whether the sidewalk is in. Never in customer texts (money); see below.
 function chosenBlockPriced(q: QuoteInfo): string[] {
   const c = q.chosen;
   if (!c || c.accepted.length === 0) return [];
@@ -778,27 +667,19 @@ function chosenBlockPriced(q: QuoteInfo): string[] {
     ...(c.declined.length > 0 ? block("Turned down:", ...c.declined.map((o) => o.title)) : []),
   ];
 }
-// PRICE NEVER GOES IN A CUSTOMER TEXT.
-//
-// A figure in a text is a figure out of context: no scope beside it, no
-// what's-included, nothing to answer the question it immediately raises. It
-// also gets forwarded, screenshotted and shopped around on its own. The
-// customer sees their number on their quote page, next to the five sections
-// that explain it, and the texts carry the link instead.
-//
-// So `usd` is for OWNER and CREW messages only. Before using it, check the
-// `role` on the send: "owner" and "crew" may show money, "customer" may not.
+// PRICE NEVER GOES IN A CUSTOMER TEXT. A bare figure has no scope beside it and
+// gets forwarded and shopped around; the quote page shows it in context, and
+// texts carry the link. `usd` is for "owner" and "crew" roles only.
 const usd = (n?: number | null) => dollars(n);
 
-// 1st, 2nd, 3rd, 4th... Spelled-out dates read as a date rather than as data,
-// which matters when the whole message is one line on a lock screen.
+// 1st, 2nd, 3rd, 4th...
 function ordinal(day: number): string {
   if (day % 100 >= 11 && day % 100 <= 13) return `${day}th`;
   return `${day}${["th", "st", "nd", "rd"][day % 10] ?? "th"}`;
 }
 
-// "Friday, August 29th". Honest when there isn't a date: a crew text shouldn't
-// say "your scheduled day" for a job nobody has booked yet.
+// "Friday, August 29th", or null when there's no date, so a crew text never
+// says "your scheduled day" for an unbooked job.
 function dayOrNull(ymd?: string | null): string | null {
   if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
   const d = new Date(`${ymd}T00:00:00`);
@@ -811,12 +692,8 @@ function prettyDay(ymd?: string | null): string {
   return dayOrNull(ymd) ?? "your scheduled day";
 }
 
-// The customer block shared by every crew-facing text. One field per line, not
-// full label-above-value blocks: this is embedded inside longer messages, and
-// spacing out five fields would push a crew reminder past four SMS segments for
-// no gain in readability. The important thing is that nothing runs together.
-// Only fields we actually have are included, so a sparse lead doesn't produce
-// "Address: null".
+// Customer block for crew texts. One field per line rather than label blocks,
+// which would push a reminder past four SMS segments. Absent fields are omitted.
 function customerBrief(q: QuoteInfo): string {
   const lines = [`Customer: ${q.name}`, `Phone: ${q.phone}`];
   if (q.service?.trim()) lines.push(`Service: ${q.service.trim()}`);
@@ -832,16 +709,13 @@ function customerBrief(q: QuoteInfo): string {
 }
 
 // ── 1. New quote in: text the owner(s) and the auto-assigned contractor ─────
-// The owner's version is laid out in labelled blocks rather than one run-on
-// line: a new lead is usually read on a phone while doing something else, and
-// the name and number need to be scannable without parsing a sentence.
+// The owner's version uses labelled blocks so name and number scan at a glance.
 export function newQuoteMessage(q: QuoteInfo): string {
-  // Free text from the customer, so cap it - an essay shouldn't turn one alert
-  // into a ten-part text.
+  // Free text from the customer; capped so one alert isn't a ten-part text.
   const raw = q.details?.trim();
   const details = raw ? (raw.length > 400 ? `${raw.slice(0, 400)}…` : raw) : null;
-  // Raw here, not visitDateOf: this message shows an online request's fallback
-  // slot too, and the label below is what says which of the two it is.
+  // Raw visit_date, not visitDateOf: an online request's fallback slot is shown
+  // too, and the label below says which it is.
   const visitDay = dayOrNull(q.visit_date);
 
   return text([
@@ -849,9 +723,8 @@ export function newQuoteMessage(q: QuoteInfo): string {
     ...block("Job Type:", q.service?.trim() || "Not specified"),
     ...block("Customer Phone:", q.phone),
     ...block("Address:", q.address?.trim()),
-    // Which kind of quote this is decides what the reader does next: an online
-    // request is desk work today, an in-person one is a drive on a set day.
-    // Left off entirely for older leads that predate the choice.
+    // Quote type decides the next step: desk work (online) or a drive (in person).
+    // Omitted when unset.
     ...block(
       "Quote Type:",
       q.quote_type === "online"
@@ -862,11 +735,9 @@ export function newQuoteMessage(q: QuoteInfo): string {
             ? "In person"
             : null,
     ),
-    // The same date means two different things, so it is never labelled the
-    // same way. On an online request it's the customer's fallback slot and the
-    // label has to say out loud that nobody has agreed to it, or the crew reads
-    // a booking into a maybe and drives out. A plans job has no date at all,
-    // so visitDateOf gives nothing and this whole block drops out.
+    // On an online request the date is only the customer's fallback slot, and
+    // the label must say nobody agreed to it, or the crew drive out on a maybe.
+    // Plans jobs have no date, so the block drops out.
     ...block(
       q.quote_type === "online" ? "If a visit is needed, they asked for:" : "Visit Booked:",
       q.quote_type === "plans"
@@ -875,10 +746,8 @@ export function newQuoteMessage(q: QuoteInfo): string {
           ? `${visitDay}${q.visit_time ? ` at ${q.visit_time}` : ""}${
               q.quote_type === "online" ? " (not confirmed - confirm it on the job page)" : ""
             }`
-          : // In person but no time: they skipped it, or the one they asked
-            // for had gone by the time they sent it. Either way the form
-            // saved the lead rather than turning them away, and this is the
-            // reader's cue that the next step is theirs.
+          : // In person with no time (skipped, or it had passed): the lead was
+            // saved anyway, so the next step is the reader's.
             q.quote_type === "inperson"
             ? "Not booked yet - call or text them to set a time"
             : null,
@@ -895,8 +764,7 @@ export async function notifyNewQuote(
 ): Promise<void> {
   await alertOwner(newQuoteMessage(q), null, { quoteId: q.id, kind: "new_quote" });
   if (contractorPhone) {
-    // Same full brief as a manual assignment - from the crew's side this is the
-    // same event, so it shouldn't read differently.
+    // Same brief as a manual assignment: to the crew it's the same event.
     await sendSms(contractorPhone, assignmentMessage(q, contractorName), {
       quoteId: q.id,
       kind: "new_quote_crew",
@@ -909,8 +777,8 @@ export async function notifyNewQuote(
 export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
   const msg =
     q.quote_type === "inperson" && !dayOrNull(q.visit_date)
-      ? // In person with no time on the row: the form saved the request rather
-        // than turning them away over a slot. Promise the call, not a booking.
+      ? // In person with no time: the request was saved anyway. Promise a
+        // call, not a booking.
         text([
           `Hi ${firstName(q.name)},`,
           `this is ${OWNER_NAME} with ${BUSINESS}. We got your request for a free in-person quote.`,
@@ -930,13 +798,9 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
           "",
           OPT_OUT_LINE,
         ])
-      : // Deliberately promises a follow-up, not a price or a timeframe. Pricing
-        // depends on the project, and committing to "your price shortly" up
-        // front sets an expectation the job can't always meet.
-        //
-        // The slot they picked is repeated back so they know we have it, and
-        // named as a maybe in the same breath. They must not put us in their
-        // calendar off this text - nobody is coming until we confirm.
+      : // Promises a follow-up, not a price or timeframe, which the job may not
+        // meet. Their slot is echoed back as explicitly unconfirmed so they
+        // don't put us in their calendar.
         text([
           `Hi ${firstName(q.name)},`,
           `this is ${OWNER_NAME} with ${BUSINESS}. Thanks for reaching out.`,
@@ -954,43 +818,29 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
           "",
           OPT_OUT_LINE,
         ]);
-  // Sent through quiet hours. This is a receipt, not a notification: the
-  // customer filled in the form seconds ago and is still looking at the page
-  // that said we'd text them. Holding it until 8am reads as the form having
-  // failed, which is how somebody at 10pm ends up filling it in twice or
-  // calling a competitor. The alert to the office about the same lead is not
-  // urgent in that way, and does wait.
+  // Forced through quiet hours: it's a receipt for a form submitted seconds ago.
+  // Holding it reads as the form failing (resubmits, calls to competitors).
+  // The office alert for the same lead does wait.
   await sendSms(q.phone, msg, { quoteId: q.id, kind: "received", role: "customer" }, { force: true }).catch(() => {});
 }
 
 // ── 4. Contractor confirms the visit an online customer offered ─────────────
-// The moment a maybe becomes an appointment. Both sides get the same day and
-// time in the same shape, because this is the text each of them will scroll
-// back to on the morning.
+// A maybe becomes an appointment. Both sides get the same day/time shape.
 export async function notifyVisitConfirmed(
   q: QuoteInfo,
   crewPhone?: string | null,
   crewName?: string | null,
   requested?: { date?: string | null; time?: string | null },
   fromOnline = true,
-  // Who confirmed it. On the crew's own job page this is the same person as
-  // crewPhone, and telling somebody what they just did is noise.
+  // Who confirmed it; skip texting them about their own action.
   actorPhone?: string | null,
 ): Promise<void> {
   const when = `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`;
 
-  // The customer asked for a photo quote and is getting a visit instead, so the
-  // first thing this has to do is explain why - unexplained, a crew turning up
-  // reads as a sales call. Measuring is the honest reason and it's in the
-  // customer's interest, so it leads.
-  //
-  // The day is offered rather than announced. They picked this slot themselves
-  // when they filled the form, but that was a maybe and it may have been weeks
-  // ago, so it closes by inviting them to move it rather than assuming.
-  //
-  // If the crew put them on a different slot, say so and name only the part
-  // that moved. "That's a change from Friday" when it is still Friday reads as
-  // a mistake and costs a phone call.
+  // A photo-quote customer getting a visit needs the reason first (measuring),
+  // or it reads as a sales call. The day is offered, not announced: their slot
+  // was a maybe, possibly weeks old. If the crew moved it, name only the part
+  // that changed.
   const movedDay = Boolean(requested?.date) && requested?.date !== q.visit_date;
   const movedTime = !movedDay && Boolean(requested?.time) && requested?.time !== q.visit_time;
   const wasAsked = movedDay ? prettyDay(requested?.date) : movedTime ? requested?.time : null;
@@ -1000,10 +850,7 @@ export async function notifyVisitConfirmed(
       `Hi ${firstName(q.name)},`,
       `this is ${BUSINESS}.`,
       "",
-      // "Rather than price it off the photos" only makes sense to someone who
-      // sent photos. A customer who booked an in-person quote from the start
-      // never did, and telling them we've decided against a photo quote they
-      // never asked for reads as a different job.
+      // The photos line only makes sense to someone who sent photos.
       fromOnline
         ? "For a job like this we want to make sure you get an accurate estimate, so rather than price it off the photos we'd like to come measure it in person. We have you down for:"
         : "To make sure you get an accurate estimate we'd like to come measure the job in person. We have you down for:",
@@ -1050,14 +897,9 @@ export async function notifyVisitConfirmed(
 }
 
 // ── 4a. A message the owner wrote themselves ────────────────────────────────
-// Sent when logging a call-in lead. The body is whatever they typed, because
-// the whole point is that a commercial enquiry about an apartment block needs
-// something none of the templates here can say.
-//
-// Two things are added rather than left to whoever is typing: the business
-// name, so it isn't an unsigned text from an unknown number, and the STOP
-// notice, because for a phoned-in lead this is the first message we have ever
-// sent them and that notice has to appear at least once.
+// Sent when logging a call-in lead; the body is whatever the owner typed.
+// Business name and STOP notice are always added: this is the first text the
+// lead has had from us.
 export async function notifyCustomMessage(q: QuoteInfo, body: string): Promise<SendResult> {
   const written = body.trim();
   return sendSmsResult(
@@ -1068,9 +910,7 @@ export async function notifyCustomMessage(q: QuoteInfo, body: string): Promise<S
 }
 
 // ── 4b. Estimate booked on a phone call ─────────────────────────────────────
-// The office books the visit while the customer is on the line, so this is
-// confirmation in writing rather than news. It stays short for that reason:
-// the day, the time, the address, and how to move it.
+// Booked while the customer is on the line, so it's a short written confirmation.
 export async function notifyVisitBooked(q: QuoteInfo): Promise<void> {
   await sendSms(
     q.phone,
@@ -1091,10 +931,8 @@ export async function notifyVisitBooked(q: QuoteInfo): Promise<void> {
 }
 
 // ── 5. Quote is ready: send the customer their link ─────────────────────────
-// Carries the link and the deadline, never the number - see the note on `usd`.
-// The deadline is stated here because this is the message they scroll back to,
-// and a quote that quietly stops working is worse than one that said when it
-// would.
+// Link and deadline, never the price (see `usd`). The deadline is stated so the
+// quote doesn't quietly stop working.
 export async function notifyQuoteReady(q: QuoteInfo): Promise<SendResult> {
   return sendSmsResult(
     q.phone,
@@ -1114,14 +952,9 @@ export async function notifyQuoteReady(q: QuoteInfo): Promise<SendResult> {
 }
 
 // ── 5a. The quote changed after it went out ─────────────────────────────────
-// Not the same text again. A price that was wrong when it left is the one thing
-// worth interrupting a customer for a second time, and the message has to say
-// so plainly: the number they were already shown is no longer the number.
-//
-// Same link as before - the quote page always renders the current row - so the
-// text they have in their thread still works and now shows the corrected quote.
-// It says that outright, because the natural worry on reading "updated" is that
-// the old link is the old price.
+// A price that was wrong is worth a second interruption, and the text says the
+// earlier number no longer stands. Same link (the page renders the current
+// row), and it says so, since "updated" makes people doubt the old link.
 export async function notifyQuoteUpdated(q: QuoteInfo): Promise<SendResult> {
   return sendSmsResult(
     q.phone,
@@ -1141,16 +974,9 @@ export async function notifyQuoteUpdated(q: QuoteInfo): Promise<SendResult> {
 }
 
 // ── 5a-ii. Another way of doing the job was added ───────────────────────────
-// Its own message rather than the correction above, because it is its own
-// event. "We've updated the quote" is what you say when the number they were
-// shown was wrong. This is the opposite: the number was right, they told us it
-// was more than they wanted to spend, and there is now a second way to do the
-// job sitting next to it. Saying "updated" there would read as a correction of
-// something they never complained about, and it buries the one thing they
-// actually asked for.
-//
-// Same link as always, and still no price: the two figures only mean anything
-// beside each other, which is the whole reason the page shows them that way.
+// Its own message: this isn't a correction. The price was right but too high
+// for them, and a second way to do the job now sits beside it. Same link, no
+// price: the two figures only mean something side by side.
 export async function notifyQuoteOptionAdded(q: QuoteInfo): Promise<SendResult> {
   return sendSmsResult(
     q.phone,
@@ -1170,43 +996,23 @@ export async function notifyQuoteOptionAdded(q: QuoteInfo): Promise<SendResult> 
 }
 
 // ── 5b. Quote is out: tell the office ──────────────────────────────────────
-// A quote leaving is a money moment nobody was being told about. The owner gets
-// it because it's the point the job starts waiting on someone outside the
-// business.
-//
-// Whoever pressed Send does not. They are holding the phone they pressed it on,
-// and the page answers them there: the CRM banner and the crew's job card both
-// report the send, name the number, and say when a held text goes out. A text
-// that arrives seconds later saying what they just did is the definition of
-// noise - and the rule this app already runs on is that nobody is told about
-// their own click.
-//
-// The message keys off whether the customer's text was actually accepted. A
-// confident "quote sent" over a text that bounced is worse than saying nothing:
-// everyone stops chasing a customer who never heard from us.
+// A quote going out is a money moment; the owner is told. Not whoever pressed
+// Send: their screen already reports it, and nobody is told about their own
+// click. Keyed on whether the customer's text was accepted: "quote sent" over a
+// bounced text makes everyone stop chasing a customer who never heard from us.
 export async function notifyQuoteSent(
   q: QuoteInfo,
   sender: { name?: string | null; phone?: string | null },
-  // How the customer's own text went, as the send itself reported it. Three
-  // outcomes, not two: it reached the provider, quiet hours are holding it
-  // until morning, or it actually failed.
-  //
-  // This used to be a bare `delivered` boolean, which folded the middle case
-  // into the last one: a contractor quoting a job at 9pm was told their quote
-  // "did NOT go out" and to ring the office, about a text that was queued and
-  // fine. That is a wrong answer at the worst moment - they either send it
-  // again, or they spend the evening believing the job is stalled.
+  // The customer send's outcome: reached the provider, held for quiet hours, or
+  // failed. Held is not failed: telling someone at 9pm their quote "did NOT go
+  // out" leads to resends or false alarms.
   outcome: { ok: boolean; held?: boolean; sendAfterLabel?: string },
-  // A correction to a quote the customer had already been sent, rather than a
-  // first send. Same money moment, different story: the office needs to know a
-  // number they may have already discussed has moved.
+  // A correction to an already-sent quote: the office needs to know the number moved.
   revised = false,
 ): Promise<void> {
   const by = sender.name?.trim() || "A contractor";
   const delivered = outcome.ok;
-  // Held is only ever true on a customer send, which is the only kind quiet
-  // hours touch. The crew's own copy of this message is role "crew" and goes
-  // out now, whatever time it is.
+  // Only customer sends are ever held; crew copies go out immediately.
   const held = !delivered && Boolean(outcome.held);
   const when = outcome.sendAfterLabel ?? "in the morning";
 
@@ -1240,20 +1046,19 @@ export async function notifyQuoteSent(
             ...block("Their number:", q.phone),
             "The quote link did NOT reach them. Give them a call.",
           ]),
-    // Whoever pressed the button doesn't need to be told what they just did.
+    // Don't tell whoever pressed the button what they just did.
     sender.phone,
     { quoteId: q.id, kind: "quote_sent" },
   ).catch(() => {});
 }
 
 // ── 6. Customer approved: thank them, but don't promise a day yet ───────────
-// They've proposed dates; the crew confirms one. Saying "we'll confirm" here is
-// what stops the customer assuming their first choice is locked in.
+// They proposed dates; the crew confirms one. "We'll confirm" stops them
+// assuming their first choice is locked in.
 export async function notifyCustomerApproved(
   q: QuoteInfo,
-  // The deposit to ask for, in cents, when the crew on this job can take a
-  // card. Null on a cash-only job: a payment link nobody can pay is worse than
-  // no link, and the crew will collect on site.
+  // Deposit to ask for, in cents, when this job's crew takes cards. Null on a
+  // cash-only job: an unpayable link is worse than none.
   depositCents?: number | null,
 ): Promise<void> {
   const asking = Boolean(depositCents && depositCents > 0 && q.public_token);
@@ -1263,19 +1068,15 @@ export async function notifyCustomerApproved(
       `Hi ${firstName(q.name)},`,
       "thanks for approving your quote.",
       "",
-      // Titles only, never the prices - the same rule as every other customer
-      // text. Reading back what they chose is the receipt for a decision they
-      // made on a phone in about four taps.
+      // Titles only, never prices (as in every customer text): a receipt for
+      // what they chose.
       q.chosen && q.chosen.accepted.length > 0
         ? `We've got you down for: ${q.chosen.accepted.map((o) => o.title).join(", ")}.`
         : null,
       q.chosen && q.chosen.accepted.length > 0 ? "" : null,
       "We're checking the crew's schedule against the days you picked and will text you shortly to confirm your project date and time.",
-      // The deposit ask rides on the message they were always going to get,
-      // rather than arriving as a second text a minute later. It goes last, on
-      // its own lines, and it is an offer rather than an instruction - a
-      // customer who would rather hand the crew cash has not done anything
-      // wrong and shouldn't be told to pay online.
+      // The deposit rides on this message rather than a second text. Last, and
+      // an offer, not an instruction: paying the crew in cash is fine.
       ...(asking
         ? [
             "",
@@ -1294,9 +1095,8 @@ export async function notifyCustomerApproved(
 
 // ── 6b. Approved: tell the owner + crew it needs a date ─────────────────────
 export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: string | null): Promise<void> {
-  // The day AND the hour they asked for. A list of bare days sends the crew
-  // back to the customer to ask what time, which is the phone call this whole
-  // propose-and-confirm split exists to remove.
+  // Day AND hour: bare days send the crew back to ask what time, the call the
+  // propose-and-confirm flow exists to avoid.
   const times = q.preferred_times ?? [];
   const picks = (q.preferred_dates ?? [])
     .map((d, i) => {
@@ -1344,26 +1144,19 @@ export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: stri
 
 
 // ── 6c. Approved on the phone: say who wrote it down ────────────────────────
-// The same news as notifyNeedsScheduling above, and a deliberately different
-// message, because the one fact the office needs here is the one that isn't in
-// the database: nobody watched the customer press a button. A member of staff
-// heard a yes and recorded it, and the alert names them.
-//
-// It goes out on every recorded approval, including one that books the day in
-// the same breath. That one also sends JOB BOOKED, which says when - but a
-// booking text that doesn't say the approval was taken over the phone reads
-// exactly like a customer who clicked, which is the thing this exists to stop.
+// Same news as notifyNeedsScheduling, but the key fact isn't in the database:
+// nobody watched the customer press a button; a staff member recorded a yes,
+// and the alert names them. Sent even when the day is booked too, because
+// JOB BOOKED alone reads like the customer clicked.
 export async function notifyOfflineApproval(
   q: QuoteInfo,
   contractorPhone: string | null | undefined,
   opts: {
-    // The staff member who recorded it, by name, for the alert - and by phone,
-    // so the usual rule holds and they aren't texted about their own typing.
+    // Recorder's name for the alert; their phone so they aren't texted about it.
     recordedBy: string;
     actorPhone?: string | null;
-    // The same form booked the day it agreed to. When true, q carries the
-    // booked date; when false, whatever day was mentioned on the call is still
-    // only a preference.
+    // Day booked in the same form: q carries the booked date. Otherwise any
+    // day from the call is only a preference.
     booked?: boolean;
   },
 ): Promise<void> {
@@ -1388,17 +1181,15 @@ export async function notifyOfflineApproval(
   ]);
 
   await alertOwner(msg, opts.actorPhone, { quoteId: q.id, kind: "approved_offline" });
-  // The crew copy only goes to a contractor who wasn't the one recording it.
-  // When they took the call themselves, the screen in their hand is the receipt.
+  // Crew copy only if someone else recorded it; otherwise their screen is the receipt.
   if (contractorPhone && !samePhone(contractorPhone, opts.actorPhone)) {
     await sendSms(contractorPhone, msg, { quoteId: q.id, kind: "approved_offline", role: "crew" }).catch(() => {});
   }
 }
 
 // ── 6d. Approved on the phone: the customer's written record ────────────────
-// Sent only when the call ended without a day. With one agreed, the confirmed
-// text below carries both the approval and the date, and a customer who just
-// hung up does not need two texts about the same conversation.
+// Only when the call ended without a day. With one, the confirmed text carries
+// both, and they don't need two texts about one call.
 export async function notifyApprovalRecorded(q: QuoteInfo): Promise<void> {
   const agreed = dayOrNull(q.preferred_dates?.[0]);
   const time = q.preferred_times?.[0] ?? null;
@@ -1409,7 +1200,7 @@ export async function notifyApprovalRecorded(q: QuoteInfo): Promise<void> {
       `Hi ${firstName(q.name)},`,
       "thanks for approving your quote over the phone.",
       "",
-      // Titles only, never prices - the same rule every customer text runs on.
+      // Titles only, never prices.
       q.chosen && q.chosen.accepted.length > 0
         ? `We've got you down for: ${q.chosen.accepted.map((o) => o.title).join(", ")}.`
         : null,
@@ -1426,9 +1217,8 @@ export async function notifyApprovalRecorded(q: QuoteInfo): Promise<void> {
   ).catch(() => {});
 }
 
-// The day plus the crew's start time, e.g. "Monday, August 17 at 9:00 AM".
-// Every customer-facing mention of the appointment goes through this so the
-// time can never silently drop out of one message but not another.
+// "Monday, August 17 at 9:00 AM". Every customer mention of the appointment
+// uses this, so the time can't drop out of one message only.
 function dayAndTime(q: QuoteInfo): string {
   return `${prettyDay(q.scheduled_date)}${q.scheduled_time ? ` at ${q.scheduled_time}` : ""}`;
 }
@@ -1451,25 +1241,14 @@ export async function notifyCustomerScheduled(q: QuoteInfo): Promise<void> {
 
 
 // ── 7b. Change orders ───────────────────────────────────────────────────────
-// The job is agreed, usually booked, and the customer has asked for something
-// different. These three cover the whole round trip: out to the customer, and
-// their answer back to the office and the crew.
+// Out to the customer, then their answer to the office and crew.
 
 /**
- * The customer's copy: what is changing, and the link to answer it on.
- *
- * No figures, which is worth a note because this is the message where the
- * temptation is strongest. The rule above still holds, and holds hardest here: a
- * price in a text is a price with no scope beside it, and a CHANGE in price with
- * no scope beside it is the version of that mistake most likely to start an
- * argument. The old total, the new one, the difference, what they have already
- * paid and what is left are all on the quote page, one tap away, laid out next
- * to the words describing the work - which is the only place a number like that
- * can be read fairly.
- *
- * What does go in: that their date has not moved, and that nothing happens
- * unless they say yes. Those are the two things a customer reading "the price of
- * your job is changing" is actually frightened of.
+ * The customer's copy: what is changing and where to answer. No figures, least
+ * of all here: a price change without scope beside it starts arguments. Totals,
+ * paid and remaining are on the quote page next to the work description.
+ * It does say their date hasn't moved and nothing happens unless they say yes,
+ * the two things they're actually worried about.
  */
 export async function notifyChangeRequested(q: QuoteInfo, note: string): Promise<SendResult> {
   return sendSmsResult(
@@ -1482,8 +1261,7 @@ export async function notifyChangeRequested(q: QuoteInfo, note: string): Promise
       "",
       q.scheduled_date ? `Your date doesn't move: ${dayAndTime(q)}.` : null,
       q.scheduled_date ? "" : null,
-      // The page it opens shows the new total beside what has already been paid
-      // and what that leaves - the deposit is counted there, not here.
+      // The page shows the new total against what's been paid (deposit included).
       "See what it changes and approve it here:",
       quoteLink(q.public_token ?? ""),
       "",
@@ -1516,14 +1294,11 @@ export async function notifyChangeAnswered(
             "New total:",
             `${money(change.toCents)} (was ${money(change.fromCents)}, ${diff > 0 ? "+" : "-"}${money(Math.abs(diff))})`,
           ),
-          // The deposit, spelled out, because "still to collect" on a job with
-          // money already in it is the figure most likely to be misread as the
-          // whole total. Left out when nothing has been paid: "$0.00 collected"
-          // is a line to read past, and "still to collect" already says it.
+          // Spelled out because "still to collect" on a part-paid job is easily
+          // misread as the total. Omitted when nothing's been paid.
           ...(change.paidCents > 0 ? block("Already collected:", money(change.paidCents)) : []),
           ...block("Still to collect:", money(dueCents)),
-          // The second deposit, when the change asked for one: the part of
-          // "still to collect" that has to come in before the work.
+          // The part of "still to collect" due before the work, if the change asked for one.
           ...(change.depositCents && change.depositCents > 0
             ? block(
                 "Deposit due now:",
@@ -1532,8 +1307,7 @@ export async function notifyChangeAnswered(
             : []),
         ]
       : block("Price unchanged:", money(change.fromCents))),
-    // The day is the thing a crew checks next, and a change order never moves
-    // it - so saying so here stops somebody going to look.
+    // A change order never moves the day; saying so saves the crew checking.
     q.scheduled_date ? `Day is unchanged: ${dayAndTime(q)}.` : null,
     "",
     q.job_token ? jobLink(q.job_token) : null,
@@ -1549,10 +1323,8 @@ export async function notifyChangeAnswered(
   }
 }
 
-// The date moved. Say so plainly rather than re-sending the "booked" text, which
-// reads as a mistake when the customer already had a different day. The old and
-// new times each get their own line: this is the message most likely to be
-// misread, and a customer skimming it has to come away with the right day.
+// Says the date moved rather than re-sending "booked", which reads as a mistake.
+// Old and new each get a line so a skimming customer lands on the right day.
 export async function notifyCustomerRescheduled(
   q: QuoteInfo,
   previous?: string | null,
@@ -1561,8 +1333,7 @@ export async function notifyCustomerRescheduled(
   const wasDay = dayOrNull(previous);
   const was = wasDay ? `${wasDay}${previousTime ? ` at ${previousTime}` : ""}` : null;
 
-  // No previous date on file: there's nothing to move "from", so state the new
-  // one rather than printing a dangling "from:".
+  // No previous date: state the new one rather than a dangling "from:".
   const body = was
     ? [`your project with ${BUSINESS} has been moved from:`, "", was, "to:", dayAndTime(q)]
     : [`your project with ${BUSINESS} has been moved to:`, "", dayAndTime(q)];
@@ -1580,20 +1351,13 @@ export async function notifyCustomerRescheduled(
 }
 
 // ── Quote visits: moved or cancelled from the calendar ─────────────────────
-// The visit is an appointment the customer set aside time for, so moving or
-// dropping it gets the same courtesy as a booked job.
+// The customer set time aside, so these get the same courtesy as a booked job.
 /**
- * A quote visit the customer already had, on a different day.
+ * A quote visit moved to a different day. Not the confirmation text again:
+ * resending the intro reads as a second appointment. This says only what changed.
  *
- * Deliberately not the confirmation text again. That one introduces the visit -
- * why we want to come, that it's free, that there's no obligation - and none of
- * that is news to somebody who already has the appointment. Sending it a second
- * time reads as a second appointment on top of the first, which is a phone call
- * to sort out. This says the one thing that changed and gets out of the way.
- *
- * `crew` is passed when the move came from a screen that isn't the crew's own
- * job page: the office can move a visit out from under the person who has to
- * drive to it, and that person needs telling.
+ * `crew` is passed when the move came from somewhere other than the crew's own
+ * job page, so the person driving there is told.
  */
 export async function notifyVisitMoved(
   q: QuoteInfo,
@@ -1603,10 +1367,9 @@ export async function notifyVisitMoved(
     crewPhone?: string | null;
     crewName?: string | null;
     movedBy?: string | null;
-    // Who moved it, so they aren't texted about their own change.
+    // Who moved it; not texted about their own change.
     actorPhone?: string | null;
-    // False when the office has already told them - rang up and went out
-    // early, say. The crew and the office still hear either way.
+    // False when the office already told the customer. Crew and office still hear.
     tellCustomer?: boolean;
   },
 ): Promise<void> {
@@ -1646,16 +1409,9 @@ export async function notifyVisitMoved(
 }
 
 /**
- * A quote visit called off.
- *
- * `asked` is whether the CUSTOMER asked for this, and it changes the whole
- * message. "We've had to cancel your visit, sorry for the trouble" sent to
- * somebody who rang up five minutes ago to cancel it themselves reads as a
- * second, separate cancellation - and an apology for something they wanted.
- * Theirs is a receipt; ours is an apology.
- *
- * `crew` is passed when whoever has to drive there isn't the person cancelling.
- * A cancellation nobody passes on is a van outside an empty house.
+ * A quote visit called off. `asked` = the CUSTOMER asked: theirs gets a
+ * receipt, ours an apology; an apology to someone who just cancelled reads as
+ * a second cancellation. `crew` is passed when the driver isn't the canceller.
  */
 export async function notifyVisitCancelled(
   q: QuoteInfo,
@@ -1663,7 +1419,7 @@ export async function notifyVisitCancelled(
 ): Promise<void> {
   const day = dayOrNull(q.visit_date);
 
-  // Skipped when the office has already said it out loud on the phone.
+  // Skipped when the office already told them on the phone.
   if (opts?.tellCustomer !== false) {
     await sendSms(
       q.phone,
@@ -1689,9 +1445,6 @@ export async function notifyVisitCancelled(
   await tellTeamCancelled(q, "QUOTE VISIT CANCELLED", day, opts);
 }
 
-// The crew and the office, told the same thing: this is off, here is who is
-// no longer expecting you, and who called it. Sent from every cancel path,
-// because the one that matters is the one nobody remembered to wire up.
 // Who hears about a cancellation, and who already knows because they called it.
 export type CancelAudience = {
   asked?: boolean;
@@ -1701,6 +1454,8 @@ export type CancelAudience = {
   actorPhone?: string | null;
 };
 
+// Crew and office get the same message: what's off, for whom, and who called it.
+// Sent from every cancel path.
 async function tellTeamCancelled(
   q: QuoteInfo,
   headline: string,
@@ -1723,8 +1478,7 @@ async function tellTeamCancelled(
   await alertOwner(internal, [opts.actorPhone, opts.crewPhone], { quoteId: q.id, kind: "cancelled_crew" }).catch(() => {});
 }
 
-// A booked work day was removed. The customer is expecting a crew, so this is
-// the one cancellation that must never be silent.
+// A booked work day was removed. The customer expects a crew, so never silent.
 export async function notifyBookingCancelled(
   q: QuoteInfo,
   previous?: string | null,
@@ -1768,10 +1522,8 @@ export async function notifyBooked(
   contractorPhone?: string | null,
   previous?: string | null,
   previousTime?: string | null,
-  // Who confirmed the day. Usually the assigned contractor, from their own job
-  // page - that is the whole point of the approve/confirm split - so without
-  // this the crew's main action always texts the crew the date they just
-  // picked, and an owner doing it from the CRM gets their own alert back.
+  // Who confirmed the day, usually the assigned contractor on their own job
+  // page; they (or an owner in the CRM) shouldn't be texted their own action.
   actorPhone?: string | null,
 ): Promise<void> {
   const wasDay = dayOrNull(previous);
@@ -1788,9 +1540,7 @@ export async function notifyBooked(
   ]);
 
   await alertOwner(msg, actorPhone, { quoteId: q.id, kind: "booked" });
-  // The crew copy is for a contractor who wasn't the one clicking - the office
-  // booked it, or another owner did. When they confirmed it themselves the job
-  // page in their hand already shows the date.
+  // Crew copy only if someone else booked it; otherwise their page shows it.
   if (contractorPhone && !samePhone(contractorPhone, actorPhone)) {
     await sendSms(contractorPhone, msg, { quoteId: q.id, kind: "booked", role: "crew" }).catch(() => {});
   }
@@ -1843,10 +1593,8 @@ export async function notifyUnconfirmed(q: QuoteInfo, contractorPhone?: string |
 }
 
 // ── 10. Crew reminders ahead of a booked job ────────────────────────────────
-// Sent 3 days out, 1 day out and the morning of. Every one of them repeats the
-// address, the start time and how to bail out, because the whole point is that
-// a crew member who can't make it says so while there's still time to cover it,
-// rather than the customer finding out by nobody showing up.
+// 3 days out, 1 day out and the morning of. Each repeats address, start time and
+// who to call, so a no-show is flagged while there's still time to cover it.
 export function crewReminderMessage(q: QuoteInfo, daysOut: number, contractorName?: string | null): string {
   const when = daysOut === 0 ? "TODAY" : daysOut === 1 ? "TOMORROW" : `IN ${daysOut} DAYS`;
   const greeting = contractorName?.trim() ? `Hi ${firstName(contractorName)},` : "Hi,";
@@ -1871,8 +1619,7 @@ export async function notifyCrewReminder(
   q: QuoteInfo,
   daysOut: number,
   contractorName?: string | null,
-  // Minutes to hold this one back so a crew member with several jobs isn't sent
-  // all of them at once. 0 sends now.
+  // Minutes to hold this back so several jobs don't arrive at once. 0 sends now.
   delayMinutes = 0,
 ): Promise<SendResult | null> {
   if (!contractorPhone) return null;
@@ -1889,10 +1636,8 @@ export async function notifyCrewReminder(
 }
 
 // ── 12. Stale lead: still nothing sent 48h after it came in ────────────────
-// Never sent for a lead whose visit is still ahead of it - see
-// hasUpcomingVisit. So a visit date appearing here has already passed, which
-// is a different and more pointed message than "nobody has looked at this":
-// somebody went out, and no price came back.
+// Never sent while a visit is still ahead (hasUpcomingVisit), so a visit date
+// here has passed: somebody went out and no price came back.
 export function staleLeadMessage(q: QuoteInfo, contractorName?: string | null): string {
   const greeting = contractorName?.trim() ? `Hi ${firstName(contractorName)},` : "Hi,";
   const visited = dayOrNull(visitDateOf(q));
@@ -1914,14 +1659,10 @@ export function staleLeadMessage(q: QuoteInfo, contractorName?: string | null): 
   ]);
 }
 
-// How many leads a digest spells out before it stops and points at the CRM.
-// Past this the text is a wall nobody reads to the end, and the pipeline board
-// is the better tool anyway.
+// Leads a digest lists before pointing at the CRM.
 const DIGEST_MAX_ITEMS = 6;
 
-// One lead as a few lines inside a digest, rather than the four-line brief a
-// single-lead text can afford. `who` is set only on the owner's copy - the
-// contractor knows whose leads these are, the owner needs telling.
+// One lead as a few lines in a digest. `who` only on the owner's copy.
 function staleLeadItem(q: QuoteInfo, n: number, who?: string | null): string {
   const visited = dayOrNull(visitDateOf(q));
   return text([
@@ -1935,14 +1676,8 @@ function staleLeadItem(q: QuoteInfo, n: number, who?: string | null): string {
 }
 
 /**
- * Every stale lead in one text.
- *
- * This used to be one text per lead, which meant a contractor who took a day
- * off came back to six identical-looking alerts and read none of them. A list
- * is both less noise and more use: it says how far behind the pipeline is,
- * which a stack of separate texts actively hides.
- *
- * `who` on each entry labels it for the owner's copy, which spans everybody.
+ * Every stale lead in one text: less noise than one per lead, and it shows how
+ * far behind the pipeline is. `who` labels entries for the owner's copy.
  */
 export function staleLeadDigest(
   leads: { quote: QuoteInfo; who?: string | null }[],
@@ -1965,28 +1700,20 @@ export function staleLeadDigest(
   ]);
 }
 
-// A contractor and the leads of theirs that have gone quiet. `phone` is null
-// for a contractor with no number on file, and for the unassigned pile - both
-// still belong in the owner's copy.
+// A contractor's quiet leads. `phone` is null for no number on file and for the
+// unassigned pile; both still go in the owner's copy.
 export type StaleLeadGroup = {
   phone?: string | null;
   name?: string | null;
   leads: QuoteInfo[];
-  // Set by the caller's spacer, so this contractor's nudge queues behind the
-  // job reminders the same run already sent them rather than arriving with them.
+  // From the caller's spacer, so this queues behind the run's job reminders.
   delayMinutes?: number;
 };
 
 /**
- * Text each contractor their own stale leads, and the owner everybody's.
- *
- * One text per person per run, not one per lead. The owner's copy spans every
- * group including the unassigned pile, so it doubles as the "nobody has picked
- * this up" alert that used to have no owner of its own.
- *
- * A contractor who is also an owner is skipped: their leads are already in the
- * owner digest they're about to get, and two texts listing the same jobs is the
- * spam this replaced.
+ * Each contractor gets their own stale leads, the owner everybody's (including
+ * unassigned), one text per person per run. A contractor who is also an owner
+ * is skipped: the owner digest already lists their jobs.
  */
 export async function notifyStaleLeads(
   groups: StaleLeadGroup[],
@@ -1995,8 +1722,7 @@ export async function notifyStaleLeads(
   const leadCount = withLeads.reduce((n, g) => n + g.leads.length, 0);
   if (leadCount === 0) return { owner: false, contractors: 0, leads: 0 };
 
-  // One lead is still one lead: it gets the message it always got, which says
-  // more about that job than a list entry can. The digest is for the pile-up.
+  // A single lead gets the fuller single-lead message; the digest is for pile-ups.
   const only = leadCount === 1 ? withLeads[0] : null;
 
   await alertOwner(
@@ -2004,8 +1730,7 @@ export async function notifyStaleLeads(
       ? staleLeadMessage(only.leads[0], only.name)
       : staleLeadDigest(withLeads.flatMap((g) => g.leads.map((quote) => ({ quote, who: g.name || "Unassigned" })))),
     null,
-    // A digest belongs to no single job, so it is logged without one; the
-    // per-lead trace is the stale_lead_reminded event the cron writes on each.
+    // A digest has no single job; each lead's trace is its stale_lead_reminded event.
     only ? { quoteId: only.leads[0].id, kind: "stale_lead" } : { kind: "stale_lead_digest" },
   );
 
@@ -2025,9 +1750,7 @@ export async function notifyStaleLeads(
       g.leads.length === 1
         ? { quoteId: g.leads[0].id, kind: "stale_lead", role: "crew" as const }
         : { kind: "stale_lead_digest", role: "crew" as const };
-    // A queued text is not a failure, so it counts as handled either way: the
-    // caller's tally is "who did we have something to say to", and the queue
-    // row is the record of what happens next.
+    // A queued text counts as handled; the queue row records what happens next.
     if (await sendSms(phone, msg, log, { delayMinutes: g.delayMinutes ?? 0 }).catch(() => false)) contractors += 1;
   }
 
@@ -2035,8 +1758,7 @@ export async function notifyStaleLeads(
 }
 
 // ── 13. Quote visit, night before: customer + contractor ───────────────────
-// The 2-day reminder above (notifyReminder) is for a booked WORK day. This is
-// the equivalent for the free in-person quote VISIT - one reminder, the night
+// notifyReminder covers booked work days; visits get one reminder, the night
 // before, since a visit is an hour, not a crew and a truck.
 export async function notifyVisitReminder(q: QuoteInfo): Promise<SendResult> {
   const when = `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`;
@@ -2086,9 +1808,8 @@ export async function notifyVisitReminderCrew(
 }
 
 // ── 14. 48h follow-up: a sent quote nobody has accepted or declined ────────
-// Says the quote is waiting, never what it costs - see the note on `usd`.
-// The days-left line is the part that actually moves people: a decision with
-// no deadline gets postponed indefinitely, and this one has a real one.
+// Says the quote is waiting, never the price (see `usd`). The days-left line is
+// what moves people; a decision with no deadline gets postponed.
 export async function notifyQuoteFollowup(q: QuoteInfo, daysLeft?: number | null): Promise<SendResult> {
   const deadline =
     daysLeft != null && daysLeft > 0
@@ -2131,10 +1852,8 @@ export async function notifyComplete(q: QuoteInfo): Promise<void> {
 }
 
 // ── Payment: text the customer their card link ──────────────────────────────
-// The crew's "send a card link" button. Deliberately says the amount and then
-// stops: the page itself is where the customer chooses deposit or balance, and
-// a text that argues the case for paying reads like a collections notice on a
-// job that isn't finished.
+// The crew's "send a card link" button. States the amount and stops: the page
+// handles deposit vs balance, and arguing for payment reads like collections.
 export async function notifyPayLink(q: QuoteInfo, dueCents: number): Promise<SendResult> {
   return sendSmsResult(
     q.phone,
@@ -2154,10 +1873,8 @@ export async function notifyPayLink(q: QuoteInfo, dueCents: number): Promise<Sen
 }
 
 // ── Payment: the crew took money on site ────────────────────────────────────
-// Cash counts the moment the crew says it landed, so this text IS the control.
-// Nobody is approving anything - the owner is being told, immediately, what was
-// taken and what it means for what they're owed, while the crew is still
-// standing in the driveway and a mistake is cheap to fix.
+// Cash counts as soon as the crew records it, so this text IS the control: the
+// owner hears immediately, while a mistake is still cheap to fix.
 export async function notifyCashRecorded(input: {
   q: QuoteInfo;
   amountCents: number;
@@ -2175,9 +1892,8 @@ export async function notifyCashRecorded(input: {
       ...block("Customer:", q.name),
       ...block("Taken by:", who),
       ...block("Still due from customer:", dueCents > 0 ? money(dueCents) : "Nothing - paid in full"),
-      // The line the whole cash board exists for. Card payments pay the office
-      // automatically; this one didn't, so the fee is now a debt somebody has
-      // to remember - and the owner should learn that here, not at month end.
+      // Card payments pay the office automatically; cash doesn't, so the fee is
+      // now a debt the owner should hear about now, not at month end.
       ...block("They now owe you:", feeOwedCents > 0 ? money(feeOwedCents) : "Nothing on this job"),
       q.job_token ? jobLink(q.job_token) : null,
     ]),
@@ -2186,10 +1902,8 @@ export async function notifyCashRecorded(input: {
   );
 }
 
-// Assignment from the CRM: give the contractor everything they need to pick up
-// the phone without opening anything first, then point them at the full job.
-// The job link needs a CRM session now, so the text says so up front rather
-// than letting them tap through to a login screen with no explanation.
+// Everything the contractor needs to call the customer without opening anything.
+// The job link needs a CRM login, so the text says so up front.
 export function assignmentMessage(q: QuoteInfo, contractorName?: string | null): string {
   const greeting = contractorName?.trim() ? `Hi ${firstName(contractorName)},` : "Hi,";
   return text([
@@ -2197,8 +1911,7 @@ export function assignmentMessage(q: QuoteInfo, contractorName?: string | null):
     `you've been assigned a new job with ${BUSINESS}.`,
     "",
     customerBrief(q),
-    // The link is skipped rather than half-built when there's no token. A bare
-    // ".../job/" is worse than no link: it looks tappable and goes nowhere.
+    // No token, no link: a bare ".../job/" looks tappable and goes nowhere.
     ...(q.job_token
       ? ["", "Full details and photos:", jobLink(q.job_token), "", "Sign in with your CRM login to open it."]
       : []),
@@ -2208,12 +1921,8 @@ export function assignmentMessage(q: QuoteInfo, contractorName?: string | null):
 }
 
 // ── A payment the office had to correct ─────────────────────────────────────
-// The crew recorded one figure and it was not what happened. They are told
-// because two numbers they act on have just moved: what is left to collect from
-// the customer, and what they owe the office.
-//
-// Never sent to whoever did it. The office corrects these from a screen that
-// already shows them the result.
+// The crew acted on a figure that changed: what's left to collect and what they
+// owe the office. Never sent to whoever made the correction.
 export async function notifyPaymentCorrected(input: {
   q: QuoteInfo;
   contractorPhone?: string | null;
@@ -2239,8 +1948,7 @@ export async function notifyPaymentCorrected(input: {
     what,
     "",
     ...block("Still to collect:", money(input.dueCents)),
-    // The reason the crew care beyond curiosity: their own balance with the
-    // office is a percentage of what the customer has actually handed over.
+    // Their balance with the office is a percentage of what was actually collected.
     ...block("You owe the office:", money(input.feeOwedCents)),
     `Corrected by ${who}.`,
     "",

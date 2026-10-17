@@ -6,19 +6,13 @@ import { useRouter } from "next/navigation";
 
 import { usd as money } from "@/lib/crm/fees";
 
-// The customer answering a change to a job they have already approved.
+// The customer answering a change to an approved (often half-paid) job. A bigger
+// number first reads as a bill, so the order is fixed: what's changing, the date
+// is safe, the money, then the buttons.
 //
-// This is the most delicate panel on the customer's side of the whole app. They
-// agreed a price, they have very likely already paid half of it, and a screen
-// that opens with a bigger number reads as a bill arriving - so the order is
-// chosen deliberately: what is changing, then their date is safe, then the
-// money, then the two buttons. By the time a figure appears they have already
-// read the reason for it.
-//
-// The deposit is the part that has to be unmissable. "New balance $5,275" on its
-// own looks like a second invoice on top of the $4,125 they have paid; the same
-// number under a line that says their $4,125 is counted is the balance it
-// actually is. So the three rows are always shown together, never summarised.
+// The deposit must be unmissable: "New balance $5,275" alone looks like a second
+// invoice on top of the $4,125 paid. Whenever something's been paid, that row
+// sits with the totals rather than being summarised away.
 type Mode = "choose" | "sending" | "done" | "declined";
 
 export function ChangeReview({
@@ -34,7 +28,7 @@ export function ChangeReview({
   payHref = null,
 }: {
   token: string;
-  /** Which change this is (its change_requested_at), so an answer can't land on a different one. */
+  /** Which change this is (its change_requested_at), so an answer can't land on another. */
   requestedAt: string;
   /** What the crew said is changing, word for word. */
   note: string;
@@ -42,21 +36,18 @@ export function ChangeReview({
   fromCents: number;
   /** What the job would come to. */
   toCents: number;
-  /** What they have already handed over. The deposit. */
+  /** Already paid (the deposit). */
   paidCents: number;
   /** Their booked day, already formatted, when they have one. */
   when: string | null;
-  /**
-   * The breakdown that comes with the change, when the crew wrote one. It adds
-   * up to the new total, so it sits directly above it.
-   */
+  /** The change's breakdown, if any; it sums to the new total, so it sits above it. */
   lines?: { title: string; description: string | null; amount: number }[] | null;
   /**
-   * A second deposit the change asks for, in cents: paid up front once they
-   * approve, for materials on the added work. Null when it asks for nothing.
+   * Second deposit the change asks for, in cents, paid on approval for the added
+   * work's materials. Null when none.
    */
   depositCents?: number | null;
-  /** Where to pay it by card, when card payment is set up on this job. */
+  /** Where to pay it by card, when card payment is set up for this job. */
   payHref?: string | null;
 }) {
   const router = useRouter();
@@ -66,11 +57,9 @@ export function ChangeReview({
 
   const diff = toCents - fromCents;
   const dueCents = Math.max(0, toCents - paidCents);
-  // We have more of their money than the job is now worth. Said plainly rather
-  // than shown as a $0 balance, because a customer owed money needs to know it
-  // is coming back, not that they owe nothing.
+  // Overpaid for the new total: said plainly, so they know money is coming back.
   const refundCents = Math.max(0, paidCents - toCents);
-  // What to send now and what waits for the end, when a deposit is asked for.
+  // What to send now vs at the end, when a deposit is asked for.
   const nowCents = depositCents && depositCents > 0 ? Math.min(depositCents, dueCents) : 0;
   const restCents = dueCents - nowCents;
 
@@ -86,8 +75,7 @@ export function ChangeReview({
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string; stale?: boolean };
       if (res.ok && json.ok) {
         setMode(action === "accept" ? "done" : "declined");
-        // Re-render the page into its ordinary confirmed view, now carrying the
-        // new total and balance.
+        // Re-render into the ordinary confirmed view with the new totals.
         router.refresh();
       } else {
         setStale(json.stale === true);
@@ -147,12 +135,10 @@ export function ChangeReview({
       {/* Their words first. The number means nothing without it. */}
       <p className="cr-note-body">{note}</p>
 
-      {/* Before the money, because "is my date still ok" is the question a
-          customer reads a message like this asking. */}
+      {/* Before the money: "is my date still ok" is their first question. */}
       {when && <p className="cr-date">Your date doesn&apos;t move: <strong>{when}</strong></p>}
 
-      {/* Where the new total goes, line by line. Plain rows, the same look as
-          the breakdown on their quote, so it reads as the same document. */}
+      {/* Line by line, styled like their quote's breakdown. */}
       {lines && lines.length > 0 && (
         <div className="cr-lines">
           <p className="cr-lines-title">New price breakdown</p>
@@ -176,8 +162,7 @@ export function ChangeReview({
           <dd>{money(fromCents)}</dd>
         </div>
         <div>
-          {/* Same total, new breakdown: said as no change rather than as a
-              "+$0" that reads like a trick. */}
+          {/* Same total, new breakdown: said as no change, not a "+$0". */}
           <dt>{diff > 0 ? "This change adds" : diff < 0 ? "This change takes off" : "Change to the price"}</dt>
           <dd className={diff > 0 ? "cr-up" : diff < 0 ? "cr-down" : undefined}>
             {diff === 0 ? "None" : `${diff > 0 ? "+" : "-"}${money(Math.abs(diff))}`}
@@ -187,8 +172,7 @@ export function ChangeReview({
           <dt>New total</dt>
           <dd>{money(toCents)}</dd>
         </div>
-        {/* The deposit, always on its own line when there is one. This is the
-            row that stops a new balance reading as a new bill. */}
+        {/* The deposit on its own line: what stops a new balance reading as a new bill. */}
         {paidCents > 0 && (
           <div>
             <dt>You&apos;ve already paid</dt>
@@ -199,8 +183,7 @@ export function ChangeReview({
           <dt>{refundCents > 0 ? "Back to you" : "Left to pay"}</dt>
           <dd>{refundCents > 0 ? money(refundCents) : money(dueCents)}</dd>
         </div>
-        {/* The second deposit: the part of that balance to send now, for the
-            materials, and what waits for the end. */}
+        {/* Second deposit: what to send now for materials, and what waits for the end. */}
         {nowCents > 0 && (
           <>
             <div className="cr-sums-now">
@@ -216,7 +199,7 @@ export function ChangeReview({
       </dl>
 
       {stale ? (
-        // What is on screen is no longer what is on the job; only a reload shows the real one.
+        // The screen no longer matches the job; only a reload shows the real one.
         <div className="cr-acts">
           <button type="button" className="cr-yes" onClick={() => window.location.reload()}>
             Reload the page

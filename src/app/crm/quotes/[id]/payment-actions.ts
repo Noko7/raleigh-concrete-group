@@ -23,10 +23,8 @@ import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries
 
 export type PaymentState = { ok: boolean; error?: string; message?: string };
 
-// Every screen that can move money on a job. Revalidated together because the
-// crew's job page, the office's quote page and the cash board are three views
-// of the same ledger, and a payment that only appears on one of them is how two
-// people end up recording the same $4,000 twice.
+// The crew's job page, the quote page and the cash board are three views of one
+// ledger; refreshing them together stops the same payment being recorded twice.
 function refreshMoneyViews(id: string) {
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm/money");
@@ -46,11 +44,8 @@ function parseAmount(raw: unknown): number | null {
 // ── Text the customer a card link ───────────────────────────────────────────
 
 /**
- * Send the customer their payment page.
- *
- * The link is the same one for the whole job, so this is safe to press twice -
- * the customer gets the same page showing whatever is currently owed, not a
- * second bill.
+ * Text the customer their payment page. Same link for the whole job, showing
+ * whatever is currently owed, so pressing twice is safe.
  */
 export async function sendPayLink(_prev: PaymentState, formData: FormData): Promise<PaymentState> {
   const session = await getSession();
@@ -61,8 +56,8 @@ export async function sendPayLink(_prev: PaymentState, formData: FormData): Prom
   const quote = await getQuote(session, id);
   if (!quote) return { ok: false, error: "You don't have access to this job." };
 
-  // Staff-facing, so this says exactly what is wrong and who fixes it. The
-  // customer-facing version of the same failure says none of this.
+  // Staff-facing: says exactly what's wrong and who fixes it (the customer
+  // version doesn't).
   const payee = await payeeState(quote);
   if (!payee.ok) {
     const why: Record<typeof payee.reason, string> = {
@@ -88,8 +83,7 @@ export async function sendPayLink(_prev: PaymentState, formData: FormData): Prom
     error: sent?.ok ? null : (sent?.detail ?? "send failed"),
     due_cents: ledger.dueCents,
   });
-  // Stamped whether or not the text landed: the office asked for the money, and
-  // that is the fact the pipeline is tracking.
+  // Stamped whether or not the text landed: the request is what's tracked.
   await updateQuote(session, id, { payment_requested_at: new Date().toISOString() });
 
   refreshMoneyViews(id);
@@ -104,17 +98,12 @@ export async function sendPayLink(_prev: PaymentState, formData: FormData): Prom
 // ── Money the crew took in person ───────────────────────────────────────────
 
 /**
- * Record cash, a cheque, Zelle or Venmo.
+ * Record cash, a cheque, Zelle or Venmo. Counts immediately with no approval
+ * step: the office is texted within seconds, and a confirmation queue would
+ * just leave balances wrong for a day.
  *
- * It counts the moment it is entered - no approval step, by design. The crew is
- * standing in front of the customer and the office gets a text within seconds;
- * a queue of payments waiting to be confirmed would just mean the balance on
- * screen is wrong for a day, which is worse than trusting the person who took
- * the money.
- *
- * The office's cut is deliberately NOT collected here. Nothing moved through
- * Stripe, so the fee stays owed on the job and the contractor settles it later -
- * that debt, and its being visible, is the whole point of the cash board.
+ * The office's cut is NOT collected here: nothing went through Stripe, so the
+ * fee stays owed for the contractor to settle (what the cash board tracks).
  */
 export async function recordManualPayment(_prev: PaymentState, formData: FormData): Promise<PaymentState> {
   const session = await getSession();
@@ -151,15 +140,10 @@ export async function recordManualPayment(_prev: PaymentState, formData: FormDat
 // ── Giving money back ───────────────────────────────────────────────────────
 
 /**
- * Refund a card payment, and hand back the office's cut with it.
- *
- * Owner only. A refund comes out of the contractor's Stripe balance, and
- * `refundApplicationFee` is what stops it costing them the office's percentage
- * on top of the customer's money - without it a refunded job would leave the
- * crew down the fee on work they were never paid for.
- *
- * Cash is not refundable here on purpose: the office never held it, so there is
- * nothing on this system to send back. Whoever took it hands it back.
+ * Refund a card payment and hand back the office's cut. Owner only.
+ * `refundApplicationFee` keeps the refund from costing the contractor the
+ * office's percentage on top. Cash isn't refundable here: the office never held
+ * it.
  */
 export async function refundJobPayment(_prev: PaymentState, formData: FormData): Promise<PaymentState> {
   const session = await getSession();
@@ -189,14 +173,14 @@ export async function refundJobPayment(_prev: PaymentState, formData: FormData):
     paymentIntentId: row.payment_intent_id,
     stripeAccount: row.stripe_account_id,
     amountCents,
-    // Always. See the note above.
+    // Always; see above.
     refundApplicationFee: true,
     idempotencyKey: `rf_${row.id}_${amountCents}`,
   });
   if (!done.ok) return { ok: false, error: done.error };
 
-  // Written here as well as by the charge.refunded webhook. Both set the running
-  // total rather than adding to it, so whichever lands second changes nothing.
+  // Also written by the charge.refunded webhook. Both set the running total, so
+  // whichever lands second is a no-op.
   await applyRefund(row.id, row.refunded_cents + amountCents, row.amount_cents);
   await addEvent(session, id, "payment_refunded", { amount_cents: amountCents });
 
@@ -205,21 +189,14 @@ export async function refundJobPayment(_prev: PaymentState, formData: FormData):
 }
 
 // ── Fixing a payment somebody keyed in wrong ────────────────────────────────
-// Owner only, both of these. A contractor restating their own entry is exactly
-// what least-privilege.sql exists to prevent - the cash board is settled from
-// these rows - so the office does the correcting and the crew get told.
-//
-// Neither of these is a refund. No money moved wrongly: the figure on the row
-// is not what happened. A refund would put an imaginary outgoing on a ledger
-// that gets reconciled against a bank statement.
+// Owner only: the cash board settles from these rows, so contractors can't
+// restate their own entries (least-privilege.sql); the crew get told.
+// Not refunds: no money moved wrongly, the row is just wrong, and a refund would
+// add a fake outgoing to a ledger reconciled against the bank.
 
 /**
- * Correct the amount, method or note on a hand-recorded payment.
- *
- * The case this was built for: a 50% deposit recorded as the whole job. Nothing
- * refused it - the form's amount box is pre-filled with the outstanding balance,
- * and on an untouched job that is the full total - and until now nothing could
- * put it right without opening the Supabase console.
+ * Correct the amount, method or note on a hand-recorded payment, e.g. a 50%
+ * deposit recorded as the whole job (the amount box pre-fills with the balance).
  */
 export async function correctRecordedPayment(_prev: PaymentState, formData: FormData): Promise<PaymentState> {
   const session = await getSession();
@@ -237,12 +214,8 @@ export async function correctRecordedPayment(_prev: PaymentState, formData: Form
   const blocked = correctableReason(row);
   if (blocked) return { ok: false, error: blocked };
 
-  // Nothing came in at all - no deposit, the crew recorded money that was never
-  // handed over. Typing 0 here is the obvious move and it cannot work: a payment
-  // row is never $0 (the database refuses it, and a $0 payment would be a row
-  // that says money arrived when none did). The honest answer is that the row
-  // should not exist, which is what voiding is for - so say so, rather than
-  // refusing with "enter what they paid" to somebody who just did.
+  // Nothing came in at all: a payment row can't be $0 (the DB refuses it), so
+  // point them to voiding instead of a confusing refusal.
   const typed = cleanAmount(formData.get("amount"));
   if (typed !== "" && Number(typed) === 0) {
     return {
@@ -259,10 +232,8 @@ export async function correctRecordedPayment(_prev: PaymentState, formData: Form
 
   const note = String(formData.get("note") ?? "").trim().slice(0, 500);
 
-  // Same ceiling a new payment has: never more than the job is worth. Measured
-  // against the job's OTHER rows, so this one is not weighed against itself -
-  // without that, correcting $8,250 down to $4,125 would be refused for
-  // exceeding a balance that the $8,250 itself was filling.
+  // Same ceiling as a new payment, measured against the job's OTHER rows, so
+  // correcting $8,250 down to $4,125 isn't refused by its own old figure.
   const rows = await listPaymentsAdmin(id);
   const elsewhere = rows
     .filter((r) => r.id !== row.id && (r.status === "paid" || r.status === "refunded"))
@@ -283,8 +254,7 @@ export async function correctRecordedPayment(_prev: PaymentState, formData: Form
   const saved = await correctRecordedPaymentAdmin(row, { amountCents, method, note: note || null });
   if (!saved.ok) return { ok: false, error: saved.error ?? "Could not save that correction." };
 
-  // Both figures on the row, because "corrected a payment" tells nobody whether
-  // the books moved by five dollars or four thousand.
+  // Both figures, so the log shows whether the books moved $5 or $4,000.
   await addEvent(session, id, "payment_corrected", {
     payment_id: row.id,
     from_cents: row.amount_cents,
@@ -294,15 +264,13 @@ export async function correctRecordedPayment(_prev: PaymentState, formData: Form
     note: note || null,
   });
 
-  // The stamp the wrong figure earned has to come off, or the job stays out of
-  // "customers still owe" on the Money page forever. Goes both ways - a
-  // correction upward can finish paying a job off.
+  // Re-derive paid state both ways, or a wrong stamp keeps the job off
+  // "customers still owe" (or a correction upward fails to settle it).
   await resyncJobPaidState(id).catch(() => {});
 
   const after = await jobLedger(quote);
-  // The crew are told because it changes two numbers they act on: what is left
-  // to collect, and what they owe the office. The owner did it, so they are not
-  // texted their own click.
+  // The crew act on what's left to collect and what they owe the office. The
+  // owner made the change, so isn't texted.
   const contractor = quote.assigned_to ? await getStaffById(session, quote.assigned_to) : null;
   await notifyPaymentCorrected({
     q: { id, name: quote.name, phone: quote.phone, job_token: quote.job_token },
@@ -327,14 +295,9 @@ export async function correctRecordedPayment(_prev: PaymentState, formData: Form
 }
 
 /**
- * Take a payment off the books entirely - a duplicate, or one recorded against
- * the wrong job.
- *
- * The row is not deleted. It stays visible as voided with the reason on it,
- * because "what happened to that $8,250" gets asked exactly when somebody is
- * reconciling a month, and a deleted row cannot answer it. Every total in the
- * business sums rows that are 'paid' or 'refunded', so a voided one stops
- * counting everywhere at once.
+ * Take a payment off the books (duplicate, wrong job). Not deleted: kept as
+ * voided with the reason, for reconciliation. Totals only sum 'paid' and
+ * 'refunded' rows, so it stops counting everywhere.
  */
 export async function voidRecordedPayment(_prev: PaymentState, formData: FormData): Promise<PaymentState> {
   const session = await getSession();
@@ -352,8 +315,7 @@ export async function voidRecordedPayment(_prev: PaymentState, formData: FormDat
   const blocked = correctableReason(row);
   if (blocked) return { ok: false, error: blocked };
 
-  // Required, and it rides on the row. A voided payment with no reason is a
-  // hole in the books that somebody will have to come back and ask about.
+  // Required and stored on the row: an unexplained void is a hole in the books.
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 300);
   if (reason.length < 3) return { ok: false, error: "Say why it's being voided - it goes on the record." };
 
@@ -377,7 +339,7 @@ export async function voidRecordedPayment(_prev: PaymentState, formData: FormDat
     contractorPhone: contractor?.phone,
     actorPhone: session.staff.phone,
     fromCents: row.amount_cents,
-    // Voided, not reduced. The text says so rather than claiming it became zero.
+    // Voided, not reduced; the text says so.
     toCents: null,
     method: row.method,
     who: session.staff.full_name || "the office",
@@ -395,12 +357,9 @@ export async function voidRecordedPayment(_prev: PaymentState, formData: FormDat
 // ── Waiving part of the office fee ──────────────────────────────────────────
 
 /**
- * Take some or all of the office fee off one job. Owner only.
- *
- * For part of a job total the office shouldn't take a cut of - a change order
- * that only passed materials through at cost. Sets the amount rather than
- * adding to it, so typing a new figure replaces the old one and 0 clears it.
- * The database refuses this column from anybody but an owner as well.
+ * Waive some or all of the office fee on one job (e.g. materials passed through
+ * at cost). Owner only, also enforced by the DB. Sets rather than adds, so a new
+ * figure replaces the old and 0 clears it.
  */
 export async function setFeeWaiver(_prev: PaymentState, formData: FormData): Promise<PaymentState> {
   const session = await getSession();
@@ -415,7 +374,7 @@ export async function setFeeWaiver(_prev: PaymentState, formData: FormData): Pro
   if (!Number.isFinite(dollars) || dollars < 0) return { ok: false, error: "Enter the amount to waive, or 0 to clear it." };
   const cents = Math.round(dollars * 100);
 
-  // Against the full fee, before any waiver: the most there is to take off.
+  // Against the full fee before any waiver: the most there is to take off.
   const { ledger } = await jobLedger({ ...quote, fee_waived_cents: 0 });
   if (cents > ledger.feeTotalCents) {
     return { ok: false, error: `That's more than the whole ${usd(ledger.feeTotalCents)} fee on this job.` };

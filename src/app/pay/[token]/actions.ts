@@ -9,13 +9,9 @@ import { getQuoteByToken } from "@/lib/crm/queries";
 export type PayState = { error?: string };
 
 /**
- * Send the customer to Stripe for one payment on their job.
- *
- * Everything about the amount is re-derived here from the job, never trusted
- * from the form: the page is behind an unguessable token rather than a login,
- * so the only thing standing between a posted field and a charge is this
- * function. The form says how much they chose; the server says whether that is
- * a number this job can accept.
+ * Send the customer to Stripe for one payment. The amount is re-derived from
+ * the job, never trusted from the form: the page is behind a token, not a
+ * login, so this function is all that stands between a posted field and a charge.
  */
 export async function beginPayment(_prev: PayState, formData: FormData): Promise<PayState> {
   const token = String(formData.get("token") ?? "");
@@ -34,24 +30,17 @@ export async function beginPayment(_prev: PayState, formData: FormData): Promise
   const amountCents = Math.round(dollars * 100);
   if (amountCents < MIN_PAYMENT_CENTS) return { error: "Enter an amount of at least $1." };
 
-  // Read WITHOUT freezing. The comment here used to claim the opposite, and the
-  // distinction matters enough to be worth stating properly: freezing writes
-  // today's rate onto the job, and merely validating an amount the customer
-  // typed must not commit their contractor to a rate. startJobCheckout freezes,
-  // at the point money actually moves.
-  //
-  // The two agree on the ceiling regardless - previewFee and ensureFeeOnJob
-  // derive the same rate from the same inputs - so this is the same figure
-  // startJobCheckout will charge against, arrived at without the write.
+  // Read WITHOUT freezing: validating a typed amount must not commit the
+  // contractor to today's rate; startJobCheckout freezes when money moves.
+  // previewFee and ensureFeeOnJob derive the same rate, so the ceiling matches.
   const { ledger, rows } = await jobLedger(quote);
   if (ledger.dueCents <= 0) return { error: "This job is already paid in full - nothing is owed." };
   if (amountCents > ledger.dueCents) {
     return { error: `The most that can be paid on this job right now is $${(ledger.dueCents / 100).toFixed(2)}.` };
   }
 
-  // A handful of half-finished checkouts is a customer changing their mind. A
-  // hundred is somebody with the link hammering the button, and each one is a
-  // live Stripe session on the contractor's account.
+  // Many open checkouts means someone hammering the link, each a live Stripe
+  // session on the contractor's account.
   const openSessions = rows.filter((r) => r.status === "pending").length;
   if (openSessions >= 5) {
     return { error: "You have a payment already open. Finish or close it first, or give us a call." };
@@ -60,7 +49,6 @@ export async function beginPayment(_prev: PayState, formData: FormData): Promise
   const started = await startJobCheckout({ quote, amountCents });
   if (!started.ok) return { error: started.error };
 
-  // Outside any try/catch: redirect() works by throwing, and swallowing that
-  // would leave the customer on this page with a session open and no way to it.
+  // Outside any try/catch: redirect() throws, and swallowing it strands the customer.
   redirect(started.url);
 }

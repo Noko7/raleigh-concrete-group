@@ -7,18 +7,11 @@ import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { cancelAppointment } from "./actions";
 import type { ScheduleState } from "./types";
 
-// Calling off an appointment, from wherever you are when the customer asks.
+// Cancel an appointment from the job itself (crew page or quote page), where the
+// call usually comes in, not only from the calendar panel.
 //
-// Until now this only existed in the calendar's slide-in panel, which is the
-// office moving other people's appointments around a month grid. But the call
-// comes in while somebody is looking at the job - the crew on their own page,
-// the office on the quote - and "open the calendar, find the right day, find
-// the right chip" is a long way round to press one button.
-//
-// Two steps on purpose. This texts a customer and puts a day back on the
-// market, so it is not something to do with one stray tap on a phone in a
-// truck. Collapsed it is a quiet link, not a red button competing with
-// Reschedule next to it: cancelling is the rarer answer.
+// Two steps on purpose: it texts a customer and frees the day, so not a stray
+// tap. Collapsed it's a quiet link, since cancelling is rarer than Reschedule.
 export function CancelAppointment({
   id,
   kind,
@@ -33,22 +26,18 @@ export function CancelAppointment({
   const t = dict(locale);
   const [state, formAction, pending] = useActionState<ScheduleState, FormData>(cancelAppointment, { ok: false });
   const [open, setOpen] = useState(false);
-  // On by default: the usual cancellation is us calling it off on somebody who
-  // is expecting us. Turned off when they are the one who asked and you are
-  // still on the phone to them.
+  // On by default: usually we're calling it off on someone expecting us. Off
+  // when they asked and you're still on the phone.
   const [notify, setNotify] = useState(true);
-  // Who called it off. Off by default because the older reason for cancelling
-  // is that we can't make it; ticking it swaps the customer's text from an
-  // apology to a receipt, and tells the crew who to ask about it.
+  // Customer asked? Off by default (usually we can't make it). Ticked, their text
+  // becomes a receipt instead of an apology and the crew learn who to ask.
   const [asked, setAsked] = useState(false);
 
   const isJob = kind === "job";
-  // The first name is enough in a warning that already names the appointment,
-  // and it is what the rest of the CRM uses when it addresses a customer.
+  // First name, as elsewhere in the CRM; the warning already names the appointment.
   const firstName = firstNameOf(customerName, customerName);
 
-  // Done: fold away. The date it was about has gone from the page above, so a
-  // form still sitting open would be asking about something that isn't there.
+  // Done: fold away; the date is gone from the page above.
   if (state.ok) {
     return (
       <div className="ca">

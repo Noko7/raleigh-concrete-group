@@ -42,30 +42,25 @@ import {
   type Sections,
 } from "@/components/quote-form-parts";
 
-// The quote itself: what the customer is sent and reads back. Name, status,
-// crew and private notes are the job's, not the quote's, and live in
-// JobSettings beside it - saveQuote only touches the fields a form posts, so
-// the two save independently.
+// The quote itself: what the customer is sent. Name, status, crew and notes
+// belong to the job (JobSettings); saveQuote only touches posted fields, so the
+// two save independently.
 type Props = {
   id: string;
-  // Line items, if this quote was written as a list of choices rather than one
-  // price. Empty is the normal case and changes nothing.
+  // Line items, if written as a list rather than one price. Usually empty.
   options: StoredOption[];
-  // The ways of doing the job the customer may pick between. Empty on all but
-  // the quote that was asked for two ways at once.
+  // Alternative ways of doing the job; usually empty.
   packages: StoredPackage[];
   customerName: string;
-  // Already texted and no answer yet. The owner can still send it again - a
-  // customer saying "I never got it" is real and somebody has to be able to
-  // act on it - but it becomes a deliberate second send rather than a repeat
-  // of the same click.
+  // Texted, no answer yet. The owner can still resend ("I never got it"), as a
+  // deliberate second send.
   awaitingReply: boolean;
   initial: {
     quote_amount: number | null;
     quote_summary: string | null;
     customer_response: "accepted" | "declined" | null;
-    // Where the job sits. A declined quote is locked only while it is still
-    // marked Lost; moved off Lost, the next save reopens it (saveQuote).
+    // A declined quote is locked only while still Lost; moved off Lost, the next
+    // save reopens it (saveQuote).
     status: string;
   } & Partial<Record<QuoteSectionField, string | null>>;
 };
@@ -77,9 +72,8 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
   const packageLabels = owner.quotePackages;
   const [state, formAction, pending] = useActionState<SaveState, FormData>(saveQuote, { ok: false });
 
-  // Everything is controlled so the form always shows the saved truth. When the
-  // server data changes (after a save, or a customer action elsewhere) we resync
-  // the fields to it - that's the "stateful" behaviour the board needs.
+  // Controlled fields, resynced whenever server data changes (a save, or a
+  // customer action elsewhere), so the form always shows the saved truth.
   const [amount, setAmount] = useState(initial.quote_amount != null ? String(initial.quote_amount) : "");
   const [summary, setSummary] = useState(initial.quote_summary ?? "");
   const [sections, setSections] = useState<Sections>(() => ({
@@ -91,15 +85,14 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
   const [confirming, setConfirming] = useState(false);
   const [localErr, setLocalErr] = useState("");
 
-  // The stored line items, in the shape the builder edits. Rebuilt only when the
-  // server data actually changes, so typing in the builder isn't clobbered.
+  // Stored line items in builder shape, rebuilt only when server data changes
+  // so typing isn't clobbered.
   const optionsSig = useMemo(
     () => options.map((o) => `${o.id}|${o.title}|${o.description ?? ""}|${o.amount}|${o.required}`).join("~"),
     [options],
   );
   const storedRows = useMemo(() => rowsFromOptions(options), [optionsSig]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Built by hand rather than with Object.fromEntries, which widens the value
-  // back to a bare string and loses the union the builder is typed on.
+  // Built by hand: Object.fromEntries widens the value to string and loses the union.
   const answers = useMemo(() => {
     const out: Record<string, "accepted" | "declined" | null> = {};
     for (const o of options) out[o.id] = o.customer_response;
@@ -110,9 +103,8 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [optionsSig]);
 
-  // Same resync for the choice of options, and for the same reason: until the
-  // saved ids are back in state, the next save would insert a second copy of
-  // every card instead of updating the ones just written.
+  // Same resync for packages: until saved ids are back in state, the next save
+  // would insert duplicates.
   const packagesSig = useMemo(
     () => packages.map((p) => `${p.id}|${p.title}|${p.description ?? ""}|${p.amount}|${p.recommended}`).join("~"),
     [packages],
@@ -147,26 +139,21 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSig]);
 
-  // After any successful save/send, pull fresh server data so the status badge,
-  // activity log and the rest of the page reflect the change immediately.
+  // After a save/send, refresh so badge, log and page reflect it immediately.
   useEffect(() => {
     if (state.sent) setConfirming(false);
     if (state.ok || state.sent) router.refresh();
   }, [state, router]);
 
-  // With line items the price is their sum and the box below just reports it.
-  // Two editable numbers that are meant to agree is how a quote goes out with a
-  // total that matches nothing on it.
-  // Once they have answered, the price on the row is what they actually bought,
-  // not the sum of everything they were offered - so the box goes back to
-  // showing (and editing) that figure.
+  // With line items the price is their sum and the box only reports it (two
+  // editable numbers would drift). Once answered, the row's price is what they
+  // bought, so the box shows and edits that figure again.
   const locked =
     initial.customer_response === "accepted" ||
     (initial.customer_response === "declined" && initial.status === "lost");
   const itemised = rows.length > 0 && !locked;
-  // A choice of ways to do the job. There is no single price on such a quote -
-  // the customer settles it when they pick - so the row carries the lead option
-  // plus everything else, which is exactly what the server stores.
+  // A choice has no single price; the row carries the lead option plus extras,
+  // as the server stores.
   const choice = offersChoice(pkgRows) && !locked;
   const pkgs = filledPackages(pkgRows);
   const itemTotal = rowsTotal(rows);
@@ -175,13 +162,10 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
   const amountNum = derived ? derivedTotal : Number(amount);
   const amountValid = derived ? derivedTotal > 0 : amount.trim() !== "" && Number.isFinite(amountNum) && amountNum > 0;
   const previewPrice = amountValid ? (dollars(amountNum) ?? "N/A") : "N/A";
-  // Every option needs its own price. A $0 card next to a priced one does not
-  // read as free, it reads as a quote somebody didn't finish - and it is the
-  // cheapest thing on the page. The server refuses it too.
+  // Every option needs a price: a $0 card reads as unfinished. The server refuses it too.
   const unpricedPackage = choice ? pkgs.find((r) => packageAmountOf(r) <= 0) : undefined;
 
-  // Which of the five are still blank. A quote written before the sections
-  // existed is allowed out on its old summary instead, matching the server.
+  // Blank sections. Pre-sections quotes may go out on their legacy summary, as on the server.
   const blankSections = blanksOf(sections);
   const hasLegacySummary = summary.trim().length > 0;
   const sectionsValid = blankSections.length === 0 || hasLegacySummary;
@@ -189,11 +173,9 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
   const setSection = (field: QuoteSectionField, value: string) =>
     setSections((s) => ({ ...s, [field]: value }));
 
-  // Sending to a customer who already has this quote is one of two different
-  // acts, and what separates them is whether the quote itself changed. Edited
-  // here, it goes out as a correction and the customer is told so; untouched,
-  // it's the same quote again and only worth sending if it never arrived. The
-  // server draws the same line - this is only what the panel says about it.
+  // Resending an already-sent quote: edited means a correction (the customer is
+  // told); untouched means a duplicate, only worth it if it never arrived. The
+  // server draws the same line; this only drives the panel's wording.
   const quoteEdited =
     (derived ? derivedTotal !== Number(initial.quote_amount ?? 0) : amount.trim() !== (initial.quote_amount != null ? String(initial.quote_amount) : "")) ||
     !rowsMatch(storedRows, rows) ||
@@ -229,21 +211,14 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
   return (
     <form action={formAction} className="crm-card crm-editor crm-paper" id="quote">
       <input type="hidden" name="id" value={id} />
-      {/* The intent rides on a hidden field rather than the submit button's
-          name/value. Relying on the submitter meant that if it didn't reach the
-          server the action silently fell through to "save": no text sent, no
-          activity logged, and a green "Saved" as if it had worked. The confirm
-          panel is only open when sending, so this can't disagree with the
-          button the user actually pressed. */}
-      {/* Opening the confirm panel on a quote that's already out IS the
-          deliberate act the server asks for, so it sends "resend" rather than
-          bouncing off the duplicate guard and making the owner hunt for a
-          second button. The panel says plainly what that means. */}
+      {/* Intent rides on a hidden field, not the submit button's name/value: if
+          the submitter didn't reach the server the action silently fell back to
+          "save" and showed "Saved". The confirm panel is only open when sending,
+          so it can't disagree with the pressed button. On a quote already out,
+          opening the panel is the deliberate act, so it sends "resend". */}
       <input type="hidden" name="intent" value={confirming ? (awaitingReply ? "resend" : "send") : "save"} />
-      {/* The whole list, as JSON. A variable number of rows can't ride on named
-          form fields without inventing an indexing scheme the server then has
-          to un-invent. Not sent once the customer has answered: the rows are
-          their receipt by then, and the action refuses to rewrite them anyway. */}
+      {/* The whole list as JSON (a variable number of rows). Not sent once
+          answered: the rows are their receipt, and the action refuses anyway. */}
       {!locked && <input type="hidden" name="options_json" value={rowsToJson(rows)} />}
       {!locked && <input type="hidden" name="packages_json" value={packagesToJson(pkgRows)} />}
 
@@ -260,8 +235,8 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
         </span>
       </div>
 
-      {/* The same price card and section timeline as the crew's form and the
-          customer's own page (components/quote-form-parts). */}
+      {/* Same price card and section timeline as the crew's form and the
+          customer's page (components/quote-form-parts). */}
       <PriceCard
         value={derived ? String(derivedTotal) : amount}
         onChange={setAmount}
@@ -281,9 +256,8 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
         </>
       ) : (
         <>
-          {/* Same layout as the crew's form: the breakdown, always open, then
-              everything else folded under one heading. One rows array behind
-              both sections, so the total and the save never see two lists. */}
+          {/* As on the crew's form: breakdown open, the rest folded. One rows
+              array behind both, so total and save see one list. */}
           <OptionBuilder
             rows={rows}
             onChange={setRows}
@@ -297,8 +271,8 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
             startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
           >
             <OptionBuilder rows={rows} onChange={setRows} labels={optionLabels} mode="extras" />
-            {/* Optional extras the customer was meant to pick ONE of add up to
-                every price at once. Offered here, where the mistake gets made. */}
+            {/* Extras meant as pick-ONE add up to every price at once; suggested
+                here, where the mistake is made. */}
             <PickOneSuggestion
               rows={rows}
               hasChoice={filledPackages(pkgRows).length > 0}
@@ -312,8 +286,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
         </>
       )}
 
-      {/* Only for quotes written before the sections existed. Hidden entirely
-          on new ones so nobody fills in a sixth box that nothing displays. */}
+      {/* Legacy quotes only; hidden on new ones so nobody fills a box nothing displays. */}
       {hasLegacySummary && (
         <label className="jq-field">
           <span>Older quote summary (shown only while the sections above are blank)</span>
@@ -349,9 +322,8 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
             <span>{choice ? "Price, on the option you'd recommend" : itemised ? "Price, if they take everything" : "Price"}</span>
             <strong>{previewPrice}</strong>
           </div>
-          {/* Exactly the choice the customer is about to be asked to make, at
-              the last moment somebody can still spot that Option B is the one
-              with last week's price on it. */}
+          {/* The choice the customer will see: the last chance to spot an option
+              with a stale price. */}
           {choice && (
             <ul className="crm-confirm-options">
               {pkgs.map((r, i) => (
@@ -363,8 +335,8 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
               ))}
             </ul>
           )}
-          {/* Exactly the choice the customer is about to be given, so nobody
-              sends a quote whose optional extra was meant to be part of the job. */}
+          {/* The extras the customer will see, so nothing meant as part of the
+              job goes out as optional. */}
           {itemised && (
             <ul className="crm-confirm-options">
               {rows
@@ -396,8 +368,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
             <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setConfirming(false)} disabled={pending}>
               Cancel
             </button>
-            {/* No name/value: the hidden intent field above is the single source
-                of truth, and a second "intent" here could only disagree with it. */}
+            {/* No name/value: the hidden intent field is the single source of truth. */}
             <button type="submit" className="crm-btn crm-btn-send" disabled={pending}>
               {pending ? "Sending…" : correcting ? "Send correction" : awaitingReply ? "Send again" : "Confirm & send"}
             </button>
@@ -417,8 +388,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
             {(localErr || state.error) && <span className="crm-auth-error">{localErr || state.error}</span>}
           </div>
 
-          {/* Sending is the one action with a real-world outcome, so it gets an
-              unambiguous banner rather than a line of grey text. */}
+          {/* Sending has a real-world outcome, so it gets a clear banner. */}
           {state.sent && !pending && !state.error && (
             <div
               className={`send-result ${
@@ -432,8 +402,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
                     ? `Quote saved. The text goes out ${state.smsHeldUntil}`
                     : "Quote saved, but the text did NOT go out"}
               </strong>
-              {/* A hold is not a problem to fix, so it gets the fact and nothing
-                  else - no provider dump, no "check your settings". */}
+              {/* A hold isn't a problem: just the fact, no provider dump. */}
               {state.smsHeldUntil && (
                 <p className="crm-sm">
                   Nothing goes out between 7pm and 8am. It&apos;s queued and will send itself; the customer link below

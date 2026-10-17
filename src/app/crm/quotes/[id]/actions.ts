@@ -98,18 +98,15 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   if (!current) return { ok: false, error: "You don't have access to this quote." };
 
   const isOwner = session.staff.role === "owner";
-  // "resend" is a deliberate second send and only an owner can ask for it; it
-  // otherwise behaves exactly like "send".
+  // "resend" is a deliberate owner-only second send; otherwise same as "send".
   const intent = String(formData.get("intent") ?? "");
   const sending = intent === "send" || intent === "resend";
   const patch: Partial<Quote> = {};
   const events: { type: string; meta?: Record<string, unknown> }[] = [];
-  // Whether this save changes anything the customer would actually read: the
-  // price, one of the five sections, or an older quote's free text. It is what
-  // separates a correction from a second copy of the same quote further down.
+  // Does this save change anything the customer reads (price, sections, legacy
+  // summary)? Separates a correction from a duplicate send below.
   let contentChanged = false;
-  // Set at send time: this send replaces a quote the customer already has and
-  // hasn't answered. Read again after the save to pick the customer's text.
+  // Set at send time: replaces a quote the customer has but hasn't answered.
   let revising = false;
 
   // Status
@@ -122,15 +119,11 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     events.push({ type: "status_changed", meta: { from: current.status, to: status } });
   }
 
-  // Reopening a declined quote: moved off Lost, or sent again. The customer's
-  // "no" was an answer to the offer as it stood; putting it back on the table
-  // means forgetting that answer, or their link keeps opening on the
-  // "thanks for letting us know" page and the quote they were just texted is
-  // nowhere to be seen. It also unlocks the line items so the price can be
-  // changed before it goes back out. An accepted quote is never reopened this
-  // way: it has a booked day and a ledger behind it.
-  // Includes a quote already moved off Lost before this rule existed: declined
-  // but no longer lost is somebody who meant to reopen it.
+  // Reopening a declined quote (moved off Lost, or sent again) forgets the "no",
+  // or their link keeps showing the declined page instead of the quote just
+  // texted. It also unlocks the line items. Accepted quotes are never reopened
+  // this way: they have a booked day and a ledger. Declined-but-not-Lost counts:
+  // someone meant to reopen it.
   const reopening = current.customer_response === "declined" && (sending || (patch.status ?? current.status) !== "lost");
   if (reopening) {
     patch.customer_response = null;
@@ -138,7 +131,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     patch.discount_accepted = false;
     events.push({ type: "quote_reopened" });
   }
-  // The customer's answer as it will stand after this save.
+  // The customer's answer after this save.
   const response = reopening ? null : current.customer_response;
 
   // Assignment (owner only)
@@ -146,15 +139,9 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     const raw = String(formData.get("assigned_to") ?? "").trim();
     const next = raw === "" ? null : raw;
     if (next !== current.assigned_to) {
-      // Moving a job that already has a date onto somebody else puts a date on
-      // THEIR calendar, so it is a booking and has to clear the same checks a
-      // booking does. It didn't, which was the one way left to double-book a
-      // contractor: every other path picks a date for a known person, and this
-      // one picks a person for a known date.
-      //
-      // Both appointments are tested, because a row can be carrying a booked
-      // work day and a quote visit at once and neither may land on top of
-      // something the new assignee already has.
+      // Reassigning a dated job puts that date on the new person's calendar, so
+      // it must pass the same conflict checks as a booking. Both appointments
+      // are checked, since a row can carry a work day and a visit at once.
       const jobDate = current.scheduled_date;
       const seeDate = visitDateOf(current);
       const clash =
@@ -167,13 +154,9 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // Line items. A quote is either one price or a list of things the customer
-  // answers one at a time, and this is where the second shape arrives: both
-  // editors post the whole list as JSON, and it replaces whatever is stored.
-  //
-  // Locked once they've answered. The rows carry their own accepted/declined
-  // stamps by then - the record of what was actually bought - and rewriting
-  // them would quietly change what a finished job says it included.
+  // Line items: both editors post the whole list as JSON, replacing what's
+  // stored. Locked once answered: the rows' accepted/declined stamps are the
+  // record of what was bought.
   const existingOptions = await listQuoteOptions(session, id);
   let optionRows: QuoteOptionDraft[] | null = null;
   if (formData.has("options_json") && !response) {
@@ -196,12 +179,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // A choice of ways to do the job. Same arrival as the line items above and
-  // locked for the same reason: once the customer has picked one, the rows are
-  // the record of what they chose between.
-  //
-  // parseQuotePackages drops a lone card - one way of doing it is not a choice -
-  // so a quote can never go out asking the customer to pick from a list of one.
+  // Packages: same as line items, and locked once answered for the same reason.
+  // A lone card is saved but can't be sent (checked at send time below).
   const existingPackages = await listQuotePackages(session, id);
   let packageRows: QuotePackageDraft[] | null = null;
   if (formData.has("packages_json") && !response) {
@@ -223,23 +202,11 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // What this quote is worth, and where that number comes from.
-  //
-  // With line items the price is the sum of them, full stop. The editors show
-  // that total in the amount field so the two can't disagree on screen, but the
-  // figure the browser posted is never what gets saved - a stale form would
-  // otherwise undo a line item somebody had just added.
-  //
-  // With a choice of ways to do it there is no single price at all, so the row
-  // carries the lead option - the one the contractor marked, else the first -
-  // plus everything else on the quote. It is a headline for the pipeline and
-  // the board, never something the customer is shown: their page prices each
-  // option beside the others and the real figure is settled when they pick one.
-  //
-  // Only while the offer is still open. Once the customer has answered, the
-  // price is what THEY picked - the option they chose plus the extras they said
-  // yes to - and re-deriving it from every row on the quote would quietly bill
-  // them for the sidewalk they turned down.
+  // The price. With line items it's their sum; the posted amount is ignored so a
+  // stale form can't undo a just-added item. With a choice, the row carries the
+  // lead option (marked, else first) plus extras: a pipeline headline only; the
+  // customer page prices each option. Only while unanswered: after, the price
+  // is what they picked, and re-deriving it would bill for declined extras.
   const effectiveOptions = optionRows ?? optionsAsDrafts(existingOptions);
   const effectivePackages = packageRows ?? packagesAsDrafts(existingPackages);
   const answered = Boolean(response);
@@ -270,9 +237,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // Customer name. Free text from a phone call or a web form, so it arrives
-  // wrong often enough to need fixing - and it is the name every later text
-  // opens with, so a typo here follows the customer through the whole job.
+  // Customer name: typos follow the customer through every text, so it's editable.
   if (formData.has("name")) {
     const v = String(formData.get("name") ?? "").trim().slice(0, 120);
     if (v.length < 2) return { ok: false, error: "Enter the customer's name." };
@@ -282,8 +247,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // Customer-facing summary. Superseded by the five sections below, still
-  // saved so an older quote can be edited without losing its body.
+  // Legacy summary, superseded by the five sections; kept so old quotes stay editable.
   if (formData.has("quote_summary")) {
     const v = noEmDash(String(formData.get("quote_summary") ?? "").trim()).slice(0, 4000);
     patch.quote_summary = v || null;
@@ -293,9 +257,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // The five sections the customer reads. Any one may say "Not applicable",
-  // but none may be blank on a quote that goes out - that check is at send
-  // time below, so a half-written quote can still be saved as a draft.
+  // The five sections. "Not applicable" is fine, blank isn't, but that's
+  // checked at send time so drafts can be saved half-written.
   let sectionsChanged = false;
   for (const field of QUOTE_SECTION_FIELDS) {
     if (!formData.has(field)) continue;
@@ -316,11 +279,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     if (patch.internal_notes !== current.internal_notes) events.push({ type: "notes_changed" });
   }
 
-  // "Send Quote": make the customer link live and text it to them. Price and a
-  // customer-facing description are both required.
-  // What the customer will actually see: this save's values where it changed
-  // them, the stored ones otherwise. Declared out here because the texts sent
-  // further down report the same figure the customer was quoted.
+  // What the customer will see: this save's values, else stored ones. Also used
+  // in the texts below so they report the quoted figure.
   const effectiveAmount =
     itemised || offersChoice
       ? allInTotal(effectivePackages, effectiveOptions)
@@ -333,9 +293,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     if (itemised && !offersChoice && optionsTotal(effectiveOptions) <= 0) {
       return { ok: false, error: "Put a price on at least one line item before sending." };
     }
-    // A quote carrying one lone option is one somebody is halfway through
-    // writing. It saves - the work is kept - but it cannot go out: a customer
-    // asked to pick from a list of one is being asked nothing.
+    // One lone option is a half-written choice: saved, but not sent.
     if (!answered && effectivePackages.length > 0 && !isChoice(effectivePackages)) {
       return {
         ok: false,
@@ -343,19 +301,14 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
           "This quote has one option on it, which is not a choice. Add a second option, or remove the one you have and it goes out as a single price.",
       };
     }
-    // Every option needs a price of its own. A $0 card sitting beside a priced
-    // one does not read as "free", it reads as a quote somebody didn't finish,
-    // and it is the cheapest thing on the page.
+    // Every option needs a price: a $0 card reads as unfinished, not free.
     if (offersChoice && effectivePackages.some((p) => p.amount <= 0)) {
       return { ok: false, error: "Put a price on every option before sending." };
     }
     if (effectiveAmount == null) return { ok: false, error: "Set a quote amount before sending." };
 
-    // Every section has to say something. "Not applicable" counts - a slab
-    // with no permit and nothing to demolish is a real answer, and saying so
-    // is what stops the customer wondering what was left out. A quote sent
-    // before the sections existed passes on its old summary instead, so an
-    // owner re-sending an old quote isn't forced to rewrite it.
+    // Every section must say something ("Not applicable" counts). Quotes from
+    // before the sections pass on their legacy summary.
     const missing = QUOTE_SECTION_FIELDS.filter((f) => {
       const v = patch[f] !== undefined ? patch[f] : current[f];
       return !v || !v.trim();
@@ -369,37 +322,20 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       };
     }
 
-    // A second send to a customer who hasn't answered yet is one of two
-    // opposite things, and telling them apart is the whole rule:
-    //
-    //   a correction  the price was wrong, or the scope was, and the figure on
-    //                 their phone is one nobody wants them approving. It is new
-    //                 information, it goes out under its own message, and the
-    //                 crew who wrote the quote can send it themselves - waiting
-    //                 on the office while a wrong number sits in the customer's
-    //                 thread is how a bad quote gets accepted.
-    //
-    //   a duplicate   the same quote again, which carries nothing the first
-    //                 didn't. That's what the block below is for.
+    // A second send to an unanswered customer is either:
+    //   a correction  price or scope was wrong. New information, its own
+    //                 message, and the crew can send it themselves rather than
+    //                 leave a wrong number in the customer's thread.
+    //   a duplicate   nothing new; blocked below.
     revising = Boolean(current.quote_sent_at) && !response && contentChanged;
 
-    // One quote text, then wait for an answer.
-    //
-    // Nothing visible happens on this page when a text goes out, so the natural
-    // response to uncertainty is to press Send again. Ten identical texts is how
-    // that looks from the customer's phone, and not one of them carries any
-    // information the first didn't. The customer reads it as disorganised at the
-    // exact moment they're deciding whether to hand over thousands of dollars.
-    //
-    // Four things mean the block would be wrong, so each lifts it:
-    //   - they've replied, so this is a revised quote rather than a repeat
-    //   - the quote itself changed, so this is the correction described above
-    //   - the last text never left the building, so nothing was delivered
-    //   - an owner deliberately asked to send it again
+    // One quote text, then wait. Nothing visible happens on send, so people
+    // press it again, and the customer sees ten identical texts. The block lifts
+    // when: they've replied, the quote changed (a correction), the last text
+    // never left, or an owner chose "resend".
     if (current.quote_sent_at && !response && !reopening && !revising) {
       const last = await lastMessageOf(session, id, "quote_ready");
-      // No log row (or the table isn't there yet) is treated as delivered: the
-      // safe default when we can't tell is not to text them twice.
+      // No log row counts as delivered: when unsure, don't text twice.
       const reached = last ? last.ok : true;
       if (reached && !(intent === "resend" && isOwner)) {
         return {
@@ -415,39 +351,31 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
     if (!current.quote_sent_at) patch.quote_sent_at = new Date().toISOString();
     else if (revising) {
-      // A correction restarts the customer's clock. The quote they hold is this
-      // one, so the 48-hour nudge should count from this text rather than from
-      // the version it replaced - and a lead already nudged once gets a fresh
-      // window instead of never being followed up on the new price.
+      // A correction restarts the clock: the 48h follow-up counts from this
+      // text, and an already-nudged lead gets nudged again on the new price.
       patch.quote_sent_at = new Date().toISOString();
       patch.quote_followup_sent_at = null;
     }
-    // The link is good for QUOTE_TTL_DAYS from THIS send. Re-stamped on every
-    // send, not just the first, so re-sending is what revives an expired
-    // quote - which is the whole recovery path for one that ran out.
+    // Re-stamped on every send, so resending is how an expired quote is revived.
     patch.quote_expires_at = new Date(Date.now() + QUOTE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
     events.push(
       revising
         ? { type: "quote_revised", meta: { from: current.quote_amount, to: effectiveAmount } }
-        // The price is on the send, not just on the row, so the history of what
-        // this customer has been quoted survives the next correction.
+        // Price on the event, so quote history survives later corrections.
         : { type: "quote_sent", meta: { amount: effectiveAmount } },
     );
   }
 
-  // The whole patch, checked against who is asking before anything is written.
-  // The editors already hide the price once the customer has answered, but a
-  // hidden box is not a rule: this is the one that refuses a contractor
-  // re-pricing an approved job, or marking their own job paid. The owner passes.
+  // The editors hide the price once answered, but a hidden box isn't a rule:
+  // this refuses a contractor re-pricing an approved job or marking it paid.
   const refusal = jobPatchRefusal(session.staff.role, current, patch);
   if (refusal) return { ok: false, error: refusal };
 
   if (!sending && Object.keys(patch).length === 0 && !optionRows && !packageRows) return { ok: true };
 
   try {
-    // Line items first: the price on the row below is derived from them, so a
-    // failure here has to stop the save rather than leave a total with nothing
-    // behind it.
+    // Line items first: the row's price derives from them, so a failure stops
+    // the save rather than leave an unbacked total.
     if (optionRows) {
       const saved = await saveQuoteOptions(session, id, optionRows);
       if (!saved.ok) return { ok: false, error: saved.error ?? "Could not save the line items." };
@@ -461,14 +389,12 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       const updated = await updateQuote(session, id, patch);
       if (!updated) return { ok: false, error: "Could not save. Check your access and try again." };
     }
-    // After the row, and only for the rows not just rewritten above: a fresh
-    // set of line items carries no answers already.
+    // After the row, and only for rows not just rewritten (fresh rows carry no answers).
     if (reopening) await clearQuoteResponses(id);
 
     for (const e of events) await addEvent(session, id, e.type, e.meta);
 
-    // Texts: alert a newly-assigned contractor, and owners on every change (the
-    // acting user is excluded so they aren't texted about their own edits).
+    // Texts to a newly assigned contractor.
     if (patch.assigned_to) {
       const contractor = await getStaffById(session, patch.assigned_to);
       await notifyAssignment(
@@ -480,8 +406,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
           service: current.service,
           address: current.address,
           scheduled_date: current.scheduled_date,
-          // Without quote_type the message can't tell a booked visit from a
-          // slot an online customer merely offered, and would announce both.
+          // Needed to tell a booked visit from an online customer's offered slot.
           quote_type: current.quote_type,
           visit_date: current.visit_date,
           visit_time: current.visit_time,
@@ -489,11 +414,10 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
         },
         contractor?.full_name,
       ).catch(() => {});
-      // No owner text here: whoever assigned it is the one who'd be notified.
-      // Invite the newly-assigned contractor on Google Calendar (if dated).
+      // No owner text: the assigner is the owner who'd be notified.
       await syncQuoteToCalendar(id);
     }
-    // Marking the job Completed here (via the status dropdown) also thanks the customer.
+    // Completing via the status dropdown also thanks the customer.
     if (patch.status === "completed" && current.status !== "completed") {
       await notifyComplete({ id, name: current.name, phone: current.phone }).catch(() => {});
     }
@@ -503,12 +427,9 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     let smsHeldUntil: string | undefined;
     let smsTo: string | undefined;
     if (sending) {
-      // Deliberately not swallowed: the whole point of this button is that the
-      // customer receives something, so a failure has to reach the screen with
-      // the provider's own reason rather than a silent false.
-      // Same link either way - the quote page renders the current row, so the
-      // text they already have shows the corrected quote - but a correction
-      // says so rather than arriving as a second "your quote is ready".
+      // Not swallowed: the button's whole point is the customer receiving it,
+      // so the provider's reason must reach the screen. A correction gets its
+      // own wording; same link either way.
       const sendToCustomer = revising ? notifyQuoteUpdated : notifyQuoteReady;
       const r = await sendToCustomer({
         id,
@@ -523,9 +444,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       else if (!r.ok) {
         smsError = [r.detail, r.status ? `(HTTP ${r.status})` : ""].filter(Boolean).join(" ").slice(0, 500);
       }
-      // The quote is recorded as sent either way - it genuinely was marked sent
-      // and the link is live - but the log keeps whether it actually reached
-      // them, so a silent texting outage is visible afterwards.
+      // Marked sent either way (the link is live); the log records whether the
+      // text reached them, so an outage is visible.
       await addEvent(session, id, "quote_delivery", {
         delivered: r.ok,
         held_until: r.sendAfter ?? null,
@@ -534,10 +454,8 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
         revised: revising,
       }).catch(() => {});
 
-      // Tell the office it's out and the sender that it landed. Deliberately
-      // after the delivery result, so neither message claims a send that failed
-      // - and the whole result goes over, not just `ok`, so a text quiet hours
-      // are holding reads as queued rather than as a failure to chase.
+      // After the delivery result, so nothing claims a failed send; the full
+      // result goes so a quiet-hours hold reads as queued, not failed.
       await notifyQuoteSent(
         {
           id,
@@ -554,8 +472,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
 
     revalidatePath(`/crm/quotes/${id}`);
     revalidatePath("/crm");
-    // Contractors quote from their own job page, so it has to pick up the new
-    // price and status too.
+    // Contractors quote from their job page too.
     revalidatePath("/job/[token]", "page");
     return {
       ok: true,
@@ -572,11 +489,9 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
   }
 }
 
-// Confirm the work day, or move it. This is the one action that turns an
-// approved job into a booked one: it texts the customer their date (or that it
-// moved), tells the crew, and syncs the calendar. Contractors can run it for
-// their own assigned jobs - RLS in confirmSchedule enforces that - which is what
-// lets the crew settle a date without waiting on the owner.
+// Confirm or move the work day: the action that turns an approved job into a
+// booked one (texts customer and crew, syncs the calendar). Contractors may run
+// it for their own jobs (RLS in confirmSchedule).
 export async function setJobDate(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
@@ -586,10 +501,8 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
   const time = String(formData.get("time") ?? "").slice(0, 10);
   if (!id) return { ok: false, error: "Missing job id." };
 
-  // Only ever consulted when a booked day MOVES. Off means the office has
-  // already told the customer (called, and went out the same day instead),
-  // and a "your project has been moved" text after the fact reads as a second
-  // change. Absent - a drag on the calendar, an older form - means on.
+  // Only consulted when a booked day MOVES. "no" means the office already told
+  // the customer. Absent (calendar drag, older form) means yes.
   const tellCustomer = String(formData.get("notify") ?? "yes") !== "no";
 
   const current = await getQuote(session, id);
@@ -632,7 +545,7 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
   revalidatePath("/crm/calendar");
-  // The contractor's own job page schedules through this action too.
+  // The contractor's job page schedules through this too.
   revalidatePath("/job/[token]", "page");
   return {
     ok: true,
@@ -645,28 +558,16 @@ export async function setJobDate(_prev: ScheduleState, formData: FormData): Prom
 }
 
 
-// The customer said yes on the phone, and often said when in the same breath.
+// The customer said yes on the phone, often with a day too.
 //
-// Everything downstream of an approval - the schedule card, the money, the
-// deposit, the calendar - waits on customer_response being "accepted", and
-// until now the only hand that could write it was the customer's own, through
-// the link. So a verbal yes left the crew with two bad options: chase the
-// customer to press a button they have already answered out loud, or send a
-// fresh quote for them to accept, which puts the customer's own date picker in
-// front of them - and that picker will not offer anything sooner than
-// LEAD_TIME_DAYS. A customer who agreed to Thursday is then shown a calendar
-// that starts a week on Tuesday, and the crew get a date that isn't the one
-// anybody agreed to.
+// Everything after approval waits on customer_response = "accepted". Without
+// this the crew must chase a button press, or resend the quote, whose date
+// picker starts LEAD_TIME_DAYS out, past the day already agreed.
 //
-// This is the other hand. It records the approval as staff, with who recorded
-// it and how, and takes the agreed day in the same submit - because "approve
-// it, then find the schedule card, then book it" is two screens for one
-// conversation, and the second half is the half that gets forgotten.
-//
-// The seven-day floor is not applied here, deliberately. That rule governs what
-// a CUSTOMER may request unprompted, so the business isn't committed to a date
-// nobody has checked against the crew's week. On this form the person typing IS
-// the crew, or the office, and they have just checked. Any day from today.
+// Records the approval as staff (who and how) and books the agreed day in the
+// same submit, so the booking isn't forgotten. The lead-time floor deliberately
+// doesn't apply: it limits what a customer requests unprompted, and the person
+// entering this has just checked the crew's week. Any day from today.
 export async function acceptOffline(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
@@ -676,17 +577,15 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
   const date = String(formData.get("date") ?? "").slice(0, 10);
   const time = String(formData.get("time") ?? "").slice(0, 10);
   const booking = /^\d{4}-\d{2}-\d{2}$/.test(date);
-  // Off means they agreed verbally and are still on the phone, or asked us not
-  // to text. The approval and the booking are recorded either way; this only
-  // decides whether the customer gets the written version of the conversation.
+  // "no" = they're still on the phone or asked not to be texted. Approval and
+  // booking are recorded either way; this only controls the customer text.
   const tellCustomer = String(formData.get("notify") ?? "yes") !== "no";
 
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this quote." };
 
-  // Which optional lines they took, read off the same JSON shape the option
-  // builder posts. Anything that isn't a uuid mapped to a real answer is
-  // dropped here rather than trusted through to the database.
+  // Optional-line answers, in the option builder's JSON shape. Only uuid keys
+  // with a real answer survive.
   const choices: Record<string, OptionChoice> = {};
   try {
     const raw = JSON.parse(String(formData.get("options") ?? "{}")) as Record<string, unknown>;
@@ -698,10 +597,8 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
     return { ok: false, error: "Could not read the line item answers. Reload the page and try again." };
   }
 
-  // The day is checked BEFORE the approval is written, not after. Both halves
-  // of this form are one action to the person filling it in, and a clash found
-  // afterwards would leave the quote approved on a screen that has already
-  // navigated away from the message explaining why the date didn't take.
+  // Check the day BEFORE writing the approval: to the user it's one action, and
+  // a clash found afterwards would leave it approved with the error lost.
   if (booking) {
     if (!TIME_RE.test(time.trim())) return { ok: false, error: "Pick the start time you agreed on." };
     if (date < todayYmd()) return { ok: false, error: "That day has already passed. Pick today or later." };
@@ -712,9 +609,7 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
     if (clash) return { ok: false, error: conflictMessage(clash) };
   }
 
-  // Which way of doing the job they went with, on a quote that offered a
-  // choice. Empty on every other quote, and refused downstream if this one
-  // needed it - there is no default that isn't a guess about money.
+  // Package id, if a choice was offered; refused downstream if missing. No default.
   const packageId = String(formData.get("package") ?? "").trim();
 
   const recorded = await recordOfflineAcceptance(session, id, {
@@ -725,9 +620,8 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
   });
   if (!recorded.ok) return { ok: false, error: recorded.error ?? "Could not record that approval." };
 
-  // The option they picked leads the list the crew and the office read. On a
-  // driveway quoted two ways, "approved - $8,500" does not say what to load the
-  // truck with, and it is the first thing either of them needs to know.
+  // The chosen package leads the list: "approved - $8,500" doesn't say what to
+  // load the truck with.
   const pick = recorded.package;
   const chosen = {
     accepted: [
@@ -736,8 +630,7 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
     ],
     declined: (recorded.declined ?? []).map((o) => ({ title: o.title, amount: optionAmount(o) })),
   };
-  // What the row says now: the choice and the options may have repriced it, and
-  // every message below quotes the figure the customer actually agreed to.
+  // The row's new figure (package/options may reprice it), quoted in every message below.
   const amount =
     pick || (recorded.accepted && recorded.accepted.length > 0)
       ? Math.round(
@@ -746,9 +639,8 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
       : current.quote_amount;
 
   await addEvent(session, id, "customer_accepted", {
-    // The one thing this event has to carry that the customer's own never does:
-    // it was recorded by staff, from a conversation. Read back by the activity
-    // log on both job pages, so nothing on screen ever claims they clicked.
+    // Marks it as staff-recorded from a call, so the activity log never claims
+    // the customer clicked.
     channel: "phone",
     recorded_by: session.staff.full_name || session.staff.email || "Staff",
     preferred_dates: booking ? [date] : null,
@@ -775,16 +667,12 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
   };
 
   let booked = false;
-  // Why the day didn't take, when one was asked for. The conflicts were ruled
-  // out before anything was written, so anything left is the database refusing
-  // the write - and the crew need to be told that in the same breath as "the
-  // approval went in", or they leave the page believing the job is booked.
+  // Why the requested day didn't take. Conflicts were ruled out up front, so
+  // this is the DB refusing; the crew must hear it with "approval recorded".
   let bookingError: string | null = null;
   const withDate = { ...info, scheduled_date: booking ? date : null, scheduled_time: booking ? time : null };
   if (booking) {
-    // Same call the schedule card makes, so the booking is identical however it
-    // was reached: the customer's text, the crew brief, Google Calendar and the
-    // reminder countdown all come from here.
+    // Same call as the schedule card, so texts, calendar and reminders match.
     const result = await confirmSchedule(session, id, date, time);
     if (result.ok && !result.unchanged) {
       booked = true;
@@ -797,18 +685,15 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
     }
   }
 
-  // The office always hears, and always hears that it came by phone. Even on a
-  // job that booked in the same submit: JOB BOOKED alone reads exactly like a
-  // customer who tapped the link, and the difference is the whole point.
+  // The office always hears it came by phone, even when booked too: JOB BOOKED
+  // alone reads like the customer tapped the link.
   await notifyOfflineApproval(booked ? withDate : info, contractor?.phone, {
     recordedBy: session.staff.full_name || session.staff.email || "a teammate",
     actorPhone: session.staff.phone,
     booked,
   }).catch(() => {});
 
-  // The customer's own copy. Skipped when the day was booked in the same
-  // submit, because notifyCustomerScheduled has just confirmed both halves of
-  // the conversation in one text.
+  // Skipped when booked: notifyCustomerScheduled covered both halves.
   if (tellCustomer && !booked) await notifyApprovalRecorded(info).catch(() => {});
 
   revalidatePath(`/crm/quotes/${id}`);
@@ -816,9 +701,8 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
   revalidatePath("/crm/calendar");
   revalidatePath("/job/[token]", "page");
 
-  // The approval is written either way, so this is never an error - but a form
-  // that asked for a day and didn't get one has to say so where the person who
-  // asked is looking.
+  // Never an error (the approval is written), but a requested day that didn't
+  // book must be said where the user is looking.
   if (bookingError) {
     return { ok: true, message: `Approval recorded, but the day was NOT booked: ${bookingError} Set it on the schedule card below.` };
   }
@@ -832,19 +716,10 @@ export async function acceptOffline(_prev: ScheduleState, formData: FormData): P
 }
 
 
-// The customer rang a week before the pour wanting the patio two feet wider.
-//
-// The job is agreed, the day is booked and half the money is in the bank, so
-// none of the existing paths fit: the quote editor is for a price nobody has
-// accepted, and an owner typing a new figure into it changes what the customer
-// owes without the customer having agreed to it. A change order is the price
-// moving WITH their say-so - described, sent, and answered on the same link
-// they approved the job on.
-//
-// The deposit needs nothing from this action, which is the part worth knowing:
-// the ledger is "what the job is worth now, minus what has been collected", so
-// the moment the customer approves a new total the balance is the difference and
-// the money already in stays exactly where it is.
+// A change on an agreed (often booked, part-paid) job, e.g. the patio two feet
+// wider. The quote editor is for unaccepted prices; a change order moves the
+// price WITH the customer's say-so, answered on their link. Deposits need
+// nothing here: the ledger is "current total minus collected".
 export async function sendChangeOrder(_prev: ChangeState, formData: FormData): Promise<ChangeState> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
@@ -855,13 +730,9 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   const raw = String(formData.get("amount") ?? "").trim();
   if (raw === "") return { ok: false, error: "Enter the new total for the job." };
 
-  // The review step's tick, enforced here and not only by a disabled button.
-  //
-  // What the customer approves is a BALANCE - new total, less what they have
-  // paid - and the second half of that comes from whatever the crew recorded.
-  // A deposit entered as the whole job makes every figure on their screen wrong
-  // while the total itself looks perfectly fine, so somebody has to have looked
-  // at the payments. This is the record that they did.
+  // The review step's tick, enforced server-side. The customer approves a
+  // BALANCE (new total less paid), so a mis-recorded deposit makes their figures
+  // wrong while the total looks fine. This records that someone checked.
   if (String(formData.get("payments_checked") ?? "") !== "yes") {
     return { ok: false, error: "Open the review step and confirm the recorded payments before sending this." };
   }
@@ -869,10 +740,8 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
 
-  // The total the preview was drawn against. If the job has been repriced since
-  // - an owner editing the quote in another tab - then the difference the sender
-  // just reviewed is not the difference the customer would be shown, so this
-  // refuses rather than sending a figure nobody has actually looked at.
+  // The total the preview was drawn against. If the job was repriced since
+  // (another tab), the reviewed difference is wrong, so refuse.
   const shown = String(formData.get("shown_total") ?? "").trim();
   if (shown !== "" && Number(shown) !== toCents(current.quote_amount)) {
     return {
@@ -881,9 +750,8 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     };
   }
 
-  // The breakdown, when the crew wrote one. Same parser as the quote editors,
-  // so the caps and the price ceiling are the same; every line is part of the
-  // job, so "required" is not the sender's to choose here.
+  // Optional breakdown. Same parser as the quote editors (same caps); every
+  // line is part of the job, so all are required.
   let lines: QuoteOptionDraft[] = [];
   if (formData.has("lines_json")) {
     let parsedJson: unknown = [];
@@ -897,19 +765,16 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     lines = parsed.rows.map((r) => ({ ...r, id: undefined, required: true }));
   }
 
-  // What they have actually handed over, read off the same ledger every other
-  // screen reads, so the figure in the log is the figure on the money card -
-  // and so a second deposit is checked against the real balance.
+  // Same ledger as every screen, so the log matches the money card and a
+  // second deposit is checked against the real balance.
   const { ledger } = await jobLedger(current);
 
-  // The customer already said yes (phone, on site) - apply it now, no text.
+  // Already agreed (phone, on site): apply now, no text.
   const agreed = String(formData.get("agreed") ?? "") === "yes";
-  // Owner only. It moves the price of an agreed job with nobody asked, so for
-  // the crew the customer's own Approve is the only way a new total lands. The
-  // card doesn't offer it to them; this is the rule, not the hidden checkbox.
-  // A contractor's change may only raise the total, since they can reach the customer's Approve
-  // themselves. With lines the new total is their sum, as requestChange works it out; a figure
-  // that isn't a number is left to requestChange to refuse as such.
+  // Applying without asking is owner-only (enforced here, not just hidden on
+  // the card). A contractor's change may only raise the total, since they can
+  // reach the customer's Approve themselves. With lines the total is their sum,
+  // as requestChange computes; non-numbers are left for requestChange to refuse.
   const newTotal = lines.length > 0 ? optionsTotal(lines) : Number(raw);
   const notAllowed = changeOrderRefusal(session.staff.role, {
     agreed,
@@ -919,18 +784,16 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   });
   if (notAllowed) return { ok: false, error: notAllowed };
 
-  // A second deposit, when the box is ticked: what they send up front if they
-  // approve, typed in dollars. Only when they are being asked - agreed in
-  // person, any money they handed over goes on the payments card.
+  // Optional second deposit, typed in dollars. Only when asking; money taken in
+  // person goes on the payments card.
   let depositCents: number | null = null;
   if (!agreed && String(formData.get("deposit_on") ?? "") === "yes") {
     const typed = parseDollars(formData.get("deposit"));
     depositCents = Number.isFinite(typed) ? Math.round(typed * 100) : NaN;
   }
 
-  // Money they handed over for it, when the change was agreed in person and
-  // paid on the spot. Recorded once the new total is on the job, so the
-  // payment counts against the new balance and the Money page reads right.
+  // Payment taken on the spot for an agreed change. Recorded after the new total
+  // lands, so it counts against the new balance.
   let paidNow: { method: RecordedMethod; amountCents: number } | null = null;
   if (agreed && String(formData.get("paid_on") ?? "") === "yes") {
     const method = String(formData.get("paid_method") ?? "");
@@ -950,9 +813,8 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   if (!result.ok || !result.quote) return { ok: false, error: result.error ?? "Could not send that change." };
   const quote = result.quote;
 
-  // Checked against the balance the change leaves before anything moves, so a
-  // typo can't leave the price applied and the payment refused. The change is
-  // taken back off the job so it can simply be sent again.
+  // Check against the new balance before anything moves, so a typo can't apply
+  // the price and refuse the payment. The change is withdrawn to resend.
   if (paidNow) {
     const newDue = toCents(quote.change_amount) - ledger.paidCents;
     if (paidNow.amountCents > newDue) {
@@ -971,23 +833,19 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     lines: quote.change_lines,
     deposit_cents: quote.change_deposit_cents,
     paid_cents: ledger.paidCents,
-    // Who stood behind the figures. The balance the customer is being asked to
-    // approve rests on the recorded payments, and this is the record that
-    // somebody confirmed them before it went out.
+    // Who confirmed the recorded payments the customer's balance rests on.
     payments_checked_by: session.staff.full_name || session.staff.email || "Staff",
     ...(agreed ? { agreed: true } : {}),
   });
 
   const firstName = firstNameOf(quote.name, quote.name);
 
-  // Already agreed - on the phone, or on site. There is nobody to ask, so
-  // nobody is texted and the price moves now, through the same transaction
-  // the customer's approve button uses, logged with who recorded it.
+  // Already agreed: nobody to text. Applied through the same transaction as the
+  // customer's button, logged with who recorded it.
   if (agreed) {
     const applied = await recordChangeAgreed(session, id);
     if (!applied.ok || applied.duplicate) {
-      // The change is written but not applied. Leave it pending rather than
-      // half-done: the card shows it waiting, and it can be withdrawn and redone.
+      // Written but not applied: leave it pending so it can be withdrawn and redone.
       return { ok: false, error: "The change was saved but the price didn't update. Withdraw it and try again." };
     }
     await resyncJobPaidState(id).catch(() => {});
@@ -1017,9 +875,8 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     return { ok: true, message, warning };
   }
 
-  // The customer's text carries the change and the link, never the figures -
-  // see notifyChangeRequested for why. Their answer comes back through
-  // /api/change-response.
+  // The customer's text has the change and link, never figures (see
+  // notifyChangeRequested). Answers come back via /api/change-response.
   const sent = await notifyChangeRequested(
     {
       id,
@@ -1056,8 +913,7 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   };
 }
 
-// Took the figure back, or settled it on the phone instead. The price never
-// moved, so there is nothing to undo - this just takes the question off the
+// The price never moved, so withdrawing just takes the question off the
 // customer's page.
 export async function withdrawChangeOrder(_prev: ChangeState, formData: FormData): Promise<ChangeState> {
   const session = await getSession();
@@ -1074,9 +930,7 @@ export async function withdrawChangeOrder(_prev: ChangeState, formData: FormData
     note: before?.change_note ?? null,
     to: before?.change_amount ?? null,
   });
-  // Deliberately no customer text. They were asked a question and it has been
-  // taken away; a second text about a change that is no longer happening is
-  // noise, and whoever withdrew it is the person who just spoke to them.
+  // No customer text: whoever withdrew it just spoke to them.
 
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
@@ -1084,15 +938,10 @@ export async function withdrawChangeOrder(_prev: ChangeState, formData: FormData
   return { ok: true, message: "Change withdrawn. The price is unchanged." };
 }
 
-// An online request arrives with a slot the customer offered in case their job
-// turns out to be too big to price from photos. Until now that offer sat there
-// as a maybe. This is the crew taking it up.
-//
-// Confirming flips the request to in-person, and that flip is the point: every
-// other surface - the calendar, Google invites, crew reminders, the job page
-// headline - keys off quote_type to decide whether a date means "somebody is
-// expected here". One column change turns the whole system on for this job,
-// and until it happens nothing tells anyone to drive anywhere.
+// An online request carries a slot the customer offered in case photos aren't
+// enough; this is the crew taking it up. It flips the request to in-person,
+// which is the point: calendar, invites, reminders and the job page key off
+// quote_type to decide whether a date means someone is expected.
 export async function confirmVisit(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
@@ -1102,48 +951,32 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   const rawTime = String(formData.get("time") ?? "").slice(0, 20);
   if (!id) return { ok: false, error: "Missing job id." };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "Pick a date for the visit." };
-  // Not held to the public form's fixed slot list - a contractor confirming a
-  // visit needs to fit it around a real day, so any well-formed time is fine.
-  // Normalised the same way confirmSchedule does its start time: the fixed
-  // slot list used to guarantee one canonical spelling, and without it "9:00
-  // am" and "9:00 AM" would be two different strings in the same column.
+  // Any well-formed time, not the public form's slot list: the crew fit visits
+  // around a real day. Normalised like confirmSchedule so "9:00 am" and
+  // "9:00 AM" don't diverge.
   if (!TIME_RE.test(rawTime)) return { ok: false, error: "Pick a time for the visit." };
   const time = rawTime.trim().toUpperCase().replace(/\s+/, " ");
-  // Only for moving a visit they already have - see setJobDate. Confirming a
-  // first visit always texts them, because that text is how they find out.
+  // Only for moving an existing visit (see setJobDate); a first confirmation
+  // always texts, since that's how they find out.
   const tellCustomer = String(formData.get("notify") ?? "yes") !== "no";
 
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
 
-  // Whoever this job belongs to has to actually be free. Confirming here is the
-  // moment an offered slot becomes somewhere a person has to be, so it's the
-  // moment to find out they're already booked - not on the morning.
-  //
-  // There is no per-day cap to check any more: visits stack an hour apart, so
-  // the only thing that can be full is the one person's day, and that is
-  // exactly what this asks. A contractor is still not held to their own
-  // Settings window here - they need to fit a visit around a real day.
+  // The assignee must actually be free; this is when an offered slot becomes a
+  // commitment. No per-day cap (visits stack an hour apart), and the crew
+  // aren't held to their Settings window here.
   const clash = await findVisitConflict(current.assigned_to, date, time, id);
   if (clash) return { ok: false, error: conflictMessage(clash) };
 
   const wasOnline = current.quote_type === "online";
-  // Did this customer already have an appointment? An online request's date is
-  // a slot they offered, not one we took, so only an in-person row counts.
-  //
-  // This is the difference between confirming and moving, and the customer
-  // hears about it very differently. Confirming introduces the visit: why
-  // we're coming, when, that it's free. Moving assumes all of that and says
-  // the one thing that changed. Sending the confirmation twice - which is what
-  // this action used to do when the crew hit Reschedule - reads as a second
-  // appointment being announced on top of the first.
+  // Did they already have an appointment? An online row's date was only
+  // offered, so only in-person counts. Confirming introduces the visit; moving
+  // says only what changed, so a reschedule doesn't read as a second booking.
   const hadAppointment = Boolean(visitDateOf(current));
   const movedOff = current.visit_date !== date || (current.visit_time ?? "") !== time;
 
-  // Re-confirming the day it is already on is not news. Nothing has changed for
-  // the customer, so nothing is sent to them: a text saying the appointment
-  // they already have is still the appointment they have is the same text
-  // twice, however it's worded.
+  // Re-confirming the same slot isn't news; nobody is texted.
   if (hadAppointment && !movedOff) {
     return { ok: true, message: "That was already the visit day and time. Nobody was texted." };
   }
@@ -1152,8 +985,7 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
     quote_type: "inperson",
     visit_date: date,
     visit_time: time,
-    // A confirmed (or moved) visit gets its own night-before reminders, the
-    // same way confirmSchedule re-arms the crew countdown for a work day.
+    // Re-arm night-before reminders, as confirmSchedule does for work days.
     visit_reminder_sent_at: null,
     visit_crew_reminded_at: null,
   });
@@ -1167,8 +999,7 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
       : { requested: current.visit_date ?? null, requested_time: current.visit_time ?? null, moved: movedOff }),
   });
 
-  // Whoever the job belongs to gets the text, not whoever happened to click. On
-  // the crew's own job page these are the same person; from the CRM they aren't.
+  // The assignee is texted, not whoever clicked (same person only on the job page).
   const crew = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
   const info = {
     id,
@@ -1183,9 +1014,8 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   };
 
   if (hadAppointment) {
-    // Moving one they already have: what changed, and nothing else. The crew
-    // and the office are told separately, because the calendar can move a
-    // visit out from under whoever has to drive to it.
+    // Only what changed. Crew and office are told too, since the calendar can
+    // move a visit out from under the driver.
     await notifyVisitMoved(info, current.visit_date, current.visit_time, {
       crewPhone: crew?.phone ?? null,
       crewName: crew?.full_name ?? null,
@@ -1196,16 +1026,12 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
   } else {
     await notifyVisitConfirmed(
       info,
-      // Nobody assigned means nobody to tell. It used to fall back to the
-      // person clicking, which texted them the visit they were in the middle
-      // of booking; the owner alert already covers an unassigned job.
+      // Nobody assigned, nobody to tell; the owner alert covers it.
       crew?.phone ?? null,
       crew?.full_name ?? session.staff.full_name,
-      // What they originally asked for, so the customer text can own up to it if
-      // the crew put them on a different day.
+      // What they asked for, so the text can own up to a different slot.
       { date: current.visit_date, time: current.visit_time },
-      // Read before the update above flipped it. An in-person request being given
-      // a date is not the same story as an online one being converted.
+      // Read before the update flipped it: an online conversion is a different story.
       wasOnline,
       session.staff.phone,
     ).catch(() => {});
@@ -1229,22 +1055,14 @@ export async function confirmVisit(_prev: ScheduleState, formData: FormData): Pr
 }
 
 /**
- * Call off an appointment: a booked work day, or a quote visit.
+ * Call off an appointment (work day or quote visit), not the lead. A work day
+ * drops back to Needs scheduling; a visit's date is cleared. Removing the lead
+ * is the pipeline's Delete (archive, undoable).
  *
- * Cancels the APPOINTMENT, not the lead. The customer stays in the pipeline
- * with everything on them intact - a work day drops back to Needs scheduling
- * so it can be rebooked, a visit's date is simply cleared. Getting rid of the
- * lead itself is still the pipeline's Delete, which archives it and can be
- * undone.
+ * `notify` defaults on: usually we can't make it and they expect us. Off when
+ * the customer asked and you're on the phone with them.
  *
- * `notify` defaults to on, because the usual reason to cancel is that we can't
- * make it and they're expecting us. It comes off when the customer is the one
- * who asked and you're already on the phone with them - a text telling somebody
- * what they just said is noise.
- *
- * Lives here with setJobDate and confirmVisit rather than with the calendar
- * that first grew it: it is now reached from three screens, and two ways to
- * cancel the same appointment is how one of them ends up not texting anybody.
+ * One shared action for all three screens, so no cancel path forgets to text.
  */
 export async function cancelAppointment(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
   const session = await getSession();
@@ -1253,16 +1071,14 @@ export async function cancelAppointment(_prev: ScheduleState, formData: FormData
   const id = String(formData.get("id") ?? "");
   const kind = String(formData.get("kind") ?? "") === "job" ? "job" : "visit";
   const notify = String(formData.get("notify") ?? "yes") !== "no";
-  // Whether the CUSTOMER asked for this. It decides whether their text is a
-  // receipt or an apology, and it is what the crew's copy names as the reason.
+  // Whether the CUSTOMER asked: receipt vs apology, and the reason in the crew's copy.
   const asked = String(formData.get("asked") ?? "") === "yes";
   if (!id) return { ok: false, error: "Missing appointment." };
 
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
 
-  // Nothing booked is not a failure worth an error box - it usually means two
-  // people cancelled the same appointment, or the page has been open a while.
+  // Nothing booked usually means a double cancel or a stale page; not an error.
   const had = kind === "job" ? current.scheduled_date : visitDateOf(current);
   if (!had) return { ok: true, message: "That appointment was already cancelled. Nobody was texted." };
 
@@ -1275,9 +1091,7 @@ export async function cancelAppointment(_prev: ScheduleState, formData: FormData
     notified: notify,
   });
 
-  // The crew hears either way. `notify` is about the customer - whether to text
-  // somebody you may have just put the phone down on - and has never had
-  // anything to do with whether the person driving there finds out.
+  // The crew hears either way; `notify` only concerns the customer.
   const crew = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
   const info = {
     id,
@@ -1315,12 +1129,8 @@ export async function cancelAppointment(_prev: ScheduleState, formData: FormData
   };
 }
 
-// Contractor/owner marks the on-site work done. Moves it to Completed and texts
-// the customer a thank-you with the review link. Payment is the next step.
-//
-// Returns state rather than void so the photo requirement below can say why it
-// refused. A silent no-op on a button that texts the customer is the worst of
-// both worlds: nothing happens and nobody knows why.
+// Marks on-site work done: Completed, plus a thank-you with the review link.
+// Returns state so the photo requirement can say why it refused.
 export async function completeJob(_prev: FinishState, formData: FormData): Promise<FinishState> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
@@ -1333,10 +1143,8 @@ export async function completeJob(_prev: FinishState, formData: FormData): Promi
     return { ok: true, message: "This job is already closed out." };
   }
 
-  // Before and after are the record of what was handed over, so the job
-  // cannot close without them. Enforced here rather than only in the UI:
-  // this action is reachable from the CRM too, and a rule that only exists
-  // in one of two buttons is not a rule.
+  // Before/after photos are the handover record. Enforced here, since the CRM
+  // reaches this action too.
   const missing: string[] = [];
   if (!current.before_urls?.length) missing.push("before");
   if (!current.after_urls?.length) missing.push("after");
@@ -1350,10 +1158,8 @@ export async function completeJob(_prev: FinishState, formData: FormData): Promi
     };
   }
 
-  // The crew's close-out checklist and any note they left. Optional: the owner's
-  // own Mark completed button on the CRM page sends neither, and shouldn't have
-  // to. What matters is that when they ARE sent, they're recorded and they reach
-  // whoever has to act on them.
+  // Crew checklist and note; optional (the CRM's button sends neither), but
+  // recorded and passed on when present.
   const checks = formData.getAll("check").map((c) => String(c)).slice(0, 8);
   const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
 
@@ -1372,8 +1178,7 @@ export async function completeJob(_prev: FinishState, formData: FormData): Promi
       "",
       "Completed by:",
       session.staff.full_name || "crew",
-      // A note from the crew is the whole reason to read this text, so it goes
-      // above the routine next-step line rather than at the bottom.
+      // The crew's note is why anyone reads this, so it goes above the next-step line.
       ...(note ? ["", "Note from the crew:", note] : []),
       "",
       "Request payment when you're ready.",
@@ -1381,64 +1186,24 @@ export async function completeJob(_prev: FinishState, formData: FormData): Promi
     session.staff.phone,
   ).catch(() => {});
 
-  // A job the customer already paid in full has been sitting on a paid_at with
-  // no status to match it, because money arriving cannot be allowed to skip
-  // this close-out. Now that the work is done, it can move.
+  // Money arriving can't skip close-out, so a fully paid job waits on paid_at
+  // until now. It can move to Paid.
   await settleJobIfPaid(id).catch(() => {});
 
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
-  // The crew marks jobs done from their own job page.
+  // The crew mark jobs done from their job page.
   revalidatePath("/job/[token]", "page");
   return { ok: true, message: "Job closed out and the customer has been thanked." };
 }
 
-// Payment used to live here: a Zelle-instructions text and a Mark paid button
-// that stamped paid_at and nothing else. Both are gone. Money is recorded
-// against the ledger now - see payment-actions.ts - so "is this paid" has one
-// answer, arrived at by adding up payments rather than by somebody asserting it.
 
 /**
- * Stop a text that hasn't gone out yet, and on a quote, take the quote with it.
- *
- * A customer text raised at 9pm sits in the queue until 8am. That gap is the
- * whole point of this button: somebody spots the wrong price, or the wrong
- * customer, and the only thing worse than the text being late is it arriving
- * anyway in the morning.
- *
- * Cancelling the TEXT of a quote is cancelling the QUOTE. Stopping the message
- * and leaving the price, the sections and the live link on the row was a half
- * measure that read as a whole one: the job still said Quoted, the customer's
- * link still opened, and the follow-up cron was still counting down to chase a
- * quote nobody had received. So a quote text cancelled here runs the same wipe
- * as a retraction, which is what it is - see wipeQuote above.
- *
- * That makes it owner-only on a quote text, for the same reason retracting is:
- * it throws away written work and cannot be undone from the UI. Every other
- * kind of held text is just a text, and anyone who can open the job can stop it.
- *
- * Only while it is genuinely still waiting. `cancelMessage` will not touch a
- * row whose send_after has passed, so once the morning comes the button stops
- * being offered and stops working, rather than racing a flush that may already
- * have the message in its hand.
- */
-/**
- * Send a queued text now, instead of waiting for its hour.
- *
- * Open to the crew as well as the owner, on purpose. The person who wants this
- * is the contractor who has just corrected a price at 6:30am and does not want
- * the wrong number sitting on a customer's phone for another ninety minutes,
- * and routing that through the office is how the quote gets accepted at the old
- * price while everybody waits.
- *
- * Not gated the way cancelling is, because the two are not comparable acts:
- * cancelling a quote text destroys the quote, while this only changes WHEN a
- * text somebody already wrote and already approved goes out. The worst case is
- * a customer hearing from us earlier than our own courtesy rule intended.
- *
- * Access is the same check every other action on this page makes - can this
- * person load the job - and the quote id scopes the lookup, so a message id
- * guessed from somebody else's lead finds nothing.
+ * Send a queued text now instead of at its hour. Open to the crew: a
+ * contractor correcting a price at 6:30am shouldn't leave the wrong number
+ * waiting on the office. Not gated like cancelling, which destroys a quote;
+ * this only changes WHEN an approved text goes out. Access is "can load the
+ * job", and the quote id scopes the lookup.
  */
 export async function sendHeldTextNow(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
   const session = await getSession();
@@ -1450,8 +1215,7 @@ export async function sendHeldTextNow(_prev: ScheduleState, formData: FormData):
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
 
-  // Read the row before acting on it: the form says what the page believed a
-  // moment ago, and in this particular window that belief goes stale fast.
+  // Re-read the row: the page's view goes stale fast in this window.
   const held = await getMessage(messageId, id);
   if (!held) return { ok: false, error: "That text is no longer in the queue." };
   if (!isHeld(held)) {
@@ -1476,14 +1240,23 @@ export async function sendHeldTextNow(_prev: ScheduleState, formData: FormData):
   revalidatePath("/job/[token]", "page");
 
   if (!r.ok) {
-    // The provider's own words, not a generic failure: the whole reason this
-    // button exists is that somebody is chasing money, and "couldn't send" sends
-    // them back to the office with nothing to act on.
+    // The provider's own words, so the user has something to act on.
     return { ok: false, error: [r.detail, r.status ? `(HTTP ${r.status})` : ""].filter(Boolean).join(" ").slice(0, 500) };
   }
   return { ok: true, message: "Sent. It has gone out now rather than waiting." };
 }
 
+/**
+ * Stop a text that hasn't gone out, and for a quote text, the quote too.
+ *
+ * Cancelling a quote's TEXT cancels the QUOTE: otherwise the job stays Quoted,
+ * the link opens, and the follow-up cron chases a quote nobody received. So it
+ * runs the same wipe as a retraction (wipeQuote below), and is owner-only for
+ * the same reason. Other held texts anyone with job access can stop.
+ *
+ * Only while still waiting: cancelMessage won't touch a row past send_after,
+ * so it can't race a flush.
+ */
 export async function cancelHeldMessage(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
@@ -1491,15 +1264,12 @@ export async function cancelHeldMessage(_prev: ScheduleState, formData: FormData
   const messageId = String(formData.get("messageId") ?? "");
   if (!id || !messageId) return { ok: false, error: "Missing message." };
 
-  // The message log has no policy of its own for writes, so access is checked
-  // here the same way every other action on this page checks it: can this
-  // person load the job? The quote id then scopes the update to that job, so a
-  // guessed message id from somebody else's lead does nothing.
+  // The message log has no write policy, so access is "can load the job"; the
+  // quote id scopes the update so a guessed message id does nothing.
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this job." };
 
-  // Read before the write, so the permission check below is made against what
-  // the row actually is rather than against what the form said it was.
+  // Read first, so the permission check uses the real row, not the form.
   const held = await getMessage(messageId, id);
   if (!held) return { ok: false, error: "That text is no longer in the queue." };
 
@@ -1540,37 +1310,28 @@ export async function cancelHeldMessage(_prev: ScheduleState, formData: FormData
   };
 }
 
-// The texts that carry the quote itself. Cancelling one of these is cancelling
-// the quote; cancelling a reminder or a receipt is just cancelling a text.
+// Texts that carry the quote itself; cancelling one cancels the quote.
 const QUOTE_TEXT_KINDS = new Set(["quote_ready", "quote_updated"]);
 
 /**
- * The wipe itself, shared by the two ways a quote gets taken back.
- *
- * Retracting one the customer already has and cancelling one that never left
- * the building are the same act with different timing, and the day they stop
- * clearing exactly the same fields is the day a job carries a price nobody
- * meant to send. So it lives once, here, and both callers do their own
- * permission and eligibility checks before reaching it.
- *
- * Order matters: the row goes first. A failure part way through then leaves
- * line items on an unquoted job, which is visible and fixable, where the
- * reverse would leave a live link on a job the UI already calls retracted.
+ * The wipe shared by retracting and cancelling a quote, which must clear the
+ * same fields. Callers check permissions first. The row goes first: a partial
+ * failure leaves line items on an unquoted job (fixable), not a live link on a
+ * job the UI calls retracted.
  */
 async function wipeQuote(
   session: NonNullable<Awaited<ReturnType<typeof getSession>>>,
   id: string,
 ): Promise<boolean> {
   const patch: Partial<Quote> = {
-    // The link the customer holds stops resolving on the next tap, including a
-    // copy they forwarded to somebody else.
+    // Rotated, so the held link (and any forwarded copy) stops resolving.
     public_token: crypto.randomUUID().replace(/-/g, ""),
     quote_amount: null,
     quote_summary: null,
     quote_sent_at: null,
     quote_expires_at: null,
     quote_followup_sent_at: null,
-    // Whatever they said, they said it about a quote that no longer exists.
+    // Any answer was to a quote that no longer exists.
     customer_response: null,
     customer_responded_at: null,
     status: "new",
@@ -1580,37 +1341,23 @@ async function wipeQuote(
   const updated = await updateQuote(session, id, patch);
   if (!updated) return false;
   await saveQuoteOptions(session, id, []).catch(() => ({ ok: false }));
-  // And the choice of ways to do it, for the same reason: what went out was
-  // wrong, and a package left on the row is a price that goes out again.
+  // Packages too: a leftover package is a price that goes out again.
   await saveQuotePackages(session, id, []).catch(() => ({ ok: false }));
   return true;
 }
 
 /**
- * Take a sent quote back: kill the link, wipe the pricing, start again.
+ * Take a sent quote back (wrong customer, sent too early). All four or it
+ * isn't a retraction:
  *
- * For the quote that went to the wrong customer, or went out before anybody
- * meant it to. Four things have to happen together or it isn't a retraction:
+ *   1. Rotate public_token: the link dies immediately, forwarded copies too.
+ *   2. Cancel queued texts, or the dead link goes out at 8am.
+ *   3. Clear pricing: amount, sections, line items, packages.
+ *   4. Back to New with sent stamps cleared, so pipeline, follow-up and the
+ *      duplicate-send guard stop thinking they have a price.
  *
- *   1. The customer's link stops resolving. Rotating public_token is what makes
- *      this immediate - a quote they already have open cannot be accepted on a
- *      refresh, and a forwarded link is dead too.
- *   2. Any text still sitting in the quiet-hours queue is cancelled, or the
- *      link we just killed gets texted to them at 8am anyway.
- *   3. The pricing is cleared: the amount, the five sections, the line items
- *      and any choice of options the customer was offered.
- *      This is the "and wipe" half - what went out was wrong, and leaving it
- *      on the row is how it goes out a second time.
- *   4. The job goes back to New with its sent stamps cleared, so the pipeline,
- *      the 48-hour follow-up and the "already texted this quote" guard all stop
- *      believing this customer has a price.
- *
- * Owner only. It rotates a live link, throws away written work and moves a job
- * backwards, and none of that is undoable from the UI.
- *
- * Refused on a job with a booked work day: releasing a date is its own decision
- * with its own text to the customer, and burying it inside a quote retraction
- * is how a crew finds out on the morning of the pour.
+ * Owner only: none of it is undoable from the UI. Refused with a booked work
+ * day: releasing a date is its own decision with its own customer text.
  */
 export async function retractQuote(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
   const session = await getSession();
@@ -1632,7 +1379,7 @@ export async function retractQuote(_prev: ScheduleState, formData: FormData): Pr
     };
   }
 
-  // Before the wipe, so the log can say what the customer was holding.
+  // Captured before the wipe for the log.
   const was = current.quote_amount;
 
   if (!(await wipeQuote(session, id))) {
@@ -1655,16 +1402,10 @@ export async function retractQuote(_prev: ScheduleState, formData: FormData): Pr
 }
 
 /**
- * Mark this lead as practice, or put it back.
- *
- * Testing a payment means writing a real row through the real code, which is
- * the only kind of test worth running - and the reason an afternoon of trying
- * things out turns up on the Money page as takings. The flag is how a fixture
- * stays a fixture: the lead behaves exactly as it always did everywhere else,
- * and the money board leaves it out of every figure unless asked.
- *
- * Owner only. It moves numbers on the one page the business is run from, and a
- * real job quietly marked as practice is revenue that stops being counted.
+ * Mark a lead as practice, or unmark it. Real test payments go through real
+ * code, so the flag keeps them off the Money page's figures; the lead
+ * otherwise behaves normally. Owner only: a real job marked practice is
+ * revenue that stops counting.
  */
 export async function setTestFlag(formData: FormData): Promise<void> {
   const session = await getSession();
@@ -1686,9 +1427,8 @@ export async function setTestFlag(formData: FormData): Promise<void> {
   revalidatePath("/crm/money");
 }
 
-// Regenerate the customer + contractor capability tokens. Use this if a link is
-// leaked or shared too widely: the old /q/<token> and /job/<token> URLs stop
-// resolving immediately and you re-text the fresh customer link.
+// Regenerate the customer and contractor tokens after a leak: old /q/ and /job/
+// URLs stop resolving at once; re-text the new customer link.
 export async function rotateTokens(formData: FormData): Promise<void> {
   const session = await getSession();
   if (!session) return;
@@ -1712,33 +1452,19 @@ export async function rotateTokens(formData: FormData): Promise<void> {
 }
 
 /**
- * Add another way of doing the job to a quote the customer is already holding.
+ * Add another way of doing the job to a quote the customer already holds, e.g.
+ * an asphalt price next to concrete that was too expensive, from a phone in a
+ * driveway. Deliberately not saveQuote with a flag: it touches only packages.
  *
- * The call this exists for: we quoted concrete, they rang back and said it is
- * more than they want to spend, and the crew want to put an asphalt price next
- * to it. Before this, the only route was the full quote editor - open it, find
- * the choice builder, convert the flat price into Option A by hand, add Option
- * B, then press Send and hope it went out as a correction rather than bouncing
- * off the duplicate guard. That is a desk job, and this conversation happens
- * on a phone in a driveway.
- *
- * So this is the same machinery behind a much smaller door. It is deliberately
- * NOT saveQuote with a flag: this action touches the options and nothing else,
- * which is what makes it safe to hand to somebody holding a phone in one hand.
- *
- * What it does, in one submit:
- *   1. Turns the flat price into Option A, the first time. A quote that already
- *      offers a choice skips this and simply gains another card.
+ * In one submit:
+ *   1. First time only, the flat price becomes Option A.
  *   2. Adds the new option.
- *   3. Re-prices the row off the lead option, exactly as saveQuote does.
- *   4. Re-sends, restamping the expiry and clearing the follow-up so the
- *      customer's clock starts again on the quote they are actually holding.
- *   5. Logs a quote_revised carrying the added title, which is the new line in
- *      Quotes sent.
+ *   3. Re-prices the row off the lead option, as saveQuote does.
+ *   4. Re-sends, restamping expiry and clearing the follow-up.
+ *   5. Logs quote_revised with the added title (shown in Quotes sent).
  *
- * The customer gets notifyQuoteOptionAdded rather than the correction text: the
- * price they were shown was never wrong, and telling them it was corrected
- * would answer a complaint they did not make.
+ * The customer gets notifyQuoteOptionAdded, not the correction text: the
+ * original price was never wrong.
  */
 export async function addQuoteOption(_prev: SaveState, formData: FormData): Promise<SaveState> {
   const session = await getSession();
@@ -1750,8 +1476,7 @@ export async function addQuoteOption(_prev: SaveState, formData: FormData): Prom
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this quote." };
 
-  // Only ever a second answer to a live question. Each of these is a different
-  // conversation, and none of them is "here is another price".
+  // Only for a live, unanswered quote; each other state needs a different conversation.
   if (!current.quote_sent_at) {
     return { ok: false, error: "This quote hasn't gone out yet. Write both options into the quote itself and send it once." };
   }
@@ -1779,11 +1504,9 @@ export async function addQuoteOption(_prev: SaveState, formData: FormData): Prom
 
   const drafts: QuotePackageDraft[] = packagesAsDrafts(existingPackages);
 
-  // First time: the flat price the customer is holding becomes Option A, named
-  // and priced by whoever is filling this in. It is pre-filled on screen from
-  // the row, but read back off the form - they are allowed to correct a guess
-  // we made from the service name, and a silent auto-name is how a customer
-  // ends up looking at an option called "null".
+  // First time: the customer's flat price becomes Option A. Pre-filled on
+  // screen but read from the form, so the user can fix a guessed name (and no
+  // option is ever called "null").
   if (drafts.length === 0) {
     const title = words(String(formData.get("keep_title") ?? ""), PACKAGE_TITLE_MAX);
     const amount = money(String(formData.get("keep_amount") ?? ""));
@@ -1813,22 +1536,19 @@ export async function addQuoteOption(_prev: SaveState, formData: FormData): Prom
     recommended: false,
   });
 
-  // At most one recommendation, and only if they asked for one. "recommend"
-  // carries the index so the same control can point at either card.
+  // At most one recommendation; "recommend" carries the card index.
   const recommend = Number(String(formData.get("recommend") ?? "-1"));
   for (const [i, d] of drafts.entries()) d.recommended = i === recommend;
 
   const saved = await saveQuotePackages(session, id, drafts);
   if (!saved.ok) return { ok: false, error: saved.error ?? "Could not save the new option." };
 
-  // Priced off the lead option plus everything else, exactly as saveQuote does,
-  // so the two paths can never disagree about what this row is worth.
+  // Same pricing as saveQuote, so the two paths can't disagree.
   const was = current.quote_amount;
   const total = allInTotal(drafts, optionsAsDrafts(existingOptions));
   const patch: Partial<Quote> = {
     quote_amount: total,
-    // A new option restarts the customer's clock: the quote they hold is this
-    // one, so the expiry and the 48-hour nudge both count from this text.
+    // Restarts the customer's clock: expiry and 48h nudge count from this text.
     quote_sent_at: new Date().toISOString(),
     quote_expires_at: new Date(Date.now() + QUOTE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
     quote_followup_sent_at: null,
@@ -1838,9 +1558,7 @@ export async function addQuoteOption(_prev: SaveState, formData: FormData): Prom
   const updated = await updateQuote(session, id, patch);
   if (!updated) return { ok: false, error: "The option was saved, but the quote could not be re-sent. Open the quote editor and send it." };
 
-  // The new line in Quotes sent. quote_revised is what that list is built from,
-  // and `added` is what lets the row say which option turned up rather than
-  // just calling it a correction.
+  // Feeds Quotes sent; `added` says which option arrived.
   await addEvent(session, id, "quote_revised", { from: was, to: total, added: title });
 
   const r = await notifyQuoteOptionAdded({

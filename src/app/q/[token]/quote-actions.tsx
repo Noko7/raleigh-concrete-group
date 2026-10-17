@@ -8,27 +8,20 @@ import { DECLINE_CREDIT, DEFAULT_VISIT_SLOTS, dollarsOrZero as usd, LEAD_TIME_DA
 import { SectionText } from "@/components/section-text";
 import { DEFAULT_DEPOSIT_PERCENT, depositCents, usd as money } from "@/lib/crm/fees";
 
-// One day the customer says works, and the time they'd like the crew to start.
-// Nothing here is a booking - the crew confirms one of these against their own
-// schedule - but a day with no time on it puts the crew back on the phone to
-// ask, which is the call this step exists to remove.
-//
-// Not called `Pick`: that is a TypeScript built-in, and shadowing it in a file
-// is a trap for whoever next needs `Pick<Quote, "id">` in here.
+// One day that works for the customer, with a start time. Not a booking (the
+// crew confirm one), but a day without a time means a phone call to ask.
+// Not named `Pick`, which would shadow the TypeScript built-in.
 type DayPick = { date: string; time: string };
 
 type Mode = "choose" | "save" | "schedule" | "submitting" | "accepted" | "paying" | "declined";
 
-// How the customer said they want to pay, chosen at the moment they approve -
-// the point they are most decided, and the only point where asking costs
-// nothing. It is a statement of intent, not a commitment: "card" sends them
-// straight to checkout, "direct" leaves the balance for the crew to take on
-// site, and either way the payment page stays open to them afterwards.
+// How they intend to pay, asked at approval when they're most decided. Not a
+// commitment: "card" goes to checkout, "direct" leaves it for the crew on site;
+// the payment page stays open either way.
 type PayChoice = "card" | "direct";
 
-// One line item as the customer sees it. `required` items are part of the job
-// and shown so they can see what they are paying for; the rest are theirs to
-// take or leave.
+// A line item as the customer sees it. `required` items are part of the job,
+// shown so they see what they pay for; the rest are optional.
 export type PublicOption = {
   id: string;
   title: string;
@@ -37,16 +30,14 @@ export type PublicOption = {
   required: boolean;
 };
 
-// One complete way of doing the job, on a quote that offers a choice of them.
-// Unlike the line items above these are mutually exclusive: the customer picks
-// exactly one, and the extras are added to whichever they picked.
+// One complete way of doing the job. Mutually exclusive, unlike line items:
+// they pick exactly one, and extras are added to it.
 export type PublicPackage = {
   id: string;
   title: string;
   description: string | null;
   amount: number;
-  // The contractor's own answer to "which would you pick". At most one card
-  // carries it.
+  // The contractor's "which would you pick"; at most one card.
   recommended: boolean;
 };
 
@@ -61,12 +52,10 @@ export function QuoteActions({
   amount,
   options = [],
   packages = [],
-  // The start times the assigned crew offers, from their own working hours.
-  // Falls back to the default window on a quote with nobody assigned yet.
+  // Start times from the assigned crew's hours; the default window if unassigned.
   slots = DEFAULT_VISIT_SLOTS,
-  // Whether the crew on this job can actually take a card. False means the
-  // deposit button is never offered - a payment button that dies on tap is
-  // worse than never having shown one.
+  // Whether this job's crew can take cards. If not, no deposit button: one that
+  // fails on tap is worse than none.
   cardReady = false,
 }: {
   token: string;
@@ -79,33 +68,24 @@ export function QuoteActions({
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("choose");
   const [discount, setDiscount] = useState(false);
-  // Days the customer says work for them, each with a start time. The crew
-  // confirms one of these against their own schedule, so nothing here is a
-  // booking.
+  // Days that work for them, each with a start time; the crew confirm one.
   const [picks, setPicks] = useState<DayPick[]>([]);
   const [draft, setDraft] = useState("");
-  // The time a newly added day gets. One control above the list rather than one
-  // per row: almost nobody wants a different hour on each of three days, and
-  // any row can still be changed on its own afterwards.
+  // Time given to newly added days. One control, since few want different
+  // hours per day; each row can still be changed.
   const [time, setTime] = useState(slots[1] ?? slots[0] ?? "9:00 AM");
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
   const [taken, setTaken] = useState<string[]>([]);
-  // Their yes/no per optional line item. Nothing is pre-answered: an untouched
-  // box is a customer who scrolled past it, not a decision, and either reading
-  // of it would be us deciding for them.
+  // Yes/no per optional item. Nothing pre-answered: untouched isn't a decision.
   const [answers, setAnswers] = useState<Record<string, "accepted" | "declined">>({});
-  // Which way of doing the job they picked, on a quote that offers a choice.
-  // Nothing is pre-selected, not even the recommended one: a default here is us
-  // choosing a price for them and hoping they don't notice.
+  // The package they picked. Nothing pre-selected, not even the recommended
+  // one: a default would be choosing their price.
   const [picked, setPicked] = useState<string | null>(null);
 
-  // Whether the real Approve button is on screen. On a phone the decision sits
-  // below the price, the trust lines, what's included and, on an itemised
-  // quote, every option - which is a long way to scroll back up from if you
-  // decided somewhere in the middle. A bar carries the price and the same
-  // button until the real one comes into view, and gets out of the way the
-  // moment it does: one CTA visible at a time, never two.
+  // Whether the real Approve button is on screen. On a phone it's far below the
+  // price, so a sticky bar with the same button shows until it's in view. Only
+  // one CTA visible at a time.
   const actionsRef = useRef<HTMLDivElement | null>(null);
   const [ctaOnScreen, setCtaOnScreen] = useState(true);
   useEffect(() => {
@@ -122,36 +102,29 @@ export function QuoteActions({
   const answered = optional.filter((o) => answers[o.id]).length;
   const allAnswered = answered === optional.length;
   const chosen = useMemo(() => packages.find((p) => p.id === picked) ?? null, [packages, picked]);
-  // What they are buying right now: the way of doing it they picked, plus every
-  // required item, plus the optional ones they've said yes to.
+  // Running total: chosen package + required items + accepted extras.
   const running = useMemo(() => quoteTotal(chosen, options, answers), [chosen, options, answers]);
-  // Whether the price on this page is built rather than fixed. On a quote that
-  // is neither itemised nor a choice there is one number and it never moves.
+  // Built price (itemised or a choice) vs one fixed number.
   const built = itemised || choice;
   // The figure every price below is worked from.
   const total = built ? running : (amount ?? 0);
   const canApprove = built ? (!choice || Boolean(chosen)) && allAnswered && total > 0 : amount != null;
-  // What still stands between them and the button, in the order they'd hit it.
-  // Said out loud rather than left as a greyed-out button with no explanation.
+  // What still blocks the button, in order, said out loud rather than a silent
+  // greyed-out button.
   const todo = !choice || chosen ? optional.length - answered : -1;
 
-  // What the bar shows, which has to be the number at the bottom of the option
-  // list rather than the raw total: a customer holding a credit should not see
-  // two different prices depending on where they are looking.
+  // Same figure as the bottom of the option list, so a credit doesn't show two prices.
   const discountedTotal = discount && total > 0 ? Math.max(0, total - DECLINE_CREDIT) : total;
-  // No figure at all until they have picked something. Before that the only
-  // numbers available are $0 or the sum of everything on offer, and the sum is
-  // the one that does damage: a quote written as "Section 1 / Section 2 / All
-  // sections" read as $24,984 to a customer who wanted one of them. Once they
-  // have answered every extra, $0 is a real answer (they said no to it all).
+  // No figure until something is picked: the sum of every option (e.g. "Section
+  // 1 / Section 2 / All sections" reading as $24,984) misleads. Once every extra
+  // is answered, $0 is a real answer.
   const nothingPicked = choice ? !chosen : running === 0 && !allAnswered;
 
-  // The lines that make up the price, in the order the crew put them.
+  // The lines that make up the price, in the crew's order.
   const breakdown = options.filter((o) => o.required);
 
-  // One line of the quote. A breakdown line is a title, a price and what it
-  // covers; an extra adds its yes / no. Shared by every group above so the two
-  // kinds can never drift apart in how a price or a description is shown.
+  // One line: title, price and description, plus yes/no on extras. Shared so
+  // the two kinds never drift apart.
   const renderLine = (o: PublicOption) => {
     const answer = answers[o.id];
     const on = o.required || answer === "accepted";
@@ -172,9 +145,8 @@ export function QuoteActions({
           />
         )}
         {o.required ? (
-          // In the breakdown group every line is included, so saying so on
-          // each one is noise. It earns its place next to extras, on a quote
-          // priced two ways, where included and optional share one list.
+          // In the breakdown every line is included; only say so on a choice
+          // quote, where included and optional lines share a list.
           choice && <span className="cq-opt-included">Included in your project</span>
         ) : (
           <div className="cq-opt-choice" role="group" aria-label={`${o.title}: add it or not`}>
@@ -200,19 +172,16 @@ export function QuoteActions({
     );
   };
 
-  // Both Approve buttons do exactly this, so there is one path into scheduling
-  // rather than two that can drift.
+  // Both Approve buttons call this, so there's one path into scheduling.
   function approve() {
     setDiscount(false);
     setMode("schedule");
   }
 
-  // Counted in Raleigh days. The customer's phone may be in another zone, and
-  // the server checks the same floor the same way.
+  // Raleigh days, not the phone's zone; the server checks the same floor.
   const minDate = useMemo(() => ymdInDays(LEAD_TIME_DAYS), []);
 
-  // Warn early if a day is already spoken for, so the customer doesn't offer
-  // three days we can't use.
+  // Warn early about a taken day so they don't offer three we can't use.
   async function addDate(d: string) {
     setError("");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
@@ -233,7 +202,7 @@ export function QuoteActions({
       const json = (await res.json()) as { available?: boolean };
       if (json.available === false) setTaken((t) => (t.includes(d) ? t : [...t, d]));
     } catch {
-      // A failed check is not worth blocking on - the crew confirms anyway.
+      // Don't block on a failed check; the crew confirm anyway.
     } finally {
       setChecking(false);
     }
@@ -248,11 +217,8 @@ export function QuoteActions({
     setPicks((p) => p.map((x) => (x.date === d ? { ...x, time: t } : x)));
   }
 
-  // What the save offer is quoted against: what they have picked so far. On a
-  // quote with options somebody can reach it having picked nothing, and then
-  // there is no figure to strike through - the all-in number is every option
-  // added together, which is no price anybody was ever going to pay - so the
-  // offer is made in words instead (see mode "save").
+  // The credit is quoted against what they've picked so far. With nothing
+  // picked there's no real figure to strike through, so mode "save" says it in words.
   const offerBase = total;
   const discounted = Math.max(0, Math.round((offerBase - DECLINE_CREDIT) * 100) / 100);
 
@@ -268,35 +234,28 @@ export function QuoteActions({
           token,
           action,
           discount,
-          // Recorded on the job so the crew knows what to expect before they
-          // turn up. It changes nothing about what is owed.
+          // Recorded so the crew know what to expect; changes nothing owed.
           pay: action === "accept" ? pay : undefined,
-          // Two arrays rather than a list of pairs, because that is the shape
-          // the two columns already have and the crew's card reads them by
-          // index.
+          // Two index-aligned arrays: the columns' shape, read by index on the crew card.
           preferred_dates: action === "accept" ? picks.map((p) => p.date) : undefined,
           preferred_times: action === "accept" ? picks.map((p) => p.time) : undefined,
-          // Every item, including the required ones, so the server records a
-          // decision against each rather than inferring one.
+          // Every item, required ones too, so each has a recorded decision.
           options: action === "accept" && itemised ? answersWithRequired(options, answers) : undefined,
-          // Which way of doing the job they went with. The server checks it is
-          // one of the packages on THIS quote before it prices anything.
+          // The server checks it belongs to THIS quote before pricing.
           package: action === "accept" && choice ? (picked ?? undefined) : undefined,
         }),
       });
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
       if (res.ok && json.ok) {
-        // Straight to checkout when they asked to pay now. The approval is
-        // already recorded, so a customer who changes their mind on the Stripe
-        // page still has an approved job and a link back to it - the two
-        // decisions are separate and only one of them is reversible.
+        // Straight to checkout if they chose to pay now. The approval is already
+        // recorded, so backing out of Stripe still leaves an approved job.
         if (action === "accept" && pay === "card") {
           setMode("paying");
           router.push(`/pay/${token}`);
           return;
         }
         setMode(action === "accept" ? "accepted" : "declined");
-        // Re-render the server page into its full-screen confirmed/declined view.
+        // Re-render the server page into its confirmed/declined view.
         router.refresh();
       } else {
         setError(json.error || "Something went wrong. Please call us.");
@@ -308,9 +267,8 @@ export function QuoteActions({
     }
   }
 
-  // Approved, and on their way to Stripe. Its own state rather than the
-  // confirmation panel: showing "we'll confirm your date shortly" and then
-  // yanking the page out from under them reads as a glitch.
+  // Approved and heading to Stripe. Its own state: flashing the confirmation
+  // panel and then leaving reads as a glitch.
   if (mode === "paying") {
     return (
       <div className="cq-result cq-result-ok">
@@ -375,10 +333,8 @@ export function QuoteActions({
           className="cq-btn cq-btn-accept"
           onClick={() => {
             setDiscount(true);
-            // Taking the credit is not the same as having chosen. On an
-            // itemised quote with questions still open, this goes back to them
-            // rather than to the calendar - otherwise they land on the date
-            // picker and the server refuses the approval they thought they gave.
+            // Taking the credit isn't choosing. With items unanswered, go back to
+            // them, or the server refuses the approval from the date picker.
             setMode(canApprove ? "schedule" : "choose");
           }}
         >
@@ -401,9 +357,7 @@ export function QuoteActions({
           you&apos;d like us to start. Our crew will confirm one of them and text you back. Nothing is booked until
           then.
         </p>
-        {/* What they are approving, carried into this step: the decision they
-            just made is two taps behind them and worth restating before they
-            commit to it. */}
+        {/* Restate what they're approving before they commit. */}
         {built && (
           <p className="cq-fine cq-sched-scope">
             Approving:{" "}
@@ -428,9 +382,7 @@ export function QuoteActions({
                   {pretty(p.date)}
                   {taken.includes(p.date) && <em> (likely full, we&apos;ll suggest another)</em>}
                 </span>
-                {/* Per row, so somebody who wants an early start on the Monday
-                    and a later one on the Friday can say so. Seeded from the
-                    control below rather than left blank. */}
+                {/* Per row, so different days can start at different hours. */}
                 <select
                   className="cq-pick-time"
                   value={p.time}
@@ -493,14 +445,9 @@ export function QuoteActions({
         {checking && <p className="cq-fine">Checking that day&hellip;</p>}
         {error && <p className="cq-err">{error}</p>}
 
-        {/* The payment question is asked here and nowhere else: this is the
-            one moment the customer has decided and hasn't yet moved on. Asked
-            a day later by text it becomes a chase; asked before they have
-            chosen their days it is a toll booth in front of the decision.
-
-            Both answers approve the quote. Only the route afterwards differs,
-            which is why neither is styled as a refusal - a customer who wants
-            to hand the crew cash has not done anything wrong. */}
+        {/* Asked here only: the moment they've decided. Later by text it's a
+            chase; earlier it's a toll booth. Both answers approve, so neither
+            is styled as a refusal; paying the crew in cash is fine. */}
         {cardReady ? (
           <div className="cq-pay">
             <p className="cq-pay-lead">
@@ -547,15 +494,11 @@ export function QuoteActions({
   // choose
   return (
     <>
-      {/* One panel holds the whole decision: which way of doing it, then what
-          to add to it, then the number those two answers make. Split across two
-          boxes they read as two quotes, and the total belongs under both. */}
+      {/* One panel for the whole decision (approach, extras, total); split, it
+          reads as two quotes. */}
       {built && (
         <div className="cq-opts">
-          {/* The choice of approach comes first and is answered first. Nothing
-              below it means anything until it has been: the extras are priced
-              the same either way, but the total isn't a total until there is a
-              driveway under it. */}
+          {/* The approach first: the total isn't one until there's a driveway under it. */}
           {choice && (
             <div className="cq-alts">
               <h2 className="cq-opts-title">
@@ -569,12 +512,9 @@ export function QuoteActions({
                 {packages.map((pkg, i) => {
                   const on = picked === pkg.id;
                   return (
-                    // The whole card picks it: a radio dot beside a price is a
-                    // target the size of a pea on the phone most of these are
-                    // read on. The button is the accessible control; a tap
-                    // anywhere else on the card bubbles up to the same answer.
-                    // A long description folds to two lines with its own
-                    // "Show details", which reads more without picking.
+                    // The whole card picks it (a radio dot is too small on a
+                    // phone); the button is the accessible control and card taps
+                    // bubble to it. Long descriptions fold behind "Show details".
                     <li
                       key={pkg.id}
                       className={`cq-alt-card${on ? " cq-alt-on" : ""}${pkg.recommended ? " cq-alt-rec" : ""}`}
@@ -608,13 +548,9 @@ export function QuoteActions({
             </div>
           )}
 
-          {/* Two kinds of line, shown as two groups. The breakdown is what
-              they are paying for - materials, labor and the rest - so it reads
-              as a list with prices and nothing to press. Extras are the only
-              part they decide, so they are the only part with buttons.
-
-              On a quote priced two ways the lines sit on top of whichever
-              option they pick, and stay one list under "Anything to add?". */}
+          {/* Two groups: the breakdown (what they pay for, no buttons) and extras
+              (the only decisions, so the only buttons). On a choice quote the
+              lines sit on top of whichever option is picked. */}
           {itemised && (
             <>
               {choice ? (
@@ -654,17 +590,13 @@ export function QuoteActions({
 
           <div className="cq-opt-total">
             <span>Your total</span>
-            {/* A dash, not $0, until they have picked. Zero is a real answer on
-                an itemised quote - they said no to everything - and printing it
-                at somebody who simply hasn't chosen yet is the page telling
-                them their driveway is free. */}
+            {/* A dash, not $0, until they pick: $0 is a real answer (no to
+                everything) and would tell an undecided customer it's free. */}
             <strong>
               {nothingPicked ? "-" : usd(discount && running > 0 ? Math.max(0, running - DECLINE_CREDIT) : running)}
             </strong>
           </div>
-          {/* One outstanding thing at a time, in the order they meet them.
-              Listing both at once reads as a form with errors rather than a
-              decision half made. */}
+          {/* One outstanding thing at a time; both at once reads as form errors. */}
           {todo < 0 ? (
             <p className="cq-fine cq-opt-todo">Pick the option you&apos;d like to go ahead with.</p>
           ) : todo > 0 ? (
@@ -695,11 +627,8 @@ export function QuoteActions({
         </button>
       </div>
 
-      {/* The hesitation this page actually meets is "am I committing to a date
-          I haven't checked yet". Approving does not book anything - the next
-          step asks which days suit them and the crew confirms one - so the
-          sentence that says so belongs against the button, not three sections
-          further up. */}
+      {/* Approving books nothing (they pick days, the crew confirm), so the
+          reassurance sits against the button. */}
       <p className="cq-reassure">
         Approving doesn&apos;t book a date. You&apos;ll pick a few days that suit you, and we&apos;ll text you back to
         confirm one.
@@ -721,9 +650,7 @@ export function QuoteActions({
   );
 }
 
-// Required items are sent as accepted rather than left out. The server would
-// treat them that way regardless, but a record that says every item was
-// answered is the one worth having when somebody asks what they agreed to.
+// Required items are sent as accepted, so the record shows every item answered.
 function answersWithRequired(
   options: PublicOption[],
   answers: Record<string, "accepted" | "declined">,
