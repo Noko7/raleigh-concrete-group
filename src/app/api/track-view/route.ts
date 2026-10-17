@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { recordCustomerView } from "@/lib/crm/queries";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { rateLimit } from "@/lib/rate-limit";
 
 // Each call is two writes, and the office reads the view count as buying signal, so a link holder must
 // not be able to inflate it.

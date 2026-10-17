@@ -34,7 +34,7 @@ export type BoardQuote = {
   is_test: boolean;
 };
 
-function shortDate(ymd: string | null, locale: Locale): string {
+function shortDate(ymd: string | null): string {
   if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "";
   return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", {
     month: "short",
@@ -370,8 +370,8 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                     */}
                     {(() => {
                       const kind = typeLabel(q, t);
-                      const jobDate = shortDate(q.scheduled_date, locale);
-                      const visitDate = shortDate(visitDateOf(q), locale);
+                      const jobDate = shortDate(q.scheduled_date);
+                      const visitDate = shortDate(visitDateOf(q));
                       const dated = Boolean(jobDate || visitDate);
                       const showType = !dated || kind.cls !== "inperson";
                       return (

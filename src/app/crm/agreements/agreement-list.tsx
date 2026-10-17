@@ -14,7 +14,7 @@ const statusLabel = (t: Dict, s: AgreementStatus): string =>
 
 const ORDER: AgreementStatus[] = ["pending", "sent", "signed", "declined", "void"];
 
-function fmt(iso: string, locale: Locale) {
+function fmt(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -50,11 +50,11 @@ export function AgreementList({
             <div>
               <strong>{a.title}</strong>
               <div className="crm-muted crm-sm">
-                {t.agreements.added} {fmt(a.created_at, locale)}
+                {t.agreements.added} {fmt(a.created_at)}
                 {a.signed_at
-                  ? ` · ${t.agreements.signedOn} ${fmt(a.signed_at, locale)}`
+                  ? ` · ${t.agreements.signedOn} ${fmt(a.signed_at)}`
                   : a.sent_at
-                    ? ` · ${t.agreements.sent} ${fmt(a.sent_at, locale)}`
+                    ? ` · ${t.agreements.sent} ${fmt(a.sent_at)}`
                     : ""}
               </div>
             </div>

@@ -9,7 +9,7 @@ import { AgreementStatusBadge } from "./agreement-list";
 
 export const dynamic = "force-dynamic";
 
-function fmt(iso: string, locale: string) {
+function fmt(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -105,7 +105,7 @@ export default async function AgreementsPage() {
                       <td>
                         <AgreementStatusBadge status={a.status} locale={locale} />
                       </td>
-                      <td>{fmt(a.created_at, locale)}</td>
+                      <td>{fmt(a.created_at)}</td>
                       <td className="crm-row-actions">
                         {a.file_path && (
                           <a

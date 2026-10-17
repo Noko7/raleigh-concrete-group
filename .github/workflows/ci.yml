@@ -1,6 +1,7 @@
 name: CI
 
-# Two checks, both cheap, on every push and pull request.
+# Three checks, all cheap, on every push and pull request: typecheck, lint
+# (errors fail the run, warnings do not), and the test suite.
 #
 # There was nothing here before, which is a gap worth naming: this repo takes
 # card payments and works out what a contractor owes the office, and until now
@@ -39,6 +40,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
 
       - name: Test the fee engine
         run: npm test

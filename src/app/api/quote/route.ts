@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 
-import { ADDRESS_HINT, isFullAddress } from "@/lib/address";
+import { isFullAddress } from "@/lib/address";
 import { ymdInDays } from "@/lib/crm/clock";
 import { TIME_RE, VISIT_LEAD_DAYS } from "@/lib/crm/constants";
 import { alertOwner, notifyCustomerReceived, notifyNewQuote } from "@/lib/crm/notify";

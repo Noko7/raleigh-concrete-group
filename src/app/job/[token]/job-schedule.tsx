@@ -10,7 +10,7 @@ import { DateField } from "./date-field";
 
 // Same server action as the CRM (same RLS and customer text), laid out for a phone. Only for jobs with no
 // date; moving an existing date is JobReschedule.
-function pretty(s: string, locale: Locale): string {
+function pretty(s: string): string {
   return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -66,7 +66,7 @@ export function JobSchedule({
               <input type="hidden" name="date" value={p.date} />
               <input type="hidden" name="time" value={overridden ? time : (p.time ?? time)} />
               <button type="submit" className="js-choice" disabled={pending}>
-                <span className="js-choice-date">{pretty(p.date, locale)}</span>
+                <span className="js-choice-date">{pretty(p.date)}</span>
                 {/* A day alone reads as "any time", which is how a crew turns up at 9 for a 7 o'clock pour. */}
                 {p.time && !overridden && <span className="js-choice-time">{p.time}</span>}
                 <span className="js-choice-cta">{t.contractorJob.schedConfirm}</span>
