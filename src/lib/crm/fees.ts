@@ -1,17 +1,10 @@
-// What the office earns, and how it gets taken.
-//
-// Kept apart from queries.ts and from Stripe on purpose: this is the one place
-// the business's arithmetic lives, it touches no network and no database, and
-// it is the file to read when somebody asks why a number is what it is.
-//
-// Safe to import from client components - the crew's job page shows the same
-// figures the server charges.
+// What the office earns, and how it gets taken. The business's arithmetic lives
+// only here: no network, no database, safe for client components (the crew's
+// job page shows the same figures the server charges).
 
 // ── The rate ────────────────────────────────────────────────────────────────
-// A contractor's first three paid jobs are billed at the intro rate; everything
-// after is the standard one. "Paid" means money actually moved - a lead that
-// died after approval doesn't burn one of the three, and the counter and the
-// rate are therefore decided by the same event.
+// A contractor's first three PAID jobs use the intro rate, then standard.
+// "Paid" means money moved, so a lead that died after approval doesn't use one.
 export const INTRO_FEE_RATE = 0.15;
 export const STANDARD_FEE_RATE = 0.10;
 export const INTRO_JOB_COUNT = 3;
@@ -29,12 +22,8 @@ export const RECORDED_METHODS = PAYMENT_METHODS.filter((m) => m !== "card");
 export type RecordedMethod = Exclude<PaymentMethod, "card">;
 
 /**
- * Is this string one of the methods the crew can record by hand?
- *
- * A guard rather than a bare `RECORDED_METHODS.includes(x)`, because the array's
- * element type genuinely excludes "card" and passing a wider PaymentMethod to
- * `includes` is a type error - correctly so. This is the narrowing the callers
- * actually want: string in, RecordedMethod out.
+ * String in, RecordedMethod out. A guard because RECORDED_METHODS' element type
+ * excludes "card", so `includes` on a wider string is a type error.
  */
 export function isRecordedMethod(value: string): value is RecordedMethod {
   return (RECORDED_METHODS as readonly string[]).includes(value);
@@ -50,11 +39,8 @@ export const METHOD_LABELS: Record<PaymentMethod, string> = {
 };
 
 /**
- * The rate this contractor is on, given how many jobs of theirs have already
- * been paid.
- *
- * `paidJobsBefore` counts jobs OTHER than this one. Their fourth job is the
- * first at the standard rate.
+ * The contractor's rate. `paidJobsBefore` excludes this job, so their fourth
+ * job is the first at the standard rate.
  */
 export function feeRateFor(paidJobsBefore: number): number {
   return paidJobsBefore < INTRO_JOB_COUNT ? INTRO_FEE_RATE : STANDARD_FEE_RATE;
@@ -71,12 +57,8 @@ export function fromCents(cents: number): number {
 }
 
 /**
- * Cents to dollars, with the sign where accountants put it.
- *
- * Naively interpolating a negative number puts the minus inside the amount -
- * "$-352.50" - which is not how money is written anywhere, and on a ledger
- * whose whole job is being checked against a bank statement it reads as a
- * typo. The sign belongs in front of the symbol.
+ * Cents to dollars with the sign before the symbol ("-$352.50", not
+ * "$-352.50"), since the ledger is checked against bank statements.
  */
 export const usd = (cents: number): string => {
   const value = Math.round(cents) / 100;
@@ -85,29 +67,21 @@ export const usd = (cents: number): string => {
 };
 
 /**
- * What the office earns on a job, in cents.
- *
- * A percentage of the job's TOTAL - not of any one payment - which is the rule
- * the whole design rests on: the fee is the same whether the customer pays by
- * card, in cash, or half of each. Rounded once, here, so no combination of
- * payments can drift a cent away from it.
+ * The office's earnings on a job, in cents: a percentage of the TOTAL, not of
+ * any payment, so it's the same however the customer pays. Rounded once here
+ * so no mix of payments drifts a cent.
  */
 export function feeTotalCents(jobTotalCents: number, rate: number): number {
   return Math.round(jobTotalCents * rate);
 }
 
 /**
- * How much of the outstanding fee THIS card payment can carry.
+ * How much of the outstanding fee this card payment can carry: as much as
+ * possible, as early as possible, so normally the deposit carries the whole fee
+ * and the crew have materials money on day one.
  *
- * Take as much as possible, as early as possible. On a normal job that means
- * the whole fee comes out of the deposit and the final payment is entirely the
- * contractor's, which is what the office asked for and what leaves the crew
- * their materials money on day one.
- *
- * The cap is Stripe's: an application fee must be strictly less than the
- * payment carrying it. So a customer who pays $9,000 cash and $1,000 by card
- * leaves part of the fee uncollected rather than failing the payment - the
- * remainder stays owed and rides along to the contractor's next card job.
+ * Stripe requires an application fee strictly below the payment. Any remainder
+ * stays owed (e.g. $9,000 cash + $1,000 card) instead of failing the payment.
  */
 export function applicationFeeFor(paymentCents: number, feeOwedCents: number): number {
   if (feeOwedCents <= 0 || paymentCents <= 1) return 0;
@@ -129,7 +103,7 @@ export type Ledger = {
   totalCents: number;
   /** Collected from the customer, net of refunds. */
   paidCents: number;
-  /** Still to collect from the customer. Never negative - an overpayment reads as zero due. */
+  /** Still to collect. Never negative; an overpayment reads as zero due. */
   dueCents: number;
   /** On a checkout the customer has opened but not finished. */
   pendingCents: number;
@@ -137,28 +111,24 @@ export type Ledger = {
   feeTotalCents: number;
   /** What Stripe has already moved to the office. */
   feeCollectedCents: number;
-  /** Of the fee, how much is not yet collected. The ceiling on a card payment's cut. */
+  /** Fee not yet collected; the ceiling on a card payment's cut. */
   feeOwedCents: number;
   /**
-   * What the contractor actually owes the office TODAY.
-   *
-   * The whole fee on the job total, less what has already reached the office.
-   * Not tied to how much the customer has paid: a $10,000 job at 15% owes the
-   * office $1,500 whether the customer has paid $500 or all of it.
+   * What the contractor owes the office TODAY: the whole fee less what reached
+   * the office, regardless of how much the customer has paid ($10,000 at 15%
+   * owes $1,500 whether $500 or all of it is in).
    */
   feeDueNowCents: number;
-  /** The office's fee on this job: its rate on the whole job total. */
+  /** The office's fee: its rate on the whole job total, less waivers. */
   feeEarnedCents: number;
   /** Of the owed fee, how much is already promised to a checkout in flight. */
   feeReservedCents: number;
   /** What a NEW payment may carry. Owed, less anything already reserved. */
   feeChargeableCents: number;
   /**
-   * Of the fee, how much the contractor has already sent the office by hand
-   * against THIS job (fee_settlements with this job's quote_id). Always 0 from
-   * readLedger itself - settlements are applied on top by applySettlements, so
-   * the Money page, which subtracts settlements per contractor, never counts
-   * one twice.
+   * Fee the contractor has paid the office by hand against THIS job. Always 0
+   * from readLedger; applySettlements adds it, so the Money page (which nets
+   * settlements per contractor) never counts one twice.
    */
   feeSettledCents: number;
   /** Taken off the fee by the owner (fee_waived_cents). Already out of feeTotalCents. */
@@ -170,14 +140,11 @@ export type Ledger = {
 };
 
 /**
- * @param feeTotal  The cents figure stamped on the job when its rate was frozen.
- * @param feeRate   The frozen rate. When present the fee is RE-DERIVED from it
- *                  against the current job total, exactly as ensureFeeOnJob
- *                  does before charging. Without this the two disagree the
- *                  moment an owner edits a priced job: the next payment charges
- *                  a percentage of the new total while every screen keeps
- *                  reporting a percentage of the old one, and the difference
- *                  shows up as a contractor balance nobody can account for.
+ * @param feeTotal  Cents stamped on the job when its rate was frozen.
+ * @param feeRate   The frozen rate. When present the fee is RE-DERIVED against
+ *                  the current total, exactly as ensureFeeOnJob does before
+ *                  charging; otherwise editing a priced job makes screens and
+ *                  charges disagree.
  */
 export function readLedger(
   jobTotalCents: number,
@@ -195,35 +162,20 @@ export function readLedger(
     .filter((r) => r.method !== "card")
     .reduce((sum, r) => sum + r.amount_cents - r.refunded_cents, 0);
 
-  // The rate is the promise; the total is a fact. So the fee is the rate
-  // applied to what the job is worth NOW, which is the same sum ensureFeeOnJob
-  // works out before it charges anything.
-  //
-  // Zero until a rate is frozen, and that is not a gap: a rate is frozen the
-  // first time money is about to move, and the office earns nothing on a job
-  // nobody has paid for. A number here before then would be a forecast, and
-  // this file is for facts.
-  //
-  // Less whatever the owner waived on this job - part of the total that isn't
-  // the office's to take a cut of, like materials passed through at cost.
+  // The rate is the promise; the total is a fact: fee = rate x current total,
+  // as ensureFeeOnJob computes. Zero until a rate is frozen (when money is first
+  // about to move); before that it would be a forecast. Less any owner waiver
+  // (e.g. materials passed through at cost).
   const fullFee = feeRate != null ? feeTotalCents(jobTotalCents, Number(feeRate)) : (feeTotal ?? 0);
   const waived = Math.min(fullFee, Math.max(0, Math.round(Number(feeWaivedCents) || 0)));
   const total = fullFee - waived;
   const feeOwedCents = Math.max(0, total - feeCollectedCents);
-  // The whole fee, on the whole job total as it stands after any change
-  // orders - not a share of what the customer has paid so far. Each job reads
-  // straight: its fee, less what has already reached the office.
+  // Whole fee on the current total (after change orders), not a share of what's paid.
   const feeEarnedCents = total;
 
-  // A checkout that has been opened and not yet paid is already carrying part
-  // of the fee. Subtracting it here is what stops a customer who opens the
-  // payment page on their phone and again on a laptop paying the office's cut
-  // twice - the second checkout carries whatever the first one left, which is
-  // usually nothing.
-  //
-  // Under-collecting is the safe direction to fail in: an uncollected fee stays
-  // owed on the job and shows up on the cash board. Over-collecting takes money
-  // out of a contractor's balance that they never owed.
+  // An open, unpaid checkout already carries part of the fee; subtracting it
+  // stops two checkouts (phone and laptop) taking the cut twice. Under-collecting
+  // is the safe failure: the remainder stays owed on the cash board.
   const feeReservedCents = pending.reduce((sum, r) => sum + r.fee_cents, 0);
 
   return {
@@ -234,9 +186,8 @@ export function readLedger(
     feeTotalCents: total,
     feeCollectedCents,
     feeOwedCents,
-    // A card payment takes as much of the fee as it can carry, so on a card
-    // deposit this lands at zero straight away. It only stays positive when
-    // money arrived some way that couldn't pay the office on the way past.
+    // Card payments carry the fee, so this is zero after a card deposit and only
+    // positive when money arrived off Stripe.
     feeDueNowCents: Math.max(0, feeEarnedCents - feeCollectedCents),
     feeEarnedCents,
     feeReservedCents,
@@ -249,21 +200,11 @@ export function readLedger(
 }
 
 /**
- * Net a job's ledger of the fee the contractor has already handed the office.
- *
- * A contractor on a cash job owes the office its cut, and pays it by Zelle or
- * Venmo; the owner writes that down as a settlement. The Money page always knew
- * - it subtracts settlements from each contractor's balance - but the job pages
- * read the ledger alone, so a crew who had paid up were still told "send this
- * over" on the job itself, and the office's view of that job still said owed.
- *
- * Applied only to settlements recorded against this job, and only for the job
- * screens and checkout (jobLedger). The Money page keeps calling readLedger
- * directly and subtracting per contractor, so nothing is counted twice.
- *
- * It also has to reach feeChargeableCents, and that is the part with money on
- * it: without this a card payment arriving after a settled cash fee would take
- * the office's cut a second time.
+ * Net a job's ledger of fee the contractor already paid the office by hand
+ * (a settlement, e.g. by Zelle on a cash job), so job pages stop saying "send
+ * this over". Only settlements recorded against this job, and only for job
+ * screens and checkout (jobLedger); the Money page nets per contractor itself.
+ * Must reach feeChargeableCents, or a later card payment takes the cut again.
  */
 export function applySettlements(ledger: Ledger, settledCents: number): Ledger {
   const settled = Math.max(0, Math.round(settledCents));
@@ -279,30 +220,22 @@ export function applySettlements(ledger: Ledger, settledCents: number): Ledger {
 }
 
 /**
- * A second deposit still waiting to be paid, in cents.
- *
- * A change that adds materials can ask for money up front. The job then carries
- * a target - "they should have paid this much in total before we start" - and
- * this is how far short of it they are. Never below zero, so it reads zero the
- * moment their check is recorded; never above the balance, so a later change
- * that lowers the price can't leave them asked for more than they owe.
+ * Second deposit still unpaid, in cents. A change can set a target for total
+ * paid before work starts; this is the shortfall, clamped to [0, balance].
  */
 export function depositDueNowCents(targetCents: number | null | undefined, paidCents: number, dueCents: number): number {
   if (targetCents == null) return 0;
   return Math.max(0, Math.min(Number(targetCents) - paidCents, dueCents));
 }
 
-/** Half the job, rounded to the cent, for the first payment we suggest. */
+/** Suggested first payment: `percent` of the job (default half), in cents. */
 export function depositCents(jobTotalCents: number, percent = DEFAULT_DEPOSIT_PERCENT): number {
   return Math.round((jobTotalCents * percent) / 100);
 }
 
 /**
- * What the contractor keeps from a job once the office has its cut.
- *
- * On a live job that is the whole job less the fee. On one that left the
- * pipeline after taking money, the rest of the total is never coming, so it is
- * only what was actually collected, less the fee.
+ * What the contractor keeps after the office's cut. On a job that left the
+ * pipeline after taking money, only what was collected counts.
  */
 export function crewIncomeCents(ledger: Ledger, onBooks: boolean): number {
   const base = onBooks ? ledger.totalCents : ledger.paidCents;

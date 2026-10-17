@@ -1,30 +1,12 @@
-// Who is going, at a glance.
+// Who is going, at a glance. Calendar colour already means WHAT (green work
+// day, amber visit, dashed blue unagreed slot), so people get an initials badge
+// tinted with their own colour. Initials are the identity, colour the
+// accelerator: colours need a legend and can shift, so never show one without
+// initials. Pure; safe for client components.
 //
-// The calendar already spends its colour on WHAT an appointment is - green for
-// a booked work day, amber for a quote visit, dashed blue for a slot nobody has
-// agreed to. That channel is taken, so "who is going" gets its own: a small
-// round badge with the person's initials, tinted with a colour that is theirs.
-//
-// The initials are the identity and the colour is the accelerator. That order
-// matters: a colour alone is unreadable until you have learnt the legend, and a
-// roster change can move one, whereas MR has meant Marcus Reed since the day he
-// was added. So nothing here ever shows a colour without the initials next to
-// it.
-//
-// Safe to import from client components: pure functions, no env, no secrets.
-
-// Hues that hold up on the dark CRM and against the chip fills they sit on.
-//
-// Deliberately no green and no amber: those are what the calendar already uses
-// for "work day" and "quote visit", and a green badge on a green chip reads as
-// one more thing about the job rather than a person.
-//
-// ORDER IS THE POINT. Colours are handed out from the top of this list, so the
-// first few have to be the ones nobody could confuse - roughly 90 degrees apart
-// on the wheel. A crew of four is the realistic case here and they get sky,
-// rose, violet, orange, which are as far apart as this palette can put them.
-// Everything after that is filling in the gaps, and by then the initials are
-// doing most of the work anyway.
+// No green or amber (taken by the calendar). ORDER MATTERS: colours are handed
+// out from the top, so the first four (a realistic crew) are roughly 90 degrees
+// apart.
 import { firstNameOf } from "./constants";
 
 export const CREW_COLORS = [
@@ -40,27 +22,15 @@ export const CREW_COLORS = [
   "#a855f7", // purple
 ] as const;
 
-// Nobody assigned. Grey on purpose: it is the absence of a person, and the one
-// state on this calendar that is a question rather than an answer.
+// Nobody assigned: grey, the absence of a person.
 export const UNASSIGNED_COLOR = "#6b7280";
 
 /**
- * A colour per staff id, taken from the top of the palette.
- *
- * Ordered by id, so the mapping is the same on every device and every reload
- * with nothing stored. Ids rather than names because an id never changes and a
- * name does: a contractor fixing the spelling of their own name should not
- * repaint somebody else's week.
- *
- * The tradeoff, stated plainly: hiring somebody whose id sorts early shifts the
- * colours of people after them. That is the price of guaranteeing the crew you
- * have today gets the four most distinguishable hues rather than four hashes
- * that might land next to each other. Nobody is identified by colour alone -
- * the initials beside it are what survive a reshuffle - and a new contractor is
- * a rare day, whereas telling two people apart is every day.
- *
- * More people than colours and it wraps and starts sharing. The initials are
- * what stop that being ambiguous.
+ * A colour per staff id, from the top of the palette. Sorted by id so it's
+ * stable across devices with nothing stored; ids because names get edited.
+ * Tradeoff: a new hire whose id sorts early shifts later colours, the price of
+ * giving today's crew the most distinct hues. Wraps past the palette; the
+ * initials disambiguate.
  */
 export function crewColors(ids: string[]): Map<string, string> {
   const out = new Map<string, string>();
@@ -71,9 +41,8 @@ export function crewColors(ids: string[]): Map<string, string> {
 /**
  * "Marcus Reed" -> "MR", "Ana" -> "AN", "" -> "?".
  *
- * Two letters, because one is not enough to tell a Marcus from a Mike on a crew
- * where everybody's name starts the same. A single-word name gives up its first
- * two letters rather than showing one lonely capital.
+ * Two letters, since one can't tell a Marcus from a Mike; a single-word name
+ * gives its first two letters.
  */
 export function initials(name?: string | null): string {
   const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);

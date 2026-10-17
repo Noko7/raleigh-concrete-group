@@ -1,28 +1,21 @@
-// Who may change what on a job, once money and the customer's say-so are
-// involved.
+// Who may change what on a job once money and the customer's say-so are involved.
 //
-// The office earns a percentage of the job total, so the total is the office's
-// income, and a contractor lowering the price of a job the customer already
-// agreed to cuts that income without anybody noticing. The owner's rule:
+// The office earns a percentage of the total, so a contractor lowering an
+// agreed price cuts the office's income unnoticed. The rule:
 //
-//   * Before the customer answers, the crew edit the quote exactly as before.
-//   * Once they have answered, the price moves only through a change order the
-//     customer approves on their own link. Applying a change "already agreed"
-//     on the phone, with no text to the customer, is the owner's alone.
+//   * Before the customer answers, the crew edit the quote freely.
+//   * After, the price moves only through a change order the customer approves
+//     on their link. Applying one "already agreed" (no text) is owner-only.
 //   * Paid is the ledger's word (or the owner's), never the crew's.
 //   * The owner can override all of it.
 //
-// The database enforces the same rule on the row itself
-// (supabase/stage1-price-lockdown.sql), because a contractor can talk to it
-// without the app. This file is the app's copy: it lets the server refuse with
-// a sentence a person can act on, instead of a 403, and it covers the one write
-// a contractor makes that the database cannot see as theirs - marking a job
-// Lost, which the server does with the service role (updateQuoteResult).
+// The database enforces the same rule (supabase/stage1-price-lockdown.sql),
+// since contractors can reach it directly. This copy gives a readable refusal
+// instead of a 403, and covers the service-role Lost write (updateQuoteResult).
 // Change one, change the other.
 //
-// Pure on purpose - no network, no database, no server-only imports - so the
-// rules are unit tested (permissions.test.ts) and safe to import anywhere.
-// (The .ts extensions are for that runner; both modules import nothing.)
+// Pure (no network or server-only imports) so it's unit tested and importable
+// anywhere. The .ts extensions are for the test runner.
 import { firstNameOf } from "./constants.ts";
 import { toCents } from "./fees.ts";
 
@@ -61,8 +54,7 @@ export const OFFICE_ONLY_COLUMNS = [
   // Whether the job counts at all.
   "is_test",
   "archived_at",
-  // Money the ledger records: paid in full, and the deposit an approved change
-  // asked for.
+  // Ledger money: paid in full, and the deposit an approved change asked for.
   "paid_at",
   "deposit_target_cents",
 ] as const;
@@ -133,9 +125,7 @@ export function jobPatchRefusal(
   if (role === "owner") return null;
   const first = customerFirstName(job.name);
 
-  // Paid, and moving off it. Every other status the crew set today stays
-  // theirs: booking, releasing a day, marking it done, a phone approval,
-  // sending a quote, Lost.
+  // Paid, or moving off it. Every other status change stays the crew's.
   if (changes(job, patch, "status") && (patch.status === "paid" || job.status === "paid")) {
     return patch.status === "paid"
       ? "Only the office can mark a job paid. It moves to Paid by itself once the payments recorded on it add up to the total."
@@ -179,8 +169,8 @@ export function jobPatchRefusal(
       return "There's already a change waiting on the customer. Withdraw it first.";
     }
   } else if (patch.change_requested_at != null) {
-    // Opening one. The crew can reach the customer's link, so whatever they
-    // open they can also approve: theirs may only raise the total.
+    // Opening one. The crew can reach the customer's link and so approve what
+    // they open: theirs may only raise the total.
     if (actorId !== undefined && (patch.change_requested_by ?? null) !== actorId) {
       return "A change order can only be sent in your own name.";
     }
@@ -195,11 +185,9 @@ export function jobPatchRefusal(
 /**
  * Why this person may not send this change order, or null if they may.
  *
- * `agreed` is the "already agreed - don't text them" option: the new total goes
- * straight onto the job with nobody asked. That is the price moving without the
- * customer's say-so on record, so it is the owner's alone. Anybody may send a
- * change for the customer to approve, but only the owner one that lowers the
- * total (`toTotal` below `fromTotal`).
+ * `agreed` ("already agreed, don't text them") puts the total straight on the
+ * job with no customer approval on record, so it's owner-only. Anyone may send
+ * one for approval, but only the owner one that lowers the total.
  */
 export function changeOrderRefusal(
   role: string,
@@ -220,12 +208,10 @@ export function changeOrderRefusal(
 }
 
 /**
- * The values jobPatchRefusal decided on, as column -> value, for a write that
- * cannot rely on the database guard (the service role skips it). Filtering the
- * write on these means a row that moved in between - the customer answering,
- * say - matches nothing instead of being written over. change_lines is left
- * out because jsonb is not matched by equality in a filter; change_requested_at
- * already pins a pending change.
+ * The values jobPatchRefusal decided on, as column -> value, for writes that
+ * skip the DB guard (service role). Filtering on them makes a row that changed
+ * in between (e.g. the customer answered) match nothing. change_lines is
+ * excluded (jsonb can't be equality-filtered); change_requested_at pins it.
  */
 export function refusalBasis(job: JobForPermissions, patch: JobPatch): Record<string, unknown> {
   const columns = new Set<string>(["status", "customer_response", "change_requested_at"]);
