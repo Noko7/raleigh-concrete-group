@@ -43,8 +43,7 @@ export async function moveQuote(id: string, status: string): Promise<MoveResult>
     await notifyComplete({ id, name: current.name, phone: current.phone }).catch(() => {});
   }
 
-  // Only the stages worth interrupting someone for. Dragging a card between the
-  // early columns is bookkeeping, not news - the pipeline already shows it.
+  // Only stages worth interrupting someone for; early-column moves are bookkeeping.
   const NOTABLE: Status[] = ["approved", "paid", "lost"];
   if (NOTABLE.includes(status as Status)) {
     await alertOwner(
@@ -91,17 +90,16 @@ export async function assignQuote(id: string, contractorId: string): Promise<Mov
       },
       contractor?.full_name,
     ).catch(() => {});
-    // No owner text: whoever assigned it is the one who'd be notified.
-    // If this job/visit has a date, invite the new contractor on Google Calendar.
+    // No owner text: the assigner is the owner. Invite the new contractor on
+    // Google Calendar if dated.
     await syncQuoteToCalendar(id);
   }
   revalidatePath("/crm");
   return { ok: true };
 }
 
-// Owner-only "delete" from the pipeline. This never removes the row or any of
-// its quote_events - it just stamps archived_at, which listQuotes filters out
-// by default. The lead can always be brought back from /crm/archived.
+// Owner-only "delete": stamps archived_at (filtered out by listQuotes); the row
+// and its events stay, restorable from /crm/archived.
 export async function deleteQuote(id: string): Promise<MoveResult> {
   const session = await getSession();
   if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
@@ -137,8 +135,7 @@ export async function restoreQuote(id: string): Promise<MoveResult> {
   return { ok: true };
 }
 
-// Plain <form action={...}> wrapper for the Archived page (server-rendered, no
-// client JS needed there).
+// Plain <form action> wrapper for the server-rendered Archived page.
 export async function restoreQuoteForm(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (id) await restoreQuote(id);

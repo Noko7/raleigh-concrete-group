@@ -9,20 +9,17 @@ import { firstNameOf, DEFAULT_VISIT_SLOTS, to12Hour, to24Hour } from "@/lib/crm/
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { deleteEvent, moveEvent, type CalActionState } from "./actions";
 
-// Two things somebody has to show up for, and one nobody has agreed to yet:
+// Two things somebody shows up for, and one nobody has agreed to:
 //
 //   job        a booked work day
 //   inperson   a quote visit with a drive attached
 //   online     a slot an online customer offered in case photos aren't enough
 //
-// The third is not an appointment and is never drawn like one - it is faded,
-// labelled "Not booked", and can't be dragged. It is here because it is the
-// only date on this page that still needs answering, and leaving it off meant
-// the office found it by opening leads one at a time.
+// The third is never drawn as an appointment (faded, "Not booked", not
+// draggable). It's shown because it's the only date here still needing an answer.
 export type CalKind = "job" | "inperson" | "online";
 
-// Nobody has agreed to this one. Drives the faded styling, the "Not booked"
-// label, and the absence of the drag/reschedule/cancel affordances.
+// Nobody agreed to it: faded styling, "Not booked", no drag/reschedule/cancel.
 const isRequested = (k: CalKind) => k === "online";
 
 export type CalEvent = {
@@ -35,23 +32,18 @@ export type CalEvent = {
   service: string | null;
   address: string | null;
   status: string;
-  // Whose appointment this is. Null is a real state and a loud one: a dated job
-  // nobody owns is the thing on this page most likely to go wrong.
+  // Null is a loud state: a dated job nobody owns is the likeliest thing to go wrong.
   assignedTo: string | null;
   assignedName: string | null;
 };
 
-// The roster, so a colour can be looked up and the legend can list people who
-// have nothing booked this month.
+// The roster, so the legend lists people with nothing booked this month too.
 export type CrewMember = { id: string; name: string };
 
 /**
- * Whose job this is, in the space of a full stop.
- *
- * Initials plus a colour, never a colour alone: the calendar's own colours
- * already mean "work day" and "quote visit", so a bare dot here would be a
- * fourth thing to decode. The ring is what keeps it legible sitting on top of
- * a green or amber chip.
+ * Whose job this is: initials plus a colour, never colour alone, since the
+ * calendar's colours already mean work day vs visit. The ring keeps it legible
+ * on a green or amber chip.
  */
 function CrewBadge({
   name,
@@ -79,9 +71,8 @@ function CrewBadge({
 const kindLabel = (t: Dict, k: CalKind) =>
   k === "job" ? t.calendar.kindJob : k === "online" ? t.calendar.kindOnline : t.calendar.kindInPerson;
 
-// Month names and weekday initials come from the browser rather than a hand
-// written list, so Spanish gets "enero" and "L M X J V S D" without a second
-// table to keep in sync.
+// Month and weekday names via Intl. Currently always en-US: the locale argument
+// is ignored.
 const intlLocale = (_l: Locale) => "en-US";
 
 function monthNames(locale: Locale): string[] {
@@ -92,14 +83,12 @@ function monthNames(locale: Locale): string[] {
   });
 }
 
-// [full, initial] per weekday, starting Sunday. CSS picks which one shows: a
-// single letter is all that fits over a 45px column.
+// [full, initial] per weekday from Sunday; CSS shows the initial in narrow columns.
 function weekdayNames(locale: Locale): [string, string][] {
   const long = new Intl.DateTimeFormat(intlLocale(locale), { weekday: "short", timeZone: "UTC" });
   const narrow = new Intl.DateTimeFormat(intlLocale(locale), { weekday: "narrow", timeZone: "UTC" });
   return Array.from({ length: 7 }, (_, i) => {
-    // 2024-09-01 was a Sunday. Read in UTC, so the header can never come back
-    // shifted by one against a grid that starts its rows on Sunday.
+    // 2024-09-01 was a Sunday. Read in UTC so the header can't shift by a day.
     const d = new Date(Date.UTC(2024, 8, 1 + i));
     const full = long.format(d);
     return [full.charAt(0).toUpperCase() + full.slice(1), narrow.format(d).toUpperCase()];
@@ -110,17 +99,10 @@ function weekdayNames(locale: Locale): [string, string][] {
 const MAX_CHIPS = 3;
 const VIEW_KEY = "rcg-cal-view";
 
-// UTC getters throughout this file, deliberately, and it has nothing to do with
-// UTC being a timezone anybody here lives in.
-//
-// A month grid is pure calendar arithmetic: which numbers go in which columns is
-// the same question in every timezone on earth. Doing that arithmetic with local
-// Date parts means asking the browser's clock a question that is not about the
-// browser's clock, and it drags in every place local midnight can shift, go
-// missing, or land on a different date than the one the CRM is working in - the
-// grid was being laid out in the viewer's zone while "today" came from Raleigh.
-// Pinning the arithmetic to UTC removes the clock from it entirely: the same
-// dates land in the same columns for everyone, forever.
+// UTC getters throughout, deliberately: a month grid is pure calendar
+// arithmetic, the same in every timezone. Local Date parts drag in DST shifts
+// and the viewer's zone (while "today" comes from Raleigh); UTC removes the
+// clock entirely.
 function ymd(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
@@ -141,8 +123,8 @@ function daysBetween(from: string, to: string): number {
   return Math.round((b - a) / 86_400_000);
 }
 
-// "Today", "Tomorrow", "Yesterday", then the date. On a job site the only
-// questions are "is this now" and "is this next", so those get words.
+// "Today", "Tomorrow", "Yesterday", then the date: the questions on site are
+// "is this now" and "is this next".
 function dayHeading(date: string, todayStr: string, t: Dict, locale: Locale): { main: string; sub: string } {
   const diff = daysBetween(todayStr, date);
   const d = new Date(`${date}T00:00:00Z`);
@@ -163,8 +145,7 @@ function dayHeading(date: string, todayStr: string, t: Dict, locale: Locale): { 
   return { main: full, sub: "" };
 }
 
-// A job's date lives in a different column from a visit's, so the server needs
-// to know which one it's moving.
+// Jobs and visits store their dates in different columns, so the server needs to know which.
 const serverKind = (k: CalKind) => (k === "job" ? "job" : "visit");
 
 // Sort key: timed appointments in clock order, untimed last.
@@ -197,35 +178,29 @@ export function CalendarView({
   const t = dict(locale);
   const MONTHS = useMemo(() => monthNames(locale), [locale]);
   const DOW = useMemo(() => weekdayNames(locale), [locale]);
-  // Raleigh's today, not the viewer's. A phone that has wandered into another
-  // zone - or is simply set wrong - would otherwise ring the wrong cell and
-  // file jobs under the wrong day.
+  // Raleigh's today, not the viewer's, so a phone in another zone (or set
+  // wrong) doesn't ring the wrong cell.
   const todayStr = todayYmd();
   const [todayY, todayM] = todayStr.split("-").map(Number);
 
-  // List is the default: this is used in the field far more than at a desk, and
-  // a 7-column grid on a phone gives you 45px cells nobody can read or tap. A
-  // wide screen flips to Month on first load, then whatever you last chose.
+  // List by default: mostly used on phones, where month cells are 45px. Wide
+  // screens flip to Month on first load, then whatever was last chosen.
   const [view, setView] = useState<"list" | "month">("list");
   const [cursor, setCursor] = useState({ y: todayY, m: todayM - 1 });
   const [show, setShow] = useState<Record<CalKind, boolean>>({ job: true, inperson: true, online: true });
-  // Null means everybody. Clicking a name in the legend narrows the whole
-  // calendar to one person's week, which is the question straight after "whose
-  // is that?" - and clicking them again puts everyone back.
+  // Null means everybody. Clicking a legend name narrows to that person;
+  // clicking again resets.
   const [who, setWho] = useState<string | null>(null);
 
-  // One colour per person, derived from their staff id, so it is the same on
-  // every device without storing anything. Anyone on the calendar but off the
-  // roster (a deleted account) still gets a slot rather than no colour at all.
+  // Colour per staff id, stable across devices with nothing stored. People on
+  // the calendar but off the roster (deleted accounts) still get one.
   const colors = useMemo(
     () => crewColors([...crew.map((c) => c.id), ...events.map((e) => e.assignedTo ?? "").filter(Boolean)]),
     [crew, events],
   );
   const colorOf = (id: string | null) => (id ? (colors.get(id) ?? UNASSIGNED_COLOR) : UNASSIGNED_COLOR);
 
-  // The legend: the roster, plus an Unassigned entry only when something on
-  // this calendar actually has nobody on it. A permanent "Unassigned" filter
-  // for a state you never reach is a button that always comes back empty.
+  // Roster, plus Unassigned only when something actually has nobody on it.
   const legend = useMemo(() => {
     const rows = crew.map((c) => ({ id: c.id, name: c.name, color: colorOf(c.id) }));
     if (events.some((e) => !e.assignedTo)) {
@@ -256,7 +231,7 @@ export function CalendarView({
     try {
       window.localStorage.setItem(VIEW_KEY, v);
     } catch {
-      // Private mode: the choice just doesn't persist, which is fine.
+      // Private mode: the choice doesn't persist, which is fine.
     }
   }
 
@@ -308,11 +283,8 @@ export function CalendarView({
     return map;
   }, [visible]);
 
-  // Everything shows, nothing is hidden. What's coming leads, because that's
-  // what you open this for, and finished work follows under its own heading,
-  // newest first. An earlier version cut off anything before today, which meant
-  // a customer whose only visit had already happened looked like no customer
-  // at all.
+  // Nothing is hidden: upcoming first, then past work newest first, so a
+  // customer whose only visit has passed still appears.
   const upcoming = useMemo(
     () =>
       [...byDate.keys()]
@@ -332,9 +304,8 @@ export function CalendarView({
     [byDate, todayStr],
   );
 
-  // Six weeks from the Sunday on or before the 1st. Built by adding whole days
-  // to a UTC instant, which is the one kind of date arithmetic that cannot be
-  // knocked sideways by a clock going forward, back, or missing an hour.
+  // Six weeks from the Sunday on or before the 1st, built by adding whole days
+  // to a UTC instant, so DST can't knock it sideways.
   const cells = useMemo(() => {
     const first = Date.UTC(cursor.y, cursor.m, 1);
     const start = first - new Date(first).getUTCDay() * 86_400_000;
@@ -427,12 +398,9 @@ export function CalendarView({
         ))}
       </div>
 
-      {/* Who is on the calendar. It is a legend first - a colour means nothing
-          until it has a name beside it - and a filter second, because "just
-          show me Ana's week" is the question straight after "whose is that?".
-          Hidden with one contractor: a legend of one explains nothing, and a
-          filter that can only ever say "everyone" or "the only person" is a
-          control that does nothing twice. */}
+      {/* A legend first (a colour means nothing without a name), a filter second
+          ("just show me Ana's week"). Hidden with one contractor, where it
+          explains and filters nothing. */}
       {legend.length > 1 && (
         <div className="cal-crew" role="group" aria-label={t.calendar.crewLegend}>
           <button
@@ -523,20 +491,16 @@ export function CalendarView({
                 >
                   <span className="cal-daynum">{d.getUTCDate()}</span>
 
-                  {/* Wide screens get readable chips. Narrow screens get dots
-                      and open the whole day in a sheet, because a name never
-                      fits in a 45px cell and a half-rendered one is worse than
-                      an honest dot. */}
+                  {/* Wide screens get chips; narrow ones get dots and open the day
+                      in a sheet, since names never fit a 45px cell. */}
                   <div className="cal-events">
                     {chips.map((e) => (
                       <button
                         key={e.id + e.kind}
                         type="button"
                         className={`cal-chip cal-chip-${e.kind}${dragId === e.id ? " cal-chip-dragging" : ""}`}
-                        // A requested slot has nothing to move: it is the
-                        // customer's suggestion, not a date we hold. Dragging
-                        // it would text them that a visit they were never
-                        // promised had been rescheduled.
+                        // A requested slot isn't a date we hold; dragging it would
+                        // text them about a visit they were never promised.
                         draggable={!busy && !isRequested(e.kind)}
                         onDragStart={(ev) => {
                           ev.dataTransfer.setData("text/plain", e.id);
@@ -550,9 +514,7 @@ export function CalendarView({
                         }${isRequested(e.kind) ? ` · ${t.calendar.notBooked}` : ""}`}
                       >
                         {e.time && <span className="cal-chip-time">{e.time}</span>}
-                        {/* The badge rides on the name line rather than its own:
-                            a chip is two lines tall and a third would push the
-                            day cell past what a month grid has room for. */}
+                        {/* Badge on the name line: a third line won't fit the month cell. */}
                         <span className="cal-chip-title">
                           <CrewBadge name={e.assignedName} color={colorOf(e.assignedTo)} />
                           {e.title}
@@ -614,8 +576,7 @@ export function CalendarView({
                         {kindLabel(t, e.kind)}
                         {isRequested(e.kind) && <em className="cal-tentative">{t.calendar.notBooked}</em>}
                       </span>
-                      {/* Spelled out here, not just badged. A list row has the width for
-                          a name, and reading one beats decoding two letters. */}
+                      {/* Spelled out: a list row has room for a name. */}
                       <span className="cal-row-crew">
                         <CrewBadge name={e.assignedName} color={colorOf(e.assignedTo)} />
                         <span className={e.assignedName ? "" : "cal-row-none"}>{e.assignedName ?? t.calendar.unassigned}</span>
@@ -648,8 +609,8 @@ export function CalendarView({
   );
 }
 
-/* One day in the schedule list. Rows are full-width tap targets with Call and
-   Map on the row itself, since those are what actually get used from a truck. */
+/* One day in the schedule list. Full-width rows with Call and Map, which are
+   what get used from a truck. */
 function DayGroup({
   group,
   todayStr,
@@ -685,8 +646,7 @@ function DayGroup({
                 {kindLabel(t, e.kind)}
                 {isRequested(e.kind) && <em className="cal-tentative">{t.calendar.notBooked}</em>}
               </span>
-              {/* Spelled out here, not just badged. A list row has the width for
-                  a name, and reading one beats decoding two letters. */}
+              {/* Spelled out: a list row has room for a name. */}
               <span className="cal-row-crew">
                 <CrewBadge name={e.assignedName} color={colorOf(e.assignedTo)} />
                 <span className={e.assignedName ? "" : "cal-row-none"}>{e.assignedName ?? t.calendar.unassigned}</span>
@@ -710,9 +670,8 @@ function DayGroup({
   );
 }
 
-/* ── The detail panel: what this appointment is, and the three things you can
-      do to it. States what the customer will be told before anything
-      irreversible happens. ──────────────────────────────────────────────── */
+/* ── The detail panel: what this appointment is and what you can do to it,
+      stating what the customer will be told before anything irreversible. ── */
 function EventPanel({
   event,
   base,
@@ -742,12 +701,10 @@ function EventPanel({
 
   const [mode, setMode] = useState<"view" | "move" | "delete">("view");
   const [date, setDate] = useState(event.date);
-  // Only what the field opens on when the appointment has no time yet. The
-  // office isn't held to either list - see the picker below.
+  // Initial value only when there's no time yet; the picker below takes any time.
   const [time, setTime] = useState(event.time ?? (isJob ? "9:00 AM" : DEFAULT_VISIT_SLOTS[0]));
   const [notify, setNotify] = useState(true);
-  // Separate from the cancel box above: unticking one is a decision about that
-  // action, and shouldn't be waiting pre-unticked on the other.
+  // Separate from the cancel checkbox: unticking one shouldn't preset the other.
   const [notifyMove, setNotifyMove] = useState(true);
 
   return (
@@ -809,11 +766,9 @@ function EventPanel({
               )}
             </dl>
 
-            {/* Reschedule and Cancel are for dates we hold. A requested slot
-                is the customer's suggestion, and both buttons would text them
-                about an appointment nobody ever made - so the only way on is
-                Open job, where confirming it is a real decision with a real
-                text attached. */}
+            {/* Reschedule and Cancel are for dates we hold; on a requested slot
+                both would text about an appointment nobody made. Confirming it
+                happens from Open job. */}
             {isRequested(event.kind) && (
               <p className="cal-panel-note">{fill(t.calendar.requestedNote, { name: event.title })}</p>
             )}
@@ -862,11 +817,8 @@ function EventPanel({
                 required
               />
             </label>
-            {/* Any time of day, not a fixed list. The five slots on the public
-                form are what a customer may request; rescheduling from here is
-                the office moving a real appointment around a real day, and
-                both moveEvent paths already validate the time by shape
-                (TIME_RE) rather than against any list. */}
+            {/* Any time of day: the public form's slots limit customers, not the
+                office. Both moveEvent paths validate the time's shape (TIME_RE). */}
             <label className="crm-field">
               <span>{t.calendar.time}</span>
               <input
@@ -875,8 +827,7 @@ function EventPanel({
                 value={to24Hour(time, isJob ? "09:00" : "08:00")}
                 onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
               />
-              {/* moveEvent reads FormData, not component state, so the picked
-                  time still needs the field name the old select carried. */}
+              {/* moveEvent reads FormData, so the time needs a named field. */}
               <input type="hidden" name="time" value={time} />
             </label>
             <p className="crm-muted crm-sm">{isJob ? t.calendar.moveNoteJob : t.calendar.moveNoteVisit}</p>

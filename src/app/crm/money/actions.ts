@@ -11,16 +11,10 @@ import { getQuote, getStaffById } from "@/lib/crm/queries";
 export type SettleState = { ok: boolean; error?: string; message?: string };
 
 /**
- * Record a contractor sending the office what they owe.
- *
- * Owner only, and the reason is not that contractors can't be trusted with a
- * form. It is that this is the OTHER side of a debt they already control the
- * first side of: they record the cash that creates the fee. Letting the same
- * person also record it as cleared would make the balance on this page a number
- * that can be written to zero by the person who owes it.
- *
- * Nothing moves through Stripe here. The contractor Zelled or Venmoed the
- * money; this is the office writing down that it arrived.
+ * Record a contractor paying the office what they owe (by Zelle/Venmo; nothing
+ * goes through Stripe). Owner only: contractors record the cash that creates
+ * the fee, so letting them also clear it would let the debtor zero their own
+ * balance.
  */
 export async function recordFeeSettlement(_prev: SettleState, formData: FormData): Promise<SettleState> {
   const session = await getSession();
@@ -42,8 +36,7 @@ export async function recordFeeSettlement(_prev: SettleState, formData: FormData
   const method = String(formData.get("method") ?? "");
   if (!isRecordedMethod(method)) return { ok: false, error: "Pick how they sent it." };
 
-  // The job it was for, when one was picked. Must be one of theirs: a fee sent
-  // by Mike can't be booked against Rafa's job.
+  // Optional job; must be one of this contractor's.
   const quoteId = String(formData.get("quote_id") ?? "").trim() || null;
   let jobName: string | null = null;
   if (quoteId) {
