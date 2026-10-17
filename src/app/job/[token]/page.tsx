@@ -458,6 +458,10 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             paidCents={money.ledger.paidCents}
             dueCents={money.ledger.dueCents}
             dueNowCents={depositDueNowCents(quote.deposit_target_cents, money.ledger.paidCents, money.ledger.dueCents)}
+            feeTotalCents={money.ledger.feeTotalCents}
+            feeRate={money.rate}
+            feeRateFrozen={quote.fee_rate != null}
+            feeCollectedCents={money.ledger.feeCollectedCents}
             feeDueCents={money.ledger.feeDueNowCents}
             feeSettledCents={money.ledger.feeSettledCents}
             rows={money.rows.map((r) => ({
@@ -468,6 +472,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               status: r.status,
               paid_at: r.paid_at,
               created_at: r.created_at,
+              fee_cents: r.fee_cents,
             }))}
           />
         )}

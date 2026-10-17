@@ -35,6 +35,8 @@ export type QuotePaymentRow = {
    */
   correctable: boolean;
   note: string | null;
+  /** The office's cut this payment carried. Only ever non-zero on a card. */
+  fee_cents: number;
 };
 
 /**
@@ -61,6 +63,7 @@ export function QuotePayments({
   dueCents,
   dueNowCents = 0,
   feeTotalCents,
+  feeRate,
   feeCollectedCents,
   feeDueCents,
   feeSettledCents = 0,
@@ -76,6 +79,7 @@ export function QuotePayments({
   /** A second deposit from an approved change, still to come in. 0 when none. */
   dueNowCents?: number;
   feeTotalCents: number;
+  feeRate: number;
   feeCollectedCents: number;
   feeDueCents: number;
   /** What the contractor has already sent over by hand for this job. */
@@ -147,7 +151,8 @@ export function QuotePayments({
           Said in the office's voice - the crew's card says "you owe", which is
           the same fact from the other side of the table. */}
       <p className="crm-muted crm-sm qp-fee">
-        {t.officeCut}: <strong>{usd(feeTotalCents)}</strong> · {usd(feeCollectedCents)} {t.feeTaken} ·{" "}
+        {t.officeCut}: <strong>{usd(feeTotalCents)}</strong> ({Math.round(feeRate * 1000) / 10}%) ·{" "}
+        {usd(feeCollectedCents)} {t.feeTaken} ·{" "}
         {/* Without this the three figures stop adding up the moment a crew
             settles by Zelle: $750 cut, $0 taken by card, $0 still owed. */}
         {feeSettledCents > 0 && (
@@ -231,6 +236,9 @@ export function QuotePayments({
                     {r.status === "pending" && <em> · {t.waiting}</em>}
                     {isVoided && <em> · {t.voided}</em>}
                     {r.refunded_cents > 0 && <em> · {usd(r.refunded_cents)} {t.refunded}</em>}
+                    {(r.status === "paid" || r.status === "refunded") && r.fee_cents > 0 && (
+                      <em> · {fill(t.rowFee, { amount: usd(r.fee_cents) })}</em>
+                    )}
                   </span>
                   <span className="qp-row-when">
                     {new Date(r.paid_at ?? r.created_at).toLocaleDateString("en-US", {

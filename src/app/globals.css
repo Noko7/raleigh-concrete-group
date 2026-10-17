@@ -3751,6 +3751,12 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .jp-fee-label { font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
 .jp-fee strong { font-size: 1.1rem; font-weight: 800; color: #1f2328; font-variant-numeric: tabular-nums; text-align: right; }
 .jp-fee-note { grid-column: 1 / -1; font-size: 0.82rem; color: #6b7280; line-height: 1.4; }
+.jp-fee-split { grid-column: 1 / -1; margin: 0.45rem 0 0.35rem; display: flex; flex-direction: column; gap: 0.15rem; }
+.jp-fee-split div { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.88rem; color: #4b5563; }
+.jp-fee-split dt, .jp-fee-split dd { margin: 0; }
+.jp-fee-split dd { font-weight: 700; color: #1f2328; font-variant-numeric: tabular-nums; }
+.jp-fee-split .jp-fee-left { border-top: 1px solid rgba(0, 0, 0, 0.08); padding-top: 0.25rem; margin-top: 0.1rem; font-weight: 800; color: #1f2328; }
+.jp-fee-owed .jp-fee-left dd { color: #b45309; }
 
 .jp-ways { display: grid; gap: 0.7rem; }
 .jp-way { border: 1px solid #e2e5ea; border-radius: 0.7rem; padding: 0.85rem 0.9rem; }

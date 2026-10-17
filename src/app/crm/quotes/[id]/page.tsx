@@ -409,6 +409,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 dueCents={money.ledger.dueCents}
                 dueNowCents={depositDueNowCents(quote.deposit_target_cents, money.ledger.paidCents, money.ledger.dueCents)}
                 feeTotalCents={money.ledger.feeTotalCents}
+                feeRate={money.rate}
                 feeCollectedCents={money.ledger.feeCollectedCents}
                 feeDueCents={money.ledger.feeDueNowCents}
                 feeSettledCents={money.ledger.feeSettledCents}
@@ -429,6 +430,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   // button is never offered for something the server would refuse.
                   correctable: correctableReason(r) === null,
                   note: r.note,
+                  fee_cents: r.fee_cents,
                 }))}
               />
             </div>
