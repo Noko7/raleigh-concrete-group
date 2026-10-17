@@ -352,7 +352,7 @@ there. So:
 
    `supabase/crew-reminders.sql` also (re)adds `scheduled_time`, so running just
    that one file is enough to fix "Could not save that date" when confirming a
-   work day. Every file is safe to re-run.
+   work day. Every file is safe to re-run except the four marked "superseded" at the top (least-privilege, fee-waiver, change-order-lines, change-deposit): re-running them undoes the Stage 1 price lock.
 2. Confirm Vercel env vars exist: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (the CRM needs the service-role key).
 3. Create your owner login: Supabase → **Authentication → Users → Add user** (email + password), then run the promote snippet at the bottom of `supabase/crm.sql`.
 4. **Subdomain:** in Vercel → Project → **Domains**, add `crm.raleighconcrete.net`; in your DNS registrar add the **CNAME** Vercel shows (typically `crm` → `cname.vercel-dns.com`). Routing to the CRM is already wired in `src/middleware.ts`. (Until DNS is live you can also reach it at `raleighconcrete.net/crm`.)

@@ -2327,8 +2327,8 @@ async function applyChange(
   let res = shownRequestedAt ? await call({ ...args, p_requested_at: shownRequestedAt }) : await call(args);
   // PGRST202 = no such function signature: code deployed before the SQL. Answer as before rather than fail.
   if (!res.ok && shownRequestedAt) {
-    const body = await res.text().catch(() => "");
-    if (body.includes("PGRST202")) {
+    const code = await res.json().then((b: { code?: unknown }) => b?.code, () => null);
+    if (code === "PGRST202") {
       console.error("[change-response] apply_change_response has no p_requested_at - run supabase/stage1-price-lockdown.sql");
       res = await call(args);
     }
