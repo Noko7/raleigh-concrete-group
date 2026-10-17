@@ -1,6 +1,7 @@
 // The owner's view of every dollar in the business.
 //
-// Server-only, owner-only. Everything here is assembled from three tables and
+// Server-only. The owner sees every job; a contractor gets the same board
+// scoped to their own (see moneyBoard). Everything here is assembled from three tables and
 // computed in one pass rather than queried per job: the arithmetic that decides
 // what a contractor owes has to be the SAME arithmetic the crew's job page
 // shows them, and the only way to guarantee that is for both to go through
@@ -12,7 +13,7 @@
 // anything, so every balance on this page is a number somebody owes the office
 // and never the other way round.
 import { applySettlements, readLedger, toCents, usd, type Ledger } from "./fees";
-import { pgUser } from "./rest";
+import { pgAdmin, pgUser } from "./rest";
 import type { FeeSettlement, QuotePayment, Session, Staff } from "./types";
 
 // How far back the "collected recently" figures look.
@@ -243,6 +244,19 @@ export async function moneyBoard(
   opts: { includeTests?: boolean } = {},
 ): Promise<MoneyBoard> {
   const includeTests = opts.includeTests === true;
+  // A contractor reads this board too, for their own Money page. Their token
+  // already limits jobs and payments to their own through RLS; settlements are
+  // owner-only there (a contractor must not be able to WRITE one), so theirs
+  // are read with the service key, pinned to their own staff id. Without them
+  // a crew who had sent the fee over would still be told they owe it.
+  const isOwner = session.staff.role === "owner";
+  const settlementsPath = `fee_settlements?select=*&order=created_at.desc&limit=${SETTLEMENT_LIMIT}`;
+  const readSettlements = isOwner
+    ? readRows<FeeSettlement>(session, settlementsPath)
+    : pgAdmin(`${settlementsPath}&staff_id=eq.${session.staff.id}`).then(async (res) => ({
+        rows: res.ok ? ((await res.json()) as FeeSettlement[]) : [],
+        ok: res.ok,
+      }));
   const names = new Map(staff.map((s) => [s.id, s.full_name || s.email || "Unnamed"]));
   // Practice accounts. A test contractor's settlement is a real row in
   // fee_settlements, and it was counting as a fee received while the practice
@@ -266,14 +280,14 @@ export async function moneyBoard(
         `&order=created_at.desc&limit=${JOB_LIMIT}`,
     ),
     readRows<QuotePayment>(session, `quote_payments?select=*&order=created_at.desc&limit=${PAYMENT_LIMIT}`),
-    readRows<FeeSettlement>(session, `fee_settlements?select=*&order=created_at.desc&limit=${SETTLEMENT_LIMIT}`),
+    readSettlements,
     // `not.is.true` rather than `is.false`: is_test arrived with test-data.sql
     // and is null on every row written before it, and `is.false` would drop
     // every one of them - which is most of the history this figure is about.
-    sumQuotes(
-      session,
-      `quote_requests?quote_sent_at=not.is.null${includeTests ? "" : "&is_test=not.is.true"}`,
-    ),
+    // The owner's figure only; the crew page never shows it.
+    isOwner
+      ? sumQuotes(session, `quote_requests?quote_sent_at=not.is.null${includeTests ? "" : "&is_test=not.is.true"}`)
+      : Promise.resolve(null),
   ]);
 
   // A read that came back exactly full is a read that was probably cut short.

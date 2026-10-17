@@ -287,3 +287,15 @@ export function depositDueNowCents(targetCents: number | null | undefined, paidC
 export function depositCents(jobTotalCents: number, percent = DEFAULT_DEPOSIT_PERCENT): number {
   return Math.round((jobTotalCents * percent) / 100);
 }
+
+/**
+ * What the contractor keeps from a job once the office has its cut.
+ *
+ * On a live job that is the whole job less the fee. On one that left the
+ * pipeline after taking money, the rest of the total is never coming, so it is
+ * only what was actually collected, less the fee.
+ */
+export function crewIncomeCents(ledger: Ledger, onBooks: boolean): number {
+  const base = onBooks ? ledger.totalCents : ledger.paidCents;
+  return Math.max(0, base - ledger.feeTotalCents);
+}
