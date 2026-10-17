@@ -12,7 +12,7 @@ import { DateField } from "./date-field";
 //   online    a photo quote whose customer offered a fallback slot: one-tap accept
 //   schedule  an in-person request with no date (cancelled, or predates the field): picker only
 // Both end in confirmVisit, which texts the customer.
-function pretty(s: string, locale: Locale): string {
+function pretty(s: string): string {
   return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -84,7 +84,7 @@ export function JobVisit({
             <input type="hidden" name="time" value={fallbackTime} />
             <div className="jv-asked">
               <span className="jv-asked-label">{t.contractorJob.visitAsked}</span>
-              <strong className="jv-asked-day">{pretty(offered, locale)}</strong>
+              <strong className="jv-asked-day">{pretty(offered)}</strong>
               <strong className="jv-asked-time">{fallbackTime}</strong>
             </div>
             <button type="submit" className="js-confirm" disabled={pending}>

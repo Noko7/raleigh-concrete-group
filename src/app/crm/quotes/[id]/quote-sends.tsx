@@ -14,7 +14,7 @@ import type { ScheduleState } from "./types";
 // only stores the current quote.
 
 // Raleigh time.
-function stamp(iso: string, locale: Locale) {
+function stamp(iso: string) {
   return new Date(iso).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
@@ -77,7 +77,7 @@ export function QuoteSends({
                   <span className={`qs-amount${s.amount == null ? "" : " qs-has-amount"}`}>
                     {dollars(s.amount) ?? t.quoteLog.noPrice}
                   </span>
-                  <span className="qs-when">{stamp(s.at, locale)}</span>
+                  <span className="qs-when">{stamp(s.at)}</span>
                   {/* Two columns so every tag aligns regardless of how many a row has. */}
                   <span className="qs-flag">
                     {s.live && <em className="qs-tag qs-tag-live">{t.quoteLog.current}</em>}
