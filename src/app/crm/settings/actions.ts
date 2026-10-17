@@ -70,12 +70,7 @@ export async function saveWorkHours(_prev: SaveState, formData: FormData): Promi
     work_end_hour: hours.endHour,
     work_days: hours.days,
   });
-  if (!ok) {
-    return {
-      ok: false,
-      error: "Could not save your hours. If this keeps happening, run supabase/appointments.sql.",
-    };
-  }
+  if (!ok) return { ok: false, error: "Could not save your hours. Please try again." };
 
   revalidatePath("/crm/settings");
   return { ok: true, saved: true };

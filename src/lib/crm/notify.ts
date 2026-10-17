@@ -246,8 +246,7 @@ export async function sendSmsResult(
         provider: SMS_PROVIDER,
         to,
         detail:
-          "Could not put this text on the queue, so it has NOT been sent and is not waiting to be. " +
-          "Check the message log migrations in Supabase, then send it again.",
+          "Could not put this text on the queue, so it has NOT been sent and is not waiting to be. Send it again.",
       };
       console.error("[sms-queue] could not queue a held message", { to, kind: log?.kind ?? "spaced" });
       return lost;

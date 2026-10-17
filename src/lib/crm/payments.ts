@@ -28,8 +28,11 @@ export async function listPayments(session: Session, quoteId: string): Promise<Q
     `quote_payments?quote_id=eq.${quoteId}&select=*&order=created_at.asc`,
     session.accessToken,
   );
-  // 404 (table missing) or any failure reads as "no payments yet".
-  if (!res.ok) return [];
+  // Any failure reads as "no payments yet".
+  if (!res.ok) {
+    console.error("[payments] list failed", quoteId, res.status);
+    return [];
+  }
   return (await res.json()) as QuotePayment[];
 }
 
@@ -37,7 +40,10 @@ export async function listPayments(session: Session, quoteId: string): Promise<Q
 export async function listPaymentsAdmin(quoteId: string): Promise<QuotePayment[]> {
   if (!UUID_RE.test(quoteId)) return [];
   const res = await pgAdmin(`quote_payments?quote_id=eq.${quoteId}&select=*&order=created_at.asc`);
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.error("[payments] list failed", quoteId, res.status);
+    return [];
+  }
   return (await res.json()) as QuotePayment[];
 }
 
@@ -132,9 +138,7 @@ export async function recordPayment(
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    if (detail.includes("quote_payments") && res.status === 404) {
-      return { ok: false, error: "Payments aren't set up yet. Run supabase/payments.sql." };
-    }
+    console.error("[payments] record failed", p.quoteId, res.status, detail);
     return { ok: false, error: "Could not save that payment. Please try again." };
   }
   const rows = (await res.json()) as QuotePayment[];

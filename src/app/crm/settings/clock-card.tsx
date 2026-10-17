@@ -75,8 +75,7 @@ export function ClockCard({ check, queue }: { check: ClockCheck; queue: QueueHea
               <>
                 <span className="crm-badge crm-badge-danger">Can&apos;t read the queue</span> The held-text queue could
                 not be read, so nothing is going out of it and there is no way to say how much is
-                stuck. Usually a migration that has not been run - open <code>supabase/audit.sql</code> in Supabase and
-                look for anything marked MISSING. ({queue.error})
+                stuck. ({queue.error})
               </>
             ) : stuck ? (
               <>

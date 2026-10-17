@@ -383,7 +383,7 @@ export async function setFeeWaiver(_prev: PaymentState, formData: FormData): Pro
   const note = String(formData.get("note") ?? "").trim().slice(0, 500) || null;
   const before = Number(quote.fee_waived_cents ?? 0);
   const saved = await updateQuote(session, id, { fee_waived_cents: cents, fee_waived_note: cents > 0 ? note : null });
-  if (!saved) return { ok: false, error: "Could not save that. Run supabase/fee-waiver.sql and try again." };
+  if (!saved) return { ok: false, error: "Could not save that. Please try again." };
 
   await addEvent(session, id, "fee_waived", { from_cents: before, to_cents: cents, note });
   refreshMoneyViews(id);

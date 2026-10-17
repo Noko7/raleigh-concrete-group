@@ -95,14 +95,6 @@ export async function createQuote(_prev: NewQuoteState, formData: FormData): Pro
   const result = await insertQuoteResult(session, row);
   const created = result.quote;
   if (!created) {
-    // On a "From plans" lead, a check violation means qr_chk doesn't know the
-    // type yet (quote-type-plans.sql); every other field was validated above.
-    if (result.code === "23514" && quoteType === "plans") {
-      return {
-        ok: false,
-        error: 'The database does not know the "From plans" quote type yet. Run supabase/quote-type-plans.sql in Supabase, then try again.',
-      };
-    }
     return { ok: false, error: result.error ?? "Could not save the lead. Please try again." };
   }
 

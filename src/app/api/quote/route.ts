@@ -424,15 +424,6 @@ async function handle(request: Request) {
     inserted = landed ? { ok: true, id: landed } : await insertLead(row);
   }
 
-  // If client_submission_id is missing (lead-idempotency.sql), saving the lead
-  // matters more than de-duplicating it.
-  if (!inserted.ok && inserted.status === 400 && /client_submission_id/.test(inserted.detail)) {
-    console.error("[quote] client_submission_id column missing - run supabase/lead-idempotency.sql; saving without it");
-    const { client_submission_id: _drop, ...withoutId } = row;
-    void _drop;
-    inserted = await insertLead(withoutId);
-  }
-
   // A retry of a form already saved (timeout, double tap): the unique index
   // refused it, so answer with the existing row.
   if (!inserted.ok && inserted.status === 409 && submissionId) {
