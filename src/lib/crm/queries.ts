@@ -31,6 +31,7 @@ import {
   type QuoteOptionDraft,
   type QuotePackageDraft,
   type WorkHours,
+  VISIT_GRACE_DAYS,
 } from "./constants";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./env";
 // Cents, for the two places a change order has to compare money to money.
@@ -1382,13 +1383,12 @@ function ageWindow(column: string, hours: number): string {
 // until they have seen the job. Chasing it would be telling a contractor off
 // for following the process.
 //
-// A visit that has already passed is the opposite: they went, and no price
-// came back. That is exactly the lead worth chasing, so only FUTURE visits
-// buy an exemption. Today counts as future - the visit may not have happened
-// yet when the cron runs at 10am.
-export function hasUpcomingVisit(q: Quote, today = todayYmd()): boolean {
+// Once the visit has passed they get VISIT_GRACE_DAYS to send the price; after
+// that no price has come back, which is exactly the lead worth chasing. A visit
+// on the 10th holds the lead back through the 12th.
+export function hasUpcomingVisit(q: Quote, graceFrom = ymdInDays(-VISIT_GRACE_DAYS)): boolean {
   const booked = visitDateOf(q);
-  return Boolean(booked && booked >= today);
+  return Boolean(booked && booked >= graceFrom);
 }
 
 // ── Stale-lead nudge (cron) ──────────────────────────────────────────────────

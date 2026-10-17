@@ -47,6 +47,11 @@ export const VISIT_LEAD_DAYS = 4;
 // work they hadn't had a chance to get to. Sent once per lead.
 export const STALE_LEAD_HOURS = 48;
 
+// After a site visit, how many days the crew get to send the price before that
+// lead counts as needing attention again. Two, not one: the morning after a
+// visit is too soon to be chasing them for the number.
+export const VISIT_GRACE_DAYS = 2;
+
 // ── Appointment slots ───────────────────────────────────────────────────────
 // Quote visits are booked back to back against ONE contractor's day, an hour
 // apart. The gap is what "back to back" means here: two visits for the same

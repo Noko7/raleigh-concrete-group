@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { todayYmd } from "@/lib/crm/clock";
-import { dollars, STATUSES, visitDateOf, type Status } from "@/lib/crm/constants";
+import { ymdInDays } from "@/lib/crm/clock";
+import { dollars, STATUSES, VISIT_GRACE_DAYS, visitDateOf, type Status } from "@/lib/crm/constants";
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { assignQuote, deleteQuote, moveQuote } from "./board-actions";
 
@@ -51,13 +51,13 @@ function shortDate(ymd: string | null, locale: Locale): string {
 // meant to wait until they have seen the job. Ageing that card red would be
 // marking a contractor late for following the process.
 //
-// Once the visit date has passed, it counts again - they went, and no price
-// came back, which is exactly the lead worth chasing. Today still counts as
-// upcoming, since the visit may not have happened yet.
-function isUntouched(q: BoardQuote, today: string): boolean {
+// After the visit the crew get VISIT_GRACE_DAYS to send the price, the same
+// grace the "lead needs attention" text gives them; after that no price has
+// come back, which is exactly the lead worth chasing.
+function isUntouched(q: BoardQuote, graceFrom: string): boolean {
   if (q.status !== "new") return false;
   const booked = visitDateOf(q);
-  if (booked && booked >= today) return false;
+  if (booked && booked >= graceFrom) return false;
   return true;
 }
 
@@ -66,8 +66,8 @@ const hoursSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 3_6
 // Amber from 12 hours so a lead sitting a while is visible on the board, red
 // from 48 - which is also when the contractor gets the "lead needs attention"
 // text (STALE_LEAD_HOURS).
-function ageBadge(q: BoardQuote, today: string): { text: string; tone: "warn" | "late" } | null {
-  if (!isUntouched(q, today)) return null;
+function ageBadge(q: BoardQuote, graceFrom: string): { text: string; tone: "warn" | "late" } | null {
+  if (!isUntouched(q, graceFrom)) return null;
   const h = hoursSince(q.created_at);
   if (h < 12) return null;
   const text = h < 48 ? `${Math.floor(h)}h` : `${Math.floor(h / 24)}d`;
@@ -197,18 +197,19 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
 
   // Recomputed per render rather than memoised: this is only ever compared
   // against dates, so it costs nothing and can't go stale in a long-lived tab.
-  const today = todayYmd();
+  // The earliest visit date that still holds a lead back (see isUntouched).
+  const graceFrom = ymdInDays(-VISIT_GRACE_DAYS);
 
   // The single oldest lead nobody has quoted. Pinned above the board so there
   // is one obvious answer to "what now" rather than seven columns of options.
   const nextUp = useMemo(() => {
     const stale = quotes
-      .filter((q) => isUntouched(q, today))
+      .filter((q) => isUntouched(q, graceFrom))
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
     const oldest = stale[0];
     if (!oldest || hoursSince(oldest.created_at) < 12) return null;
     return { quote: oldest, waiting: stale.length };
-  }, [quotes, today]);
+  }, [quotes, graceFrom]);
 
   // Owners get the same picture per contractor: who is sitting on work. Only
   // counts leads past the 12-hour nudge, so a morning's fresh leads don't
@@ -217,14 +218,14 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
     if (role !== "owner") return [];
     const counts = new Map<string, number>();
     for (const q of quotes) {
-      if (!isUntouched(q, today) || hoursSince(q.created_at) < 12) continue;
+      if (!isUntouched(q, graceFrom) || hoursSince(q.created_at) < 12) continue;
       const key = q.assigned_to ?? "";
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return [...counts.entries()]
       .map(([id, n]) => ({ id, name: id ? (nameMap[id] ?? t.pipeline.crew) : t.pipeline.unassigned, n }))
       .sort((a, b) => b.n - a.n);
-  }, [quotes, role, nameMap, t, today]);
+  }, [quotes, role, nameMap, t, graceFrom]);
 
   // Land on something worth reading: the first stage with anything in it,
   // starting from New. Only on first load, so picking an empty stage on purpose
@@ -304,7 +305,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
           <span className="kb-next-meta">
             {nextUp.quote.service || t.pipeline.serviceTBD}
             {" · "}
-            {fill(t.pipeline.waitingFor, { age: ageBadge(nextUp.quote, today)?.text ?? "" })}
+            {fill(t.pipeline.waitingFor, { age: ageBadge(nextUp.quote, graceFrom)?.text ?? "" })}
             {nextUp.waiting > 1 ? ` · ${fill(t.pipeline.alsoWaiting, { n: nextUp.waiting - 1 })}` : ""}
           </span>
         </button>
@@ -402,7 +403,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                           would otherwise sit - an unquoted lead has no price
                           to show, so the two never collide. */}
                       {(() => {
-                        const age = ageBadge(q, today);
+                        const age = ageBadge(q, graceFrom);
                         if (age) return <span className={`kb-age kb-age-${age.tone}`}>{age.text}</span>;
                         return q.quote_amount != null ? (
                           <span className="kb-card-amount">{money(q.quote_amount)}</span>
