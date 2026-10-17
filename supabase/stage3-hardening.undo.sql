@@ -3,10 +3,7 @@
 -- stage3-hardening.sql ran. See supabase/snapshots/2026-10-17-pre-stage3.sql.
 -- Safe to re-run.
 --
---   1. send_to_make comes back, identical to the live pg_get_triggerdef, but
---      only once the webhook URL is pasted in below. It is a credential and is
---      not committed; until it is there this step is skipped with a NOTICE, so a
---      trigger never posts every new lead to a placeholder.
+--   1. send_to_make is enabled again (stage 3 only disabled it).
 --   2. The definer functions get EXECUTE for PUBLIC back. Their ACL was NULL
 --      (the built-in default); a GRANT can only write that default out, as
 --      {=X/postgres,postgres=X/postgres}, which grants exactly the same.
@@ -18,21 +15,10 @@ begin;
 
 -- ── 1. The Make.com webhook ─────────────────────────────────────────────────
 do $$
-declare
-  -- The real value is in the Supabase dashboard (Database -> Webhooks / history).
-  url text := '<MAKE_WEBHOOK_URL - see Supabase dashboard history>';
 begin
-  if url like '<%' then
-    raise notice 'send_to_make not restored: paste the Make.com webhook URL into stage3-hardening.undo.sql';
-  elsif not exists (
-    select 1 from pg_trigger
-    where tgrelid = 'public.quote_requests'::regclass and tgname = 'send_to_make'
-  ) then
-    execute format(
-      'create trigger send_to_make after insert on public.quote_requests for each row '
-      'execute function supabase_functions.http_request(%L, %L, %L, %L, %L)',
-      url, 'POST', '{"Content-type":"application/json"}', '{}', '5000'
-    );
+  if exists (select 1 from pg_trigger
+              where tgrelid = 'public.quote_requests'::regclass and tgname = 'send_to_make') then
+    alter table public.quote_requests enable trigger send_to_make;
   end if;
 end $$;
 

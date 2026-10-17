@@ -2,8 +2,11 @@
 -- Run once in Supabase -> SQL Editor. Safe to re-run. Undo: stage3-hardening.undo.sql.
 -- The state it was written against: supabase/snapshots/2026-10-17-pre-stage3.sql.
 --
---   1. The Make.com webhook trigger on new leads goes. Nothing uses the scenario
---      any more, and every lead insert was posting the whole row to it.
+--   1. The Make.com webhook trigger on new leads is disabled. Nothing uses the
+--      scenario any more, and every lead insert was posting the whole row to it.
+--      Disabled rather than dropped, so the undo is one ENABLE and the webhook URL
+--      never has to live in this repo. To remove it for good, in the SQL Editor:
+--        drop trigger send_to_make on public.quote_requests;
 --   2. SECURITY DEFINER functions stop being callable by anyone through the REST
 --      API. Their EXECUTE came from the built-in PUBLIC grant (proacl NULL), so
 --      revoking from anon or authenticated alone changes nothing: it has to come
@@ -19,7 +22,13 @@
 begin;
 
 -- ── 1. The Make.com webhook ─────────────────────────────────────────────────
-drop trigger if exists send_to_make on public.quote_requests;
+do $$
+begin
+  if exists (select 1 from pg_trigger
+              where tgrelid = 'public.quote_requests'::regclass and tgname = 'send_to_make') then
+    alter table public.quote_requests disable trigger send_to_make;
+  end if;
+end $$;
 
 -- ── 2. Definer functions ────────────────────────────────────────────────────
 revoke execute on function public.guard_payment_not_over_total() from public;
