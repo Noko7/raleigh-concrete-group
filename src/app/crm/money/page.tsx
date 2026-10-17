@@ -1,18 +1,20 @@
 import Link from "next/link";
 
-import { requireOwner } from "@/lib/crm/auth";
+import { requireSession } from "@/lib/crm/auth";
 import { METHOD_LABELS, usd, type PaymentMethod } from "@/lib/crm/fees";
 import { MONEY_WINDOW_DAYS, moneyBoard } from "@/lib/crm/money";
 import { crmBase } from "@/lib/crm/nav";
 import { listStaff } from "@/lib/crm/queries";
 import { JobRows } from "./job-rows";
+import { CrewMoney } from "./crew-money";
 import { LedgerTable } from "./ledger-table";
 import { SettleForm } from "./settle-form";
 
 export const dynamic = "force-dynamic";
 
 /**
- * The cash board. Owner only.
+ * The cash board. The owner sees the whole business; a contractor sees their
+ * own jobs and the income on each (CrewMoney), from the same board.
  *
  * Reads top to bottom as an accounts page should: what the totals are, then
  * anything that makes a total untrustworthy, then the entries those totals are
@@ -28,12 +30,14 @@ export default async function MoneyPage({
 }: {
   searchParams: Promise<{ tests?: string }>;
 }) {
-  const session = await requireOwner();
+  const session = await requireSession();
   const base = await crmBase();
   const { tests } = await searchParams;
   const includeTests = tests === "1";
   const staff = await listStaff(session);
   const board = await moneyBoard(session, staff, { includeTests });
+
+  if (session.staff.role !== "owner") return <CrewMoney session={session} board={board} base={base} />;
 
   const owedBy = board.contractors.filter((c) => c.balanceCents > 0 && c.staffId);
   const crew = board.contractors
