@@ -8,8 +8,7 @@ import type { AgreementState } from "./types";
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.heic,.webp";
 const MAX_BYTES = 25 * 1024 * 1024;
 
-// Maps a picked file to the extension + MIME the upload route expects. Browsers
-// sometimes report an empty type for .heic, so fall back to the extension.
+// Browsers sometimes report an empty type for .heic; fall back to the extension.
 function describe(file: File): { ext: string; contentType: string } | null {
   const ext = (file.name.split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const byExt: Record<string, string> = {
@@ -42,8 +41,7 @@ export function AddAgreement({
   const [fileName, setFileName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Collapse the form once the save lands - the saved row shows up in the list
-  // above via revalidatePath, so leaving a filled-in form open is just confusing.
+  // Collapse once saved; the row appears via revalidatePath.
   useEffect(() => {
     if (state.ok) {
       setOpen(false);
@@ -52,9 +50,8 @@ export function AddAgreement({
     }
   }, [state.ok]);
 
-  // Upload straight to Supabase Storage with a one-time signed URL, then keep
-  // just the returned path to submit with the form. Keeps the contract out of
-  // the server-action body, which has a much smaller size limit.
+  // Direct to Storage with a one-time signed URL; only the path is submitted (server actions have a small
+  // body limit).
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;

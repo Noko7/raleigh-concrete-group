@@ -8,22 +8,9 @@ import { confirmVisit, setJobDate } from "@/app/crm/quotes/[id]/actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
 import { DateField } from "./date-field";
 
-// Moving an appointment that already exists, from the crew's own job page.
-//
-// It sits directly under the date it changes rather than in a card of its own,
-// because that date is the thing being questioned: the crew looks at the day at
-// the top of the page, realises they can't make it, and the way out is right
-// there. Collapsed to a single button until it's needed - a booked job is
-// settled, and a date picker sitting open on it reads as unfinished work.
-//
-// Deliberately not the calendar's slide-in panel. That surface is the office
-// moving other people's appointments around a month grid; this is one person
-// changing one date they already have on screen, and an overlay on a phone
-// hides the very date they're deciding against.
-//
-// Both kinds go through the same server actions the CRM uses, so the customer
-// text, the crew text, the event log and the Google Calendar sync are identical
-// no matter which screen the change was made from.
+// Directly under the date it changes, collapsed to a button until needed. Not the calendar's overlay panel:
+// on a phone it would hide the date being reconsidered.
+// Same server actions as the CRM, so texts, log and Google sync are identical.
 export function JobReschedule({
   id,
   kind,
@@ -42,9 +29,7 @@ export function JobReschedule({
   const t = dict(locale);
   const isJob = kind === "job";
 
-  // A work day and a quote visit live in different columns and send different
-  // texts, so they have different actions. `kind` is fixed for the life of the
-  // page, so both hooks run and one result is used.
+  // Work days and visits use different columns and texts. `kind` is fixed for the page, so both hooks run.
   const jobMove = useActionState<ScheduleState, FormData>(setJobDate, { ok: false });
   const visitMove = useActionState<ScheduleState, FormData>(confirmVisit, { ok: false });
   const [state, formAction, pending] = isJob ? jobMove : visitMove;
@@ -53,22 +38,16 @@ export function JobReschedule({
   const [start, setStart] = useState(time ?? (isJob ? "9:00 AM" : "8:00 AM"));
   const [notify, setNotify] = useState(true);
 
-  // Opening always starts from the appointment as it stands now, which after a
-  // save is the day that was just set rather than the one this component first
-  // mounted with. The date field reseeds itself - collapsing unmounts the whole
-  // form - but the start time outlives it up here, so it's reset by hand. Not
-  // done by remounting this component on the new date, because that would take
-  // the "customer texted" line down with it.
+  // Reopen from the appointment as it stands now. The date field reseeds on remount but the start time lives
+  // here, so reset it by hand (remounting would drop the "customer texted" line).
   function reopen() {
     setStart(time ?? (isJob ? "9:00 AM" : "8:00 AM"));
-    // Back on every time: an untick is about one move, not a setting.
+    // Back on every time: an untick is about one move.
     setNotify(true);
     setOpen(true);
   }
 
-  // Saved: fold back to the button. The new day is already the big date above,
-  // so leaving the form open would show the same answer twice. A failure keeps
-  // it open with what they typed still in it.
+  // Saved: fold back (the new date is already shown above). Failures keep the input.
   useEffect(() => {
     if (state.ok) setOpen(false);
   }, [state]);
@@ -100,14 +79,12 @@ export function JobReschedule({
               value={to24Hour(start, isJob ? "09:00" : "08:00")}
               onChange={(e) => e.target.value && setStart(to12Hour(e.target.value))}
             />
-            {/* Both actions read FormData rather than component state, and both
-                want "H:MM AM/PM" rather than the 24h value the picker holds. */}
+            {/* Both actions read FormData and want "H:MM AM/PM", not the picker's 24h value. */}
             <input type="hidden" name="time" value={start} />
           </label>
         </div>
 
-        {/* Said before the button, not after: this change goes to a customer's
-            phone, and that's the part worth knowing in advance. */}
+        {/* Before the button: this goes to a customer's phone. */}
         <p className="jr-note">{isJob ? t.contractorJob.reschedNoteJob : t.contractorJob.reschedNoteVisit}</p>
         <label className="jr-check">
           <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />

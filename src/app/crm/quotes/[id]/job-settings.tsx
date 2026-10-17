@@ -10,11 +10,8 @@ import type { SaveState } from "./types";
 
 type ContractorOption = { id: string; label: string };
 
-// The job's own facts, apart from the quote: who the customer is called, where
-// it sits on the board, which crew has it, and the notes only staff read. It
-// posts to the same saveQuote as the quote editor, which only touches the
-// fields a form sends, so saving here never rewrites the quote and saving the
-// quote never moves the status.
+// Job facts apart from the quote. Posts to saveQuote, which only touches the fields sent, so this never
+// rewrites the quote and the quote editor never moves the status.
 export function JobSettings({
   id,
   contractors,
@@ -31,8 +28,7 @@ export function JobSettings({
   const [assigned, setAssigned] = useState(initial.assigned_to ?? "");
   const [notes, setNotes] = useState(initial.internal_notes ?? "");
 
-  // Follow the saved truth when it changes underneath (a send moves the
-  // status, the customer approves), so this never shows a stale value.
+  // Follow the saved values when they change underneath (a send moves the status, the customer approves).
   const sig = [initial.name, initial.status, initial.assigned_to ?? "", initial.internal_notes ?? ""].join("|");
   useEffect(() => {
     setName(initial.name);
@@ -82,8 +78,7 @@ export function JobSettings({
         </label>
       </div>
 
-      {/* The name every later text opens with. Arrives from a web form or a
-          phone call, so it is wrong often enough to need fixing here. */}
+      {/* Every later text opens with this name, and web forms and calls get it wrong often enough. */}
       <label className="crm-field">
         <span>Customer name</span>
         <input name="name" value={name} onChange={(e) => setName(e.target.value)} className="crm-input" maxLength={120} />

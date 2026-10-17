@@ -3,30 +3,17 @@
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
-// Vercel's Web Analytics and Speed Insights, with the URLs cleaned up first.
-//
-// Both send the page URL with every datapoint, and five of this app's routes
-// carry a secret in the path:
-//
-//   /q/<token>        opens a customer's quote with no login at all
-//   /confirm/<token>  confirms their booked day, same
-//   /join/<token>     one-shot contractor invite: sets up a CRM login
-//   /job/<token>      the crew's job page (this one needs a session too)
-//   /pay/<token>      the customer's payment page, same token as their quote
-//
-// Left alone, those tokens would be sitting in the analytics dashboard, and a
-// quote link pasted out of it works for whoever has it. Query strings go the
-// same way: the CRM's ?search= is whatever the office typed, usually a
-// customer's name or phone, and /crm/login?next=... carries a token of its own.
-//
-// So neither leaves the browser. What's reported is the route - /q/[token] -
-// which is the only part any performance question is actually asked about.
+// Vercel Analytics and Speed Insights with URLs cleaned first. These routes carry a secret in the path:
+//   /q/<token>        a customer's quote, no login
+//   /confirm/<token>  confirms their booked day, no login
+//   /join/<token>     one-shot contractor invite
+//   /job/<token>      the crew's job page
+//   /pay/<token>      the customer's payment page
+// A token in the dashboard is a working link. Query strings are dropped too (?search= holds names and
+// phones; /crm/login?next= carries a token). Only the route is reported.
 const TOKEN_ROUTES = new Set(["q", "job", "confirm", "join", "pay"]);
 
-// Add a route here if it ever takes a secret in its path. Speed Insights
-// doesn't need the list (see below); this is Web Analytics' only defence.
-// Returns null for a URL it can't parse, which drops the datapoint - one
-// missing page view beats one leaked token.
+// Add any route that takes a secret in its path. Unparseable URLs return null and the datapoint is dropped.
 export function scrubUrl(raw: string): string | null {
   try {
     const url = new URL(raw);
@@ -49,9 +36,7 @@ export function VercelInsights() {
       />
       <SpeedInsights
         beforeSend={(event) => {
-          // Speed Insights works the route out itself, from Next's own params,
-          // so it covers every dynamic route including any added after this
-          // file was written. The list above is only the fallback.
+          // Speed Insights derives the route from Next's params, covering every dynamic route; the list is a fallback.
           const url = event.route ? `${window.location.origin}${event.route}` : scrubUrl(event.url);
           return url ? { ...event, url } : null;
         }}

@@ -1,7 +1,6 @@
 import type { FaqItem } from "@/lib/site-data";
 
-// Accessible FAQ accordion using native <details>/<summary> (no client JS).
-// Pair with faqSchema() so the visible content matches the FAQPage markup.
+// Native <details> (no client JS). Pair with faqSchema() so the content matches the FAQPage markup.
 export function FaqSection({
   faqs,
   heading = "Frequently Asked Questions",

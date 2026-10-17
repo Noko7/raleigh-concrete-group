@@ -24,13 +24,8 @@ function refresh(id: string) {
   revalidatePath("/job/[token]", "page");
 }
 
-// Move an appointment to another day (and optionally another time). Dragging a
-// chip onto a cell and using the panel's date picker both land here.
-//
-// A booked WORK DAY is delegated to setJobDate rather than reimplemented: that
-// action already texts the customer that the date moved, tells the crew, logs
-// it and updates Google Calendar. Two code paths for "the job moved" is exactly
-// how a message ends up going out from one screen but not the other.
+// Drag-and-drop and the panel's date picker both land here. Work days delegate to setJobDate, which
+// already texts the customer and crew, logs and updates Google Calendar; one path for "the job moved".
 export async function moveEvent(_prev: CalActionState, formData: FormData): Promise<CalActionState> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
@@ -47,8 +42,7 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
       : { ok: false, error: result.error };
   }
 
-  // Unchecked in the panel when the customer already knows. A drag sends no
-  // field at all, which means on.
+  // Unticked when the customer already knows. A drag sends no field, which means yes.
   const tellCustomer = String(formData.get("notify") ?? "yes") !== "no";
 
   // Quote visit (in-person or online).
@@ -68,8 +62,7 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
     notified: tellCustomer,
   });
 
-  // The office moving a visit from the month grid is precisely when whoever has
-  // to drive to it needs telling - they aren't looking at this screen.
+  // Whoever drives to the visit isn't looking at this screen, so tell them.
   const crew = current.assigned_to ? await getStaffById(session, current.assigned_to) : null;
   await notifyVisitMoved(
     {
@@ -103,13 +96,9 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
   };
 }
 
-// Take the appointment off the calendar. The lead itself is untouched: this is
-// "cancel the appointment", not "delete the customer". Deleting a lead outright
-// is still the pipeline's Delete, which archives it and can be undone.
+// Cancels the appointment only; the lead is untouched (Delete in the pipeline archives it).
 export async function deleteEvent(_prev: CalActionState, formData: FormData): Promise<CalActionState> {
-  // Delegated for the same reason moveEvent delegates to setJobDate: cancelling
-  // clears the date, logs it, texts the customer and takes the Google Calendar
-  // event down, and a second copy of that here is how the month grid quietly
-  // stops doing one of the four.
+  // Delegated like moveEvent: cancelAppointment clears the date, logs, texts the customer and removes the
+  // Google event.
   return cancelAppointment({ ok: false }, formData);
 }

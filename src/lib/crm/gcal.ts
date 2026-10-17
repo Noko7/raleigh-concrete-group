@@ -1,14 +1,8 @@
-// Server-only Google Calendar integration. No SDK - just fetch() against
-// Google's OAuth + Calendar REST endpoints so nothing needs to be installed.
-//
-// Flow: the owner connects their Google account once (OAuth, offline access).
-// We store the refresh token in public.app_integrations (service-role only).
-// When a job is booked or a contractor is assigned to a dated job/visit, we
-// create or update an event on the owner's primary calendar with the contractor
-// (and customer, if we have their email) as attendees and sendUpdates=all, so
-// Google emails everyone a real calendar invite.
-//
-// Required env: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI.
+// Server-only Google Calendar integration via fetch(), no SDK.
+// The owner connects once (OAuth, offline access); the refresh token lives in app_integrations
+// (service-role only). Booked jobs and dated visits become events on the owner's primary calendar with
+// contractor and customer as attendees and sendUpdates=all, so Google emails real invites.
+// Env: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI.
 import { dollars, visitDateOf } from "./constants";
 import { pgAdmin } from "./rest";
 import type { Quote } from "./types";
@@ -29,7 +23,6 @@ export function googleConfigured(): boolean {
   return Boolean(CLIENT_ID && CLIENT_SECRET && GOOGLE_REDIRECT_URI);
 }
 
-// ── Token storage (app_integrations, provider='google') ─────────────────────
 type GoogleToken = { refresh_token: string; email?: string };
 
 async function loadToken(): Promise<GoogleToken | null> {
@@ -60,7 +53,6 @@ export async function googleStatus(): Promise<{ connected: boolean; email?: stri
   return { connected: Boolean(t), email: t?.email };
 }
 
-// ── OAuth ───────────────────────────────────────────────────────────────────
 export function googleAuthUrl(state: string): string {
   const p = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -75,7 +67,6 @@ export function googleAuthUrl(state: string): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${p.toString()}`;
 }
 
-// Exchange the one-time code for tokens and persist the refresh token.
 export async function exchangeAndStore(code: string): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -95,8 +86,7 @@ export async function exchangeAndStore(code: string): Promise<{ ok: boolean; err
   }
   const json = (await res.json()) as { refresh_token?: string; access_token?: string };
   if (!json.refresh_token) {
-    // No refresh token means Google didn't grant offline access (often because
-    // the app was already authorized). prompt=consent should force it.
+    // No refresh token: Google didn't grant offline access (often already authorized); prompt=consent should force it.
     return { ok: false, error: "Google didn't return a refresh token. Remove the app's access in your Google account and try connecting again." };
   }
   let email: string | undefined;
@@ -130,7 +120,6 @@ async function accessToken(): Promise<string | null> {
   return (((await res.json()) as { access_token?: string }).access_token) ?? null;
 }
 
-// ── Event building ──────────────────────────────────────────────────────────
 type GAttendee = { email: string };
 type GDate = { date?: string; dateTime?: string; timeZone?: string };
 type GEvent = {
@@ -142,8 +131,7 @@ type GEvent = {
   attendees?: GAttendee[];
 };
 
-// How long a booked job blocks the calendar for, in hours. A concrete job is a
-// day's work; this keeps the slot from looking free at 10am.
+// A concrete job is a day's work; keeps the slot from looking free at 10am.
 const JOB_HOURS = 8;
 
 function addDays(ymd: string, n: number): string {
@@ -152,7 +140,7 @@ function addDays(ymd: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// "2:00 PM" -> { h: 14, m: 0 }. Returns null if it can't parse.
+// "2:00 PM" -> { h: 14, m: 0 }; null if unparseable.
 function parseClock(s: string | null): { h: number; m: number } | null {
   if (!s) return null;
   const m = s.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
@@ -183,9 +171,7 @@ function describe(q: Quote, isVisit: boolean): string {
 function buildEvent(q: Quote, attendees: GAttendee[]): GEvent | null {
   const base = { attendees: attendees.length ? attendees : undefined };
 
-  // A booked work day takes precedence. Timed when the crew picked a start
-  // time, so the calendar agrees with what the customer was told; all-day only
-  // for older bookings made before start times existed.
+  // A booked work day wins. Timed when the crew set a start time; all-day only for older bookings.
   if (q.scheduled_date) {
     const job = {
       ...base,
@@ -197,8 +183,6 @@ function buildEvent(q: Quote, attendees: GAttendee[]): GEvent | null {
     if (clock) {
       const hh = String(clock.h).padStart(2, "0");
       const mm = String(clock.m).padStart(2, "0");
-      // Blocks the working day from the start time, so nothing else gets
-      // booked on top of a crew that's already out on a pour.
       const endH = String(Math.min(clock.h + JOB_HOURS, 23)).padStart(2, "0");
       return {
         ...job,
@@ -213,9 +197,8 @@ function buildEvent(q: Quote, attendees: GAttendee[]): GEvent | null {
     };
   }
 
-  // Otherwise an in-person quote visit (timed if we can read the time slot).
-  // Online quotes never produce an event even if the row carries a date: an
-  // invite on the crew's calendar means somebody is expected to be somewhere.
+  // Otherwise an in-person visit. Online quotes never produce an event: an invite means someone is expected
+  // somewhere.
   const visitDate = visitDateOf(q);
   if (visitDate) {
     const clock = parseClock(q.visit_time);
@@ -255,9 +238,7 @@ async function staffEmail(id: string): Promise<string | null> {
   return rows[0]?.email ?? null;
 }
 
-// Pull a quote's event off the calendar. Used when an appointment is deleted in
-// the CRM: without this the invite lingers on everyone's calendar and the crew
-// shows up to a job that isn't happening. Best-effort - never throws.
+// Used when an appointment is deleted, so the crew don't show up to a cancelled job. Never throws.
 export async function removeQuoteFromCalendar(quoteId: string): Promise<void> {
   try {
     if (!googleConfigured()) return;
@@ -268,7 +249,7 @@ export async function removeQuoteFromCalendar(quoteId: string): Promise<void> {
 
     const token = await accessToken();
     if (token) {
-      // 404/410 means it's already gone, which is the state we wanted anyway.
+      // 404/410: already gone.
       const del = await fetch(`${CAL_BASE}/${encodeURIComponent(eventId)}?sendUpdates=all`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -278,8 +259,7 @@ export async function removeQuoteFromCalendar(quoteId: string): Promise<void> {
       }
     }
 
-    // Clear the id regardless: a stale id would make the next booking try to
-    // PATCH an event that no longer exists.
+    // Clear the id regardless, or the next booking PATCHes a missing event.
     await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(quoteId)}`, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
@@ -290,14 +270,13 @@ export async function removeQuoteFromCalendar(quoteId: string): Promise<void> {
   }
 }
 
-// Create or update the calendar invite for a quote. Idempotent: stores the
-// Google event id on the quote so subsequent calls update the same event (and
-// invite any newly-assigned contractor). Best-effort - never throws.
+// Idempotent: the Google event id is stored on the quote so later calls update the same event (and
+// invite newly assigned contractors). Never throws.
 export async function syncQuoteToCalendar(quoteId: string): Promise<void> {
   try {
     if (!googleConfigured()) return;
     const token = await accessToken();
-    if (!token) return; // not connected
+    if (!token) return;
 
     const res = await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(quoteId)}&select=*&limit=1`);
     if (!res.ok) return;
@@ -312,7 +291,7 @@ export async function syncQuoteToCalendar(quoteId: string): Promise<void> {
     if (q.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(q.email)) attendees.push({ email: q.email });
 
     const event = buildEvent(q, attendees);
-    if (!event) return; // nothing dated to sync
+    if (!event) return;
 
     const auth = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
@@ -327,7 +306,7 @@ export async function syncQuoteToCalendar(quoteId: string): Promise<void> {
         console.error("[gcal] update failed", upd.status, await upd.text().catch(() => ""));
         return;
       }
-      // 404/410: event was deleted in Google - fall through and recreate.
+      // 404/410: deleted in Google; fall through and recreate.
     }
 
     const created = await fetch(`${CAL_BASE}?sendUpdates=all`, {

@@ -3,38 +3,25 @@ export type SaveState = {
   error?: string;
   sent?: boolean;
   smsDelivered?: boolean;
-  // Why the text failed, straight from the provider. Without this a failed send
-  // is indistinguishable from a misconfigured one.
+  // The provider's own reason, so a failure is distinguishable from misconfiguration.
   smsError?: string;
-  // Where it was sent, so a wrong number is obvious at a glance.
+  // So a wrong number is obvious.
   smsTo?: string;
-  // Quiet hours held the text rather than sending it. Not a failure and not a
-  // delivery - the banner is its own third thing, because "did NOT go out" is
-  // wrong and "sent" is a lie.
+  // Held by quiet hours: neither a failure nor a delivery.
   smsHeldUntil?: string;
-  // The send was refused because this quote is already with the customer and
-  // they haven't answered. Not a failure - the UI renders it as a status rather
-  // than an error, because nothing went wrong and nothing needs fixing.
+  // Refused because the quote is already out and unanswered. Rendered as a status, not an error.
   alreadySent?: boolean;
-  // The send replaced a quote the customer already had and hadn't answered, so
-  // the confirmation can say a correction went out rather than a first quote.
+  // Replaced an unanswered quote, so the confirmation says a correction went out.
   revised?: boolean;
 };
 
 export type ScheduleState = { ok: boolean; error?: string; message?: string };
 
-// One day the customer said works, and the start time they asked for on it.
-// `time` is null on a quote accepted before customers were asked for a time,
-// and the scheduling cards fall back to their own default for those.
-//
-// Shared by the CRM's ScheduleCard and the crew's JobSchedule so the two
-// screens can't drift on how a preferred day is read.
+// `time` is null on quotes accepted before times were asked; the cards fall back to a default.
+// Shared by ScheduleCard and the crew's JobSchedule so they read preferred days the same way.
 export type PreferredSlot = { date: string; time: string | null };
 
-// The two index-aligned columns, zipped into the shape above. Kept here rather
-// than in each page because both pages have to agree that preferred_times[i]
-// belongs to preferred_dates[i], and an off-by-one would quietly book somebody
-// at the wrong hour.
+// preferred_times[i] belongs to preferred_dates[i]; an off-by-one books the wrong hour.
 export function preferredSlots(
   dates: string[] | null | undefined,
   times: (string | null)[] | null | undefined,
@@ -42,15 +29,10 @@ export function preferredSlots(
   return (dates ?? []).filter(Boolean).map((date, i) => ({ date, time: times?.[i] ?? null }));
 }
 
-// Closing a job out. Same shape as ScheduleState, named separately because the
-// one thing it reports that matters is the refusal: no before/after photos.
+// The refusal that matters: no before/after photos.
 export type FinishState = { ok: boolean; error?: string; message?: string };
 
-// Sending a change order, and withdrawing one. Shaped like ScheduleState plus
-// the delivery fields SaveState carries, because a change order IS a little
-// quote: the thing that can go wrong is the customer's text not arriving, and a
-// screen that says "sent" over a text that bounced leaves the crew waiting on an
-// answer to a question nobody was asked.
+// A change order is a little quote: the failure that matters is the customer's text not arriving.
 export type ChangeState = {
   ok: boolean;
   error?: string;

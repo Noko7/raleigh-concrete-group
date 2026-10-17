@@ -5,17 +5,11 @@ import { addEvent } from "@/lib/crm/queries";
 import type { Quote, Session } from "@/lib/crm/types";
 
 /**
- * Money the crew took in person - cash, a cheque, Zelle or Venmo - written to
- * the job's ledger.
- *
- * Shared by the payments card and by a change order the customer agreed to on
- * the phone and paid for on the spot, so both land the same row, the same log
- * entry and the same text to the office. Deliberately not a server action
- * module: callers check the session and the job first.
- *
- * It counts the moment it is entered - no approval step, by design. The office's
- * cut is NOT collected here: nothing moved through Stripe, so the fee stays owed
- * on the job and the contractor settles it later.
+ * Money the crew took in person (cash, cheque, Zelle, Venmo). Shared by the payments card and phone-agreed
+ * change orders so both write the same row, log entry and office text. Not a server action: callers check
+ * the session and job first.
+ * Counts immediately, no approval step. The office's cut is NOT collected here (nothing went through
+ * Stripe); it stays owed for the contractor to settle.
  */
 export async function takeManualPayment(
   session: Session,
@@ -23,9 +17,7 @@ export async function takeManualPayment(
   input: { method: RecordedMethod; amountCents: number; note?: string | null },
 ): Promise<{ ok: boolean; error?: string; dueCents?: number }> {
   const id = quote.id;
-  // Frozen here: this is money moving, so the rate the office earns on this job
-  // is settled now and won't drift if the contractor crosses the 3-job mark
-  // before the balance comes in.
+  // Freeze the rate now so it can't drift if the contractor crosses the 3-job mark before the balance comes in.
   const before = await jobLedger(quote, { freeze: true });
   if (before.ledger.totalCents <= 0) {
     return { ok: false, error: "This job has no price on it yet, so there's nothing to pay against." };
@@ -51,9 +43,7 @@ export async function takeManualPayment(
   await addEvent(session, id, "payment_received", { method: input.method, amount_cents: input.amountCents, fee_cents: 0 });
   await settleJobIfPaid(id).catch(() => {});
 
-  // Read back rather than subtracting: the alert tells the owner what is still
-  // owed, and that figure has to come from the ledger, not from arithmetic done
-  // on a stale copy of it.
+  // Read back from the ledger rather than subtracting from a stale copy.
   const after = await jobLedger(quote);
   await notifyCashRecorded({
     q: { id, name: quote.name, phone: quote.phone, job_token: quote.job_token },

@@ -15,8 +15,7 @@ import type { AgreementState } from "./types";
 
 const STATUSES: AgreementStatus[] = ["pending", "sent", "signed", "declined", "void"];
 
-// Only ever store a link we recognise as an http(s) URL, so a stored value can't
-// turn into a javascript: link when we render it.
+// Only http(s), so a stored value can't render as a javascript: link.
 function safeUrl(raw: string): string | null {
   if (!raw) return null;
   try {
@@ -27,8 +26,7 @@ function safeUrl(raw: string): string | null {
   }
 }
 
-// Paths we revalidate after a change. The agreement can live on a contractor,
-// a job, or the overview, so refresh whichever ones are relevant.
+// An agreement can belong to a contractor, a job, or the overview.
 function revalidateFor(quoteId?: string | null) {
   revalidatePath("/crm/agreements");
   revalidatePath("/crm/contractors");
@@ -67,7 +65,7 @@ export async function createAgreement(_prev: AgreementState, formData: FormData)
     docuseal_url: docusealUrl,
     notes,
     created_by: session.staff.id,
-    // Keep the timestamps consistent with the status they chose on creation.
+    // Timestamps consistent with the chosen status.
     sent_at: status === "sent" || status === "signed" ? new Date().toISOString() : null,
     signed_at: status === "signed" ? new Date().toISOString() : null,
   });
@@ -91,7 +89,7 @@ export async function setAgreementStatus(formData: FormData): Promise<void> {
   const now = new Date().toISOString();
   await updateAgreement(session, id, {
     status,
-    // Stamp the first time it reaches each state; don't overwrite a real date.
+    // Stamp the first time each state is reached; never overwrite a real date.
     sent_at: existing.sent_at ?? (status === "sent" || status === "signed" ? now : null),
     signed_at: status === "signed" ? existing.signed_at ?? now : existing.signed_at,
   });
@@ -106,7 +104,7 @@ export async function removeAgreement(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  // Read it first so we know which paths to refresh and which file to clean up.
+  // Read first to know which paths to refresh and which file to clean up.
   const existing = await getAgreement(session, id);
   if (!existing) return;
 

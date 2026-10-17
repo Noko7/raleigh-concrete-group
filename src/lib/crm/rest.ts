@@ -1,5 +1,4 @@
-// Server-only Supabase REST/Auth helpers. Do NOT import from client components:
-// this module references the service-role key.
+// Server-only: references the service-role key.
 import { SUPABASE_URL, ANON_KEY, SERVICE_KEY } from "./env";
 
 if (typeof window !== "undefined") {
@@ -11,7 +10,7 @@ const AUTH = `${SUPABASE_URL}/auth/v1`;
 
 type Init = RequestInit & { headers?: Record<string, string> };
 
-// PostgREST as the logged-in user (RLS enforces owner/contractor scoping).
+// As the logged-in user; RLS enforces owner/contractor scoping.
 export async function pgUser(path: string, accessToken: string, init: Init = {}) {
   return fetch(`${REST}/${path}`, {
     ...init,
@@ -25,9 +24,8 @@ export async function pgUser(path: string, accessToken: string, init: Init = {})
   });
 }
 
-// PostgREST with the service-role key (bypasses RLS). Use ONLY where there is no
-// user session: the public customer/job token pages, view tracking, and admin
-// tasks where we have already verified the caller is an owner.
+// Service role (bypasses RLS). ONLY where there's no user session (public token pages, view tracking) or
+// the caller is already verified as owner.
 export async function pgAdmin(path: string, init: Init = {}) {
   return fetch(`${REST}/${path}`, {
     ...init,
@@ -41,7 +39,6 @@ export async function pgAdmin(path: string, init: Init = {}) {
   });
 }
 
-// ── Auth (GoTrue) ───────────────────────────────────────────────────────────
 export type TokenResponse = {
   access_token: string;
   refresh_token: string;
@@ -69,7 +66,7 @@ export async function getAuthUser(accessToken: string): Promise<{ id: string; em
   return (await res.json()) as { id: string; email?: string };
 }
 
-// Owner-only: create a contractor's auth account with a temporary password.
+// Owner-only: temporary password.
 export async function adminCreateUser(
   email: string,
   password: string,
@@ -91,10 +88,8 @@ export async function adminCreateUser(
   return { id: json.id };
 }
 
-// Owner-only: change the address a contractor signs in with. This has to update
-// Supabase Auth, not just the staff row - the staff table is a profile, the auth
-// user is the identity. email_confirm skips the verification round-trip, which
-// the contractor can't complete anyway since the owner is making the change.
+// Owner-only. Updates Supabase Auth (the identity), not just the staff profile. email_confirm skips
+// verification the contractor couldn't complete.
 export async function adminUpdateEmail(
   userId: string,
   email: string,
@@ -108,17 +103,14 @@ export async function adminUpdateEmail(
   if (res.ok) return { ok: true };
   const json = (await res.json().catch(() => ({}))) as { msg?: string; message?: string };
   const raw = json.msg || json.message || "Could not update the email.";
-  // The common failure is the address already belonging to another account.
+  // Usually: the address already belongs to another account.
   const friendly = /already|exists|registered/i.test(raw)
     ? "Another account already uses that email."
     : raw;
   return { ok: false, error: friendly };
 }
 
-// Owner-only: permanently remove a contractor's login. The staff row is keyed on
-// auth.users(id) with on delete cascade, so removing the auth user takes the
-// profile with it - and via the staff FKs, their agreements, while assigned jobs
-// fall back to unassigned rather than disappearing.
+// Owner-only. staff cascades from auth.users, taking agreements with it; assigned jobs fall back to unassigned.
 export async function adminDeleteUser(userId: string): Promise<boolean> {
   const res = await fetch(`${AUTH}/admin/users/${userId}`, {
     method: "DELETE",
@@ -128,8 +120,7 @@ export async function adminDeleteUser(userId: string): Promise<boolean> {
   return res.ok;
 }
 
-// Set a user's password with the service-role key (used for the forced
-// first-login reset, after we've verified the caller's own session).
+// For the forced first-login reset, after verifying the caller's own session.
 export async function adminUpdatePassword(userId: string, password: string): Promise<boolean> {
   const res = await fetch(`${AUTH}/admin/users/${userId}`, {
     method: "PUT",

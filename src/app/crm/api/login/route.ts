@@ -8,23 +8,12 @@ import { signInWithPassword, pgAdmin } from "@/lib/crm/rest";
 import type { Staff } from "@/lib/crm/types";
 import { clientIp } from "@/lib/rate-limit";
 
-// One generic message for every credential failure. We never echo back the
-// submitted values or any database/auth error text, so probing the form (e.g.
-// typing SQL fragments) just yields this same harmless response.
+// One generic message for every credential failure; never echo input or auth/database errors.
 const BAD_CREDS = "Incorrect email or password.";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Per-ACCOUNT throttle, on top of the middleware's per-IP one.
-//
-// The IP limit stops one machine hammering the form. It does nothing about the
-// same password list tried against the owner's address from a hundred
-// addresses, which is the shape this actually takes - and the login_attempts
-// table was already recording every one of them while nothing read it back.
-//
-// Ten consecutive failures, then a fifteen-minute cool-off. A person who has
-// genuinely forgotten their password gets ten goes, which is more than anybody
-// needs and few enough to make a list useless. The streak is counted since the
-// last success, so getting in resets it.
+// Per-ACCOUNT throttle on top of the middleware's per-IP one (which can't stop a distributed password
+// list). Ten consecutive failures since the last success, then a 15-minute cool-off.
 const MAX_FAILURES = 10;
 const LOCKOUT_MS = 15 * 60 * 1000;
 const LOCKED_OUT =
@@ -48,20 +37,14 @@ export async function POST(request: Request) {
   const email = (typeof body.email === "string" ? body.email : "").trim().toLowerCase().slice(0, 254);
   const password = typeof body.password === "string" ? body.password.slice(0, 256) : "";
 
-  // Reject anything that isn't a plausible login with the same generic message,
-  // before it ever reaches the auth service. No hint about what was wrong.
+  // Implausible logins get the same generic message before reaching the auth service.
   if (!EMAIL_RE.test(email) || password.length < 1) {
     await logLoginAttempt({ email, success: false, reason: "invalid_format", ip, userAgent }).catch(() => {});
     return NextResponse.json({ ok: false, error: BAD_CREDS }, { status: 401 });
   }
 
-  // Before the password reaches the auth service, not after. A locked account
-  // must cost an attacker a round-trip that tells them nothing, and it must not
-  // be possible to keep testing passwords against a locked account and read the
-  // answer from how long the refusal took.
-  //
-  // Logged with its own reason so the Security dashboard shows the lockout
-  // rather than a silent gap in the attempt log.
+  // Checked before the password reaches the auth service, so a locked account reveals nothing (including
+  // via timing). Logged with its own reason for the Security dashboard.
   if ((await recentFailuresFor(email, LOCKOUT_MS)) >= MAX_FAILURES) {
     await logLoginAttempt({ email, success: false, reason: "locked_out", ip, userAgent }).catch(() => {});
     return NextResponse.json({ ok: false, error: LOCKED_OUT }, { status: 429 });
@@ -74,8 +57,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: BAD_CREDS }, { status: 401 });
     }
 
-    // Only users with an active staff row may use the CRM. id is a server-issued
-    // UUID from the verified token (not user input), and still URL-encoded.
+    // Only an active staff row may use the CRM. id comes from the verified token.
     const res = await pgAdmin(`staff?id=eq.${encodeURIComponent(token.user.id)}&select=active,role,email&limit=1`);
     const rows = res.ok ? ((await res.json()) as Pick<Staff, "active" | "role" | "email">[]) : [];
     const staff = rows[0];
@@ -88,8 +70,7 @@ export async function POST(request: Request) {
 
     await logLoginAttempt({ email, success: true, reason: "ok", staffId: token.user.id, ip, userAgent }).catch(() => {});
 
-    // Lifetime follows the role: a week on a contractor's phone, until the
-    // browser closes for an owner. See sessionCookieOpts.
+    // Lifetime follows the role (see sessionCookieOpts).
     const jar = await cookies();
     const opts = sessionCookieOpts(staff.role);
     jar.set(AT_COOKIE, token.access_token, opts);
@@ -97,7 +78,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch {
     await logLoginAttempt({ email, success: false, reason: "error", ip, userAgent }).catch(() => {});
-    // Never leak the underlying error; respond with a neutral, generic message.
+    // Never leak the underlying error.
     return NextResponse.json({ ok: false, error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }

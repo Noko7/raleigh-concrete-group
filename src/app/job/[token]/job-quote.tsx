@@ -43,12 +43,8 @@ import {
   type Sections,
 } from "@/components/quote-form-parts";
 
-// Quoting from the crew's own job page. Same server action as the CRM, so the
-// validation, the customer text and the activity log are identical - this is a
-// phone-shaped surface onto it, not a second implementation.
-//
-// Collapsed by default: most visits to this page are about the schedule, and an
-// open price form would push the day-confirming buttons off the screen.
+// Same server action as the CRM, so validation, customer text and log are identical.
+// Collapsed by default: an open price form would push the day-confirming buttons off screen.
 export function JobQuote({
   id,
   locale,
@@ -66,11 +62,9 @@ export function JobQuote({
   locale: Locale;
   amount: number | null;
   summary: string | null;
-  // The line items on this quote, if it was written as a list of choices. An
-  // empty list is the ordinary one-price quote and nothing here changes.
+  // Empty = an ordinary one-price quote.
   options: StoredOption[];
-  // The ways of doing the job on offer, if the customer asked for the same job
-  // two ways. Empty on every ordinary quote.
+  // Empty on every ordinary quote.
   packages: StoredPackage[];
   initialSections?: Partial<Record<QuoteSectionField, string | null>>;
   alreadySent: boolean;
@@ -91,9 +85,7 @@ export function JobQuote({
   }));
   const [rows, setRows] = useState<OptionRow[]>(() => rowsFromOptions(options));
   const [pkgRows, setPkgRows] = useState<PackageRow[]>(() => rowsFromPackages(packages));
-  // Resync to the server once a save lands. Without this the rows in state
-  // still have no ids after the first save, and the next one would insert a
-  // second copy of every line item instead of updating the ones just written.
+  // Resync after a save, or rows without ids would be inserted again on the next save.
   const optionsSig = options
     .map((o) => `${o.id}|${o.title}|${o.description ?? ""}|${o.amount}|${o.required}`)
     .join("~");
@@ -115,28 +107,22 @@ export function JobQuote({
   const setSection = (field: QuoteSectionField, value: string) =>
     setSections((s) => ({ ...s, [field]: value }));
 
-  // Line items own the price when there are any: the box above just reports
-  // their sum, so the crew can't send a total that matches nothing on the quote.
+  // Line items own the price when present, so the total always matches the lines.
   const itemised = rows.length > 0;
-  // A choice of ways to do the job. No single price on such a quote: the row
-  // carries the lead option plus everything else, same as the CRM.
+  // No single price: the row carries the lead option plus everything else, as in the CRM.
   const choice = offersChoice(pkgRows);
   const derived = itemised || choice;
   const derivedTotal = Math.round(((choice ? leadPackageAmount(pkgRows) : 0) + rowsTotal(rows)) * 100) / 100;
   const priceNum = derived ? derivedTotal : Number(price);
-  // Every option priced, and there is more than one of them - the server
-  // refuses both otherwise, and a greyed-out button beats a refusal.
+  // Every option priced and more than one; the server refuses otherwise.
   const packagesReady =
     filledPackages(pkgRows).length === 0 ||
     (choice && filledPackages(pkgRows).every((r) => packageAmountOf(r) > 0));
   const hasLegacySummary = (summary ?? "").trim().length > 0;
-  // Every section filled, or an older quote that still has its free text.
+  // Every section filled, or an older quote with free text.
   const sectionsReady = QUOTE_SECTION_FIELDS.every((f) => sections[f].trim()) || hasLegacySummary;
 
-  // Correcting a quote the customer is still holding. What makes it a
-  // correction rather than the same text again is that something they read has
-  // actually changed, so the button waits for that instead of letting them
-  // press Send and get the server's refusal back.
+  // A correction must change something the customer read; the button waits for that.
   const changed =
     (derived ? derivedTotal !== Number(amount ?? 0) : price.trim() !== (amount != null ? String(amount) : "")) ||
     !rowsMatch(storedRows, rows) ||
@@ -144,8 +130,7 @@ export function JobQuote({
     what.trim() !== (summary ?? "").trim() ||
     QUOTE_SECTION_FIELDS.some((f) => sections[f].trim() !== (initialSections?.[f] ?? "").trim());
 
-  // What still stands between them and Send, said in words under the button
-  // rather than left as a grey button with no reason.
+  // Say what still blocks Send rather than showing an unexplained grey button.
   const sectionsLeft = hasLegacySummary ? 0 : blankSections(sections).length;
   const priceOk = (derived || price.trim() !== "") && Number.isFinite(priceNum) && priceNum > 0;
 
@@ -157,24 +142,15 @@ export function JobQuote({
     sectionsReady &&
     (!awaitingReply || changed);
 
-  // Pull fresh server data once the send lands, so the status and the activity
-  // log on this page match what just happened.
+  // Refresh so status and log match what just happened.
   useEffect(() => {
     if (state.ok || state.sent) router.refresh();
-    // A send that went through folds the form away, so the page settles back to
-    // "waiting on the customer" with the result on it. A refusal leaves it open
-    // with everything they typed still in the fields.
+    // A successful send folds the form; a refusal keeps everything typed.
     if (state.sent && !state.error) setOpen(false);
   }, [state, router]);
 
-  // How the last send went. Declared once and rendered in all three states,
-  // because a send folds the form away and the answer has to follow it there
-  // rather than disappearing with the fields.
-  //
-  // Three states, not two. A quote written at 9pm has its customer text held
-  // until 8am, which is neither sent nor failed: reading it as a failure sends
-  // the crew chasing the office over something that is already handled, and
-  // reading it as sent would be a lie about a text nobody has yet received.
+  // Rendered in all three states because a send folds the form away. Three outcomes: a 9pm quote's text is
+  // held until 8am, which is neither sent nor failed.
   const result =
     state.sent && !pending && !state.error ? (
       <p className={state.smsDelivered ? "js-ok" : state.smsHeldUntil ? "js-hint" : "js-err"}>
@@ -188,17 +164,8 @@ export function JobQuote({
       </p>
     ) : null;
 
-  // The ball is in the customer's court, so there is no Send button here.
-  // Repeating a quote they already have moves the frustration from their phone
-  // to this page and back; showing when it went and what it said answers the
-  // question that makes people press Send again in the first place.
-  //
-  // Correcting it is the exception, and the only one. A price that was typed
-  // wrong is sitting on a customer's phone waiting to be approved, and the crew
-  // who wrote it are the ones who can see that - so they get a way to fix it
-  // here rather than a phone call to the office while the wrong number stands.
-  // It's a quiet second action, not a second Send: the default answer to
-  // "nothing has happened yet" is still to wait.
+  // Waiting on the customer, so no Send button (repeating the quote frustrates both sides). The one
+  // exception is a quiet "correct it" action for a price typed wrong.
   if (awaitingReply && !open) {
     const when = sentAt
       ? new Date(sentAt).toLocaleString("en-US", {
@@ -250,19 +217,19 @@ export function JobQuote({
 
       <form action={formAction} className="jq-form">
         <input type="hidden" name="id" value={id} />
-        {/* Same pattern as the CRM editor: intent rides on a hidden field, not
-            on the submit button, so it can't silently fall through to "save"
-            and report success without texting anyone. */}
+        {/*
+          Intent rides on a hidden field, not the submit button, so it can't fall through to "save" and report
+          success without texting.
+        */}
         <input type="hidden" name="intent" value="send" />
-        {/* The whole list as JSON - a variable number of rows can't ride on
-            named form fields without an indexing scheme the server would then
-            have to undo. */}
+        {/* JSON: a variable number of rows can't ride on named form fields. */}
         <input type="hidden" name="options_json" value={rowsToJson(rows)} />
         <input type="hidden" name="packages_json" value={packagesToJson(pkgRows)} />
 
-        {/* Same price card and section timeline as the owner's editor and the
-            customer's page (components/quote-form-parts), so the crew fills in
-            the page the customer gets rather than a form that becomes it. */}
+        {/*
+          Shared with the owner's editor and the customer page (components/quote-form-parts), so the crew fill in
+          the page the customer gets.
+        */}
         <PriceCard
           value={derived ? String(derivedTotal) : price}
           onChange={setPrice}
@@ -271,11 +238,10 @@ export function JobQuote({
         />
         <SectionsEditor sections={sections} onChange={setSection} />
 
-        {/* The price, line by line: materials, labor and the rest. Always
-            open, because "what am I paying for" is the question a breakdown
-            answers and the one that wins jobs. Adding a line turns the price
-            card above into their sum. On a quote the customer already has,
-            the gap to that price is shown as the lines are typed. */}
+        {/*
+          Always open: "what am I paying for" wins jobs. Adding a line makes the price card their sum; on a quote
+          already sent, the gap to that price shows while typing.
+        */}
         <OptionBuilder
           rows={rows}
           onChange={setRows}
@@ -285,17 +251,13 @@ export function JobQuote({
           choiceActive={choice}
         />
 
-        {/* Everything that is not a straight breakdown, folded under one
-            heading so the everyday quote stays a price, the scope and the
-            lines. Opens by itself on a quote that already uses any of it. */}
+        {/* Everything beyond a straight breakdown, folded; opens itself if the quote already uses any of it. */}
         <MoreWaysToPrice
           labels={t.quoteOptions}
           startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
         >
-          {/* "And what about the sidewalk?" - an add-on they can say no to. */}
           <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} mode="extras" />
-          {/* Optional extras the customer was meant to pick ONE of add up to
-              every price at once. Offered here, where the mistake gets made. */}
+          {/* Extras meant to be pick-one add up to every price at once; offered here, where the mistake is made. */}
           <PickOneSuggestion
             rows={rows}
             hasChoice={filledPackages(pkgRows).length > 0}
@@ -304,11 +266,10 @@ export function JobQuote({
               setRows([]);
             }}
           />
-          {/* "What would it cost in asphalt instead?" Two prices on one quote. */}
           <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={t.quotePackages} />
         </MoreWaysToPrice>
 
-        {/* Only for a quote written before the sections existed. */}
+        {/* Only for quotes written before the sections existed. */}
         {hasLegacySummary && (
           <label className="jq-field">
             <span>{t.contractorJob.quoteSummary}</span>
@@ -331,9 +292,7 @@ export function JobQuote({
             : t.contractorJob.quoteWho.replace("{name}", customerFirstName)}
         </p>
 
-        {/* Says why the button is greyed out before they go looking for the
-            reason: a correction that changes nothing is the duplicate text the
-            whole rule exists to stop. */}
+        {/* A correction that changes nothing is the duplicate text the rule exists to stop. */}
         {awaitingReply && !changed && <p className="js-hint">{t.contractorJob.quoteFixUnchanged}</p>}
         {!priceOk ? (
           <p className="jq-todo">{t.contractorJob.quoteNeedPrice}</p>
@@ -355,8 +314,7 @@ export function JobQuote({
         </button>
       </form>
 
-      {/* A refused duplicate isn't an error - nothing broke and there's nothing
-          to fix, so it reads as a note rather than in red. */}
+      {/* A refused duplicate isn't an error, so it reads as a note. */}
       {state.error && !pending && <p className={state.alreadySent ? "js-hint" : "js-err"}>{state.error}</p>}
       {result}
     </section>

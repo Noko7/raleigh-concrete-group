@@ -14,14 +14,9 @@ export function generateStaticParams() {
 
 export const dynamicParams = false;
 
-// Slugs that also have a bespoke /raleigh/<slug> page (docs/seo.md's P1
-// driveway and stamped-concrete clusters, targeted at those URLs
-// specifically). This page must NOT title itself "<Service> Raleigh NC" for
-// those - it would put two of our own pages up against each other for the
-// identical phrase, the same pattern Search Console already flagged
-// elsewhere on the site ("Duplicate, Google chose different canonical").
-// Every other service has no city-specific competitor, so it keeps the
-// Raleigh-branded title to carry that local intent itself.
+// Slugs with a bespoke /raleigh/<slug> page (the P1 targets in docs/seo.md). This page must NOT title
+// itself "<Service> Raleigh NC" for those, or two of our pages compete for the same phrase. Other services
+// keep the Raleigh-branded title.
 const SLUGS_WITH_OWN_RALEIGH_PAGE = new Set(
   serviceSlugs.filter((slug) => isCityServicePair("raleigh", slug)),
 );

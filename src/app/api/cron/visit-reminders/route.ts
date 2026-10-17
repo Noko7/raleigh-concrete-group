@@ -13,33 +13,22 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Second daily Vercel Cron, kept separate from /api/cron/reminders because
-// this one needs an evening run time - "the night before" - while the other
-// runs in the morning. Vercel's Hobby plan allows up to two cron jobs, each
-// once a day, so this fits without needing a paid plan.
-//
-// Job: tomorrow's in-person quote visits (the free estimate appointment, not
-// a booked work day) - texts both the customer and the assigned contractor
-// (with the address) once.
-// Protected by CRON_SECRET (Vercel sends it as a Bearer token) - same env var
-// as /api/cron/reminders.
+// Second daily Vercel Cron, separate from /api/cron/reminders because it needs an evening run ("the night
+// before"); Hobby allows two once-a-day crons. Texts customer and contractor (with address) once about
+// tomorrow's in-person quote visits (not work days). Protected by CRON_SECRET.
 
 export async function GET(request: Request) {
   if (!cronAuthorized(request)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  // 6pm ET is inside business hours, so this run can also clear anything still
-  // queued from the morning - a held text shouldn't sit all day because nobody
-  // happened to use the app.
+  // 6pm ET is inside business hours, so this also clears anything still queued from the morning.
   const flushed = await flushHeldMessages();
 
   const tomorrow = ymdInDays(1);
   let customerSent = 0;
   let crewSent = 0;
-  // A contractor with three visits tomorrow gets three texts. Their first
-  // arrives now; the others queue 15 minutes apart, so the evening brief is
-  // read as three appointments rather than one blur.
+  // Several visits tomorrow: first text now, the rest 15 minutes apart.
   const nextSlot = spacer();
 
   for (const q of await listVisitsOn(tomorrow)) {

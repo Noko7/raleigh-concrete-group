@@ -32,16 +32,12 @@ export function CityServicePage({
   if (!content) return null;
   const { service, city, neighborhoods, paragraphs, projectExample, faqs } = content;
 
-  // Only the sibling services that actually have a hand-written page in THIS
-  // city. Linking at a pair with no content would point internal link equity
-  // straight at a 301, and used to be how the templated matrix got crawled in
-  // the first place.
+  // Only siblings with a hand-written page in THIS city; others 301, wasting internal link equity.
   const otherCoreInCity = cityServicesFor(locationKey)
     .filter((s) => s !== slug)
     .map((s) => getService(s))
     .filter((s): s is NonNullable<typeof s> => Boolean(s));
 
-  // Everything else we do, pointed at the city-neutral service pages.
   const otherServicesElsewhere = coreServices.filter(
     (s) => s.slug !== slug && !otherCoreInCity.some((o) => o.slug === s.slug),
   );
@@ -77,7 +73,6 @@ export function CityServicePage({
           ]}
         />
 
-        {/* Hero */}
         <section className="relative overflow-hidden py-12 md:py-16">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_30%,rgba(194,104,42,0.18),transparent_48%)]" />
           <div className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 md:px-8 lg:grid-cols-2 lg:items-center">
@@ -133,7 +128,6 @@ export function CityServicePage({
           </div>
         </section>
 
-        {/* Local project example */}
         {projectExample && (
           <section className="mx-auto w-full max-w-3xl px-4 pb-12 md:px-8">
             <div className="rounded-3xl border-l-4 border-amber-accent bg-white/5 p-6 md:p-8">
@@ -145,7 +139,6 @@ export function CityServicePage({
           </section>
         )}
 
-        {/* What's included */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8">
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 md:p-10">
             <h2 className="mb-5 font-headline text-3xl text-ivory">
@@ -162,13 +155,11 @@ export function CityServicePage({
           </div>
         </section>
 
-        {/* Gallery */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8">
           <h2 className="mb-6 font-headline text-4xl text-ivory">Recent Work</h2>
           <GalleryCarousel images={galleryImages} />
         </section>
 
-        {/* Quote */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8" id="quote">
           <div className="rounded-3xl bg-ivory p-8 text-center text-[#2b1a12] md:p-12">
             <h2 className="mb-3 font-headline text-4xl text-[#2b1a12] md:text-5xl">
@@ -191,7 +182,6 @@ export function CityServicePage({
           </div>
         </section>
 
-        {/* Areas served */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
             <h2 className="mb-2 font-headline text-3xl text-ivory">
@@ -207,10 +197,8 @@ export function CityServicePage({
           </div>
         </section>
 
-        {/* FAQ */}
         <FaqSection faqs={faqs} heading={`${service.name} in ${city}: FAQs`} />
 
-        {/* Cross-links: other services in this city */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8">
           {otherCoreInCity.length > 0 && (
             <>

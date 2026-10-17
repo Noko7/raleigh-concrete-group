@@ -16,10 +16,8 @@ function pretty(s: string): string {
   });
 }
 
-// Confirming a date is what actually books the job and texts the customer, so
-// this is deliberately a separate card rather than another field in the editor -
-// it shouldn't be possible to move a customer's date as a side effect of saving
-// unrelated notes.
+// Confirming a date books the job and texts the customer, so it's a separate card: saving notes must never
+// move a customer's date.
 export function ScheduleCard({
   id,
   scheduledDate,
@@ -38,17 +36,11 @@ export function ScheduleCard({
   const [state, formAction, pending] = useActionState<ScheduleState, FormData>(setJobDate, { ok: false });
   const t = dict(locale);
   const booked = Boolean(scheduledDate);
-  // Seeded from what the customer asked for, not from a house default. On a
-  // quote where they said "Tuesday at 7:00 AM", 9:00 AM in this box is a
-  // different appointment than the one they agreed to.
+  // Seeded from what the customer asked for: 9:00 AM would be a different appointment than their 7:00 AM.
   const [time, setTime] = useState(scheduledTime ?? preferred.find((p) => p.time)?.time ?? "9:00 AM");
-  // Whether the box above has been touched. Until it is, each of the customer's
-  // days is confirmed at the time they asked for on THAT day - three days can
-  // carry three different times. Once the crew sets one deliberately, it wins
-  // on every day, because that is what they just said they can do.
+  // Until the box is touched, each day books at the time asked for on THAT day; once set, it wins everywhere.
   const [overridden, setOverridden] = useState(false);
-  // Moving a booked day texts the customer unless this is unticked. Shared by
-  // every button on the card, so it rides along as a hidden field in each form.
+  // Moving a booked day texts the customer unless unticked. Hidden field in every form on the card.
   const [notify, setNotify] = useState(true);
   const notifyField = booked ? <input type="hidden" name="notify" value={notify ? "yes" : "no"} /> : null;
 
@@ -69,10 +61,7 @@ export function ScheduleCard({
         <p className="crm-muted crm-sm">{t.schedule.waiting}</p>
       )}
 
-      {/* Any start time, not a list of round hours. A crew that has to be on
-          site at 6:45 for a pour shouldn't have to round it to 7:00 in the
-          text the customer gets. The value rides along in the hidden fields
-          below, so every way of booking a day carries the same time. */}
+      {/* Any start time (a 6:45 pour shouldn't read 7:00). Carried in the hidden fields below. */}
       <label className="crm-field sched-time">
         <span>{t.schedule.startTime}</span>
         <input
@@ -91,9 +80,7 @@ export function ScheduleCard({
         <div className="sched-picks">
           <p className="crm-sm sched-picks-label">{t.schedule.customerPrefers}</p>
           <div className="sched-pick-row">
-            {/* Each button carries the time the customer asked for on THAT day
-                rather than one shared value, so tapping their Tuesday books
-                their Tuesday. See `overridden` above for when the box wins. */}
+            {/* Each button carries that day's requested time; see `overridden` for when the box wins. */}
             {preferred.map((p) => {
               return (
                 <form action={formAction} key={p.date}>

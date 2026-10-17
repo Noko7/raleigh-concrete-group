@@ -10,17 +10,10 @@ import { AddOption, type SentOption } from "./add-option";
 import { retractQuote } from "./actions";
 import type { ScheduleState } from "./types";
 
-// Every price this customer has been given, newest first.
-//
-// The job row only ever holds the current quote, so "we've sent them three
-// versions and the second one is the number they're arguing about" was a thing
-// you could only reconstruct by reading the activity log line by line. This is
-// that reconstruction, done once, sitting above the logs on both job pages.
-//
-// Newest first because the top row is the live one: it is what the customer is
-// holding right now, and the older rows are only ever context for it.
+// Every price this customer has been given, newest first (the top row is what they hold now). The job row
+// only stores the current quote.
 
-// Raleigh time, like every other stamp the crew and the office read together.
+// Raleigh time.
 function stamp(iso: string, locale: Locale) {
   return new Date(iso).toLocaleString("en-US", {
     month: "short",
@@ -36,18 +29,13 @@ export function QuoteSends({
   customerName,
   sends,
   canRetract,
-  // Whether another option can still be put in front of this customer: the
-  // quote is out, and they have not answered it. Everything else - approved,
-  // declined, closed out - is a different conversation, and the button stays
-  // off the card rather than failing when it is pressed.
+  // The quote is out and unanswered. Otherwise the button isn't shown, rather than failing when pressed.
   canAddOption,
   currentAmount,
   service,
   options,
   locale,
-  // The two job pages are different colours: the office's is dark, the crew's
-  // is a white card. One component, one modifier, rather than two lists that
-  // drift apart the first time somebody adds a column to one of them.
+  // Office page is dark, crew page is a white card: one component with a modifier so they don't drift.
   tone = "dark",
 }: {
   quoteId: string;
@@ -90,19 +78,12 @@ export function QuoteSends({
                     {dollars(s.amount) ?? t.quoteLog.noPrice}
                   </span>
                   <span className="qs-when">{stamp(s.at, locale)}</span>
-                  {/* Two slots, not one list. "Current" and "Correction" are
-                      different questions - which one are they holding, and how
-                      did this one come about - and sharing a right-aligned box
-                      meant a row with one tag started somewhere a row with two
-                      didn't. A column each, and every tag begins where the one
-                      above it does. */}
+                  {/* Two columns so every tag aligns regardless of how many a row has. */}
                   <span className="qs-flag">
                     {s.live && <em className="qs-tag qs-tag-live">{t.quoteLog.current}</em>}
                   </span>
                   <span className="qs-kind">
-                    {/* An added option is its own kind of send. Calling it a
-                        correction would say the price before it was wrong,
-                        which is the one thing that did not happen. */}
+                    {/* An added option is not a correction: the earlier price wasn't wrong. */}
                     {s.added ? (
                       <em className="qs-tag qs-tag-added" title={s.added}>
                         {fill(t.quoteLog.optionAdded, { title: s.added })}
@@ -119,10 +100,7 @@ export function QuoteSends({
         </>
       )}
 
-      {/* The second price, sent from the card that already answers "what have
-          we put in front of this person". It belongs here rather than in the
-          quote form: the crew reach for it while reading back what was sent,
-          which is the moment the customer's objection is still in their ear. */}
+      {/* Here rather than in the quote form: the crew reach for it while reading back what was sent. */}
       {canAddOption && sends.length > 0 && (
         <AddOption
           quoteId={quoteId}
@@ -135,9 +113,7 @@ export function QuoteSends({
         />
       )}
 
-      {/* Owner only, and never on a job with nothing sent. Two steps rather
-          than one, because the whole point of the button is that somebody has
-          already made one mistake on this job today. */}
+      {/* Owner only, two steps: someone has already made one mistake on this job. */}
       {canRetract && sends.length > 0 && (
         <div className="qs-retract">
           {state.error && <p className="qs-err">{state.error}</p>}

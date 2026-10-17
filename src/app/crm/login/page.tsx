@@ -10,8 +10,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-// Only accept a same-site relative path (e.g. "/job/abc123") so this can't be
-// abused as an open redirect via an absolute or protocol-relative URL.
+// Same-site relative paths only, so this can't be an open redirect.
 function safeNext(next: string | undefined): string | undefined {
   if (!next || !next.startsWith("/") || next.startsWith("//")) return undefined;
   return next;

@@ -2,8 +2,7 @@ import Link from "next/link";
 
 type Crumb = { name: string; path: string };
 
-// Visible breadcrumb trail. Pair with breadcrumbSchema() for the JSON-LD so the
-// on-page UI and structured data stay in sync.
+// Pair with breadcrumbSchema() so the UI and JSON-LD stay in sync.
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
   return (
     <nav aria-label="Breadcrumb" className="mx-auto w-full max-w-6xl px-4 pt-4 md:px-8">

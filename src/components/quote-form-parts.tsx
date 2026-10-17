@@ -12,31 +12,22 @@ import {
   type QuoteSectionField,
 } from "@/lib/crm/constants";
 
-// The pieces of a quote form that the customer will read back: the price, the
-// five sections, and a preview of the page they open. Shared by the crew's form
-// on /job/<token> and the owner's editor in the CRM, so a quote written in a
-// truck and one written at a desk look the same while they are being written
-// and send the same thing. Each form keeps its own state and its own submit;
-// these only draw.
+// Quote form pieces the customer reads back, shared by the crew's /job/<token> form and the owner's CRM
+// editor so both write and send the same thing. Each form keeps its own state and submit; these only draw.
 
 export type Sections = Record<QuoteSectionField, string>;
 
 export const emptySections = (): Sections =>
   Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, ""])) as Sections;
 
-// What the Not applicable button writes. The customer's page reads it back and
-// shows it quieter than the sections that are real work.
+// The customer's page shows this quieter than real sections.
 export const NOT_APPLICABLE = "Not applicable";
 
 export function blankSections(sections: Sections): QuoteSectionField[] {
   return QUOTE_SECTION_FIELDS.filter((f) => !sections[f].trim());
 }
 
-/**
- * The price, set the way the customer will see it: one big number in the same
- * outlined card their quote page opens on. Read-only when line items or a
- * choice of options work it out instead.
- */
+/** Styled as on the customer's quote page. Read-only when line items or packages derive it. */
 export function PriceCard({
   value,
   onChange,
@@ -72,10 +63,7 @@ export function PriceCard({
   );
 }
 
-/**
- * The five sections on the timeline the customer reads them on. A stop fills
- * in once its section has something in it, so what's left reads straight down.
- */
+/** A stop fills in once its section has content, so what's left reads straight down. */
 export function SectionsEditor({
   sections,
   onChange,
@@ -125,10 +113,8 @@ export function SectionsEditor({
 }
 
 /**
- * Shown when every line item is optional and no choice is set up yet: the
- * shape a "Section 1 / Section 2 / All sections" quote comes out in. As
- * optional extras the customer can say yes to all of them and the page adds
- * them up; if they are meant to pick one, one tap rewrites them as a choice.
+ * Shown when every line item is optional and no choice exists (the "Section 1 / Section 2 / All" shape):
+ * one tap rewrites them as a pick-one choice.
  */
 export function PickOneSuggestion({
   rows,
@@ -155,11 +141,7 @@ export function PickOneSuggestion({
   );
 }
 
-/**
- * The customer's page, built from what is in the fields right now with the
- * component that page itself uses. Closed until asked for: the form already
- * reads like it, this is the final check.
- */
+/** The customer's page built from the current fields with that page's own component. Closed by default. */
 export type PreviewLine = { title: string; amount: number; description?: string };
 
 export function CustomerPreview({
@@ -177,18 +159,16 @@ export function CustomerPreview({
   derived: boolean;
   sections: Sections;
   startOpen?: boolean;
-  /** The price breakdown: every line that is part of the job, filled in. */
+  /** Every line that is part of the job. */
   lines?: PreviewLine[];
   /** How many optional extras the customer will be asked about. */
   extras?: number;
-  /** The job is priced two ways, so the customer picks one first. */
+  /** Priced two ways: the customer picks one first. */
   choice?: boolean;
 }) {
   const [open, setOpen] = useState(startOpen);
   const filled = QUOTE_SECTION_FIELDS.filter((f) => sections[f].trim());
-  // A breakdown with nothing to pick between: the customer page shows the scope,
-  // then every line with its price, then the total - so the preview does too,
-  // in that order. Only a quote priced two ways still waits on a pick.
+  // Matches the customer page: scope, each line with its price, then the total.
   const breakdown = !choice && lines.length > 0;
   const breakdownTotal = Math.round(lines.reduce((sum, l) => sum + l.amount, 0) * 100) / 100;
   return (
@@ -200,14 +180,11 @@ export function CustomerPreview({
         <div className="jq-preview">
           <p className="jq-preview-note">This is how it shows on {firstName}&apos;s phone.</p>
           <p className="cq-title">Hi {firstName},</p>
-          {/* The single-price card. A broken-down quote has no card up here on
-              the customer's page - its total sits under the lines it adds up -
-              so the preview leaves it out too rather than showing a dash. */}
+          {/* A broken-down quote has no price card on the customer page (its total sits under the lines). */}
           {!breakdown && (
             <div className="cq-price">
               <span className="cq-price-label">{derived ? "Your total" : "Your price, all in"}</span>
-              {/* A quote with options shows no total until the customer picks,
-                  so neither does the preview of it. */}
+              {/* No total until the customer picks, same as the customer page. */}
               <span className="cq-price-value">{!derived && price != null && price > 0 ? dollars(price) : "-"}</span>
               <span className="cq-price-sub">
                 {derived ? "Shown once they pick their options" : "Free quote · no obligation until you approve"}

@@ -1,15 +1,10 @@
-// Shared rate limiter usable from both edge middleware and Node route handlers.
-// Dependency-free: if Upstash Redis REST credentials are present it uses a
-// durable, cross-instance fixed-window counter; otherwise it falls back to a
-// best-effort in-memory counter (per serverless instance). Configure in Vercel:
-//   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+// Works in edge middleware and Node routes. Uses Upstash Redis REST (durable, cross-instance fixed window)
+// when UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN are set; otherwise a per-instance in-memory counter.
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL || "";
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || "";
 
-// Trusted client IP. On Vercel, `x-real-ip` is set by the platform to the
-// connecting client and is NOT spoofable by the client, unlike the left-most
-// `x-forwarded-for` entry. We fall back to the RIGHT-most XFF hop (the address
-// the edge actually saw) before giving up.
+// On Vercel `x-real-ip` is set by the platform and not client-spoofable, unlike the left-most
+// `x-forwarded-for`. Fallback: the RIGHT-most XFF hop (what the edge saw).
 export function clientIp(request: Request): string {
   const h = request.headers;
   const realIp = h.get("x-real-ip");
@@ -29,20 +24,13 @@ function memLimited(key: string, max: number, windowMs: number): boolean {
   const now = Date.now();
   const recent = (mem.get(key) ?? []).filter((t) => now - t < windowMs);
   recent.push(now);
-  // Re-set rather than mutate in place, so the key moves to the end of the
-  // Map's insertion order. That ordering is what makes the eviction below
-  // oldest-first.
+  // Re-set so the key moves to the end of insertion order, making eviction oldest-first.
   mem.delete(key);
   mem.set(key, recent);
 
   if (mem.size > MEM_MAX_KEYS) {
-    // Evict the least recently touched, NOT the whole table.
-    //
-    // This used to be mem.clear(), which handed anybody being limited a way
-    // out: fill the map with 8000 junk keys and every real counter - including
-    // the one currently refusing your login attempts - is wiped along with
-    // them. Dropping the oldest tenth costs an attacker nothing they didn't
-    // already have and leaves live counters standing.
+    // Evict the oldest tenth, NOT the whole table: clearing it would let anyone flood junk keys to wipe the
+    // counter that is limiting them.
     const evict = Math.ceil(MEM_MAX_KEYS / 10);
     let n = 0;
     for (const k of mem.keys()) {
@@ -77,7 +65,7 @@ async function upstashLimited(key: string, max: number, windowMs: number): Promi
   }
 }
 
-// Returns true when the caller has EXCEEDED `max` requests in the window.
+// True when the caller has EXCEEDED `max` in the window.
 export async function rateLimit(key: string, max: number, windowMs: number): Promise<boolean> {
   if (UPSTASH_URL && UPSTASH_TOKEN) {
     const durable = await upstashLimited(key, max, windowMs);

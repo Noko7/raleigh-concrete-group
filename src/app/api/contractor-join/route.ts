@@ -6,19 +6,16 @@ import { consumeInvite, getUsableInvite } from "@/lib/crm/queries";
 import { adminCreateUser, pgAdmin } from "@/lib/crm/rest";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-// Public endpoint: redeems a contractor invite token into a real account. This
-// is the only unauthenticated path in the app that can create a login, so every
-// step re-validates rather than trusting the page that called it.
-//
-// The generic failure message is deliberate. An attacker guessing tokens should
-// not be able to tell "no such invite" from "already used" from "expired".
+// Public: redeems a contractor invite into an account. The only unauthenticated path that can create a
+// login, so every step re-validates. One generic failure so "no such invite", "used" and "expired" look
+// the same.
 const GENERIC = "This invite link is no longer valid. Ask for a new one.";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TOKEN_RE = /^[a-f0-9]{32}$/;
 
 export async function POST(request: Request) {
   const ip = clientIp(request);
-  // Tight cap: this is account creation behind a guessable-in-principle token.
+  // Tight cap: account creation behind a token.
   if (await rateLimit(`join:${ip}`, 8, 15 * 60 * 1000)) {
     return NextResponse.json({ ok: false, error: "Too many attempts. Please wait a few minutes." }, { status: 429 });
   }
@@ -43,8 +40,7 @@ export async function POST(request: Request) {
   const fullName = (typeof body.full_name === "string" ? body.full_name : "").trim().slice(0, 120);
   const email = (typeof body.email === "string" ? body.email : "").trim().toLowerCase().slice(0, 254);
   const password = typeof body.password === "string" ? body.password : "";
-  // Whatever they picked on the form becomes their CRM language. Anything we
-  // don't ship falls back to English rather than failing the check constraint.
+  // Unshipped locales fall back to English rather than failing the check constraint.
   const locale = isLocale(body.locale) ? body.locale : "en";
 
   if (fullName.length < 2) {
@@ -59,9 +55,7 @@ export async function POST(request: Request) {
   if (password.length > 72) {
     return NextResponse.json({ ok: false, error: "That password is too long." }, { status: 400 });
   }
-  // The number they want alerts on. Normalised here because the SMS providers
-  // require E.164 - a raw "919-555-1234" would be rejected at send time, long
-  // after they'd have any way to fix it.
+  // SMS providers require E.164; normalise now while they can still fix it.
   const rawPhone = typeof body.phone === "string" ? body.phone : "";
   const phone = rawPhone.trim() ? toE164(rawPhone) : null;
   if (rawPhone.trim() && !phone) {
@@ -70,39 +64,32 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  // No allowlist check: contractors sign in with their own personal address.
-  // Their authorisation is the invite the owner sent, not their email domain.
+  // No allowlist: their authorisation is the owner's invite, not their email domain.
 
-  // Re-check the token server-side: the page's own check happened earlier and
-  // the invite may have been used or revoked in between.
+  // Re-check: the invite may have been used or revoked since the page loaded.
   const invite = await getUsableInvite(token);
   if (!invite) return NextResponse.json({ ok: false, error: GENERIC }, { status: 400 });
 
   const created = await adminCreateUser(email, password, fullName);
   if ("error" in created) {
-    // Don't burn the invite - let them retry with a different address.
+    // Don't burn the invite; let them retry with another address.
     return NextResponse.json({ ok: false, error: created.error }, { status: 400 });
   }
 
-  // Burn the invite before finishing setup. This is conditional on it still
-  // being unused, so if two submissions race, the loser stops here instead of
-  // both ending up with an account.
+  // Conditional on still being unused, so of two racing submissions only one gets an account.
   if (!(await consumeInvite(invite.id, created.id))) {
     return NextResponse.json({ ok: false, error: GENERIC }, { status: 409 });
   }
 
-  // The signup trigger already made a staff row (inactive contractor). Fill in
-  // their details and activate it - the owner invited this exact number, so
-  // there's no second approval step. must_reset_password stays false because
-  // they chose this password themselves.
+  // The signup trigger made an inactive contractor row; activate it (the invite is the approval).
+  // must_reset_password stays false: they chose this password.
   const res = await pgAdmin(`staff?id=eq.${created.id}`, {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({
       full_name: fullName,
       email,
-      // The number they entered, falling back to the one the owner invited if
-      // they cleared the field - never end up with no way to reach them.
+      // Fall back to the invited number so there's always a way to reach them.
       phone: phone ?? invite.phone,
       role: "contractor",
       active: true,

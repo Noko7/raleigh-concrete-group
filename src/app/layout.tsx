@@ -35,10 +35,7 @@ export const metadata: Metadata = {
     url: "https://www.raleighconcrete.net",
     siteName: "Raleigh Concrete Group",
     type: "website",
-    // The square logo on a white background. Solid white rather than a
-    // transparent PNG on purpose: iMessage and WhatsApp composite previews onto
-    // their own surface, and a transparent logo turns into a black square in
-    // dark mode.
+    // Solid white, not transparent: iMessage and WhatsApp render a transparent logo as a black square in dark mode.
     images: [
       {
         url: "/images/imessage-preview-image.png",
@@ -50,8 +47,7 @@ export const metadata: Metadata = {
     ],
   },
   twitter: {
-    // summary (not summary_large_image) - the artwork is square, and the large
-    // card would crop it top and bottom.
+    // The artwork is square; summary_large_image would crop it.
     card: "summary",
     title: "Raleigh Concrete Group",
     description:
@@ -67,10 +63,10 @@ export default function RootLayout({
     <html lang="en" className={`${headline.variable} ${body.variable} antialiased`}>
       <body className="min-h-screen">
         <JsonLd data={[localBusinessSchema(), websiteSchema()]} />
-        {/* The sideways-overflow guard lives on this wrapper, not on html/body:
-            on iPhone Safari an overflow rule on the page root makes position:
-            fixed elements (the bottom Quote/Call/Text bar) slide up the screen
-            while scrolling. */}
+        {/*
+          Overflow guard here, not on html/body: on iPhone Safari a root overflow rule makes position: fixed
+          elements (the bottom bar) slide while scrolling.
+        */}
         <div className="site-clip">{children}</div>
         <QuoteModalRoot />
         <VercelInsights />

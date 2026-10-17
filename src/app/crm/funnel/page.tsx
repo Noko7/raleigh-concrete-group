@@ -10,16 +10,11 @@ import { dismissDraft } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-// The quote funnel: of the people who opened Get Free Quote, how many got to
-// each step, how long each step took them, and where and why the rest gave up.
-// Recorded by the form itself (src/lib/funnel.ts) into site_funnel_events.
-//
-// Clicks and scrolling on the rest of the site are Microsoft Clarity's job
-// (src/components/clarity.tsx) - this page is only the form.
+// Of those who opened Get Free Quote: how many reached each step, how long it took, and why the rest gave
+// up (recorded by src/lib/funnel.ts). Site-wide clicks are Clarity's job.
 
 const WINDOWS = [7, 30, 90] as const;
-// PostgREST hands back at most 1000 rows a request. 50 pages is 50,000 events,
-// far past anything this site sees in 90 days; past that the page says so.
+// PostgREST caps a request at 1000 rows; 50 pages is far past 90 days of traffic, and the page says if hit.
 const PAGE = 1000;
 const MAX_PAGES = 50;
 
@@ -30,7 +25,6 @@ const STEP_LABELS: Record<string, string> = {
   schedule: "Date + time",
 };
 
-// What each recorded code means, in the office's words.
 const DETAIL_LABELS: Record<string, string> = {
   ready: "everything filled in",
   left_page: "closed the tab / left",
@@ -70,7 +64,7 @@ function detailLabel(detail: string): string {
   return detail.replace(/_/g, " ");
 }
 
-// Keys come out of funnel-stats as "step · detail".
+// Keys come from funnel-stats as "step · detail".
 function reasonLabel(key: string): string {
   const [step, detail] = key.split(" · ");
   const where = STEP_LABELS[step] ?? step;
@@ -89,7 +83,7 @@ async function loadRows(days: number): Promise<{ rows: FunnelRow[]; missingTable
       `site_funnel_events?select=attempt_id,visitor_id,form,event,step,ms,mode,detail,path,device` +
         `&created_at=gte.${encodeURIComponent(since)}&order=id.asc&limit=${PAGE}&offset=${page * PAGE}`,
     );
-    // 404 / 42P01: supabase/funnel.sql hasn't been run yet.
+    // 404 / 42P01: table missing.
     if (!res.ok) return { rows, missingTable: page === 0, truncated: false };
     const batch = (await res.json()) as FunnelRow[];
     rows.push(...batch);
@@ -98,11 +92,8 @@ async function loadRows(days: number): Promise<{ rows: FunnelRow[]; missingTable
   return { rows, missingTable: false, truncated: true };
 }
 
-// People who typed a name and number into the form and never sent it
-// (supabase/quote-drafts.sql). The point of this page for the office: a list to
-// call. Left out: anyone still on the form (touched in the last 10 minutes and
-// hasn't left), and anyone whose number turns up on a lead since - they sent it
-// in another tab or rang us.
+// People who typed a name and number and never sent it: a list to call. Excludes anyone still on the form
+// (touched in the last 10 minutes) and anyone whose number has since appeared on a lead.
 type Draft = {
   submission_id: string;
   created_at: string;
@@ -125,7 +116,7 @@ async function loadDrafts(days: number): Promise<Draft[] | null> {
     `quote_drafts?select=submission_id,created_at,updated_at,name,phone,email,address,mode,service,step,left_at` +
       `&lead_id=is.null&dismissed_at=is.null&updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=200`,
   );
-  // 404: supabase/quote-drafts.sql hasn't been run yet.
+  // 404: table missing.
   if (!res.ok) return null;
   const drafts = (await res.json()) as Draft[];
   if (!drafts.length) return drafts;

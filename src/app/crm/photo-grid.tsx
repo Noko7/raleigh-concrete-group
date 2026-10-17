@@ -2,20 +2,13 @@
 
 import { useState } from "react";
 
-// Thumbnails + tap-to-zoom lightbox. URLs point at the authenticated /api/file
-// proxy, so they only load for a signed-in staff member.
+// URLs point at the authenticated /api/file proxy.
 export function PhotoGrid({ urls }: { urls: string[] }) {
   const [open, setOpen] = useState<number | null>(null);
-  // The extension is inside the proxy URL's `p` parameter, so it is followed by
-  // `&` as often as by the end of the string - the signature and expiry are
-  // appended after it. Matching only `?|$` meant every video started rendering
-  // as a broken <img> the moment those parameters arrived.
+  // The extension sits inside the `p` param, so it can be followed by `&` (signature params come after).
   const isVideo = (u: string) => /\.(mp4|mov|webm|quicktime)(\?|&|$)/i.test(u);
 
-  // The grid asks the proxy for a thumbnail; the lightbox asks for the file.
-  // 640 rather than the 150 it is drawn at, so a retina screen still gets a
-  // sharp square and a tap-to-zoom on the way to the lightbox has something to
-  // show while the original loads.
+  // 640, not the drawn 150: sharp on retina and something to show while the lightbox original loads.
   const thumb = (u: string) => (u.includes("?") ? `${u}&w=640` : `${u}?w=640`);
 
   return (
@@ -31,9 +24,7 @@ export function PhotoGrid({ urls }: { urls: string[] }) {
                 src={thumb(u)}
                 alt={`Job upload ${i + 1}`}
                 loading="lazy"
-                // Hands the decode to the browser to schedule off the main
-                // thread. With a full-size original this was the jank; with a
-                // thumbnail it is cheap either way, and free to ask for.
+                // Lets the browser decode off the main thread.
                 decoding="async"
                 width={640}
                 height={640}

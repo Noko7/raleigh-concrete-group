@@ -23,15 +23,14 @@ import {
 } from "@/lib/site-data";
 
 export const metadata: Metadata = {
-  // Lead with the money keyword instead of the brand on the homepage.
+  // The money keyword, not the brand, leads the homepage title.
   title: { absolute: "Raleigh Concrete Contractors | Driveways, Patios & Stamped Concrete" },
   description:
     "Top-rated concrete contractors in Raleigh, NC. We pour driveways, patios, walkways, retaining walls, stamped concrete and pavers across the Triangle. Free written quotes.",
   alternates: { canonical: "/" },
 };
 
-// A tight, strong subset of finished work for the hero strip (kept small so the
-// marquee stays light and the loop is seamless).
+// Kept small so the marquee stays light.
 const marqueeImages = galleryImages.slice(0, 14);
 
 const homeBeforeAfter = [
@@ -52,7 +51,6 @@ export default function Home() {
     <>
       <SiteHeader />
       <main>
-        {/* ── Hero ── */}
         <section className="relative overflow-hidden pb-6 pt-12 md:pt-16">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_30%,rgba(194,104,42,0.18),transparent_45%)]" />
           <div className="relative mx-auto max-w-6xl px-4 text-center md:px-8">
@@ -85,12 +83,10 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Work photo strip (immediate proof, smooth auto-scroll, click for HD) ── */}
         <section aria-label="Recent concrete work" className="pb-4 pt-2">
           <HeroMarquee images={marqueeImages} />
         </section>
 
-        {/* ── Before / After (right below the recent-work strip) ── */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-8 pt-6 md:px-8">
           <h2 className="mb-6 font-headline text-4xl text-ivory">See the Before &amp; After</h2>
           <div className="grid gap-6 md:grid-cols-2">
@@ -110,7 +106,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Stat bar ── */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-10 pt-6 md:px-8">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             {homeStats.map((stat) => (
@@ -122,7 +117,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Featured services ── */}
         <section className="mx-auto w-full max-w-6xl px-4 py-10 md:px-8">
           <span className="mb-2 block text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
             Our Services
@@ -147,7 +141,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── About / Welcome ── */}
         <section id="about" className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 py-12 md:px-8">
           <div className="grid items-center gap-8 md:grid-cols-2">
             <div className="overflow-hidden rounded-2xl border border-white/10 shadow-2xl shadow-black/50">
@@ -189,7 +182,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── What to Expect ── */}
         <section className="border-y border-white/10 bg-black/20">
           <div className="mx-auto w-full max-w-6xl px-4 py-14 md:px-8">
             <div className="mb-3 text-center">
@@ -219,7 +211,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Residential & Commercial ── */}
         <section className="mx-auto w-full max-w-6xl px-4 py-14 md:px-8">
           <h2 className="mb-2 font-headline text-4xl text-ivory">
             Services We Offer Across the Triangle
@@ -260,7 +251,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Testimonials ── */}
         <section id="reviews" className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 pb-14 md:px-8">
           <div className="mb-6 flex items-end justify-between gap-4">
             <h2 className="font-headline text-4xl text-ivory">What Customers Say</h2>
@@ -278,7 +268,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Final CTA ── */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8">
           <div className="rounded-3xl bg-ivory p-8 text-center text-[#2b1a12] md:p-12">
             <h2 className="mb-3 font-headline text-4xl text-[#2b1a12] md:text-5xl">

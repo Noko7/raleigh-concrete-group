@@ -19,9 +19,9 @@ export type BoardQuote = {
   assigned_to: string | null;
   quote_amount: number | null;
   view_count: number;
-  /** Owner only: times the assigned contractor opened this job. 0 for everyone else. */
+  /** Owner only; 0 for everyone else. */
   crew_views: number;
-  /** Owner only: tries to open it after it was marked Lost. */
+  /** Owner only: opens after it was marked Lost. */
   crew_closed_views: number;
   quote_type: string | null;
   created_at: string;
@@ -30,7 +30,7 @@ export type BoardQuote = {
   visit_date: string | null;
   visit_time: string | null;
   job_token: string | null;
-  /** A practice lead. Real everywhere except the Money page. */
+  /** Practice lead: real everywhere except the Money page. */
   is_test: boolean;
 };
 
@@ -42,18 +42,8 @@ function shortDate(ymd: string | null, locale: Locale): string {
   });
 }
 
-// ── Ageing ──────────────────────────────────────────────────────────────────
-// A lead nobody has quoted yet AND nobody is booked to go and see.
-//
-// Status alone is the wrong test. It stays "new" until a price goes out, but
-// an in-person lead sits in "new" perfectly legitimately while its visit is
-// still ahead of it: somebody is driving out on that day, and the price is
-// meant to wait until they have seen the job. Ageing that card red would be
-// marking a contractor late for following the process.
-//
-// After the visit the crew get VISIT_GRACE_DAYS to send the price, the same
-// grace the "lead needs attention" text gives them; after that no price has
-// come back, which is exactly the lead worth chasing.
+// Unquoted AND nobody booked to see it. Status alone is wrong: an in-person lead legitimately stays "new"
+// until its visit. After the visit the crew get VISIT_GRACE_DAYS to send the price.
 function isUntouched(q: BoardQuote, graceFrom: string): boolean {
   if (q.status !== "new") return false;
   const booked = visitDateOf(q);
@@ -63,9 +53,7 @@ function isUntouched(q: BoardQuote, graceFrom: string): boolean {
 
 const hoursSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 3_600_000;
 
-// Amber from 12 hours so a lead sitting a while is visible on the board, red
-// from 48 - which is also when the contractor gets the "lead needs attention"
-// text (STALE_LEAD_HOURS).
+// Amber from 12h; red from 48h, when the "lead needs attention" text goes (STALE_LEAD_HOURS).
 function ageBadge(q: BoardQuote, graceFrom: string): { text: string; tone: "warn" | "late" } | null {
   if (!isUntouched(q, graceFrom)) return null;
   const h = hoursSince(q.created_at);
@@ -74,17 +62,10 @@ function ageBadge(q: BoardQuote, graceFrom: string): { text: string; tone: "warn
   return { text, tone: h < 48 ? "warn" : "late" };
 }
 
-// Columns where the oldest thing genuinely is the most urgent. Finished work
-// is left newest-first: nobody is chasing a job that's already paid.
+// Columns where the oldest is the most urgent. Finished work stays newest-first.
 const OLDEST_FIRST: ReadonlySet<Status> = new Set(["new", "quoted", "approved", "scheduled"]);
 
-// One clear label per lead type so a card reads at a glance.
-//
-// Null is labelled "In-person quote" rather than a vaguer "Lead". Everything
-// else in the system - visitDateOf, the calendar, the crew reminders - reads a
-// null quote_type as in-person, because that is what every row predating the
-// column actually was. A card calling it something else was the only place that
-// disagreed, and it made a row occupying a visit slot look like it wasn't one.
+// Null is "In-person quote": everything else (visitDateOf, calendar, reminders) treats null as in-person.
 function typeLabel(q: BoardQuote, t: Dict): { text: string; cls: string } {
   if (q.quote_type === "online") return { text: t.pipeline.typeOnline, cls: "online" };
   if (q.quote_type === "plans") return { text: t.pipeline.typePlans, cls: "plans" };
@@ -118,11 +99,9 @@ function money(n: number | null): string {
 
 export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, locale }: Props) {
   const t = dict(locale);
-  // Contractors get their own job page - the same URL their texts link to - so a
-  // job looks the same however they reach it. Owners get the full editor.
+  // Contractors get their own job page (the URL their texts link to); owners get the full editor.
   const cardHref = (q: BoardQuote) =>
     role === "contractor" && q.job_token ? `/job/${q.job_token}` : `${base}/quotes/${q.id}`;
-  // Column headings and the Move menu read from the same status names.
   const statusLabel = (s: Status) => t.status[s];
   const router = useRouter();
   const [quotes, setQuotes] = useState<BoardQuote[]>(initialQuotes);
@@ -130,19 +109,12 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
   const [overCol, setOverCol] = useState<Status | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  // Phone only: which single stage the list is showing. A board is a good way
-  // to see the shape of the week on a desk and a bad way to read twenty jobs on
-  // a phone, where seven stacked columns is one very long scroll with the thing
-  // you wanted somewhere in the middle of it. Desktop ignores this entirely and
-  // still renders every column side by side.
+  // Phone only: the single stage shown. Desktop renders every column.
   const [stage, setStage] = useState<Status>("new");
-  // Which card has its Move / Crew / Delete row open. Phone only: on a desk
-  // those controls are always on show, and the CSS below is what decides which
-  // of the two you get, so this stays a single DOM either way.
+  // Phone only; on desktop the controls always show (CSS decides), so the DOM is the same.
   const [openCard, setOpenCard] = useState<string | null>(null);
 
-  // Adopt fresh server data (e.g. a customer just accepted) without clobbering
-  // in-flight optimistic edits: only re-sync when the server snapshot changes.
+  // Adopt fresh server data without clobbering in-flight optimistic edits: re-sync only when the snapshot changes.
   const initialSig = useMemo(
     () => initialQuotes.map((q) => `${q.id}:${q.status}:${q.assigned_to ?? ""}:${q.quote_amount ?? ""}`).join("|"),
     [initialQuotes],
@@ -152,15 +124,8 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSig]);
 
-  // Auto-sync: pull the latest pipeline every 20s so booked/accepted quotes move
-  // on their own. Pause while dragging or while a change is saving.
-  //
-  // And pause when nobody is looking. router.refresh() on a force-dynamic page
-  // is a full server render plus its Supabase reads, and this was firing three
-  // times a minute in every backgrounded tab and every phone with the screen
-  // off, all of it landing on the same connection as whatever the person is
-  // actually doing. A tab that was hidden refreshes once on the way back in,
-  // so it is never showing a stale board either.
+  // Refresh every 20s so accepted/booked quotes move on their own. Paused while dragging, saving, or the tab
+  // is hidden (each refresh is a full server render); a hidden tab refreshes once on return.
   useEffect(() => {
     const tick = () => {
       if (document.hidden || dragId || isPending) return;
@@ -178,13 +143,10 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
   }, [dragId, isPending, router]);
 
   const byStatus = useMemo(() => {
-    // Built from STATUSES rather than spelled out, so adding a pipeline stage
-    // can't leave this map missing a column.
+    // From STATUSES so a new stage can't miss a column.
     const map = Object.fromEntries(STATUSES.map((s) => [s, [] as BoardQuote[]])) as Record<Status, BoardQuote[]>;
     for (const q of quotes) map[q.status]?.push(q);
-    // Oldest first in the columns that still need work. The server hands
-    // these back newest-first, which puts the lead most at risk of going
-    // stale at the bottom of the pile - the opposite of the order to work in.
+    // The server returns newest-first, which buries the lead most at risk of going stale.
     for (const s of STATUSES) {
       map[s].sort((a, b) =>
         OLDEST_FIRST.has(s)
@@ -195,13 +157,10 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
     return map;
   }, [quotes]);
 
-  // Recomputed per render rather than memoised: this is only ever compared
-  // against dates, so it costs nothing and can't go stale in a long-lived tab.
-  // The earliest visit date that still holds a lead back (see isUntouched).
+  // Earliest visit date that still holds a lead back (see isUntouched). Per render so it can't go stale.
   const graceFrom = ymdInDays(-VISIT_GRACE_DAYS);
 
-  // The single oldest lead nobody has quoted. Pinned above the board so there
-  // is one obvious answer to "what now" rather than seven columns of options.
+  // Pinned above the board: one obvious answer to "what now".
   const nextUp = useMemo(() => {
     const stale = quotes
       .filter((q) => isUntouched(q, graceFrom))
@@ -211,9 +170,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
     return { quote: oldest, waiting: stale.length };
   }, [quotes, graceFrom]);
 
-  // Owners get the same picture per contractor: who is sitting on work. Only
-  // counts leads past the 12-hour nudge, so a morning's fresh leads don't
-  // read as a backlog.
+  // Only leads past 12h, so a morning's fresh leads don't read as a backlog.
   const staleByContractor = useMemo(() => {
     if (role !== "owner") return [];
     const counts = new Map<string, number>();
@@ -227,9 +184,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
       .sort((a, b) => b.n - a.n);
   }, [quotes, role, nameMap, t, graceFrom]);
 
-  // Land on something worth reading: the first stage with anything in it,
-  // starting from New. Only on first load, so picking an empty stage on purpose
-  // doesn't bounce you straight back out of it.
+  // Start on the first non-empty stage, on first load only, so picking an empty stage doesn't bounce back.
   const [stagePicked, setStagePicked] = useState(false);
   useEffect(() => {
     if (stagePicked || quotes.length === 0) return;
@@ -295,9 +250,6 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
     <div className="kb">
       {toast && <div className="kb-toast">{toast}</div>}
 
-      {/* One job, named, at the top. A board tells you everything at once,
-          which is a good way to see the shape of the week and a bad way to
-          decide what to touch first. */}
       {nextUp && (
         <button type="button" className="kb-next" onClick={() => router.push(cardHref(nextUp.quote))}>
           <span className="kb-next-label">{t.pipeline.nextUp}</span>
@@ -322,9 +274,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
         </div>
       )}
 
-      {/* Phone only. Counts on the chips because "how many are in Quoted" is
-          most of what the column headings were for, and a row of chips says it
-          without costing seven screenfuls. */}
+      {/* Phone only. Counts on the chips replace what the column headings said. */}
       <div className="kb-stages" role="group" aria-label={t.pipeline.stagePicker}>
         {STATUSES.map((sx) => (
           <button
@@ -372,9 +322,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
               <div className="kb-col-body">
                 {cards.length === 0 && (
                   <p className="kb-empty">
-                    {/* One line per device: you cannot drop a card with a
-                        thumb, and "drop here" on a phone is an instruction for
-                        something that isn't there. */}
+                    {/* No drag and drop on a phone. */}
                     <span className="kb-wide-only">{t.pipeline.dropHere}</span>
                     <span className="kb-narrow-only">{t.pipeline.noneInStage}</span>
                   </p>
@@ -399,9 +347,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                   >
                     <div className="kb-card-top">
                       <h3 className="kb-card-name">{q.name}</h3>
-                      {/* How long this has gone unquoted, where the price
-                          would otherwise sit - an unquoted lead has no price
-                          to show, so the two never collide. */}
+                      {/* Where the price would sit: an unquoted lead has none, so they never collide. */}
                       {(() => {
                         const age = ageBadge(q, graceFrom);
                         if (age) return <span className={`kb-age kb-age-${age.tone}`}>{age.text}</span>;
@@ -414,26 +360,14 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                       {q.service || t.pipeline.serviceTBD}
                       {q.city ? ` \u00b7 ${q.city}` : ""}
                     </p>
-                    {/* Pills earn their place or they don't appear. A card that
-                        wears five of them is read as decoration and skimmed
-                        past, which costs more than any one of them adds. Three
-                        rules keep the count down:
-
-                        1. The date pill already says which kind of appointment
-                           it is ("Job Sep 12" / "Visit Sep 12"), so the type
-                           pill is dropped whenever one is showing and the type
-                           is the in-person default. Online and From-plans stay:
-                           those genuinely change what you'd do next.
-                        2. Confirmed / Not confirmed is gone entirely. The
-                           column heading already says Scheduled; the pair added
-                           nothing but a red flag on every booked job that
-                           hadn't yet answered a reminder that goes out two days
-                           before the pour. Worse, "Not confirmed" meant one
-                           thing here and a different thing on the crew's own
-                           job page, where it sat on a slot the customer had
-                           merely offered.
-                        3. Viewed and the assignee are per-card facts nothing
-                           else on screen carries, so they stay. */}
+                    {/*
+                      Pills are kept to a minimum or they get skimmed:
+                      1. The date pill names the appointment type, so the type pill is dropped for the in-person default.
+                         Online and From-plans stay: they change what you'd do next.
+                      2. No Confirmed / Not confirmed: the column already says Scheduled, and the crew page uses "Not
+                         confirmed" for something else.
+                      3. Viewed and assignee stay: nothing else on screen carries them.
+                    */}
                     {(() => {
                       const kind = typeLabel(q, t);
                       const jobDate = shortDate(q.scheduled_date, locale);
@@ -442,9 +376,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                       const showType = !dated || kind.cls !== "inperson";
                       return (
                         <div className="kb-card-meta">
-                          {/* First pill on the card, before anything about the
-                              job itself: what this row IS changes how you read
-                              every other pill on it. */}
+                          {/* First: what the row IS changes how every other pill reads. */}
                           {q.is_test && <span className="kb-pill kb-pill-test">Test</span>}
                           {showType && <span className={`kb-pill kb-pill-${kind.cls}`}>{kind.text}</span>}
                           {jobDate && (
@@ -494,10 +426,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                     </div>
 
                     <div className="kb-card-tools" onClick={(e) => e.stopPropagation()}>
-                      {/* Phone only. Twenty jobs whose every card carries two
-                          dropdowns and a delete button is a page you scroll
-                          past rather than read, so the controls fold away and
-                          the list stays a list. */}
+                      {/* Phone only: controls fold away so the list stays a list. */}
                       <button
                         type="button"
                         className="kb-more-btn"

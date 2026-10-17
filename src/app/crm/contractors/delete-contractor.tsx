@@ -5,8 +5,7 @@ import { useActionState, useState } from "react";
 import { deleteContractor } from "./actions";
 import type { DeleteState } from "./types";
 
-// Permanent, so it asks for the name to be typed rather than offering a plain
-// confirm button. Deactivate is right next to it and is the reversible option.
+// Permanent, so the name must be typed. Deactivate is the reversible option.
 export function DeleteContractor({ id, name }: { id: string; name: string }) {
   const [state, formAction, pending] = useActionState<DeleteState, FormData>(deleteContractor, { ok: false });
   const [open, setOpen] = useState(false);

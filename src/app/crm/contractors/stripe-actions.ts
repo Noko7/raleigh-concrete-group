@@ -10,17 +10,9 @@ import { ACCOUNT_RE, getAccount } from "@/lib/crm/stripe";
 export type StripeLinkState = { ok: boolean; error?: string; message?: string };
 
 /**
- * Link a contractor to the Stripe account they onboarded with.
- *
- * The account itself is created in the Stripe Dashboard and onboarded by the
- * contractor on Stripe's own hosted form; all that happens here is the office
- * pasting the resulting acct_ id in. Deliberately not an OAuth dance: there are
- * a handful of contractors, they are onboarded once, and a whole redirect flow
- * for something done five times a year is code that would rot between uses.
- *
- * The id is never taken on trust. We fetch the account from Stripe and store
- * what Stripe says about it, so a typo fails here - with Stripe's own words -
- * rather than three weeks later when a customer's payment link is dead.
+ * The account is created in Stripe and onboarded on Stripe's hosted form; the office pastes the acct_ id.
+ * No OAuth flow: a handful of contractors, onboarded once.
+ * Never trusted: fetched from Stripe and stored as Stripe reports it, so a typo fails now with Stripe's words.
  */
 export async function linkStripeAccount(
   _prev: StripeLinkState,
@@ -36,8 +28,7 @@ export async function linkStripeAccount(
   const target = await getStaffById(session, staffId);
   if (!target) return { ok: false, error: "That contractor no longer exists." };
 
-  // Clearing the field unlinks them. Their past payments keep the account id on
-  // their own rows, so the record of who was paid what survives the unlink.
+  // Clearing unlinks. Past payments keep the account id on their own rows.
   if (raw === "") {
     const ok = await saveStripeAccount(staffId, {
       stripe_account_id: null,
@@ -58,8 +49,7 @@ export async function linkStripeAccount(
   if (!found.ok) {
     return {
       ok: false,
-      // Stripe's own message here ("No such account") is more useful than
-      // anything generic, and an owner pasting IDs is exactly who can act on it.
+      // Stripe's message ("No such account") is what an owner pasting IDs can act on.
       error: found.status === 404 ? "Stripe has no account with that ID." : found.error,
     };
   }
@@ -78,10 +68,7 @@ export async function linkStripeAccount(
   revalidatePath("/crm/contractors");
   revalidatePath("/crm/money");
 
-  // Say what Stripe actually thinks, not just "saved". An account that is
-  // linked but can't take charges looks identical to a working one on every
-  // screen, and the office needs to know now rather than when a customer taps
-  // a dead link.
+  // A linked account that can't take charges looks like a working one everywhere, so say so now.
   if (!account.charges_enabled) {
     const due = account.requirements?.currently_due?.length ?? 0;
     return {
@@ -94,13 +81,7 @@ export async function linkStripeAccount(
   return { ok: true, message: `Linked. ${target.full_name || "They"} can take card payments.` };
 }
 
-/**
- * Re-ask Stripe about a linked account.
- *
- * The account.updated webhook keeps these flags current on its own; this is the
- * button for when somebody is standing there wondering why a contractor still
- * shows as not ready, and wants an answer now rather than on Stripe's schedule.
- */
+/** The account.updated webhook keeps flags current; this is for an answer right now. */
 export async function refreshStripeAccount(
   _prev: StripeLinkState,
   formData: FormData,

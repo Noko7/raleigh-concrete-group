@@ -9,8 +9,7 @@ import type { LoginAttempt, Staff } from "@/lib/crm/types";
 
 export const dynamic = "force-dynamic";
 
-// How far back the dashboard looks. Everything on this page - the stats, the
-// per-person table and the attempt log - is bounded by this window.
+// Bounds everything on this page.
 const WINDOW_DAYS = 30;
 
 const REASON_LABELS: Record<string, string> = {
@@ -26,7 +25,7 @@ function reasonLabel(reason: string): string {
   return REASON_LABELS[reason] ?? reason.replace(/_/g, " ");
 }
 
-// Small, dependency-free UA summary - just enough to tell devices apart.
+// Just enough to tell devices apart.
 function device(ua: string | null): string {
   if (!ua) return "Unknown";
   const isMobile = /Mobile|Android|iPhone|iPad/i.test(ua);
@@ -51,8 +50,7 @@ function ago(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-// Flag any IP with several failed attempts recently - the clearest signal of
-// someone (or something) guessing passwords against the CRM login.
+// Several recent failures from one IP: the clearest sign of password guessing.
 function suspiciousIps(attempts: LoginAttempt[]): { ip: string; count: number }[] {
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const counts = new Map<string, number>();
@@ -68,9 +66,7 @@ function suspiciousIps(attempts: LoginAttempt[]): { ip: string; count: number }[
     .sort((a, b) => b.count - a.count);
 }
 
-// An attempt belongs to a person if the login route resolved their staff row.
-// Failures never get that far, so fall back to matching the typed email - that's
-// what surfaces "someone is failing to log in as this contractor".
+// Failures never resolve a staff row, so fall back to the typed email.
 function belongsTo(attempt: LoginAttempt, member: Staff): boolean {
   if (attempt.staff_id) return attempt.staff_id === member.id;
   const typed = (attempt.email ?? "").trim().toLowerCase();
@@ -88,7 +84,7 @@ export default async function SecurityPage() {
     listStaff(session),
     listRecentActivity(session, 250),
   ]);
-  // The only one that has to wait: it looks up names for the rows above.
+  // The only dependent read: names for the rows above.
   const quoteNames = await getQuoteNames(
     session,
     activity.map((e) => e.quote_id),
@@ -102,7 +98,7 @@ export default async function SecurityPage() {
   const distinctIps24h = new Set(last24h.map((a) => a.ip || "unknown")).size;
   const flagged = suspiciousIps(attempts);
 
-  // Per-person sign-in summary, contractors first so the crew is easy to scan.
+  // Contractors first.
   const people = [...staff]
     .sort((a, b) => (a.role === b.role ? 0 : a.role === "contractor" ? -1 : 1))
     .map((member) => {
@@ -112,12 +108,11 @@ export default async function SecurityPage() {
         member,
         signIns: ok.length,
         failed: mine.length - ok.length,
-        last: ok[0] ?? null, // attempts come back newest-first
+        last: ok[0] ?? null, // newest-first
       };
     });
 
-  // Only events a person performed - customer-driven and automatic ones are
-  // noise when the question is "what has my crew been doing".
+  // Only actions a person performed.
   const staffActivity = activity.filter((e) => e.actor);
 
   return (

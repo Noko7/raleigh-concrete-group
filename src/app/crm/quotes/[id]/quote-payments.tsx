@@ -24,35 +24,21 @@ export type QuotePaymentRow = {
   status: string;
   paid_at: string | null;
   created_at: string;
-  /** Only a card payment that reached Stripe can be sent back from here. */
+  /** Only a card payment that reached Stripe can be refunded from here. */
   refundable: boolean;
   /**
-   * Whether an owner may restate this row. Hand-recorded rows only: a card
-   * payment is Stripe's word for money that really moved, and editing our copy
-   * would leave the two disagreeing with no way to tell which is right.
-   *
-   * Computed on the server from the row itself (correctableReason), so the
-   * button is never offered for something the action would refuse.
+   * Hand-recorded rows only (card rows are Stripe's record). Computed server-side by correctableReason so
+   * the button never offers what the action would refuse.
    */
   correctable: boolean;
   note: string | null;
-  /** The office's cut this payment carried. Only ever non-zero on a card. */
+  /** Office cut in cents. Non-zero only on card rows. */
   fee_cents: number;
 };
 
 /**
- * The office's view of one job's money.
- *
- * Deliberately the same ledger and the same two actions the crew has on their
- * own page, rather than a separate owner-only way of doing it. The one thing
- * that lives only here is the refund, because it moves money out of somebody
- * else's Stripe balance.
- *
- * This replaced a "Get paid" card that offered a Zelle text and a Mark paid
- * button. Mark paid wrote a timestamp and nothing else, so a job could read as
- * paid with no money recorded against it - and once there is a real ledger,
- * two different answers to "has this been paid" on one screen is worse than
- * either of them alone.
+ * The office's view of one job's money: the same ledger and actions the crew has, plus refunds (which move
+ * money out of someone else's Stripe balance).
  */
 export function QuotePayments({
   id,
@@ -79,15 +65,15 @@ export function QuotePayments({
   totalCents: number;
   paidCents: number;
   dueCents: number;
-  /** A second deposit from an approved change, still to come in. 0 when none. */
+  /** Cents. 0 when none. */
   dueNowCents?: number;
   feeTotalCents: number;
   feeRate: number;
   feeCollectedCents: number;
   feeDueCents: number;
-  /** What the contractor has already sent over by hand for this job. */
+  /** Cents sent over by hand for this job. */
   feeSettledCents?: number;
-  /** Taken off the office fee by the owner on this job, and why. */
+  /** Cents taken off the office fee by the owner on this job. */
   feeWaivedCents?: number;
   feeWaivedNote?: string | null;
   rows: QuotePaymentRow[];
@@ -103,14 +89,10 @@ export function QuotePayments({
   const [openWaive, setOpenWaive] = useState(false);
   const [openCash, setOpenCash] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("cash");
-  // Which row is being corrected, and whether its void branch is showing. One
-  // row at a time: two open correction forms on one ledger is how the wrong one
-  // gets saved.
+  // One row at a time, so the wrong one doesn't get saved.
   const [fixingRow, setFixingRow] = useState<string | null>(null);
   const [voidingRow, setVoidingRow] = useState<string | null>(null);
-  // Which row is asking "are you sure". A disclosure rather than a browser
-  // confirm(): the amount going back has to be on screen, in words, next to
-  // the button that sends it.
+  // Not confirm(): the amount going back must be on screen next to the button.
   const [confirming, setConfirming] = useState<string | null>(null);
 
   const settled = dueCents <= 0 && totalCents > 0;
@@ -150,20 +132,15 @@ export function QuotePayments({
         </div>
       </div>
 
-      {/* The second deposit, when a change asked for one. */}
       {!settled && dueNowCents > 0 && (
         <p className="qp-now">{fill(t.dueNow, { now: usd(dueNowCents), rest: usd(dueCents - dueNowCents) })}</p>
       )}
 
-      {/* The office's cut, split three ways so nobody has to do the subtraction:
-          what the job earns, what Stripe already took, what is still owed.
-          Said in the office's voice - the crew's card says "you owe", which is
-          the same fact from the other side of the table. */}
+      {/* Split three ways so nobody has to subtract: earned, taken by Stripe, still owed. */}
       <p className="crm-muted crm-sm qp-fee">
         {t.officeCut}: <strong>{usd(feeTotalCents)}</strong> ({Math.round(feeRate * 1000) / 10}%) ·{" "}
         {usd(feeCollectedCents)} {t.feeTaken} ·{" "}
-        {/* Without this the three figures stop adding up the moment a crew
-            settles by Zelle: $750 cut, $0 taken by card, $0 still owed. */}
+        {/* Without this the figures don't add up once a crew settles by Zelle. */}
         {feeSettledCents > 0 && (
           <>
             {usd(feeSettledCents)} {t.feeSettledLabel} ·{" "}
@@ -178,8 +155,7 @@ export function QuotePayments({
         )}
       </p>
 
-      {/* Owner only: take part of the fee off this job, e.g. a change order that
-          only passed materials through at cost. Sets the amount; 0 clears it. */}
+      {/* Owner only: e.g. a change order that passed materials through at cost. 0 clears it. */}
       {isOwner && (
         <>
           <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setOpenWaive((v) => !v)}>
@@ -314,10 +290,7 @@ export function QuotePayments({
                       {t.refund}
                     </button>
                   )}
-                  {/* Correcting and refunding are two different answers and sit
-                      side by side so the difference is visible at the point of
-                      choosing: a refund sends money back, a correction says the
-                      money never arrived in the first place. */}
+                  {/* Side by side so the difference is visible: a refund sends money back, a correction says it never arrived. */}
                   {isOwner && r.correctable && (
                     <button
                       type="button"
@@ -332,9 +305,7 @@ export function QuotePayments({
                   )}
                 </div>
 
-                {/* The note, where there is one. On a voided row it carries the
-                    reason, which is the only thing that makes a zero-value row
-                    on the books readable six months later. */}
+                {/* On a voided row this carries the reason. */}
                 {r.note && <p className="qp-row-note">{r.note}</p>}
 
                 {confirming === r.id && (
@@ -351,10 +322,7 @@ export function QuotePayments({
                 {fixingRow === r.id && (
                   <div className="qp-fix-box">
                     <h3 className="qp-fix-title">{t.fixTitle}</h3>
-                    {/* Says what this is NOT, first. An owner reaching for
-                        Correct when the customer is actually owed money needs
-                        to be sent to the refund instead, and the moment to say
-                        so is before they have typed a figure. */}
+                    {/* Says what this is NOT before any figure is typed: if the customer is owed money, refund instead. */}
                     <p className="qp-fix-lead">{t.fixLead}</p>
                     <p className="qp-fix-was">
                       {t.fixWas} <strong>{usd(r.amount_cents)}</strong> ·{" "}
@@ -375,9 +343,7 @@ export function QuotePayments({
                           autoComplete="off"
                           disabled={fixing}
                         />
-                        {/* Said before they type, not after the server refuses
-                            it: "no deposit came in" is a common enough answer
-                            that the way to record it should be on screen. */}
+                        {/* Shown up front: "no deposit came in" is a common answer. */}
                         <em className="qp-void-hint">{t.fixZeroHint}</em>
                       </label>
                       <label className="crm-field">
@@ -416,10 +382,7 @@ export function QuotePayments({
                       </div>
                     </form>
 
-                    {/* Voiding lives inside the correction box rather than next
-                        to it: it is the same decision taken further, and keeping
-                        it one level down stops it being a button anybody taps by
-                        accident on a ledger. */}
+                    {/* Inside the correction box so it's never tapped by accident. */}
                     {voidingRow === r.id ? (
                       <form action={voidAction} className="qp-void">
                         <input type="hidden" name="id" value={id} />

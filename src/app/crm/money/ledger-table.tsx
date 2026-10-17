@@ -6,19 +6,9 @@ import Link from "next/link";
 import { METHOD_LABELS, usd, type PaymentMethod } from "@/lib/crm/fees";
 import type { LedgerEntry } from "@/lib/crm/money";
 
-// Every movement of money, one row each, newest first.
-//
-// The old page showed the last 25 payments as a feed and left the rest to be
-// worked out from four summary figures. This is the thing those figures are
-// sums of: a customer paying, a customer being refunded, and a contractor
-// handing over the cut a cash job never took on its way past. One list,
-// because they are one question - what actually moved - and because a total
-// you cannot open is a total you have to take on trust.
-//
-// Money reads down a column, so every amount is right-aligned with tabular
-// figures and the header sits over its own alignment. Rows are separated by a
-// hairline rather than striped: this table has hover and expandable state, and
-// zebra fights both.
+// Every movement of money, newest first: payments, refunds, and settlements (a contractor handing over a
+// cash job's cut). One list so every total can be opened.
+// Amounts right-aligned with tabular figures; hairlines rather than stripes (hover and expand state).
 
 const KIND_LABEL: Record<LedgerEntry["kind"], string> = {
   payment: "Payment",
@@ -60,16 +50,14 @@ export function LedgerTable({
     });
   }, [entries, who, job, kind, window]);
 
-  // Every job with something on the ledger, for reading one job's whole
-  // history - payments in, fee sent over - in one place.
+  // For reading one job's whole history in one place.
   const jobs = useMemo(() => {
     const seen = new Map<string, string>();
     for (const e of entries) if (e.jobId && !seen.has(e.jobId)) seen.set(e.jobId, e.customer);
     return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [entries]);
 
-  // Footed rather than left to the eye. A ledger whose columns do not add up to
-  // something you can check against a bank statement is a list, not a ledger.
+  // Footed so the columns can be checked against a bank statement.
   const totals = useMemo(
     () =>
       rows.reduce(
@@ -152,12 +140,7 @@ export function LedgerTable({
                   <tr key={e.id} className={e.kind === "refund" ? "led-out" : ""}>
                     <td className="led-when">{day(e.at)}</td>
                     <td>
-                      {/* A payment names the customer, with the crew who
-                          earned it underneath: two facts about one row, and
-                          the second is only asked about after the first. A
-                          settlement has no customer - it is the contractor
-                          paying the office - so it names them once and says
-                          what the row is instead of repeating them. */}
+                      {/* A settlement has no customer (the contractor pays the office), so it names them once and says what it is. */}
                       {e.jobId ? (
                         <>
                           <Link href={`${base}/quotes/${e.jobId}`}>{e.customer}</Link>
@@ -193,9 +176,7 @@ export function LedgerTable({
             </table>
           </div>
 
-          {/* Phone: the same rows, stacked. A seven-column table squeezed onto
-              a 390px screen is a table nobody reads, and this is a page that
-              gets checked standing up as often as sitting down. */}
+          {/* Phone: the same rows, stacked. */}
           <ul className="led-cards">
             {rows.map((e) => (
               <li key={e.id} className={e.kind === "refund" ? "led-card led-out" : "led-card"}>

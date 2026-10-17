@@ -8,9 +8,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
-// Decode only the expiry from a JWT (no signature check) to decide whether to
-// refresh. Identity/authorization is NEVER trusted from this - see verifyUser,
-// which validates the token's signature with Supabase before we act on it.
+// Expiry only, unverified: decides whether to refresh. Identity is NEVER trusted from this (see verifyUser).
 function jwtExpMs(token: string): number {
   try {
     const part = token.split(".")[1];
@@ -39,10 +37,8 @@ async function refresh(refreshToken: string) {
 const ACCESS_CACHE_TTL_MS = 3 * 60 * 1000;
 const accessCache = new Map<string, { active: boolean; role: string | null; email: string | null; ts: number }>();
 
-// Verified-identity cache, keyed by the access token. We confirm the token's
-// signature + expiry with Supabase (which rejects forged/altered tokens) and
-// only then trust its `sub`/`email`. Cached briefly to avoid a round-trip on
-// every CRM navigation.
+// Keyed by access token. Only trusts `sub`/`email` after Supabase verifies signature and expiry; cached
+// briefly to avoid a round-trip per navigation.
 const authCache = new Map<string, { id: string; email: string | null; ts: number }>();
 
 async function verifyUser(accessToken: string): Promise<{ id: string; email: string | null } | null> {
@@ -96,11 +92,7 @@ async function getStaffAccess(userId: string) {
       email: row.email ?? null,
       ts: Date.now(),
     };
-    // Bounded the same way authCache is. This one is keyed by staff id so it
-    // is naturally small - a handful of people - but "naturally small" is a
-    // property of today's data, not of the code, and an unbounded module-level
-    // Map in a long-lived edge instance is a leak waiting for the day that
-    // stops being true.
+    // Bounded like authCache: an unbounded module-level Map in a long-lived edge instance is a leak.
     if (accessCache.size > 8000) accessCache.clear();
     accessCache.set(userId, value);
     return value;
@@ -114,28 +106,21 @@ export async function middleware(request: NextRequest) {
   const isCrmHost = host.startsWith("crm.");
   const { pathname } = request.nextUrl;
 
-  // The CRM lives under /crm (mapped from the crm.* subdomain). Contractor job
-  // pages (/job/*) also require a logged-in staff session; everything else is
-  // the public marketing site / customer token pages - leave it untouched.
+  // /job/* also requires a staff session; everything else outside /crm is public and left untouched.
   const isJobPath = pathname.startsWith("/job/");
   const touchesCrm = isCrmHost || pathname.startsWith("/crm");
   if (!touchesCrm && !isJobPath) {
-    // Allow Google to index the public marketing pages. Keep private customer
-    // token pages and API endpoints out of search with a noindex header.
+    // noindex private customer token pages and API endpoints.
     const keepPrivate =
       pathname.startsWith("/q/") ||
-      // The customer's payment page. Same token as their quote, and the last
-      // page on this site that should ever turn up in a search result.
       pathname.startsWith("/pay/") ||
-      // Contractor onboarding: public by design (they have no login yet), but a
-      // capability link that must never be indexed.
+      // Contractor onboarding: public (no login yet) but a capability link.
       pathname.startsWith("/join/") ||
       pathname.startsWith("/confirm") ||
       pathname.startsWith("/api/");
     return keepPrivate ? withNoIndex(NextResponse.next()) : NextResponse.next();
   }
 
-  // Keep the access token fresh so server components see a valid session.
   let accessToken = request.cookies.get(AT_COOKIE)?.value;
   const refreshToken = request.cookies.get(RT_COOKIE)?.value;
   let refreshed: { access_token: string; refresh_token: string } | null = null;
@@ -148,13 +133,12 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // CRM-relative path with any /crm prefix stripped, so the checks below behave
-  // the same whether we arrived via crm.host/login or apex/crm/login.
+  // Strip /crm so checks match on both crm.host/login and apex/crm/login.
   const normalized = pathname.startsWith("/crm") ? pathname.slice(4) || "/" : pathname;
   const isLogin = normalized === "/login";
   const isAuthApi = normalized.startsWith("/api/login") || normalized.startsWith("/api/logout");
 
-  // Rate limit CRM/API surface (durable across instances when Upstash is set).
+  // Durable across instances when Upstash is set.
   const ip = clientIp(request);
   const rlKeyBase = `${ip}:${normalized}`;
   if (normalized.startsWith("/api/login")) {
@@ -169,19 +153,16 @@ export async function middleware(request: NextRequest) {
     return withNoIndex(new NextResponse("Too many requests.", { status: 429 }));
   }
 
-  // Verify the session token's signature with Supabase. A forged or tampered
-  // token yields no verified identity, so it's treated as signed-out.
+  // A forged or tampered token yields no identity, so it's treated as signed-out.
   const verified = accessToken ? await verifyUser(accessToken) : null;
   const hasSession = Boolean(verified);
 
-  // Guard: signed-out users can only reach the login page + auth endpoints.
   if (!hasSession && !isLogin && !isAuthApi) {
     const url = request.nextUrl.clone();
     url.pathname = isCrmHost ? "/login" : "/crm/login";
     url.search = isJobPath ? `?next=${encodeURIComponent(pathname)}` : "";
     return withNoIndex(NextResponse.redirect(url));
   }
-  // Signed-in users skip the login screen.
   if (hasSession && isLogin) {
     const url = request.nextUrl.clone();
     url.pathname = isCrmHost ? "/" : "/crm";
@@ -189,13 +170,9 @@ export async function middleware(request: NextRequest) {
     return withNoIndex(NextResponse.redirect(url));
   }
 
-  // Authorize every authenticated CRM route from the VERIFIED identity (never
-  // raw token claims). There's no standalone email pre-check any more: the
-  // allowlist only applies to owners, so the role has to be known first, and
-  // that means loading the staff row. It's cached, so this is one lookup per
-  // user per few minutes rather than per request.
-  // Needed again at the bottom: a refreshed cookie has to be written with the
-  // same lifetime the role earned it at login.
+  // Authorize from the VERIFIED identity, never raw claims. The allowlist applies only to owners, so the
+  // staff row (cached) is loaded first. The role is also needed below to write a refreshed cookie with the
+  // right lifetime.
   let staffRole: string | null = null;
   if (hasSession && !isAuthApi && verified) {
     const tokenEmail = (verified.email ?? "").toLowerCase();
@@ -215,7 +192,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Map crm.host/<x> → /crm/<x> internally.
+  // crm.host/<x> -> /crm/<x>.
   let response: NextResponse;
   if (isCrmHost && !pathname.startsWith("/crm")) {
     const url = request.nextUrl.clone();
@@ -226,12 +203,8 @@ export async function middleware(request: NextRequest) {
   }
 
   if (refreshed) {
-    // The role is normally already in hand from the authorization check above.
-    // On the paths that skip it (the auth endpoints) look it up rather than
-    // defaulting: guessing "owner" here would expire a contractor's week-long
-    // session the moment their access token rolled over, which is the exact
-    // problem the longer lifetime exists to fix. getStaffAccess is cached, so
-    // this is almost always free.
+    // Look the role up rather than defaulting: guessing "owner" would cut a contractor's week-long session
+    // when their token rolls over. Cached.
     const role = staffRole ?? (verified ? ((await getStaffAccess(verified.id))?.role ?? null) : null);
     const opts = sessionCookieOpts(role);
     response.cookies.set(AT_COOKIE, refreshed.access_token, opts);
@@ -241,9 +214,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // The site icons are excluded alongside the other static assets: Google reads
-  // them from the home page's <link rel="icon"> to draw the favicon in a search
-  // result, and there is nothing for auth or rate limiting to do on them.
+  // Site icons excluded too: Google reads them for search result favicons.
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|images|robots.txt|sitemap.xml).*)",
   ],

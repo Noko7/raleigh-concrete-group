@@ -1,10 +1,4 @@
-// Plain-English names for the message log's `kind` column. Same arrangement as
-// STATUS_LABELS: the stored value is a stable key written by the server at send
-// time, and this is the only place it becomes something a person reads.
-//
-// A kind with no entry here falls back to its raw key rather than disappearing,
-// so adding a notification and forgetting this file degrades to "crew_reminder_3"
-// on screen instead of a blank row.
+// Labels for the message log's `kind` keys. Unknown kinds fall back to the raw key, not a blank row.
 export const MESSAGE_LABELS: Record<string, string> = {
   new_quote: "New lead alert",
   new_quote_crew: "New lead - crew brief",

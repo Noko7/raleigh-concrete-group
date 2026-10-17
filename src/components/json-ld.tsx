@@ -1,7 +1,4 @@
-// Renders one or more JSON-LD structured-data blocks. Server component.
-// `<` is escaped to its unicode form so no value can ever close the surrounding
-// <script> tag and break out into executable HTML (defense against XSS if any
-// dynamic/user-derived value is ever fed into the schema).
+// `<` is escaped so no value can close the <script> tag (XSS defence if a dynamic value ever gets in).
 function safeJson(block: object): string {
   return JSON.stringify(block).replace(/</g, "\\u003c");
 }

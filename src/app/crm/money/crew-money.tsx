@@ -7,22 +7,14 @@ import type { Session } from "@/lib/crm/types";
 import { CrewJobRows } from "./crew-job-rows";
 
 /**
- * The Money page as a contractor sees it: their own jobs, and nothing else.
- *
- * Built from the same board as the owner's, so every figure here is one the
- * office can see too and the two can be read across a phone call without
- * either side doing sums. RLS has already limited the board to this
- * contractor's jobs; the filter below is belt and braces.
- *
- * Reads as income rather than as fees: what the work is worth to them after
- * the office's cut, what has actually come in, and the one number that needs
- * doing something about - fee still owed on cash jobs.
+ * The contractor's Money page, from the same board as the owner's so both sides read the same figures.
+ * RLS already limits it to their jobs; the filter below is belt and braces.
+ * Reads as income: worth after the office's cut, what came in, and fee still owed on cash jobs.
  */
 export function CrewMoney({ session, board, base }: { session: Session; board: MoneyBoard; base: string }) {
   const me = session.staff.id;
   const jobs = board.jobs.filter((j) => j.staffId === me);
-  // The per-contractor row, not a sum of the job rows: a fee sent over against
-  // a balance rather than one job only reduces it here.
+  // The per-contractor row, not a sum of job rows: a settlement against the balance only reduces it here.
   const mine = board.contractors.find((c) => c.staffId === me);
 
   const incomeCents = jobs.reduce((sum, j) => sum + crewIncomeCents(j.ledger, j.onBooks), 0);

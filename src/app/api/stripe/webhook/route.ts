@@ -10,32 +10,21 @@ import {
 import { verifyWebhook, type StripeEvent } from "@/lib/crm/stripe";
 import { pgAdmin } from "@/lib/crm/rest";
 
-// Stripe's side of the conversation.
-//
-// Lives under /api rather than /crm/api on purpose: the CRM's middleware
-// redirects any request without a session cookie to the login page, and Stripe
-// sends no cookies. An endpoint under /crm would answer every delivery with a
-// 307, which Stripe counts as a failure and eventually disables the endpoint
-// over - while every payment silently stayed marked unpaid.
-//
-// The event scope matters just as much. Direct charges belong to the connected
-// account, not to the platform, so this only receives checkout.session.completed
-// if the endpoint is configured with "Events from: Connected accounts".
+// Under /api, not /crm/api: the CRM middleware 307s cookieless requests to login, which Stripe counts as
+// failures and eventually disables the endpoint.
+// Direct charges belong to the connected account, so the endpoint must be configured with "Events from:
+// Connected accounts" to receive checkout.session.completed.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Node, not Edge: signature verification needs node:crypto's HMAC, and the raw
-// request body has to survive byte-for-byte.
+// Node, not Edge: needs node:crypto HMAC and the byte-exact raw body.
 
 export async function POST(request: Request) {
-  // The RAW body. Reading it as JSON first and re-serialising changes key order
-  // and whitespace, and the signature never matches again.
+  // RAW body: re-serialised JSON never matches the signature.
   const raw = await request.text();
   const event = verifyWebhook(raw, request.headers.get("stripe-signature"));
 
-  // No detail in the response. Anyone can reach this URL, and telling them
-  // whether their signature was merely wrong or their timestamp was stale is
-  // free information for whoever is probing it.
+  // No detail: don't tell a prober which part of the check failed.
   if (!event) return new Response("Bad signature", { status: 400 });
 
   try {
@@ -50,16 +39,11 @@ export async function POST(request: Request) {
         await onAccountUpdated(event);
         break;
       default:
-        // Everything else is acknowledged and ignored. Answering 2xx to an
-        // event we don't handle is correct: a 4xx would make Stripe retry it
-        // forever and eventually disable the endpoint over an event that was
-        // never a problem.
+        // 2xx for unhandled events: a 4xx makes Stripe retry and eventually disable the endpoint.
         break;
     }
   } catch (err) {
-    // A 500 asks Stripe to retry, which is what we want for a transient
-    // database failure. The handlers below are all idempotent, so a retry that
-    // arrives after the first one actually succeeded does nothing twice.
+    // 500 asks Stripe to retry (transient DB failures). Handlers are idempotent.
     console.error("[stripe-webhook] handler failed", event.type, err);
     return new Response("Handler error", { status: 500 });
   }
@@ -67,7 +51,6 @@ export async function POST(request: Request) {
   return new Response("ok", { status: 200 });
 }
 
-// ── A customer finished paying ──────────────────────────────────────────────
 async function onCheckoutCompleted(event: StripeEvent) {
   const session = event.data.object as {
     id?: string;
@@ -78,9 +61,7 @@ async function onCheckoutCompleted(event: StripeEvent) {
   const sessionId = session.id;
   if (!sessionId) return;
 
-  // `completed` is not the same as `paid`. The customer has submitted the form,
-  // but a delayed method can still fail afterwards, so only an actually-paid
-  // session moves money on our side.
+  // `completed` is not `paid`: delayed methods can still fail.
   if (session.payment_status !== "paid") return;
 
   const { changed, payment } = await markSessionPaid(
@@ -88,13 +69,10 @@ async function onCheckoutCompleted(event: StripeEvent) {
     typeof session.payment_intent === "string" ? session.payment_intent : null,
   );
 
-  // Already paid. Stripe delivers more than once by design, so this is the
-  // normal second delivery rather than a problem - stop here rather than
-  // texting anybody a second time.
+  // Stripe redelivers by design; don't text anyone twice.
   if (!changed) {
     if (!(await findPaymentBySession(sessionId))) {
-      // A paid session with no row of ours at all is worth shouting about: the
-      // customer's money moved and nothing here knows which job it was for.
+      // The customer's money moved and nothing knows which job it was for.
       console.error("[stripe-webhook] paid session with no matching payment row", sessionId);
     }
     return;
@@ -113,7 +91,6 @@ async function onCheckoutCompleted(event: StripeEvent) {
   await settleJobIfPaid(quoteId);
 }
 
-// ── Money went back ─────────────────────────────────────────────────────────
 async function onChargeRefunded(event: StripeEvent) {
   const charge = event.data.object as {
     payment_intent?: string | null;
@@ -122,8 +99,7 @@ async function onChargeRefunded(event: StripeEvent) {
   const intent = typeof charge.payment_intent === "string" ? charge.payment_intent : null;
   if (!intent) return;
 
-  // Stripe reports the running total refunded on the charge, not the delta, so
-  // this is a set rather than an increment - which also makes it idempotent.
+  // Stripe reports the running total refunded, not the delta, so this is a set (idempotent).
   const refunded = Number(charge.amount_refunded ?? 0);
   if (!Number.isFinite(refunded) || refunded <= 0) return;
 
@@ -140,22 +116,16 @@ async function onChargeRefunded(event: StripeEvent) {
   const row = rows[0];
   if (!row) return;
 
-  // Already recorded - either this delivery is a repeat, or the office pressed
-  // Refund and wrote it before Stripe's event arrived. Nothing to do and, more
-  // to the point, nothing to log a second time.
+  // Already recorded (repeat delivery, or the Refund action got there first): don't log twice.
   if (row.refunded_cents >= refunded) return;
 
-  // Shared with the refund action so both write the same shape. `refunded` is
-  // Stripe's running total, not a delta, which is what makes this idempotent.
+  // Shared with the refund action so both write the same shape.
   await applyRefund(row.id, refunded, row.amount_cents);
   await addAdminEvent(row.quote_id, "payment_refunded", { amount_cents: refunded, via: "stripe" });
 }
 
-// ── A contractor's account changed ──────────────────────────────────────────
-// Fires when they finish onboarding, when Stripe finishes reviewing them, and
-// when Stripe later asks them for something new. Keeping the cached flags
-// current here is what stops the office sending a payment link to somebody
-// Stripe has quietly stopped letting take money.
+// Fires on onboarding, review, and later Stripe requests. Keeps cached flags current so no payment link
+// goes to an account that can't take money.
 async function onAccountUpdated(event: StripeEvent) {
   const account = event.data.object as {
     id?: string;
@@ -167,8 +137,7 @@ async function onAccountUpdated(event: StripeEvent) {
   if (!accountId) return;
 
   const staff = await staffByStripeAccount(accountId);
-  // An account we don't know about is not an error: the office may have created
-  // it in Stripe and not linked it to a contractor yet.
+  // Not an error: the account may not be linked to a contractor yet.
   if (!staff) return;
 
   await saveStripeAccount(staff.id, {

@@ -1,6 +1,5 @@
-// How often each contractor opens each job page. Owner-only to read (RLS on
-// job_staff_views); written only by the server through bump_job_staff_view, so
-// nobody can change their own count. See supabase/crew-views.sql.
+// Per-contractor job page opens. Owner-only to read (RLS); written only by the server through
+// bump_job_staff_view so nobody can change their own count.
 import { pgAdmin, pgUser } from "./rest";
 import type { Session } from "./types";
 
@@ -11,7 +10,7 @@ export type CrewView = {
   staff_id: string;
   view_count: number;
   last_viewed_at: string;
-  /** Tries to open the job after it was marked Lost (or archived) - when they're locked out. */
+  /** Opens after the job was Lost or archived (locked out). */
   closed_view_count: number;
   last_closed_view_at: string | null;
 };
@@ -25,7 +24,7 @@ export async function bumpCrewView(quoteId: string, staffId: string, closed = fa
   }).catch(() => {});
 }
 
-/** Every count the reader may see - all of them for an owner, none for anybody else. */
+/** All for an owner, none for anyone else. */
 export async function listCrewViews(session: Session, quoteId?: string): Promise<CrewView[]> {
   if (session.staff.role !== "owner") return [];
   if (quoteId && !UUID_RE.test(quoteId)) return [];

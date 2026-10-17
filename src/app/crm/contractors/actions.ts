@@ -30,13 +30,9 @@ function tempPassword(): string {
   return `Rcg-${crypto.randomUUID().slice(0, 8)}-${crypto.randomUUID().slice(0, 4)}`;
 }
 
-// Contractors sign in with whatever address they already use - the CRM
-// allowlist only applies to owners now (see isStaffAllowed), so there's nothing
-// to check here beyond the address being well-formed.
+// Contractors aren't held to the allowlist (see isStaffAllowed); only the format is checked.
 
-// The credentials text, built in one place so a new account and a password
-// reset can't drift apart. /crm bounces to the login screen when they're signed
-// out, so it's the shorter thing to put in a text.
+// Shared by new accounts and password resets so they can't drift. /crm bounces to login when signed out.
 function loginMessage(lead: string, email: string | null, password: string): string {
   return [
     lead,
@@ -69,8 +65,7 @@ export async function createContractor(_prev: AddState, formData: FormData): Pro
   const created = await adminCreateUser(email, password, fullName);
   if ("error" in created) return { ok: false, error: created.error };
 
-  // The on-signup trigger created the staff row as a contractor; fill in details
-  // and flag them to set their own password on first login.
+  // The signup trigger created the row as a contractor; flag a password change on first login.
   await pgAdmin(`staff?id=eq.${created.id}`, {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
@@ -83,7 +78,6 @@ export async function createContractor(_prev: AddState, formData: FormData): Pro
     }),
   });
 
-  // Optionally text the contractor their login + temporary password.
   let smsSent = false;
   let smsNote: string | undefined;
   if (notify) {
@@ -93,8 +87,7 @@ export async function createContractor(_prev: AddState, formData: FormData): Pro
       const msg = loginMessage("Your Raleigh Concrete Group CRM login is ready.", email, password);
       const res = await sendSmsResult(phone, msg);
       smsSent = res.ok;
-      // Not subject to quiet hours: a login text is staff-facing, and the crew
-      // are on the job whatever the hour.
+      // Ignores quiet hours: staff-facing.
       if (!res.ok) smsNote = `Couldn't text them (${res.detail || res.status || "unknown error"}). Share the password manually.`;
     }
   }
@@ -111,8 +104,7 @@ export async function resetContractorPassword(_prev: ResetState, formData: FormD
   const notify = String(formData.get("notify") ?? "") === "on";
   if (!id) return { ok: false, error: "Missing contractor." };
 
-  // Look the contractor up by id AND role so an owner can't reset another
-  // owner's password through this endpoint.
+  // By id AND role, so this can't reset an owner's password.
   const res = await pgAdmin(`staff?id=eq.${encodeURIComponent(id)}&role=eq.contractor&select=email,phone&limit=1`);
   if (!res.ok) return { ok: false, error: "Could not load that contractor." };
   const rows = (await res.json()) as { email: string | null; phone: string | null }[];
@@ -147,9 +139,7 @@ export async function resetContractorPassword(_prev: ResetState, formData: FormD
   return { ok: true, password, smsSent, smsNote };
 }
 
-// Owner-only: fix a contractor's name or alert number. Their phone is what every
-// job notification is sent to, so this needs to be editable without asking them
-// to log in and update it themselves.
+// Owner-only. Their phone receives every job notification, so the owner must be able to fix it.
 export async function updateContractorContact(
   _prev: ContactState,
   formData: FormData,
@@ -160,7 +150,7 @@ export async function updateContractorContact(
   const id = String(formData.get("id") ?? "").trim();
   if (!/^[0-9a-fA-F-]{36}$/.test(id)) return { ok: false, error: "Missing contractor." };
 
-  // Scope to contractors so this can't be pointed at another owner's row.
+  // Scoped to contractors so this can't target an owner's row.
   const target = await getStaffById(session, id);
   if (!target || target.role !== "contractor") return { ok: false, error: "That contractor no longer exists." };
 
@@ -176,18 +166,15 @@ export async function updateContractorContact(
 
   if (!EMAIL_RE.test(email)) return { ok: false, error: "Enter a valid email." };
 
-  // Changing the login address means updating Supabase Auth first: if that
-  // fails, the staff row must not drift away from the identity they sign in
-  // with. Only touch auth when it actually changed.
+  // Update Supabase Auth first; if it fails the staff row must not drift from the login identity.
   const emailChanged = email !== (target.email ?? "").trim().toLowerCase();
   if (emailChanged) {
     const res = await adminUpdateEmail(id, email);
     if (!res.ok) return { ok: false, error: res.error };
   }
 
-  // Only the services we actually offer, so a stale checkbox from an old page
-  // can't write a job type nothing will ever route. Empty means no
-  // restriction rather than "takes nothing" - see resolveAssignee.
+  // Only services we offer, so a stale checkbox can't write an unroutable type. Empty = no restriction
+  // (see resolveAssignee).
   const serviceTypes = formData
     .getAll("service_types")
     .map((s) => String(s))
@@ -206,9 +193,8 @@ export async function updateContractorContact(
   return { ok: true, phone, emailChanged };
 }
 
-// Owner-only: text a one-time onboarding link to a single number. Nothing is
-// created until the contractor fills the form in, so a mistyped number costs one
-// text and expires on its own rather than leaving a half-built account behind.
+// Owner-only. Nothing is created until the contractor submits the form, so a mistyped number costs one
+// expiring text.
 export async function sendContractorInvite(
   _prev: InviteState,
   formData: FormData,
@@ -216,7 +202,7 @@ export async function sendContractorInvite(
   const session = await getSession();
   if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
 
-  // Invites cost a text each and create a public, redeemable link. Cap them.
+  // Each costs a text and creates a public redeemable link.
   if (await rateLimit(`invite:${session.staff.id}`, 10, 60 * 60 * 1000)) {
     return { ok: false, error: "Too many invites in the last hour. Try again shortly." };
   }
@@ -246,8 +232,7 @@ export async function sendContractorInvite(
   const sms = await sendSmsResult(phone, msg);
   revalidatePath("/crm/contractors");
 
-  // The invite is valid whether or not the text landed, so hand back the link
-  // for the owner to share another way instead of silently failing.
+  // The invite is valid even if the text failed, so return the link to share another way.
   return {
     ok: true,
     phone,
@@ -268,8 +253,7 @@ export async function revokeContractorInvite(formData: FormData): Promise<void> 
   revalidatePath("/crm/contractors");
 }
 
-// Owner-only: permanently remove a contractor. Deliberately separate from
-// Deactivate, which is the reversible option and what you usually want.
+// Owner-only and irreversible; Deactivate is the reversible option.
 export async function deleteContractor(
   _prev: DeleteState,
   formData: FormData,
@@ -279,17 +263,15 @@ export async function deleteContractor(
 
   const id = String(formData.get("id") ?? "").trim();
   if (!/^[0-9a-fA-F-]{36}$/.test(id)) return { ok: false, error: "Missing contractor." };
-  // Deleting yourself would lock you out of the CRM entirely.
+  // Deleting yourself would lock you out.
   if (id === session.staff.id) return { ok: false, error: "You can't delete your own account." };
 
-  // Re-check the role server-side: this endpoint must never be able to remove
-  // another owner, whatever the form said.
+  // Re-check the role server-side: never remove an owner.
   const target = await getStaffById(session, id);
   if (!target) return { ok: false, error: "That contractor no longer exists." };
   if (target.role !== "contractor") return { ok: false, error: "Only contractors can be deleted here." };
 
-  // Typing the name is the confirmation - it makes an accidental click on an
-  // irreversible action essentially impossible.
+  // Typing the name confirms an irreversible action.
   const typed = String(formData.get("confirm") ?? "").trim().toLowerCase();
   const expected = (target.full_name || target.email || "").trim().toLowerCase();
   if (!expected || typed !== expected) {

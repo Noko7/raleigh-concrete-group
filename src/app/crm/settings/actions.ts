@@ -11,16 +11,8 @@ import { setPrimaryContractorId, updateOwnProfile } from "@/lib/crm/queries";
 import { rateLimit } from "@/lib/rate-limit";
 import type { SaveState, TestSmsState } from "./types";
 
-// Returns the E.164 form, null to clear, or "invalid".
-//
-// The conversion itself is toE164 in notify.ts - the same function the senders
-// use, so a number this form accepts is by definition a number a text can go
-// to. This used to be a second copy of that logic, which is the kind of
-// duplicate that only announces itself the day the two disagree about what a
-// valid number is and somebody's alerts stop arriving.
-//
-// The wrapper exists for the one thing toE164 has no answer for: an empty box
-// means "clear my number", which is a valid instruction and not a bad number.
+// E.164, null to clear, or "invalid". Uses toE164 from notify.ts (what the senders use), so an accepted
+// number is one a text can reach. The wrapper treats an empty box as "clear my number".
 function normalizePhone(raw: string): string | null | "invalid" {
   if (raw.trim() === "") return null;
   return toE164(raw) ?? "invalid";
@@ -36,8 +28,7 @@ export async function saveSettings(_prev: SaveState, formData: FormData): Promis
     return { ok: false, error: "Enter a valid US phone number, e.g. (919) 555-1234." };
   }
 
-  // Ignore anything that isn't a language we ship, so a tampered form can't
-  // write a value the locale check constraint would reject.
+  // Only locales we ship, so a tampered form can't violate the locale check constraint.
   const rawLocale = String(formData.get("locale") ?? "");
   const locale = isLocale(rawLocale) ? rawLocale : undefined;
 
@@ -50,15 +41,9 @@ export async function saveSettings(_prev: SaveState, formData: FormData): Promis
 }
 
 /**
- * When this person takes on-site quote visits.
- *
- * Separate from saveSettings deliberately: the two forms are saved
- * independently, and a contractor narrowing their hours shouldn't be able to
- * blank their own alert number as a side effect of a stale name field.
- *
- * Everything is re-derived through readWorkHours rather than trusted, so a
- * hand-posted form can't write a window the check constraint would reject or a
- * day list that leaves them unbookable.
+ * Separate from saveSettings so narrowing hours can't blank the alert number via a stale field.
+ * Re-derived through readWorkHours so a hand-posted form can't break the check constraint or leave them
+ * unbookable.
  */
 export async function saveWorkHours(_prev: SaveState, formData: FormData): Promise<SaveState> {
   const session = await getSession();
@@ -74,9 +59,7 @@ export async function saveWorkHours(_prev: SaveState, formData: FormData): Promi
   if (endHour < startHour) {
     return { ok: false, error: "The last visit can't be earlier than the first." };
   }
-  // An empty list would be read as "no restriction" by readWorkHours, which is
-  // the right default for a row nobody has touched and the wrong answer to
-  // somebody deliberately unticking every box - so it's refused here instead.
+  // Empty would read as "no restriction" in readWorkHours; unticking every box deliberately is refused instead.
   if (days.length === 0) {
     return { ok: false, error: "Pick at least one day, otherwise nobody can book you." };
   }
@@ -98,16 +81,13 @@ export async function saveWorkHours(_prev: SaveState, formData: FormData): Promi
   return { ok: true, saved: true };
 }
 
-// Owner-only: fire one real text through the configured provider so you can see
-// whether notifications actually work, and read the provider's own error when
-// they don't. Sends to the number you type, or to everyone who'd receive a real
-// owner alert if you leave it blank.
+// Owner-only: send one real text to check notifications and see the provider's own error. Blank sends to
+// every owner-alert recipient.
 export async function sendTestSms(_prev: TestSmsState, formData: FormData): Promise<TestSmsState> {
   const session = await getSession();
   if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
 
-  // Texts cost money and the provider rate-limits us anyway; keep an accidental
-  // double-click or a stuck tab from burning through the allowance.
+  // Texts cost money and the provider rate-limits us; guard against double clicks and stuck tabs.
   if (await rateLimit(`smstest:${session.staff.id}`, 10, 10 * 60 * 1000)) {
     return { ok: false, error: "Too many test messages. Wait a few minutes and try again." };
   }
@@ -119,8 +99,7 @@ export async function sendTestSms(_prev: TestSmsState, formData: FormData): Prom
     if (!e164) return { ok: false, error: `"${typed}" isn't a valid US number.` };
     targets = [e164];
   } else {
-    // Exactly the list a real owner alert would go to - no exclusions, since the
-    // point is to prove your own number receives them.
+    // Exactly the real owner-alert list, no exclusions: the point is to prove your own number receives them.
     targets = await ownerRecipients();
     if (targets.length === 0) {
       return {
@@ -137,18 +116,15 @@ export async function sendTestSms(_prev: TestSmsState, formData: FormData): Prom
   }).format(now());
   const results = await Promise.all(
     targets.map(async (to) => {
-      // Sends at any hour, like every other staff-facing text: quiet hours only
-      // hold messages to customers. An owner tapping "send a test" at 9pm needs
-      // the answer at 9pm.
+      // Ignores quiet hours, like every staff-facing text (only customer texts are held).
       const r = await sendSmsResult(to, `Raleigh Concrete Group CRM test message (${stamp}). Notifications are working.`);
       return {
         to,
         from: r.from ?? null,
         ok: r.ok,
         status: r.status ?? null,
-        // The provider's raw response is the whole point of this feature - it's
-        // what tells you "A2P Registration Not Approved" vs a bad key. Trimmed
-        // so a huge HTML error page can't blow up the panel.
+        // The raw response is the point (e.g. "A2P Registration Not Approved" vs a bad key). Trimmed so an HTML
+        // error page can't blow up the panel.
         detail: r.detail ? r.detail.slice(0, 600) : null,
       };
     }),
@@ -157,7 +133,7 @@ export async function sendTestSms(_prev: TestSmsState, formData: FormData): Prom
   return { ok: results.some((r) => r.ok), results };
 }
 
-// Owner-only: choose the contractor every new quote auto-assigns to.
+// Owner-only: the contractor every new quote auto-assigns to.
 export async function savePrimaryContractor(_prev: SaveState, formData: FormData): Promise<SaveState> {
   const session = await getSession();
   if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };

@@ -20,14 +20,13 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
   const t = dict(locale);
 
-  // Independent queries, so don't make the second wait on the first.
   const [quotes, staff, crewViews] = await Promise.all([
     listQuotes(session, { search: sp.search, assignedTo: sp.assignedTo }),
     listStaff(session),
-    // Owner only - an empty list for anybody else.
+    // Owner only; empty for anyone else.
     listCrewViews(session),
   ]);
-  // Opens of each job by its CURRENT contractor, for the owner's card pill.
+  // Opens by the CURRENT contractor, for the owner's card pill.
   const crewViewsOf = new Map(crewViews.map((v) => [`${v.quote_id}:${v.staff_id}`, v]));
   const contractors = staff.filter((s) => s.role === "contractor");
   const nameMap: Record<string, string> = {};
@@ -64,9 +63,7 @@ export default async function CrmDashboard({ searchParams }: { searchParams: Pro
           <p className="crm-muted">
             {board.length} {board.length === 1 ? t.pipeline.quote : t.pipeline.quotes}
             {isOwner ? "" : ` ${t.pipeline.assignedToYou}`}{" · "}
-            {/* You cannot drag a card with a thumb, and the phone lays this out
-                as one stage at a time, so each device gets the hint that is
-                true on it. */}
+            {/* No drag on a phone, which shows one stage at a time. */}
             <span className="kb-wide-only">{t.pipeline.dragHint}</span>
             <span className="kb-narrow-only">{t.pipeline.tapHint}</span>
           </p>

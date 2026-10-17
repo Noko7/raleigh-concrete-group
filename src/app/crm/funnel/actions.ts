@@ -6,11 +6,7 @@ import { getSession } from "@/lib/crm/auth";
 import { pgAdmin } from "@/lib/crm/rest";
 import { UUID_RE } from "@/lib/quote-submit";
 
-/**
- * Take a started-but-not-sent quote off the Funnel page's call list: called
- * them, they went elsewhere, it was a test. The row stays (it ages out with the
- * rest of quote_drafts); it just stops asking to be called.
- */
+/** Removes it from the call list (called, went elsewhere, test). The row stays and ages out with quote_drafts. */
 export async function dismissDraft(formData: FormData): Promise<void> {
   const session = await getSession();
   if (!session || session.staff.role !== "owner") return;

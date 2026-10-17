@@ -12,10 +12,8 @@ import {
 } from "@/lib/crm/queries";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-// One answer per optional line item, keyed by option id. Anything that isn't a
-// uuid mapped to accepted/declined is dropped here rather than trusted through
-// to the database, and a quote whose options go missing on the way is caught by
-// recordCustomerResponse refusing an unanswered option.
+// Keyed by option id. Anything not a uuid mapped to accepted/declined is dropped; recordCustomerResponse
+// refuses a quote with an unanswered option.
 function readChoices(raw: unknown): Record<string, OptionChoice> | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const out: Record<string, OptionChoice> = {};
@@ -26,9 +24,8 @@ function readChoices(raw: unknown): Record<string, OptionChoice> | undefined {
   return out;
 }
 
-// Customer-facing endpoint behind the unguessable public_token. Records accept
-// (with a scheduled date, optionally the $150 save offer) or decline, then texts
-// the owner.
+// Behind the unguessable public_token. Records accept (with a date, optionally the $150 save offer) or
+// decline, then texts the owner.
 export async function POST(request: Request) {
   let body: {
     token?: unknown;
@@ -50,10 +47,7 @@ export async function POST(request: Request) {
   const action = body.action === "accept" || body.action === "decline" ? body.action : null;
   if (!action) return NextResponse.json({ ok: false, error: "Invalid request." }, { status: 400 });
 
-  // Approving a quote is a once-in-a-job decision that texts three people. A
-  // duplicate answer is already handled downstream (recordCustomerResponse
-  // reports it as the success it is and writes nothing), so this is only here
-  // to stop a script sitting on the endpoint.
+  // Duplicates are already handled downstream; this only stops a script on the endpoint.
   if (await rateLimit(`qresp:${clientIp(request)}`, 20, 10 * 60 * 1000)) {
     return NextResponse.json(
       { ok: false, error: "Too many attempts. Please give us a call." },
@@ -61,10 +55,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // How they said they'd like to pay, taken at the moment they approved. It is
-  // recorded, not enforced: what a job is owed comes from the ledger, and a
-  // customer who said "card" and then hands the crew cash has changed nothing
-  // except what the crew was expecting.
+  // Recorded, not enforced: what a job is owed comes from the ledger.
   const payChoice = body.pay === "card" || body.pay === "direct" ? body.pay : null;
 
   const result = await recordCustomerResponse(token, {
@@ -73,37 +64,26 @@ export async function POST(request: Request) {
     preferredDates: Array.isArray(body.preferred_dates)
       ? body.preferred_dates.filter((d): d is string => typeof d === "string")
       : undefined,
-    // Mapped rather than filtered, so a missing time in the middle doesn't
-    // shift every later one onto the wrong day. recordCustomerResponse
-    // shape-checks each entry and nulls anything it doesn't recognise.
+    // Mapped, not filtered, so a missing time doesn't shift later ones onto the wrong day.
     preferredTimes: Array.isArray(body.preferred_times)
       ? body.preferred_times.map((t) => (typeof t === "string" ? t : null))
       : undefined,
     options: readChoices(body.options),
-    // Which way of doing the job they picked. Shape-checked here and matched
-    // against this quote's own packages downstream - an id from somebody else's
-    // quote would otherwise set the price of this one.
+    // Matched against this quote's own packages downstream, so another quote's id can't set this price.
     packageId:
       typeof body.package === "string" && /^[0-9a-f-]{36}$/i.test(body.package) ? body.package : undefined,
   });
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
 
-  // Their answer was already on file and nothing changed, so nobody is told
-  // again. The customer still gets their confirmation screen - from their side
-  // the button worked, which is the truth.
+  // Already on file and unchanged: nobody is told again, but the customer still sees success.
   if (result.duplicate) return NextResponse.json({ ok: true });
 
-  // Best-effort texts to BOTH owner and the assigned contractor. Never let a
-  // texting outage fail the customer's action.
+  // Best-effort texts to owner and contractor: a texting outage must never fail the customer's action.
   try {
     const q = await getQuoteByToken("public_token", token);
     if (q) {
       const contractorPhone = q.assigned_to ? await getStaffPhoneById(q.assigned_to) : null;
-      // What they actually bought. The crew and the office need this before
-      // anything else: "approved" on a quote with options doesn't say whether
-      // there's a sidewalk to pour - and on one quoted two ways it doesn't say
-      // whether to bring concrete or asphalt, which is why the option they
-      // picked leads the list.
+      // What they bought, the chosen package first (concrete or asphalt?).
       const pick = result.package;
       const chosen = {
         accepted: [
@@ -115,13 +95,10 @@ export async function POST(request: Request) {
       const withChoices = { ...q, chosen };
       if (action === "accept") {
         if (payChoice) await addAdminEvent(q.id, "payment_choice", { choice: payChoice });
-        // The deposit ask only goes out if the crew on this job can actually
-        // take a card. On a cash-only job the customer is told nothing about
-        // paying online, because there is nothing there for them.
+        // The deposit ask only goes out if the crew can take a card.
         const payee = await payeeState(q);
         const deposit = payee.ok ? depositCents(toCents(q.quote_amount)) : null;
-        // No calendar event yet - there's no confirmed day until the crew picks
-        // one. Thank the customer, then push the owner and crew to lock a date.
+        // No calendar event until the crew picks a day.
         await notifyCustomerApproved(withChoices, deposit);
         await notifyNeedsScheduling(withChoices, contractorPhone);
       } else {
@@ -129,7 +106,7 @@ export async function POST(request: Request) {
       }
     }
   } catch {
-    // ignore - texting must never fail the customer's action
+    // texting must never fail the customer's action
   }
 
   return NextResponse.json({ ok: true });

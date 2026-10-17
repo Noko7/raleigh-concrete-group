@@ -7,16 +7,9 @@ import { linkStripeAccount, refreshStripeAccount, type StripeLinkState } from ".
 const initial: StripeLinkState = { ok: false };
 
 /**
- * Whether this contractor can be paid by card, and what to do about it if not.
- *
- * The states are deliberately three, not two. "Linked" and "can take money" are
- * different facts - an account can be attached and still be mid-review - and
- * collapsing them is how an office sends a customer a payment link that dies on
- * open. Each state says what it is and what the next action is, in that order.
- *
- * The account ID is behind a disclosure rather than sitting in the table:
- * linking happens once per contractor, and a field nobody touches for months
- * shouldn't take up a column that gets read every day.
+ * Three states, not two: "linked" and "can take money" differ (an account can be mid-review), and
+ * conflating them sends customers dead payment links.
+ * The account ID sits behind a disclosure: it's set once per contractor.
  */
 export function StripePayee({
   staffId,
@@ -55,9 +48,7 @@ export function StripePayee({
 
       {open && (
         <div className="sp-panel">
-          {/* The reason this exists, said once, where somebody is about to do
-              it. An owner links an account roughly five times ever, so the
-              instructions have to travel with the field. */}
+          {/* Linking happens rarely, so the instructions travel with the field. */}
           <p className="crm-muted crm-sm">
             Create an Express account for {name} in the Stripe Dashboard, send them the onboarding link, then paste
             the account ID here.

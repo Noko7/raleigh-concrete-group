@@ -1,5 +1,4 @@
-// Plain-English rendering of the activity log. Shared by the job detail page
-// and the Security dashboard so both describe an event the same way.
+// Plain-English activity log, shared by the job page and Security dashboard.
 import { clockLabel } from "./clock";
 import { dollars, STATUS_LABELS } from "./constants";
 import { usd } from "./fees";
@@ -9,37 +8,22 @@ import type { QuoteEvent } from "./types";
 
 const statusLabel = (v: unknown) => STATUS_LABELS[String(v) as keyof typeof STATUS_LABELS] ?? String(v ?? "N/A");
 
-// Money in the log is always stored in cents, same as the ledger it came from.
-// Named for its unit because the quote_revised case below has its own local
-// helper that formats DOLLARS - two "money" functions disagreeing by a factor
-// of a hundred is not a bug anyone finds by reading.
+// Log money is in CENTS. Named for its unit because quote_revised below has a local helper in DOLLARS.
 const centsUsd = (v: unknown) => (v == null ? "$0.00" : usd(Number(v) || 0));
 
-// When a text held by quiet hours is due, in Raleigh time - "tomorrow at
-// 8:00 AM" rather than the ISO stamp the event actually stores.
+// Raleigh time, e.g. "tomorrow at 8:00 AM".
 const heldWhen = (v: unknown) => {
   const d = new Date(String(v));
   return Number.isNaN(d.getTime()) ? "in the morning" : clockLabel(d);
 };
 
 /**
- * Every version of the quote that has gone to the customer, oldest send first.
- *
- * There is no table of quote versions and there does not need to be: the
- * activity log already records a row per send, and a correction records what it
- * replaced. Reading the history back out of those two is what makes "how many
- * times have we quoted this, and at what" answerable without a second copy of
- * the truth that can disagree with the first.
- *
- * Sends before this function existed carry no amount of their own. The revision
- * that replaced one wrote down what it was replacing, so it is read back from
- * there, and the last send with nothing after it is by definition the price on
- * the quote right now.
+ * Versions of the quote sent to the customer, oldest first, read from the activity log (one row per send;
+ * a correction records what it replaced) rather than a separate versions table.
+ * Older sends carry no amount: it's read from the revision that replaced them, and the last send is the
+ * current price.
+ * `added` marks a send from "send them another option", so it isn't labelled a correction.
  */
-// `added` is the option this send put in front of the customer, on the rows
-// that came from "send them another option" rather than from a correction. It
-// is what lets the list say "Asphalt driveway added" where it would otherwise
-// only be able to say "Correction", which is not what happened.
 export type QuoteSend = {
   id: string;
   at: string;
@@ -75,26 +59,15 @@ export function quoteSends(events: QuoteEvent[], currentAmount: number | null): 
 }
 
 /**
- * The same log, cut down to what a contractor needs, in their own language.
- *
- * eventText above is the office's audit trail: every note edit, every price
- * tweak, every text that failed, written in English because the CRM is. A crew
- * standing on a driveway is asking a smaller question - where is this job, and
- * what did the customer say - so this returns a line only for the moments that
- * answer it, and null for everything else.
- *
- * A whitelist rather than a blocklist on purpose: a new event type added for
- * the office shows up in the CRM and stays out of the crew's page until
- * somebody decides it belongs there. The other way round, every internal thing
- * we ever log leaks onto a screen customers sometimes read over a shoulder.
+ * The log cut down to what a contractor needs, in their language; null for everything else.
+ * A whitelist so new office-only event types stay off the crew's page (which customers may see).
  */
 export function crewEventText(e: QuoteEvent, t: Dict): string | null {
   const l = t.contractorJob.log;
   const m = (e.meta ?? {}) as Record<string, unknown>;
   switch (e.type) {
     case "assigned":
-      // Only the assignment itself. "Unassigned" is an office decision and the
-      // person reading this has just lost the job from their list anyway.
+      // Only the assignment; "unassigned" is an office decision.
       return m.to ? l.assigned : null;
     case "quote_sent":
       return l.quoteSent;
@@ -102,9 +75,7 @@ export function crewEventText(e: QuoteEvent, t: Dict): string | null {
       return m.added ? fill(l.quoteOptionAdded, { title: String(m.added) }) : l.quoteRevised;
     case "customer_viewed":
       return l.customerViewed;
-    // Both spellings of the same fact, told apart so neither is a lie: the
-    // customer tapped their link, or somebody wrote down a call. See the
-    // `channel` meta written by the acceptOffline action.
+    // Customer tapped their link vs. office logged a call; see `channel` meta from acceptOffline.
     case "customer_accepted":
       return m.channel === "phone" ? l.customerAcceptedPhone : l.customerAccepted;
     case "customer_declined":
@@ -115,9 +86,7 @@ export function crewEventText(e: QuoteEvent, t: Dict): string | null {
       return l.visitMoved;
     case "visit_cancelled":
       return l.visitCancelled;
-    // A change order is one of the few things on this log that changes what the
-    // crew are being paid to do, so all four states are on it rather than just
-    // the outcome: "sent, still waiting" is the one they come to the page for.
+    // Change orders change what the crew are paid to do, so every state is shown, including "still waiting".
     case "change_requested":
       return l.changeSent;
     case "change_accepted":
@@ -138,9 +107,7 @@ export function crewEventText(e: QuoteEvent, t: Dict): string | null {
       return l.jobCompleted;
     case "payment_received":
       return l.paymentReceived;
-    // On the crew's log too, and not as a courtesy: a corrected payment changes
-    // what is left to collect and what they owe the office, so it is one of the
-    // few rows here that changes what they do next.
+    // Changes what is left to collect and what they owe the office.
     case "payment_corrected":
       return l.paymentCorrected;
     case "payment_voided":
@@ -150,14 +117,12 @@ export function crewEventText(e: QuoteEvent, t: Dict): string | null {
   }
 }
 
-// Who triggered the event: a named teammate, the customer, or an automatic change.
 export function eventActor(e: QuoteEvent, names: Map<string, string>): string {
   if (e.actor) return names.get(e.actor) ?? "A teammate";
   if (e.type.startsWith("customer_")) return "Customer";
   return "Automatic";
 }
 
-// Audit-friendly description of what happened.
 export function eventText(e: QuoteEvent, names: Map<string, string>): string {
   const m = (e.meta ?? {}) as Record<string, unknown>;
   switch (e.type) {
@@ -175,38 +140,29 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "Declined quote reopened";
     case "quote_sent":
       return "Quote sent to the customer";
-    // A corrected quote sent to a customer who hadn't answered the first one.
-    // Both figures are on the line, because "did the price move, and by how
-    // much" is the only question anyone opens this row to answer.
+    // Both figures: whether and how much the price moved is the point.
     case "quote_revised": {
       const money = (v: unknown) => dollars(v as number) ?? "no price";
-      // An added option is not a correction, and the log must not call it one:
-      // nothing the customer was shown was wrong, they now have a second way to
-      // do the job beside the first.
+      // An added option is not a correction: nothing shown was wrong.
       if (m.added) return `Another option sent to the customer: ${String(m.added)} (now ${money(m.to)})`;
       return m.from !== m.to
         ? `Corrected quote sent to the customer (was ${money(m.from)}, now ${money(m.to)})`
         : "Corrected quote sent to the customer (wording changed)";
     }
     case "quote_delivery":
-      // Three outcomes, not two: sent, held for quiet hours, or actually
-      // failed. Reading a hold as a failure sends somebody chasing a problem
-      // that will resolve itself at 8am.
+      // Held for quiet hours is not a failure; it resolves itself at 8am.
       if (m.delivered) return `Quote link texted to ${String(m.to ?? "the customer")}`;
       if (m.held_until) return `Quote link queued for ${String(m.to ?? "the customer")} (quiet hours, goes out ${heldWhen(m.held_until)})`;
       return `Quote text FAILED to ${String(m.to ?? "the customer")}${m.error ? ` - ${String(m.error)}` : ""}`;
     case "customer_viewed":
       return "Customer opened their quote";
-    // Line items were added, removed, repriced or reordered. The count and the
-    // all-in figure are what tell a repriced quote from a reshuffled one.
+    // Count and all-in figure tell a repriced quote from a reshuffled one.
     case "options_changed": {
       const n = Number(m.count ?? 0);
       const total = m.total != null ? ` (${dollars(m.total as number)} all in)` : "";
       return n === 0 ? "Line items removed - back to a single price" : `Line items updated: ${n} item(s)${total}`;
     }
-    // A choice of ways to do the job was added, repriced or taken away. The
-    // count is the whole story here: two is a quote that now asks a question,
-    // and zero is one that has stopped asking it.
+    // Two or more is a quote asking a question; zero has stopped asking.
     case "packages_changed": {
       const n = Number(m.count ?? 0);
       return n === 0
@@ -215,24 +171,17 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     }
     case "customer_accepted": {
       const picks = Array.isArray(m.preferred_dates) ? (m.preferred_dates as string[]) : [];
-      // The hour they asked for on each day, where the log has one. Older
-      // entries recorded days only and still read correctly.
+      // Older entries recorded days only.
       const at = Array.isArray(m.preferred_times) ? (m.preferred_times as (string | null)[]) : [];
       const asked = picks.map((d, i) => `${d}${at[i] ? ` ${at[i]}` : ""}`);
       const wanted = asked.length ? `, prefers ${asked.join(", ")}` : "";
-      // On a quote with options, which ones they took is the whole story - the
-      // total alone doesn't say whether the sidewalk is in it.
+      // The total alone doesn't say which options are in.
       const yes = Array.isArray(m.accepted_options) ? (m.accepted_options as string[]) : [];
       const no = Array.isArray(m.declined_options) ? (m.declined_options as string[]) : [];
-      // The way of doing the job they picked leads it, on a quote that offered
-      // a choice: on a driveway quoted two ways it is the difference between a
-      // concrete pour and an asphalt one.
       const pick = m.chosen_package ? String(m.chosen_package) : "";
       const took = [pick, ...yes].filter(Boolean);
       const chose = took.length ? `: took ${took.join(", ")}${no.length ? `, left ${no.join(", ")}` : ""}` : "";
-      // An approval taken over the phone says so, and says who wrote it down.
-      // The row is otherwise identical to one the customer produced themselves,
-      // and on an audit trail those two must never read the same.
+      // A phone approval must never read the same as one the customer gave.
       if (m.channel === "phone") {
         const by = m.recorded_by ? String(m.recorded_by) : "staff";
         const agreed = picks.length ? `, agreed ${asked.join(", ")}` : "";
@@ -240,16 +189,11 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       }
       return `Customer approved the quote${chose}${wanted}${m.discount ? " ($150 credit)" : ""}`;
     }
-    // ── Change orders ──
-    // The figures are the point of every one of these rows: a change order is
-    // the only thing that moves the price of an agreed job, so the log has to
-    // answer "from what, to what" without anybody opening anything else.
+    // Change orders are the only thing that moves an agreed price, so every row shows from what, to what.
     case "change_requested": {
       const money = (v: unknown) => dollars(v as number) ?? "no price";
       const paid = m.paid_cents != null ? `, ${centsUsd(m.paid_cents)} already paid` : "";
-      // Who confirmed the recorded payments at the review step. The customer is
-      // approving a balance, so the row has to say who stood behind the half of
-      // it that came from the ledger.
+      // Who checked the ledger half of the balance the customer is approving.
       const by = m.payments_checked_by ? `, payments checked by ${String(m.payments_checked_by)}` : "";
       const what = m.agreed ? "Change agreed with the customer directly, not texted" : "Change sent for approval";
       return `${what}: ${money(m.from)} → ${money(m.to)}${paid}${by}${m.note ? ` - "${String(m.note)}"` : ""}`;
@@ -282,8 +226,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return `Work day moved${m.from ? ` from ${String(m.from)}${m.from_time ? ` ${String(m.from_time)}` : ""}` : ""} to ${String(m.to ?? "a new date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}${m.notified === false ? ", customer not texted" : ""}`;
     case "visit_confirmed": {
       const when = `${String(m.to ?? "a date")}${m.to_time ? ` at ${String(m.to_time)}` : ""}`;
-      // Worth recording when the crew didn't take the slot the customer offered:
-      // it's the difference between "we agreed" and "we told them a new time".
+      // "We agreed" vs. "we told them a new time".
       const asked =
         m.moved && m.requested
           ? ` (customer had asked for ${String(m.requested)}${m.requested_time ? ` at ${String(m.requested_time)}` : ""})`
@@ -301,9 +244,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     case "reminder_sent":
       return "Confirmation reminder texted to the customer";
     case "stale_lead_reminded": {
-      // Chased in one text covering every stale lead, so this says which batch
-      // it was part of - the text itself is logged without a job id, since it
-      // belongs to several.
+      // One text covers every stale lead (logged without a job id), so this says which batch.
       const of = Number(m.of);
       return of > 1
         ? `Chased as untouched, in a list of ${of} sent to the crew`
@@ -312,9 +253,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     case "crew_reminded": {
       const d = Number(m.days_out);
       const when = d === 0 ? "morning of" : d === 1 ? "day before" : `${d} days out`;
-      // Three outcomes again: sent, queued behind that person's other texts
-      // from the same run, or failed. A spaced reminder that reads as a failure
-      // sends somebody chasing a text that is about to arrive.
+      // Queued behind that person's other texts is not a failure.
       if (m.delivered) return `Crew reminder texted (${when})`;
       if (m.queued_for) return `Crew reminder queued for ${String(m.queued_for)} (${when}, spaced out)`;
       return `Crew reminder FAILED (${when}) to ${String(m.to ?? "the crew")}`;
@@ -345,8 +284,7 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return m.delivered
         ? `Card payment link texted to ${String(m.to ?? "the customer")}`
         : `Card payment link FAILED to send${m.error ? ` - ${String(m.error)}` : ""}`;
-    // What they said at the moment they approved. Not a commitment - it just
-    // tells the crew whether to expect a card or a cheque book.
+    // Not a commitment; tells the crew whether to expect a card or a cheque.
     case "payment_choice":
       return m.choice === "card"
         ? "Customer chose to pay by card"
@@ -354,18 +292,14 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     case "payment_received": {
       const how = String(m.method ?? "payment");
       const fee = Number(m.fee_cents ?? 0);
-      // The office's cut is on the line because this is the only record that
-      // says whether it was collected with the payment or left owed.
+      // The only record of whether the fee was collected with the payment or left owed.
       return `${how === "card" ? "Card payment" : `${how.charAt(0).toUpperCase()}${how.slice(1)} recorded`}: ${centsUsd(m.amount_cents)}${
         how === "card" ? ` (fee ${centsUsd(fee)})` : ""
       }`;
     }
     case "payment_refunded":
       return `Refunded ${centsUsd(m.amount_cents)}`;
-    // ── Corrections to the ledger ──
-    // Both figures, always. "A payment was corrected" tells nobody whether the
-    // books moved by five dollars or by four thousand, and this row is the only
-    // record that the first figure was ever there.
+    // Both figures, always: this row is the only record the first figure existed.
     case "payment_corrected": {
       const moved =
         m.from_method && m.to_method && m.from_method !== m.to_method
@@ -385,20 +319,13 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
             ? ` (${dollars(m.amount as number)})`
             : ""
       }`;
-    // A queued text somebody stopped before the morning flush reached it. The
-    // kind is the point of the line: "a text was cancelled" tells nobody
-    // whether the customer is still waiting on their quote.
-    // Somebody chose not to wait for the hour a text was queued for. Worth its
-    // own line: a customer text that arrives at 6:40am was a decision, and the
-    // log is where that decision is answerable.
+    // An early send was a deliberate choice (e.g. a 6:40am text), so it gets its own line.
     case "message_sent_early":
       return `Queued text sent early${m.kind ? ` (${messageLabel(String(m.kind))})` : ""}${
         m.delivered === false ? ", and it failed" : ""
       }`;
     case "message_cancelled":
       return `Queued text cancelled before it sent${m.kind ? ` (${messageLabel(String(m.kind))})` : ""}`;
-    // The quote went to the wrong person, or went out before it should have.
-    // The link is dead and the pricing is gone; this is the row that says so.
     case "quote_retracted":
       return `Quote retracted and wiped${m.amount != null ? ` (was ${dollars(m.amount as number)})` : ""}${
         m.texts_cancelled ? `, ${Number(m.texts_cancelled)} queued text(s) stopped` : ""

@@ -8,13 +8,8 @@ import { setJobDate } from "@/app/crm/quotes/[id]/actions";
 import type { PreferredSlot, ScheduleState } from "@/app/crm/quotes/[id]/types";
 import { DateField } from "./date-field";
 
-// Settling the work day from the crew's own job page. Same server action the CRM
-// uses, so the RLS scoping and the customer text are identical - this is only a
-// different surface, built for a phone on a job site: full-width targets, dates
-// spelled out, and the confirm buttons above the fold rather than in a dropdown.
-//
-// Only ever shown on a job with no date yet. Moving a date that already exists
-// is JobReschedule, under the date itself at the top of the page.
+// Same server action as the CRM (same RLS and customer text), laid out for a phone. Only for jobs with no
+// date; moving an existing date is JobReschedule.
 function pretty(s: string, locale: Locale): string {
   return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "long",
@@ -36,9 +31,7 @@ export function JobSchedule({
 }) {
   const [state, formAction, pending] = useActionState<ScheduleState, FormData>(setJobDate, { ok: false });
   const t = dict(locale);
-  // Seeded from the time the customer asked for, so the crew standing in the
-  // yard confirms the appointment that was actually agreed rather than a house
-  // default. Touching the box overrides it for every day - see `overridden`.
+  // Seeded from the customer's requested time; touching the box overrides it for every day (see `overridden`).
   const [time, setTime] = useState(preferred.find((p) => p.time)?.time ?? "9:00 AM");
   const [overridden, setOverridden] = useState(false);
 
@@ -74,9 +67,7 @@ export function JobSchedule({
               <input type="hidden" name="time" value={overridden ? time : (p.time ?? time)} />
               <button type="submit" className="js-choice" disabled={pending}>
                 <span className="js-choice-date">{pretty(p.date, locale)}</span>
-                {/* The hour is on the button because it is half of what they
-                    are agreeing to. A day alone reads as "any time that day",
-                    which is how a crew turns up at 9 for a 7 o'clock pour. */}
+                {/* A day alone reads as "any time", which is how a crew turns up at 9 for a 7 o'clock pour. */}
                 {p.time && !overridden && <span className="js-choice-time">{p.time}</span>}
                 <span className="js-choice-cta">{t.contractorJob.schedConfirm}</span>
               </button>

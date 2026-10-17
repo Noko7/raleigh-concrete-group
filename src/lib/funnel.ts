@@ -1,32 +1,23 @@
-// The quote funnel: what a visitor does between opening the quote form and
-// sending it, recorded so the office can see where people give up.
-//
-// Shared by the browser (which sends events), /api/funnel (which checks them)
-// and the CRM's Funnel page (which adds them up). Nothing in here is personal:
-// no name, phone, email or address ever goes into an event, only which step
-// someone was on, how long they spent on it, and which requirement was still
-// unmet when they left. An attempt is identified by a random id minted when the
-// form opens, and nothing ties that id to the lead it may turn into.
-//
-// Why not Vercel Analytics: custom events are a Pro-plan feature, and this is
-// on Hobby. Supabase is already paid for (free tier) and already here.
+// Quote funnel events (where visitors give up), shared by the browser, /api/funnel and the CRM Funnel page.
+// Never personal: no name, phone, email or address; only step, time on it, and what was unmet. An attempt
+// id is random per form open and is not tied to the resulting lead.
+// Not Vercel Analytics: custom events need the Pro plan.
 
-// The quote modal's screens, in order. "choice" is online vs in-person.
+// In order. "choice" is online vs in-person.
 export const FUNNEL_STEPS = ["choice", "contact", "service", "schedule"] as const;
 export type FunnelStep = (typeof FUNNEL_STEPS)[number];
 
-// open    the form was opened (path = the page it was opened from)
-// view    a step was shown
-// done    a step was completed with Continue (ms = time spent on it)
-// back    Back was pressed on a step (ms = time spent on it)
-// close   the form was dismissed before sending (detail = what was unfinished)
+// open    form opened (path = page it was opened from)
+// view    step shown
+// done    step completed with Continue (ms = time on it)
+// back    Back pressed (ms = time on it)
+// close   dismissed before sending (detail = what was unfinished)
 // error   something told them no (detail = what)
-// submit  the lead was saved (ms = open to saved)
+// submit  lead saved (ms = open to saved)
 export const FUNNEL_EVENTS = ["open", "view", "done", "back", "close", "error", "submit"] as const;
 export type FunnelEventName = (typeof FUNNEL_EVENTS)[number];
 
-// The Get Free Quote pop-up. (There was also a standalone /estimate page; it
-// was retired on 23 Sep, and anything still claiming to be from it is dropped.)
+// Events claiming any other form are dropped.
 export const FUNNEL_FORMS = ["modal"] as const;
 export type FunnelForm = (typeof FUNNEL_FORMS)[number];
 
@@ -43,10 +34,8 @@ export type FunnelEvent = {
   device: "mobile" | "desktop";
 };
 
-// Routes whose second path segment is a secret (a customer's quote link, a
-// contractor's invite). The pages themselves are private, but the quote button
-// is site-wide, so an event could still be sent from one: the token is cut out
-// here before it goes anywhere. Keep in step with vercel-insights.tsx.
+// Routes whose second segment is a secret token; it is cut out before sending. Keep in step with
+// vercel-insights.tsx.
 const TOKEN_ROUTES = new Set(["q", "job", "confirm", "join", "pay"]);
 
 export function scrubPath(pathname: string): string {
@@ -55,8 +44,7 @@ export function scrubPath(pathname: string): string {
   return parts.join("/").slice(0, 200) || "/";
 }
 
-// A browser can send anything, so every field is re-checked on the way in and
-// anything unrecognised is dropped rather than stored. Returns null to discard.
+// Browsers can send anything: every field is re-checked and anything unrecognised dropped. Null = discard.
 const ID_RE = /^[a-z0-9-]{8,40}$/i;
 const DETAIL_RE = /^[a-z0-9_+:,.-]{1,120}$/i;
 const STEP_SET = new Set<string>(FUNNEL_STEPS);
@@ -77,8 +65,7 @@ export function parseFunnelEvent(raw: unknown): FunnelEvent | null {
   const stepRaw = str(r.step);
   const step = STEP_SET.has(stepRaw) ? (stepRaw as FunnelEvent["step"]) : null;
 
-  // A tab left open overnight is not a 14-hour step. Cap at an hour; the
-  // stats use medians, so the odd long one doesn't drag the figure anyway.
+  // Cap at an hour: a tab left open overnight is not a 14-hour step.
   const msNum = typeof r.ms === "number" && Number.isFinite(r.ms) ? Math.round(r.ms) : null;
   const ms = msNum === null || msNum < 0 ? null : Math.min(msNum, 60 * 60 * 1000);
 

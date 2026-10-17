@@ -5,45 +5,26 @@ import { isCancellable, isCancelled, isHeld, type QuoteMessage } from "@/lib/crm
 import { CancelHeldText } from "./cancel-held-text";
 import { SendHeldNow } from "./send-held-now";
 
-// The texts that carry the quote itself. Kept in step with QUOTE_TEXT_KINDS in
-// actions.ts, which is the copy that decides what actually happens.
+// Keep in step with QUOTE_TEXT_KINDS in actions.ts, which decides what actually happens.
 const QUOTE_KINDS = new Set(["quote_ready", "quote_updated"]);
 
-// Every text this job has produced, and whether it left the building.
-//
-// Sends are deliberately best-effort - a texting outage must never fail a
-// customer's quote submission - but that used to mean a lead could arrive with
-// nobody notified and no trace of why. This is the trace, and it lives on the
-// job rather than in a log file, because "did the customer actually get that?"
-// is a question you ask while looking at the customer.
-//
-// Bodies are in <details> rather than a modal so the whole thing works without
-// client JavaScript, and a failed send shows the provider's own words: "Failed"
-// on its own is the same dead end as the generic errors this replaced.
-// Raleigh time, not the server's. These rows are read next to a phone that
-// says something different, and a log that disagrees with the phone in your
-// hand is a log you stop trusting.
+// Every text this job produced and whether it left. Sends are best-effort (an outage must never fail a
+// quote), so this is the trace, kept on the job. <details> instead of a modal so it works without client
+// JS; failures show the provider's own words.
+// Raleigh time, matching the phone in your hand.
 function fmt(iso: string) {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: BUSINESS_TZ });
 }
 
 export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; isOwner: boolean }) {
-  // Whether sending one by hand right now means texting somebody at 6am. Read
-  // once for the whole list rather than per row: they all share a clock.
+  // Whether a manual send now means texting someone at 6am. One clock for the whole list.
   const quiet = inQuietHours();
-  // A text waiting for 8am is neither sent nor failed, and counting it as
-  // failed would put a red number on a night that went fine.
-  //
-  // Two different reasons a row is waiting, and the role is what separates
-  // them: quiet hours only ever holds a CUSTOMER text, so anything else in the
-  // queue is there because a cron run spread its texts out. Same badge, because
-  // both mean "this is going to send"; different sentence, because only one of
-  // them is a rule about the hour.
+  // A held text is neither sent nor failed. Quiet hours only hold CUSTOMER texts; anything else queued was
+  // spread out by a cron run. Same badge, different sentence.
   const held = messages.filter(isHeld);
   const heldForMorning = held.filter((m) => m.role === "customer");
   const spaced = held.length - heldForMorning.length;
-  // A cancelled text is not a failed one. It never left because somebody
-  // decided it shouldn't, which is the queue working, not the queue breaking.
+  // Cancelled is not failed: someone decided it shouldn't go.
   const failed = messages.filter((m) => !m.ok && !isHeld(m) && !isCancelled(m)).length;
 
   return (
@@ -99,24 +80,15 @@ export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; is
                   <span className="crm-muted crm-sm msg-when">{fmt(m.created_at)}</span>
                 </div>
 
-                {/* A hold and a cancellation both explain themselves in the
-                    badge; the detail line is for a provider's own words about a
-                    real failure. */}
+                {/* Holds and cancellations explain themselves in the badge; this line is for real provider failures. */}
                 {m.detail && !m.ok && !isHeld(m) && !isCancelled(m) && <pre className="msg-detail">{m.detail}</pre>}
 
-                {/* Both controls live on the row rather than behind a menu:
-                    the window between "queued" and "sent" is the only one
-                    anybody gets.
-
-                    They differ on which rows they appear for, and the reason is
-                    what losing a race to the drain costs. Sending is offered on
-                    ANY held row, past its hour included - which, when the queue
-                    has stalled, is the only kind of row there is - because the
-                    worst case is finding it already claimed and saying so.
-                    Cancelling hides itself once the hour has come, because a
-                    cancel that lands a second behind a send marks a text
-                    cancelled that is already on somebody's phone, and then the
-                    log is lying. */}
+                {/*
+                  On the row, not a menu: the queued-to-sent window is short.
+                  Send shows on ANY held row (past its hour too, e.g. a stalled queue): losing the race just reports it
+                  was claimed. Cancel hides once the hour arrives: a cancel landing just after a send would mark a
+                  delivered text cancelled.
+                */}
                 {isHeld(m) && m.quote_id && <SendHeldNow quoteId={m.quote_id} messageId={m.id} quiet={quiet} />}
 
                 {isCancellable(m) && m.quote_id && (

@@ -21,10 +21,9 @@ export default async function SettingsPage() {
   const primaryId = isOwner ? await getPrimaryContractorId() : null;
   const sms = isOwner ? smsDiagnostics() : null;
   const alertTargets = isOwner ? await ownerRecipientDetails() : [];
-  // One HEAD request to a public host, only when an owner opens this page.
-  // Nothing else in the app waits on it.
+  // One HEAD request, owners only; nothing else waits on it.
   const clock = isOwner ? await checkClockDrift() : null;
-  // Cheap, and only for an owner: one indexed read of whatever is still queued.
+  // Owners only: one indexed read.
   const queue = isOwner ? await queueHealth() : null;
   const t = dict(staff.locale);
 
@@ -43,9 +42,7 @@ export default async function SettingsPage() {
         role={staff.role}
         locale={isLocale(staff.locale) ? staff.locale : "en"}
       />
-      {/* Directly under your own details, because it is one of them. Owners get
-          it too: an owner who goes out on estimates is on the same routing as
-          anyone else and needs a window of their own. */}
+      {/* Owners get it too: an owner who does estimates is routed like anyone else. */}
       <WorkHoursForm
         hours={readWorkHours(staff)}
         locale={isLocale(staff.locale) ? staff.locale : "en"}

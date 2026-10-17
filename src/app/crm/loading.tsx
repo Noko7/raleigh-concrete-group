@@ -1,14 +1,5 @@
-// Shown the instant a CRM link is tapped, for as long as the server takes.
-//
-// Every page in here is force-dynamic, so a navigation cannot be served from a
-// cache: the browser sits on the page you are leaving until Supabase has
-// answered, which reads as the app freezing when you move between pages
-// quickly. This is what Next streams in that gap instead, and it turns "did
-// that tap register?" into "it is coming".
-//
-// Shaped like the page it stands in for - a head, a filter row, a stack of
-// cards - because a skeleton that matches nothing is just a different kind of
-// blank screen.
+// Every CRM page is force-dynamic, so navigation waits on Supabase; this streams instantly so a tap reads
+// as registered. Shaped like the page it stands in for.
 export default function CrmLoading() {
   return (
     <main className="crm-page crm-page-wide" aria-busy="true" aria-live="polite">

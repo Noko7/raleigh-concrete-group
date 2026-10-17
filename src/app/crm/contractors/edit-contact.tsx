@@ -6,10 +6,8 @@ import { quoteServiceOptions } from "@/lib/site-data";
 import { updateContractorContact } from "./actions";
 import type { ContactState } from "./types";
 
-// Everything about a contractor an owner can change without involving them:
-// their name, the address they sign in with, the number job alerts go to, and
-// which job types route to them.
-// Password lives in Reset password; active/inactive is the row's own button.
+// What an owner can change without involving the contractor. Password is Reset password; active is the
+// row's own button.
 export function EditContact({
   id,
   name,
@@ -26,7 +24,7 @@ export function EditContact({
   const [state, formAction, pending] = useActionState<ContactState, FormData>(updateContractorContact, { ok: false });
   const [open, setOpen] = useState(false);
 
-  // Close once the save lands - the row above already shows the new values.
+  // Close once saved; the row already shows the new values.
   useEffect(() => {
     if (state.ok) setOpen(false);
   }, [state.ok]);
@@ -60,10 +58,10 @@ export function EditContact({
           placeholder="(919) 555-1234"
         />
       </label>
-      {/* Which job types route to this person. Nothing ticked means no
-          restriction, which is what every contractor was before routing
-          existed and stays the safe default: a lead is never dropped for
-          want of a rule, it just falls through to the primary contractor. */}
+      {/*
+        Nothing ticked = no restriction: a lead is never dropped for want of a rule, it falls through to the
+        primary contractor.
+      */}
       <fieldset className="crm-sections">
         <legend>Job types they take</legend>
         <p className="crm-muted crm-sm">

@@ -8,14 +8,8 @@ import { recordFeeSettlement, type SettleState } from "./actions";
 const initial: SettleState = { ok: false };
 
 /**
- * "Mike sent me $600 on Zelle for Dave Allmon's job."
- *
- * Recorded against the job it was for, so the ledger reads by job and each
- * job shows what's been sent on it - half from the deposit, half at the end.
- * Folded away until it is needed, and seeded with exactly what that person
- * owes - the overwhelmingly common case is somebody clearing their balance in
- * full, and making the office type a figure it already knows is how the number
- * on this page slowly stops matching the bank.
+ * "Mike sent me $600 on Zelle for Dave Allmon's job." Recorded against the job it was for. Seeded with
+ * exactly what they owe (the common case) so nobody retypes a known figure.
  */
 export function SettleForm({
   contractors,
@@ -24,7 +18,7 @@ export function SettleForm({
     staffId: string;
     name: string;
     balanceCents: number;
-    /** Their jobs with fee still owed on them, so the payment lands on the job it was for. */
+    /** Jobs with fee still owed, so the payment lands on the job it was for. */
     jobs: { id: string; name: string; owedCents: number }[];
   }[];
 }) {
@@ -34,8 +28,7 @@ export function SettleForm({
   const [method, setMethod] = useState<PaymentMethod>("zelle");
 
   const picked = contractors.find((c) => c.staffId === staffId);
-  // The job it was for. Defaults to the one owing most, which is almost always
-  // the one they're paying; "" is a lump sum across their balance.
+  // Defaults to the job owing most; "" is a lump sum across their balance.
   const [jobPick, setJobPick] = useState<{ staffId: string; jobId: string } | null>(null);
   const jobId =
     jobPick && jobPick.staffId === staffId ? jobPick.jobId : (picked?.jobs[0]?.id ?? "");
@@ -94,8 +87,7 @@ export function SettleForm({
               name="amount"
               type="text"
               inputMode="decimal"
-              // Keyed on the person so switching contractor reseeds the figure
-              // rather than leaving the last one's balance in the box.
+              // Keyed on the person so switching contractor reseeds the figure.
               key={`${staffId}:${jobId}`}
               defaultValue={seed > 0 ? String(fromCents(seed)) : ""}
               autoComplete="off"

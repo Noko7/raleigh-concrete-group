@@ -1,7 +1,5 @@
-// Server-only data access for the payment ledger. Sits beside queries.ts and
-// follows its conventions: pgUser where a session exists so RLS scopes the
-// read, pgAdmin only where there genuinely is no session (the customer's own
-// payment page and the Stripe webhook).
+// Server-only payment ledger access. pgUser wherever a session exists so RLS scopes the read; pgAdmin only
+// where there is none (the customer's payment page, the Stripe webhook).
 import { SITE_ORIGIN } from "./env";
 import {
   applicationFeeFor,
@@ -24,22 +22,18 @@ import type { FeeSettlement, Quote, QuotePayment, Session, Staff } from "./types
 
 const UUID_RE = /^[0-9a-fA-F-]{36}$/;
 
-// ── Reading a job's ledger ──────────────────────────────────────────────────
-
 export async function listPayments(session: Session, quoteId: string): Promise<QuotePayment[]> {
   if (!UUID_RE.test(quoteId)) return [];
   const res = await pgUser(
     `quote_payments?quote_id=eq.${quoteId}&select=*&order=created_at.asc`,
     session.accessToken,
   );
-  // The table arrives with supabase/payments.sql. Until it is run PostgREST
-  // 404s the relation, and every screen reads that as "no payments yet" rather
-  // than falling over - the same way a missing quote_options table is handled.
+  // 404 (table missing) or any failure reads as "no payments yet".
   if (!res.ok) return [];
   return (await res.json()) as QuotePayment[];
 }
 
-/** Service-role read, for the customer's own payment page and the webhook. */
+/** Service-role read, for the customer's payment page and the webhook. */
 export async function listPaymentsAdmin(quoteId: string): Promise<QuotePayment[]> {
   if (!UUID_RE.test(quoteId)) return [];
   const res = await pgAdmin(`quote_payments?quote_id=eq.${quoteId}&select=*&order=created_at.asc`);
@@ -47,18 +41,12 @@ export async function listPaymentsAdmin(quoteId: string): Promise<QuotePayment[]
   return (await res.json()) as QuotePayment[];
 }
 
-/** The whole money picture for one job, from its rows. */
 export function ledgerOf(quote: Quote, rows: QuotePayment[]): Ledger {
   return readLedger(toCents(quote.quote_amount), quote.fee_total_cents, rows, quote.fee_rate, quote.fee_waived_cents);
 }
 
-// ── Freezing the rate ───────────────────────────────────────────────────────
-
 /**
- * How many of this contractor's jobs have already been paid.
- *
- * Counts jobs with at least one paid row, not payments - a job settled in three
- * instalments is one job. Excludes the job being priced, so a contractor's
+ * Counts jobs with at least one paid row, not payments. Excludes the job being priced, so a contractor's
  * fourth job is the first at the standard rate.
  */
 export async function paidJobCountFor(staffId: string, excludeQuoteId?: string): Promise<number> {
@@ -75,26 +63,16 @@ export async function paidJobCountFor(staffId: string, excludeQuoteId?: string):
 }
 
 /**
- * Settle what the office earns on this job, once, and write it onto the job.
- *
- * Called the first time money is about to move. If the job already carries a
- * rate it is returned untouched - re-running this must never reprice a job
- * that has already taken a payment, which is the difference between a stable
- * agreement and a number that drifts under the contractor.
- *
- * The job total can still change afterwards (an owner edits the quote). That
- * is handled where it belongs, on the next payment: the fee owed is recomputed
- * against the frozen RATE and the current total, so a job that grows tops the
- * office up rather than under-charging.
+ * Freeze the office's rate on this job the first time money is about to move. A job that already has a
+ * rate is returned untouched: a job that has taken a payment must never be repriced.
+ * The total can still change later; the fee is recomputed from the frozen RATE and the current total.
  */
 export async function ensureFeeOnJob(quote: Quote): Promise<{ rate: number; feeTotalCents: number }> {
   const totalCents = toCents(quote.quote_amount);
 
   if (quote.fee_rate != null && quote.fee_total_cents != null) {
     const rate = Number(quote.fee_rate);
-    // Re-derived against today's total rather than trusting the stored figure:
-    // the rate is the promise, the total is a fact, and the office should be
-    // paid its percentage of the job as it now stands.
+    // The rate is the promise; the fee follows today's total.
     return { rate, feeTotalCents: feeTotalCents(totalCents, rate) };
   }
 
@@ -110,8 +88,6 @@ export async function ensureFeeOnJob(quote: Quote): Promise<{ rate: number; feeT
 
   return { rate, feeTotalCents: total };
 }
-
-// ── Writing payments ────────────────────────────────────────────────────────
 
 export type NewPayment = {
   quoteId: string;
@@ -139,17 +115,12 @@ function paymentRow(p: NewPayment): Record<string, unknown> {
     payment_intent_id: p.paymentIntentId ?? null,
     recorded_by: p.recordedBy ?? null,
     note: p.note ?? null,
-    // Stamped now for anything already settled. A pending card row gets its
-    // timestamp from the webhook, when the money actually arrived, not from
-    // when we asked for it.
+    // A pending card row is stamped by the webhook when the money actually arrives.
     paid_at: status === "paid" ? new Date().toISOString() : null,
   };
 }
 
-/**
- * Record a payment as the signed-in user. RLS keeps a contractor to their own
- * jobs, which is what lets the crew log cash from their own job page.
- */
+/** Insert as the signed-in user; RLS keeps a contractor to their own jobs. */
 export async function recordPayment(
   session: Session,
   p: NewPayment,
@@ -183,12 +154,8 @@ export async function recordPaymentAdmin(p: NewPayment): Promise<QuotePayment | 
 }
 
 /**
- * Mark a pending card payment paid, keyed by its Checkout Session.
- *
- * The webhook's landing point, and deliberately conditional on the row still
- * being pending: Stripe delivers the same event more than once by design, and
- * a second delivery must find nothing left to do rather than adding a second
- * payment to the job. Returns whether this call was the one that changed it.
+ * Mark a pending card payment paid, keyed by Checkout Session. Conditional on the row still being pending
+ * because Stripe redelivers events. Returns whether this call changed it.
  */
 export async function markSessionPaid(
   sessionId: string,
@@ -219,12 +186,8 @@ export async function paymentById(id: string): Promise<QuotePayment | null> {
 }
 
 /**
- * Write back how much of a payment has gone home to the customer.
- *
- * A running TOTAL, never an increment - the same shape Stripe reports it in.
- * Two things write this (the refund action and the charge.refunded webhook) and
- * they routinely both fire for one refund, so the second must be able to say
- * the same thing again without doubling it.
+ * Writes the refunded running TOTAL (as Stripe reports it), never an increment: the refund action and the
+ * charge.refunded webhook both fire for one refund.
  */
 export async function applyRefund(
   paymentId: string,
@@ -252,9 +215,6 @@ export async function findPaymentBySession(sessionId: string): Promise<QuotePaym
   return ((await res.json()) as QuotePayment[])[0] ?? null;
 }
 
-// ── The contractor's Stripe account ─────────────────────────────────────────
-
-/** Cache what Stripe says about an account onto the staff row. */
 export async function saveStripeAccount(
   staffId: string,
   patch: {
@@ -273,22 +233,20 @@ export async function saveStripeAccount(
   return res.ok;
 }
 
-/** Who a Stripe account belongs to - the webhook's way back from acct_ to staff. */
+/** The webhook's way back from acct_ to staff. */
 export async function staffByStripeAccount(accountId: string): Promise<Staff | null> {
   const res = await pgAdmin(`staff?stripe_account_id=eq.${encodeURIComponent(accountId)}&select=*&limit=1`);
   if (!res.ok) return null;
   return ((await res.json()) as Staff[])[0] ?? null;
 }
 
-/** Service-role read of one contractor's payment setup, for token-gated pages. */
+/** Service-role read, for token-gated pages. */
 export async function payeeFor(staffId: string | null | undefined): Promise<Staff | null> {
   if (!staffId || !UUID_RE.test(staffId)) return null;
   const res = await pgAdmin(`staff?id=eq.${staffId}&select=*&limit=1`);
   if (!res.ok) return null;
   return ((await res.json()) as Staff[])[0] ?? null;
 }
-
-// ── Fee settlements (owner only) ────────────────────────────────────────────
 
 export async function listSettlements(session: Session, staffId?: string): Promise<FeeSettlement[]> {
   const filter = staffId && UUID_RE.test(staffId) ? `&staff_id=eq.${staffId}` : "";
@@ -320,15 +278,11 @@ export async function recordSettlement(
   return { ok: true };
 }
 
-// ── The whole money picture for one job ─────────────────────────────────────
-
-// A Checkout Session Stripe will not honour any more. Their sessions expire
-// after 24 hours; a little past that, a pending row of ours can never become a
-// payment, and leaving it pending would hold part of the fee reserved against a
-// checkout nobody is ever going to finish.
+// Stripe Checkout Sessions expire after 24h; a pending row past that can never be paid and would keep
+// part of the fee reserved.
 const PENDING_EXPIRY_HOURS = 26;
 
-/** Retire pending rows whose Stripe session has expired. Safe to call often. */
+/** Safe to call often. */
 async function expireStalePending(quoteId: string): Promise<void> {
   const cutoff = new Date(Date.now() - PENDING_EXPIRY_HOURS * 3600_000).toISOString();
   await pgAdmin(
@@ -341,13 +295,7 @@ async function expireStalePending(quoteId: string): Promise<void> {
   ).catch(() => {});
 }
 
-/**
- * What the office would earn on this job, WITHOUT writing anything.
- *
- * The rate is only frozen when money actually moves. This is the read-only
- * counterpart, so a screen can show the figure on a job nobody has paid yet
- * without quietly committing the contractor to today's rate.
- */
+/** Read-only fee preview: shows the figure without freezing today's rate. */
 async function previewFee(quote: Quote): Promise<{ rate: number; feeTotalCents: number }> {
   const totalCents = toCents(quote.quote_amount);
   if (quote.fee_rate != null) {
@@ -359,13 +307,7 @@ async function previewFee(quote: Quote): Promise<{ rate: number; feeTotalCents: 
   return { rate, feeTotalCents: feeTotalCents(totalCents, rate) };
 }
 
-/**
- * Everything any screen needs to talk about this job's money.
- *
- * `freeze` is the difference between looking and charging: pass it only where a
- * payment is actually about to happen, so merely opening the payment page does
- * not lock a contractor onto a rate.
- */
+/** Pass `freeze` only where a payment is about to happen, so viewing a payment page doesn't lock in a rate. */
 export async function jobLedger(
   quote: Quote,
   opts: { freeze?: boolean } = {},
@@ -374,8 +316,7 @@ export async function jobLedger(
   const fee = opts.freeze ? await ensureFeeOnJob(quote) : await previewFee(quote);
   const [rows, settledCents] = await Promise.all([listPaymentsAdmin(quote.id), settledOnJob(quote.id)]);
   return {
-    // Net of any fee the contractor has already sent the office for this job -
-    // see applySettlements for why that has to happen here and not in readLedger.
+    // Net of fee already settled for this job; see applySettlements for why it happens here, not in readLedger.
     ledger: applySettlements(
       readLedger(toCents(quote.quote_amount), fee.feeTotalCents, rows, null, quote.fee_waived_cents),
       settledCents,
@@ -385,30 +326,23 @@ export async function jobLedger(
   };
 }
 
-/** Fee the contractor has already sent the office against this one job, in cents. */
+/** In cents. */
 async function settledOnJob(quoteId: string): Promise<number> {
   if (!UUID_RE.test(quoteId)) return 0;
   const res = await pgAdmin(`fee_settlements?quote_id=eq.${quoteId}&select=amount_cents`);
-  // A database without the table, or any read failure, reads as nothing settled
-  // - the old behaviour - rather than taking the job page down with it.
+  // Missing table or any read failure reads as nothing settled.
   if (!res.ok) return 0;
   const rows = (await res.json()) as { amount_cents: number }[];
   return rows.reduce((sum, r) => sum + (Number(r.amount_cents) || 0), 0);
 }
-
-// ── Can this job take a card at all? ────────────────────────────────────────
 
 export type PayeeState =
   | { ok: true; staff: Staff; account: string }
   | { ok: false; reason: "unassigned" | "not_linked" | "not_ready" | "no_stripe" };
 
 /**
- * Whether a card payment is possible on this job right now, and if not, which
- * of the four reasons it is.
- *
- * Four distinct answers rather than a boolean, because each one has a different
- * person who has to do something about it: assign the job, link an account,
- * finish Stripe's onboarding, or set STRIPE_PRIV_KEY.
+ * Four reasons rather than a boolean: each needs a different fix (assign the job, link an account, finish
+ * Stripe onboarding, set STRIPE_PRIV_KEY).
  */
 export async function payeeState(quote: Quote): Promise<PayeeState> {
   if (!STRIPE_READY) return { ok: false, reason: "no_stripe" };
@@ -419,19 +353,12 @@ export async function payeeState(quote: Quote): Promise<PayeeState> {
   return { ok: true, staff, account: staff.stripe_account_id };
 }
 
-// ── Taking a card payment ───────────────────────────────────────────────────
-
 /** Below this, the card fee eats most of what is collected. */
 export const MIN_PAYMENT_CENTS = 100;
 
 /**
- * Open a hosted checkout for one payment on this job, and record our side of it.
- *
- * Order matters. The session is created first because we cannot write a row
- * keyed by a session id we don't have yet - and if the row then fails to write,
- * the session is expired again rather than left payable. A customer paying a
- * session with no row behind it is money that lands with no job attached to it,
- * which is the one failure the webhook can only log and not repair.
+ * Session first, because the row is keyed by its id; if the row then fails to write the session is expired
+ * so it can't be paid. A paid session with no row is money the webhook cannot attach to a job.
  */
 export async function startJobCheckout(input: {
   quote: Quote;
@@ -450,7 +377,7 @@ export async function startJobCheckout(input: {
     };
   }
 
-  // Frozen here, because this is the moment money moves.
+  // Frozen here: this is the moment money moves.
   const { ledger } = await jobLedger(quote, { freeze: true });
 
   const amountCents = Math.round(input.amountCents);
@@ -464,7 +391,7 @@ export async function startJobCheckout(input: {
     return { ok: false, error: "That's more than the balance left on this job." };
   }
 
-  // Only what is left after any checkout already in flight - see readLedger.
+  // Only what is left after checkouts already in flight; see readLedger.
   const applicationFeeCents = applicationFeeFor(amountCents, ledger.feeChargeableCents);
 
   const created = await createCheckoutSession({
@@ -476,10 +403,8 @@ export async function startJobCheckout(input: {
     successUrl: `${SITE_ORIGIN}/pay/${quote.public_token}?done={CHECKOUT_SESSION_ID}`,
     cancelUrl: `${SITE_ORIGIN}/pay/${quote.public_token}?back=1`,
     metadata: { quote_id: quote.id },
-    // A fresh key per attempt. Idempotency here protects a double-tapped
-    // button, not two deliberate payments - so it must not be derived from the
-    // job, or a customer paying in two instalments would be handed the first
-    // session again the second time.
+    // Fresh key per attempt: it guards a double tap, and a job-derived key would hand a second instalment the
+    // first session again.
     idempotencyKey: `chk_${quote.id}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
   });
 
@@ -513,15 +438,8 @@ export async function startJobCheckout(input: {
 }
 
 /**
- * Ask Stripe directly whether a session was paid, and settle up if it was.
- *
- * The webhook is the primary path; this is the customer standing on the "thank
- * you" page a second after paying. It exists because those two race, and
- * because a misconfigured endpoint would otherwise leave every payment reading
- * as unpaid with nothing on screen to suggest why.
- *
- * Idempotent through the same conditional update the webhook uses, so whichever
- * arrives second finds nothing left to do.
+ * The customer's "thank you" page check, racing the webhook (and covering a misconfigured endpoint).
+ * Idempotent via the same conditional update the webhook uses.
  */
 export async function reconcileCheckout(sessionId: string): Promise<QuotePayment | null> {
   const row = await findPaymentBySession(sessionId);
@@ -547,18 +465,9 @@ export async function reconcileCheckout(sessionId: string): Promise<QuotePayment
 }
 
 /**
- * Stamp a job paid once the customer has handed over everything.
- *
- * Reads the whole ledger rather than trusting one payment: a job can be settled
- * by a card payment that finishes what two cash payments started, and only the
- * sum knows that.
- *
- * Money paid and work finished are two different facts, and this only ever
- * asserts the first. A customer who pays the whole job up front would otherwise
- * jump the pipeline straight to Paid, taking the crew's close-out card off
- * their own job page and skipping the before/after photos - so the STATUS only
- * moves once the work is already marked completed. Called again from
- * completeJob, which is what flips a prepaid job over at the right moment.
+ * Stamp paid_at once the whole ledger is covered (several payments can settle one job).
+ * STATUS only moves to Paid once the work is completed; otherwise a prepaid job skips the crew's close-out
+ * card and photos. completeJob calls this again to flip prepaid jobs.
  */
 export async function settleJobIfPaid(quoteId: string): Promise<void> {
   if (!UUID_RE.test(quoteId)) return;
@@ -590,27 +499,16 @@ export async function settleJobIfPaid(quoteId: string): Promise<void> {
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify(patch),
   });
-  // Logged once, when the money finished arriving - not again when the status
-  // catches up weeks later.
+  // Logged once, when the money finished arriving, not when the status catches up.
   if (patch.paid_at) await addAdminEvent(quoteId, "job_paid", { amount_cents: paid });
 }
 
-// ── Correcting what somebody recorded ───────────────────────────────────────
-// A contractor took a 50% deposit and recorded the whole job as paid. No money
-// moved wrongly - the figure on the row is simply not what happened - so this
-// is not a refund, and treating it as one would put an imaginary outgoing on a
-// ledger that gets reconciled against a bank statement.
-//
-// Owner only, enforced in the action above the call. Service role on the write
-// for the reason least-privilege.sql spells out: UPDATE on this table is
-// revoked from authenticated precisely so a contractor cannot restate their own
-// entry, and the office's ability to fix one must not reopen that door.
-//
-// Only hand-recorded rows. A card row is Stripe's word for money that really
-// moved, and editing our copy of it would leave the two disagreeing with no way
-// to tell which is right.
+// Correcting a hand-recorded figure that doesn't match what happened (e.g. a deposit recorded as the whole
+// job). Not a refund: no money moved back.
+// Owner only (enforced by the caller). Service role because UPDATE is revoked from authenticated so a
+// contractor can't restate their own entry (least-privilege.sql).
+// Card rows are excluded: they are Stripe's record and editing our copy would make the two disagree.
 
-/** Can this row be corrected or voided at all, and if not, why not. */
 export function correctableReason(row: QuotePayment): string | null {
   if (row.method === "card") {
     return "Card payments come from Stripe and can't be edited here. Refund it instead if the money needs to go back.";
@@ -626,20 +524,14 @@ export function correctableReason(row: QuotePayment): string | null {
 }
 
 /**
- * Change the amount, method or note on a hand-recorded payment.
- *
- * `collectedElsewhereCents` is what the job has taken on its OTHER rows - the
- * caller works it out, because the ceiling on a correction is the same ceiling
- * recording has (never more than the job is worth) and this row has to be left
- * out of that sum or it would be measured against itself.
+ * `collectedElsewhereCents` is what the job took on its OTHER rows; the ceiling is the job total, and this
+ * row must be left out of that sum.
  */
 export async function correctRecordedPaymentAdmin(
   row: QuotePayment,
   patch: { amountCents: number; method: string; note: string | null },
 ): Promise<{ ok: boolean; error?: string; payment?: QuotePayment }> {
-  // The database says fee_cents < amount_cents. Hand-recorded rows carry a zero
-  // fee so this cannot bite in practice, but a constraint violation surfacing as
-  // "could not save" would be a bad way to find that out.
+  // DB constraint: fee_cents < amount_cents. Checked here so it isn't a vague "could not save".
   if (patch.amountCents <= row.fee_cents) {
     return { ok: false, error: "That's less than the office's cut already taken out of this payment." };
   }
@@ -662,21 +554,12 @@ export async function correctRecordedPaymentAdmin(
   return { ok: true, payment: rows[0] };
 }
 
-/**
- * Take a payment off the books without pretending money went back.
- *
- * The row stays in the table with its reason written into the note, because
- * deleting it would leave the office unable to answer "what happened to that
- * $8,250" - and that question gets asked precisely when somebody is trying to
- * reconcile the month.
- */
+/** The row stays, reason in the note, so the office can still account for the money when reconciling. */
 export async function voidRecordedPaymentAdmin(
   row: QuotePayment,
   reason: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  // The reason rides on the row, after whatever was already there. Capped to
-  // the column's 500, trimmed from the front of the ORIGINAL note rather than
-  // the reason, so the explanation is never the half that gets cut.
+  // Column cap is 500; trim the front of the ORIGINAL note so the reason is never cut.
   const tail = `Voided: ${reason}`;
   const head = (row.note ?? "").trim();
   const note = head ? `${head.slice(0, Math.max(0, 500 - tail.length - 3))} - ${tail}`.slice(0, 500) : tail.slice(0, 500);
@@ -695,18 +578,9 @@ export async function voidRecordedPaymentAdmin(
 }
 
 /**
- * Put a job's paid flag back in line with what has actually been collected.
- *
- * settleJobIfPaid only moves one way - it stamps a job that has finished being
- * paid - because every caller it had could only ever increase what was
- * collected. A correction can DECREASE it, and that direction has to exist too:
- * the whole point of the deposit case is a job wearing a paid_at it never
- * earned, and leaving that stamp on would keep it out of "customers still owe"
- * on the Money page for good.
- *
- * Both directions in one function so they cannot disagree about where the line
- * is. Status only falls back as far as the work has actually got to: a job whose
- * concrete is poured stays `completed`, it just stops claiming to be paid for.
+ * Bring paid state in line with what was collected, in both directions (a correction can DECREASE it, and
+ * a stale paid_at hides the job from "customers still owe"). One function so both directions agree on the
+ * line. Status only falls back to where the work is: a completed job stays completed.
  */
 export async function resyncJobPaidState(quoteId: string): Promise<void> {
   if (!UUID_RE.test(quoteId)) return;
@@ -735,8 +609,7 @@ export async function resyncJobPaidState(quoteId: string): Promise<void> {
   if (settled && quote.status === "completed") patch.status = "paid";
   if (!settled && quote.paid_at) patch.paid_at = null;
   if (!settled && quote.status === "paid") {
-    // Back to the stage the WORK is at, which is the only thing a payment
-    // correction has not changed.
+    // Back to the stage the WORK is at.
     patch.status = quote.completed_at ? "completed" : quote.scheduled_date ? "scheduled" : "approved";
   }
   if (Object.keys(patch).length === 0) return;

@@ -2,22 +2,9 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, type TextareaHTMLAttributes } from "react";
 
-// A textarea that grows to fit what is in it, instead of scrolling inside
-// itself.
-//
-// Every multi-line box in this app is filled in on a phone, standing in
-// somebody's driveway: the five quote sections, what an option covers, the
-// note at the end of a job. A `rows={2}` box is two lines tall on that phone,
-// so writing three sentences into one means typing into a slot that scrolls
-// away from you, and re-reading it afterwards means scrolling back through a
-// window the height of a thumb. Neither is a thing anybody does carefully, and
-// the section that is hardest to read back is the one that goes out wrong.
-//
-// So `rows` becomes a MINIMUM here rather than a fixed height. The box opens at
-// that size and grows from there, and nothing inside it is ever out of sight.
-//
-// Drop-in: same props as <textarea>, controlled or uncontrolled, so every call
-// site keeps its own name/value/onChange exactly as it had them.
+// A textarea that grows to fit its content. Everything multi-line here is written on a phone, where a
+// fixed `rows={2}` box scrolls the text out of sight. `rows` becomes a MINIMUM.
+// Drop-in: same props as <textarea>, controlled or uncontrolled.
 export function AutoTextarea({
   value,
   onChange,
@@ -30,17 +17,10 @@ export function AutoTextarea({
   const fit = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    // Reset first: scrollHeight only ever reports the content's full height
-    // when the box is not already taller than it. Without this the box grows
-    // and never shrinks back when text is deleted.
-    //
-    // It also restores the intrinsic height that `rows` asks for, and
-    // scrollHeight is never less than that - so `rows` keeps working as the
-    // minimum this form was designed around, with no second guess at it here.
+    // Reset first: scrollHeight only reports full content height when the box isn't already taller, so
+    // without this it never shrinks. "auto" also restores the `rows` minimum.
     el.style.height = "auto";
-    // scrollHeight measures the padding box, so under border-box sizing - which
-    // is this app's default - assigning it straight back leaves the box short
-    // by its own borders, and every one of them keeps a 2px scroll.
+    // scrollHeight is the padding box; under border-box sizing add the borders or it keeps a 2px scroll.
     const s = getComputedStyle(el);
     const borders =
       s.boxSizing === "border-box"
@@ -49,18 +29,12 @@ export function AutoTextarea({
     el.style.height = `${el.scrollHeight + borders}px`;
   }, []);
 
-  // Before paint, not after: measuring in useEffect lets the browser show one
-  // frame at the wrong height, which on a page full of these reads as a flinch
-  // every time it loads.
+  // Before paint: useEffect shows one frame at the wrong height.
   useLayoutEffect(fit, [fit]);
-  // A controlled box also has to follow its parent - the crew's form resyncs
-  // every field when a save lands, and a box still sized for the old text
-  // would clip the new.
+  // Controlled boxes follow the parent (forms resync fields after a save).
   useLayoutEffect(fit, [fit, value]);
 
-  // Fonts land after first paint and change how many lines the text takes.
-  // Without this the box is measured against a fallback font and settles a
-  // line short of what it needs.
+  // Web fonts land after first paint and change the line count.
   useEffect(() => {
     const fonts = (document as Document & { fonts?: { ready?: Promise<unknown> } }).fonts;
     if (!fonts?.ready) return;
@@ -79,8 +53,7 @@ export function AutoTextarea({
       ref={ref}
       value={value}
       onChange={(e) => {
-        // Sized from the event's own target rather than waiting for the value
-        // to come back down as a prop, so an uncontrolled box grows too.
+        // From the event target, so uncontrolled boxes grow too.
         fit();
         onChange?.(e);
       }}
@@ -88,9 +61,8 @@ export function AutoTextarea({
         fit();
         onInput?.(e);
       }}
-      // Hidden rather than auto: the element is always exactly as tall as its
-      // content, so a scrollbar here would only ever be a flicker mid-keystroke.
-      // resize:none because a hand-dragged height is undone by the next keypress.
+      // Hidden: it's always exactly content height, so a scrollbar would only flicker. resize:none because a
+      // dragged height is undone by the next keypress.
       style={{ overflow: "hidden", resize: "none", ...style }}
     />
   );

@@ -5,20 +5,14 @@ import { useRouter } from "next/navigation";
 
 import { addJobPhotos, type PhotoKind } from "./quotes/[id]/photo-actions";
 
-// Adding photos to a job from a staff screen. Used three times with different
-// `kind`s: internal reference shots on the CRM job page, and the before/after
-// pair a contractor uploads to close a job out.
-//
-// Uploads go straight from the browser to Storage with a one-time signed URL
-// (the same /api/upload-url the public quote form uses, which names the object
-// server-side so there's no path to traverse). Only the returned paths reach
-// the server action, which keeps the file itself out of the action body and
-// its much smaller size limit.
+// Staff photo uploads (internal shots, and the before/after pair needed to close a job).
+// Straight to Storage via a one-time signed URL from /api/upload-url (object named server-side); only
+// paths reach the server action, keeping files out of its small body limit.
 const ACCEPT = "image/*,video/*";
 const MAX_BYTES = 50 * 1024 * 1024;
 const MAX_AT_ONCE = 8;
 
-// Browsers report an empty type for .heic often enough to need the fallback.
+// Browsers often report an empty type for .heic.
 const EXT_MIME: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -49,7 +43,7 @@ export function PhotoUpload({
   quoteId: string;
   kind: PhotoKind;
   label: string;
-  // The job page is a light card; the CRM is the dark theme.
+  // Job page is a light card; the CRM is dark.
   light?: boolean;
 }) {
   const router = useRouter();
@@ -119,8 +113,7 @@ export function PhotoUpload({
 
     if (paths.length === 0) return;
 
-    // Recorded against the job only once the bytes are actually in the
-    // bucket, so a failed upload never leaves a path pointing at nothing.
+    // Recorded only once the bytes are in the bucket, so no path points at nothing.
     startTransition(async () => {
       const res = await addJobPhotos(quoteId, kind, paths);
       if (!res.ok) setError(res.error ?? "Could not save those photos.");
