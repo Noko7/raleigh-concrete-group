@@ -9,37 +9,20 @@ import { sendChangeOrder, withdrawChangeOrder } from "./actions";
 import { blankRow, filledRows, OptionBuilder, rowAmount, type OptionRow } from "./option-builder";
 import type { ChangeState } from "./types";
 
-// The customer rang a week before the pour wanting the patio two feet wider.
-//
-// Everything about the job is settled by then - approved, booked, deposit in -
-// so there was no honest way to move the price. The quote editor is for a price
-// nobody has accepted yet, and an owner typing a new figure into it changes what
-// the customer owes without the customer agreeing to it.
-//
-// So this card is a small quote: say what is changing, say what the job is worth
-// now, send it. Two fields, because two is what the job needs - the words go to
-// the customer verbatim and the figure is the new TOTAL, not the difference, so
-// there is one number to get right instead of two that can contradict.
+// A change order: a small quote on an agreed job (e.g. the patio two feet wider
+// a week before the pour). The note goes to the customer verbatim; the figure is
+// the new TOTAL, not the difference, so there's one number to get right.
 //
 // ── Why there is a review step ──
-//
-// A change order is not really about a total, it is about a BALANCE: what the
-// customer sees is "new total, less what you've paid, leaves this". That second
-// line comes from whatever the crew recorded as paid, and the crew can get it
-// wrong - a 50% deposit entered as the whole job is one tap on a form whose
-// amount box is pre-filled with the outstanding balance. When that happens every
-// figure the customer is about to read is wrong, and they are being asked to
-// approve it.
-//
-// So sending is two steps, not one. The second shows exactly what the customer
-// will see, the payments it was all worked out from, and a tick saying somebody
-// looked. The tick is not ceremony: it is the difference between a figure
-// nobody checked and a figure somebody is answerable for.
+// The customer sees a BALANCE: new total less what's paid, and "paid" is
+// whatever the crew recorded. A 50% deposit entered as the whole job makes every
+// figure wrong. So step two shows exactly what the customer will see, the
+// payments behind it, and a tick saying somebody checked.
 export type ChangePayment = {
   id: string;
   method: string;
   amountCents: number;
-  /** Net of refunds, which is what the balance is actually worked from. */
+  /** Net of refunds, which the balance is worked from. */
   netCents: number;
   status: string;
   when: string | null;
@@ -68,36 +51,29 @@ export function ChangeOrder({
   customerName: string;
   /** What the job is worth today, in cents. */
   totalCents: number;
-  /** What the customer has already handed over, net of refunds. The deposit. */
+  /** Already paid, net of refunds (the deposit). */
   paidCents: number;
-  /**
-   * Every payment row on the job, so the review step can show the figures the
-   * balance was built from rather than asking anyone to trust the total.
-   */
+  /** Every payment row, so the review shows what the balance was built from. */
   payments: ChangePayment[];
-  /** Their booked day, already formatted, so the preview can promise it is safe. */
+  /** Booked day, formatted, so the preview can say it isn't moving. */
   bookedFor: string | null;
-  /** Whether the work itself is finished - decides the paid-in-full warning. */
+  /** Whether the work is finished; drives the paid-in-full warning. */
   workCompleted: boolean;
   /** The change already waiting on the customer, if there is one. */
   pending: { note: string; amountCents: number; lines?: ChangeLineDraft[] | null; depositCents?: number | null } | null;
   /**
-   * Where the breakdown starts: the job as the customer agreed it. Its own
-   * lines when it has them, otherwise one line carrying the agreed total - so
-   * a line the crew add is money ON TOP of the job, never the job's new price.
+   * Where the breakdown starts: the job as agreed. Its own lines, or one line
+   * carrying the agreed total, so an added line is money ON TOP of the job.
    * See changeStartLines.
    */
   lines?: ChangeLineDraft[];
-  /** Whether the job itself has a breakdown today, as opposed to one price. */
+  /** Whether the job has a breakdown today, rather than one price. */
   jobHasLines?: boolean;
   /** False on a job priced as a choice of ways, which stays one figure. */
   canBreakDown?: boolean;
   /**
-   * Whether to offer "already agreed - don't text them", which puts the new
-   * total on the job with nobody asked. The owner's alone: for the crew a new
-   * total lands only when the customer approves it. sendChangeOrder refuses
-   * it from anybody else regardless. Also whether the change may lower the total,
-   * which is the owner's alone too.
+   * Owner only: offer "already agreed, don't text them" (applies the total with
+   * nobody asked), and allow lowering the total. sendChangeOrder enforces both.
    */
   canApplyAgreed?: boolean;
   locale: Locale;
@@ -109,29 +85,22 @@ export function ChangeOrder({
 
   const [step, setStep] = useState<Step>("closed");
   const [note, setNote] = useState("");
-  // Seeded with today's total rather than blank or zero: almost every change is
-  // an adjustment to this number, and starting from it means the crew edit a
-  // figure they recognise instead of typing a total from scratch and
-  // fat-fingering a digit onto a job that is already agreed.
+  // Seeded with today's total: most changes adjust it, and editing a familiar
+  // figure beats retyping one onto an agreed job.
   const [amount, setAmount] = useState(String((totalCents / 100).toFixed(2)));
-  // Ticked on the review step. Reset whenever they go back to edit, because a
-  // tick that survives a changed figure is a tick against something else.
+  // Reset on going back to edit: a tick must not survive a changed figure.
   const [checked, setChecked] = useState(false);
-  // A second deposit: off unless the crew ask for one. The amount is theirs to
-  // set, seeded with what the change adds the first time the box is ticked,
-  // because "they send us the $1,390 for the materials" is the usual case.
+  // Optional second deposit, seeded with what the change adds the first time
+  // it's ticked (the usual "send us the materials money").
   const [depositOn, setDepositOn] = useState(false);
   const [deposit, setDeposit] = useState("");
-  // The customer already said yes - on the phone, or on site. Then there is
-  // nobody to ask: the job is updated now and they aren't texted.
+  // Already agreed (phone, on site): nobody to ask; applied now, no text.
   const [agreed, setAgreed] = useState(false);
-  // Money they handed the crew for it there and then, recorded with the change
-  // so the balance and the Money page are right the moment it's saved.
+  // Money handed over on the spot, recorded with the change so balances are right.
   const [paidOn, setPaidOn] = useState(false);
   const [paidAmount, setPaidAmount] = useState("");
   const [paidMethod, setPaidMethod] = useState<string>("cash");
-  // The breakdown, when there is one. Seeded from the job's own lines for the
-  // same reason the total is seeded: a change is an edit to what was agreed.
+  // Seeded from the job's lines, like the total: a change edits what was agreed.
   const [rows, setRows] = useState<OptionRow[]>(() =>
     lines.map((l) => ({ ...blankRow(true), title: l.title, description: l.description ?? "", amount: String(l.amount) })),
   );
@@ -139,16 +108,10 @@ export function ChangeOrder({
   const first = firstNameOf(customerName, customerName);
   const card = tone === "light" ? "co co-light" : "co";
 
-  // How the customer's text went, rendered in whichever branch the card is
-  // showing when the send lands.
-  //
-  // This has to follow the card rather than live in one branch, because sending
-  // revalidates the page: the server comes back with a pending change on the
-  // job, so the card re-renders into its "waiting on the customer" state and any
-  // message left behind in the sent branch would never be seen. A change order
-  // whose text didn't go out is a question the customer was never asked, and the
-  // crew would sit waiting for an answer to it - so of everything on this card,
-  // this is the part that must not get lost.
+  // How the customer's text went. Rendered in whichever branch shows when the
+  // send lands: revalidation flips the card to "waiting on the customer", and a
+  // message left in the sent branch would be lost. An unsent change is a
+  // question never asked, so this must stay visible.
   const delivery = (
     <>
       {state.sent === false && (
@@ -161,12 +124,8 @@ export function ChangeOrder({
     </>
   );
 
-  // The numbers the crew are deciding between, worked out live so the
-  // consequence of the figure they are typing is on screen beside it.
-  //
-  // With a breakdown the lines ARE the price: the new total is their sum, each
-  // rounded to the cent the same way the server rounds it, so the figure on
-  // this screen is the figure that gets saved.
+  // Live figures beside the input. With a breakdown the lines ARE the price,
+  // each rounded to the cent as the server does, so this matches what's saved.
   const lineDrafts: ChangeLineDraft[] = canBreakDown
     ? filledRows(rows).map((r) => ({
         title: r.title.trim(),
@@ -185,14 +144,10 @@ export function ChangeOrder({
     (hasLines || amount.trim() !== "") && Number.isFinite(nextCents) && nextCents >= 0 && nextCents <= 9_999_999_900;
   const diffCents = valid ? nextCents - totalCents : 0;
   const dueCents = valid ? Math.max(0, nextCents - paidCents) : 0;
-  // Dropping the scope below what they have already paid means we owe them,
-  // which is a different conversation and has to be said out loud before the
-  // change goes out rather than discovered afterwards.
+  // Dropping below what's paid means we owe them; say so before it goes out.
   const refundCents = valid ? Math.max(0, paidCents - nextCents) : 0;
-  // The second deposit, and the rest of the balance once it is in. Checked
-  // against the balance this change leaves, the same rule the server applies.
-  // Only while the box can be seen: a change that ends up owing them money
-  // back hides it, and a tick left behind must not block or ride along.
+  // Second deposit and remaining balance, checked as the server does. Only while
+  // the box is visible: a refund case hides it, and a stale tick must not count.
   const asking = depositOn && refundCents === 0;
   const depositCentsVal = asking ? Math.round(parseDollars(deposit) * 100) : 0;
   const depositProblem = !asking
@@ -203,23 +158,18 @@ export function ChangeOrder({
         ? fill(t.changeOrder.depositTooMuch, { max: money(dueCents) })
         : null;
   const showDeposit = asking && !depositProblem && valid;
-  // A new total, or the same total with a new breakdown: "same price, but show
-  // me where it goes" is a real change for the customer to approve.
-  // The server refuses a contractor's lower total (changeOrderRefusal); said here before they write it all up.
+  // A new total, or the same total with a new breakdown, is a real change. The
+  // server refuses a contractor's lower total (changeOrderRefusal); flag it early.
   const lowerRefused = !canApplyAgreed && diffCents < 0;
   const composed =
     valid && note.trim().length >= 3 && (diffCents !== 0 || linesChanged) && !depositProblem && !lowerRefused;
 
-  // The symptom of the bug this whole step exists for: the job says it is fully
-  // paid and nobody has finished the work. It can be legitimate - a customer may
-  // genuinely pay up front - so it warns rather than blocks, which is why the
-  // tick below is the thing that actually gates sending.
+  // Paid in full with the work unfinished: the symptom this step exists for.
+  // Can be legitimate (paid up front), so it warns; the tick gates sending.
   const readsPaidInFull = totalCents > 0 && paidCents >= totalCents && !workCompleted;
   const counted = payments.filter((p) => p.status === "paid" || p.status === "refunded");
 
-  // The three live figures, shared by the compose panel and the review. One
-  // renderer so the numbers somebody approves on the second screen are provably
-  // the numbers they typed on the first.
+  // One renderer for compose and review, so the approved numbers are the typed ones.
   const sums = (
     <dl className="co-sums">
       <div>
@@ -252,8 +202,7 @@ export function ChangeOrder({
         <dt>{refundCents > 0 ? t.changeOrder.reviewBack2You : t.changeOrder.reviewLeft}</dt>
         <dd>{refundCents > 0 ? money(refundCents) : money(dueCents)}</dd>
       </div>
-      {/* The balance split in two when a second deposit is asked for, so the
-          customer reads exactly what to send now and what waits for the end. */}
+      {/* Split when a second deposit is asked: what to send now vs at the end. */}
       {showDeposit && (
         <>
           <div className="co-sums-now">
@@ -269,8 +218,7 @@ export function ChangeOrder({
     </dl>
   );
 
-  // The breakdown as the customer will read it, set the same way their page
-  // sets it: one line per row, price on the right.
+  // The breakdown laid out as the customer's page shows it.
   const lineList = (items: ChangeLineDraft[]) => (
     <div className="co-lines">
       <p className="co-label">{t.changeOrder.linesTitle}</p>
@@ -289,7 +237,7 @@ export function ChangeOrder({
   );
 
   // ── A change is already out with the customer ──
-  // One at a time, so there is never a question of which figure they answered.
+  // One at a time, so it's never unclear which figure they answered.
   if (pending) {
     const pendingDiff = pending.amountCents - totalCents;
     return (
@@ -368,8 +316,7 @@ export function ChangeOrder({
       <section className={card}>
         <h2 className="co-title">{fill(t.changeOrder.reviewTitle, { name: first })}</h2>
 
-        {/* Their words and their figures, in the order their own page shows
-            them, so this screen is a preview and not a summary of one. */}
+        {/* In the order their page shows them: a preview, not a summary. */}
         <div className="co-preview">
           <p className="co-note-back">{note.trim()}</p>
           {bookedFor && <p className="co-held">{fill(t.changeOrder.reviewDateHeld, { when: bookedFor })}</p>}
@@ -383,10 +330,8 @@ export function ChangeOrder({
         )}
         {readsPaidInFull && <p className="co-warn">{t.changeOrder.paidInFullWarn}</p>}
 
-        {/* The payments the balance above was built from. This is the part that
-            catches a deposit recorded as the whole job: the figure is wrong in a
-            way no amount of staring at the total will reveal, and right here is
-            the last moment before a customer is asked to approve it. */}
+        {/* The payments behind the balance: where a deposit recorded as the
+            whole job gets caught, last chance before the customer is asked. */}
         <div className="co-ledger">
           <p className="co-label">{t.changeOrder.ledgerTitle}</p>
           {counted.length === 0 ? (
@@ -398,10 +343,8 @@ export function ChangeOrder({
                 return (
                   <li key={p.id} className={ignored ? "co-ledger-row co-ledger-out" : "co-ledger-row"}>
                     <span className="co-ledger-how">
-                      {/* The same label the payments card uses, not the raw
-                          column value: this screen is read side by side with
-                          that one, and "cash" against "Cash" invites the
-                          question of whether they are the same row. */}
+                      {/* The payments card's label, not the raw value, since the
+                          two screens are read side by side. */}
                       {t.payments.methods[p.method as PaymentMethod] ?? p.method}
                       {p.status === "voided" && <em> · {t.changeOrder.ledgerVoided}</em>}
                       {p.status === "pending" && <em> · {t.payments.waiting}</em>}
@@ -420,10 +363,8 @@ export function ChangeOrder({
               })}
             </ul>
           )}
-          {/* With nothing recorded the risk turns round. It is no longer a
-              deposit counted as the whole job, it is a deposit that WAS taken
-              and never written down - and then the customer gets asked for the
-              full amount. Same tick, saying the opposite thing. */}
+          {/* With nothing recorded the risk flips: a deposit taken but never
+              written down, so they get asked for the full amount. */}
           <p className="co-hint">{counted.length === 0 ? t.changeOrder.ledgerHintNone : t.changeOrder.ledgerHint}</p>
         </div>
 
@@ -432,8 +373,7 @@ export function ChangeOrder({
           action={(fd) => {
             fd.set("id", id);
             fd.set("note", note);
-            // With a breakdown the total is its sum. The server works it out
-            // again from the lines and never trusts this figure for it.
+          // With lines the server recomputes the total and ignores this.
             fd.set("amount", hasLines ? (nextCents / 100).toFixed(2) : amount);
             if (canBreakDown) {
               fd.set(
@@ -443,8 +383,7 @@ export function ChangeOrder({
                 ),
               );
             }
-            // The server refuses a send without this, so the tick is a real
-            // gate rather than a disabled button somebody can get around.
+          // The server refuses a send without this; the tick is a real gate.
             fd.set("payments_checked", checked ? "yes" : "no");
             fd.set("agreed", agreed ? "yes" : "no");
             fd.set("paid_on", agreed && paidOn ? "yes" : "no");
@@ -452,9 +391,7 @@ export function ChangeOrder({
             fd.set("paid_method", paidMethod);
             fd.set("deposit_on", asking ? "yes" : "no");
             fd.set("deposit", deposit);
-            // The total this preview was drawn against. The server refuses the
-            // send if the job has been repriced since, rather than letting a
-            // reviewed difference go out against a figure nobody saw.
+          // The total this preview used; the server refuses if the job was repriced since.
             fd.set("shown_total", String(totalCents));
             formAction(fd);
           }}
@@ -478,8 +415,7 @@ export function ChangeOrder({
                 checked={paidOn}
                 onChange={(e) => {
                   setPaidOn(e.target.checked);
-                  // Seeded with what the change adds, the usual case: they paid
-                  // the difference on the spot.
+                // Seeded with what the change adds: they usually paid the difference.
                   if (e.target.checked && paidAmount === "" && diffCents > 0) {
                     setPaidAmount((Math.min(diffCents, dueCents) / 100).toFixed(2));
                   }
@@ -529,8 +465,7 @@ export function ChangeOrder({
               className="co-cancel"
               onClick={() => {
                 setStep("compose");
-                // A tick belongs to the figures that were on screen when it was
-                // made. Going back to change them takes it with you.
+              // A tick belongs to the figures it was made against.
                 setChecked(false);
               }}
               disabled={busy}
@@ -554,8 +489,7 @@ export function ChangeOrder({
       <div className="co-form">
         <label className="co-field">
           <span>{t.changeOrder.noteLabel}</span>
-          {/* Goes to the customer word for word, so the hint says so. A change
-              described as "extra concrete" is a change nobody can approve. */}
+          {/* Sent word for word, so the hint says so: "extra concrete" can't be approved. */}
           <textarea
             rows={3}
             maxLength={CHANGE_NOTE_MAX}
@@ -566,9 +500,7 @@ export function ChangeOrder({
           <em>{t.changeOrder.noteHint}</em>
         </label>
 
-        {/* Optional, and the same breakdown editor the quote uses, so a crew who
-            has broken one price down knows this one already. Leave it empty and
-            the change is one figure, exactly as before. */}
+        {/* Optional; the quote's breakdown editor. Empty means one figure. */}
         {canBreakDown && (
           <OptionBuilder
             rows={rows}
@@ -585,9 +517,7 @@ export function ChangeOrder({
           />
         )}
 
-        {/* With lines, the lines own the total: the breakdown above adds it
-            up and the sums below carry it, so there is no box to type a
-            second, different figure into. */}
+        {/* With lines, the lines own the total, so there's no second figure to type. */}
         {!hasLines && (
           <label className="co-field co-field-amount">
             <span>{t.changeOrder.amountLabel}</span>
@@ -604,8 +534,7 @@ export function ChangeOrder({
         )}
         {dropsLines && <p className="co-hint">{t.changeOrder.linesGone}</p>}
 
-        {/* A second deposit. One tick and one figure: most changes ask for
-            nothing up front, so it stays out of the way until it is wanted. */}
+        {/* Second deposit: one tick, one figure, hidden until wanted. */}
         {refundCents === 0 && (
           <div className={`co-deposit${depositOn ? " co-deposit-on" : ""}`}>
             <label className="co-check co-deposit-toggle">
@@ -647,9 +576,8 @@ export function ChangeOrder({
           </div>
         )}
 
-        {/* The customer's arithmetic, shown as it is typed. This panel is the
-            answer to "what about the deposit": it is already counted, because the
-            balance has always been the total minus what has come in. */}
+        {/* The customer's arithmetic, live. The deposit is already counted: the
+            balance is the total minus what's come in. */}
         {sums}
 
         {lowerRefused && <p className="co-warn">{t.changeOrder.lowerIsOffice}</p>}
@@ -665,8 +593,7 @@ export function ChangeOrder({
         <p className="co-hint">{fill(t.changeOrder.sendHint, { name: first })}</p>
 
         <div className="co-acts">
-          {/* Nothing is sent from this screen. The next one shows it as the
-              customer will read it, with the payments behind it. */}
+          {/* Nothing is sent here; the review shows it as the customer will read it. */}
           <button type="button" className="co-go" disabled={!composed} onClick={() => setStep("review")}>
             {t.changeOrder.review}
           </button>

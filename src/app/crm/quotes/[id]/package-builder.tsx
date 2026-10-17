@@ -11,28 +11,20 @@ import {
 import type { dict } from "@/lib/crm/i18n";
 import { AutoTextarea } from "@/components/auto-textarea";
 
-// The "or instead" builder, shared by the CRM editor and the crew's job page so
-// a quote written from a truck can offer the same choice as one written at a
-// desk. Sibling of OptionBuilder in every way that matters - controlled, parent
-// owns the rows, same JSON-in-a-hidden-input hand-off - because the two sit one
-// above the other on the same form and any difference between them would read
-// as a bug.
-//
-// What it is NOT is more line items. Two line items both chosen is a bigger
-// job; two of these both chosen is a contradiction, which is why they are their
-// own list with their own table and the customer picks exactly one.
+// The "or instead" builder, shared by the CRM editor and the crew's job page.
+// Mirrors OptionBuilder (controlled, JSON in a hidden input) since they sit on
+// the same form. Not more line items: two chosen line items is a bigger job,
+// two chosen packages a contradiction, so the customer picks exactly one.
 export type PackageLabels = ReturnType<typeof dict>["quotePackages"];
 
-// A card being edited. `key` is a client-side identity so React can track a
-// card that has no database id yet; `id` is the stored row it came from, and
-// keeping it is what preserves the customer's choice across an edit.
+// A card being edited. `key` is client-side identity for cards with no DB id;
+// `id` is the stored row, and keeping it preserves the customer's choice.
 export type PackageRow = {
   key: string;
   id?: string;
   title: string;
   description: string;
-  // Held as a string, not a number: an empty box and a zero are different
-  // things while somebody is typing, and only one of them is a price.
+  // A string: while typing, empty and zero differ, and only zero is a price.
   amount: string;
   recommended: boolean;
 };
@@ -64,10 +56,8 @@ export function blankPackage(): PackageRow {
   return { key: nextKey(), id: undefined, title: "", description: "", amount: "", recommended: false };
 }
 
-// Line items the customer was meant to pick ONE of, rewritten as the choice
-// they always were. "Section 1 / Section 2 / Section 3 / All sections" set up
-// as optional extras let a customer say yes to all four and be priced for
-// every section twice. As a choice they pick one, and the total is that one.
+// Pick-ONE extras rewritten as a choice. "Section 1 / 2 / 3 / All sections" as
+// optional extras let a customer accept all four and be priced twice over.
 export function packagesFromOptionRows(rows: { title: string; description: string; amount: string }[]): PackageRow[] {
   return rows
     .filter((r) => r.title.trim() !== "")
@@ -79,18 +69,15 @@ export const packageAmountOf = (r: PackageRow): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// Blank cards are dropped rather than refused: adding one and thinking better
-// of it is not a mistake anybody should have to go back and clear.
+// Blank cards are dropped rather than refused.
 export const filledPackages = (rows: PackageRow[]) => rows.filter((r) => r.title.trim() !== "");
 
-// One way of doing the job is not a choice. A lone card is kept on save - it is
-// somebody halfway through writing the second one - but it prices nothing and
-// the customer is never shown it, and the same rule runs on the server.
+// A lone card isn't a choice: kept on save (half-written), but it prices nothing
+// and the customer never sees it. The server applies the same rule.
 export const offersChoice = (rows: PackageRow[]): boolean => isChoice(filledPackages(rows));
 
-// The one the contractor marked, else the first. The headline figure on a quote
-// that offers a choice is built from this, because there is no single price on
-// such a quote and the lead option is the most honest stand-in for one.
+// The marked card, else the first: the headline figure for a choice quote,
+// which has no single price.
 export function leadPackageRow(rows: PackageRow[]): PackageRow | null {
   const filled = filledPackages(rows);
   return filled.find((r) => r.recommended) ?? filled[0] ?? null;
@@ -113,8 +100,7 @@ export const packagesToJson = (rows: PackageRow[]): string =>
     })),
   );
 
-// Two lists describe the same choice. Used by both editors to tell a correction
-// apart from a re-send of the same quote.
+// Same choice? Used by both editors to tell a correction from a re-send.
 export function packagesMatch(a: PackageRow[], b: PackageRow[]): boolean {
   const norm = (rows: PackageRow[]) =>
     filledPackages(rows).map(
@@ -135,10 +121,9 @@ export function PackageBuilder({
   rows: PackageRow[];
   onChange: (rows: PackageRow[]) => void;
   labels: PackageLabels;
-  // The customer has chosen. The cards are the record of what they were offered
-  // and what they took, so they are shown and not edited.
+  // The customer has chosen: the cards are the record, so read-only.
   locked?: boolean;
-  // Their answer per stored card, for that locked view.
+  // Their answer per stored card, for the locked view.
   answers?: Record<string, "accepted" | "declined" | null>;
 }) {
   const t = labels;
@@ -146,9 +131,7 @@ export function PackageBuilder({
   const set = (key: string, patch: Partial<PackageRow>) =>
     onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const remove = (key: string) => onChange(rows.filter((r) => r.key !== key));
-  // A choice needs two sides, so the first press makes both. Adding one card and
-  // being told it isn't enough yet is a worse first minute than starting with
-  // the shape of the thing you are about to write.
+  // The first press makes two cards: a choice needs two sides.
   const start = () => onChange([blankPackage(), blankPackage()]);
   const add = () => onChange([...rows, blankPackage()]);
   const move = (key: string, by: -1 | 1) => {
@@ -159,9 +142,8 @@ export function PackageBuilder({
     [next[i], next[j]] = [next[j], next[i]];
     onChange(next);
   };
-  // At most one recommendation per quote - two is no recommendation, and the
-  // database says so too. Picking a new one un-picks the old rather than
-  // failing a save the person has no way to understand.
+  // At most one recommendation (the DB enforces it too); picking one un-picks
+  // the other instead of failing the save.
   const recommend = (key: string, on: boolean) =>
     onChange(rows.map((r) => ({ ...r, recommended: on ? r.key === key : r.recommended && r.key !== key })));
 
@@ -187,8 +169,7 @@ export function PackageBuilder({
     );
   }
 
-  // Nothing yet: one button and a sentence saying what it is for. The empty
-  // state is the state almost every quote stays in, so it stays one line tall.
+  // Empty state, which almost every quote stays in: one line tall.
   if (rows.length === 0) {
     return (
       <fieldset className="qc-box qc-box-empty">
@@ -266,8 +247,7 @@ export function PackageBuilder({
             />
           </label>
 
-          {/* The one thing a customer staring at two prices actually wants:
-              which would you pick. Optional, and only one card can carry it. */}
+          {/* "Which would you pick?" Optional; only one card can carry it. */}
           <label className="qc-rec">
             <input
               type="checkbox"
@@ -287,9 +267,8 @@ export function PackageBuilder({
         </div>
       )}
 
-      {/* Says where the quote stands before anybody presses Send. One card is
-          saved and kept, but it is not yet a choice, and finding that out from
-          the customer's page would be finding it out far too late. */}
+      {/* Says before Send that one card isn't yet a choice, rather than the
+          customer's page revealing it. */}
       {filled.length < 2 ? (
         <p className="qc-warn">{t.needTwo}</p>
       ) : (

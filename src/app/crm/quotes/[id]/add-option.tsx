@@ -11,35 +11,24 @@ import type { SaveState } from "./types";
 
 // "They said it's too much. Send them the asphalt price as well."
 //
-// The whole of this flow already existed, spread across the quote editor: open
-// it, find the choice builder, retype the price the customer is holding as
-// Option A, add Option B, press Send and hope it goes out as a correction
-// rather than bouncing off the duplicate guard. That is four screens of desk
-// work, and the conversation that starts it happens on a phone in a driveway
-// while the customer is still on the line.
+// One modal, opened from Quotes sent, that turns the flat price into Option A,
+// adds Option B and sends, instead of four screens of the quote editor while
+// the customer is on the phone. Their link shows both as soon as it lands.
 //
-// So this is one door onto it, opened from the one card that is already about
-// "what have we sent this person": Quotes sent. One modal, two prices, one
-// button, and the customer's own link shows both the moment it lands.
-//
-// Two tones, one component, same as QuoteSends and AcceptOffline: the office's
-// page is dark and the crew's is a white card, and two copies of a form this
-// fiddly would drift the first time somebody fixed a bug in one of them.
+// One component, two tones (dark office page, white crew card), so one copy of
+// a fiddly form.
 
 export type SentOption = { id: string; title: string; amount: number; recommended: boolean };
 
 export function AddOption({
   quoteId,
   customerName,
-  // The price the customer is currently holding. Becomes Option A's price the
-  // first time, pre-filled and editable.
+  // The customer's current price; Option A's price the first time, editable.
   currentAmount,
-  // The job's service, e.g. "Concrete Driveways". The best guess we have at what
-  // to call the quote they already have, and only ever a guess - it is shown in
-  // an editable box, never written on their behalf.
+  // The job's service, e.g. "Concrete Driveways": only a guess at a name for the
+  // existing quote, shown editable, never written on their behalf.
   service,
-  // The options already on this quote. Empty on the ordinary quote, which is the
-  // case this flow is really for: one flat price that has to become Option A.
+  // Options already on the quote. Usually empty: one flat price becoming Option A.
   options,
   locale,
   tone = "dark",
@@ -58,12 +47,11 @@ export function AddOption({
 
   const [open, setOpen] = useState(false);
   const first = firstNameOf(customerName, customerName);
-  // Already a choice: they are adding a third, and the ones on the quote are
-  // shown as context rather than asked for again.
+  // Already a choice: adding another; existing ones shown as context.
   const converting = options.length === 0;
 
-  // Title-cased from the service, so "Concrete Driveways" opens as "Concrete
-  // driveway" rather than as a database value. Only a starting point.
+  // The service minus a trailing "s" ("Concrete Driveways" -> "Concrete
+  // Driveway"). Only a starting point.
   const guess = (service ?? "").trim().replace(/s$/i, "");
   const [keepTitle, setKeepTitle] = useState(guess);
   const [keepAmount, setKeepAmount] = useState(currentAmount != null ? String(currentAmount) : "");
@@ -71,20 +59,12 @@ export function AddOption({
   const [addTitle, setAddTitle] = useState("");
   const [addAmount, setAddAmount] = useState("");
   const [addDesc, setAddDesc] = useState("");
-  // Which one the crew would pick, by index into the list as the customer will
-  // see it. -1 is "no recommendation".
-  //
-  // Seeded from whatever the quote already says rather than from -1. The server
-  // rewrites every card's flag from this one number, so defaulting to "none" on
-  // a quote that already recommends something would quietly strip that
-  // recommendation off the customer's page the moment anybody sent a third
-  // option. On the first pass there is nothing to carry and it starts at -1,
-  // which is right: pushing one is a decision, not a box to opt out of.
+  // The crew's pick, as an index into the customer's list; -1 is none. Seeded
+  // from the quote: the server rewrites every card's flag from this number, so
+  // starting at -1 would silently strip an existing recommendation.
   const [recommend, setRecommend] = useState(() => options.findIndex((o) => o.recommended));
 
-  // Escape, and the page behind it stops scrolling. Same handling as the
-  // gallery lightbox, for the same reason: a modal you cannot dismiss with the
-  // key everybody reaches for is a modal people close by reloading.
+  // Escape closes, and the page behind stops scrolling (as in the gallery lightbox).
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -99,8 +79,7 @@ export function AddOption({
     };
   }, [open, pending]);
 
-  // Sent: fold the modal away and pull the page fresh, so the new line is in
-  // Quotes sent behind it rather than appearing on the next navigation.
+  // Sent: close and refresh so the new line shows in Quotes sent.
   useEffect(() => {
     if (state.ok && state.sent) {
       setOpen(false);
@@ -115,8 +94,7 @@ export function AddOption({
   const keepOk = !converting || (keepTitle.trim() !== "" && money(keepAmount) > 0);
   const ready = keepOk && addTitle.trim() !== "" && money(addAmount) > 0;
 
-  // Exactly what the customer will be looking at, in their order. Built here so
-  // the preview cannot drift from what the server is about to save.
+  // What the customer will see, in order; built here so it can't drift from the save.
   const preview = converting
     ? [
         { title: keepTitle.trim() || t.previewUnnamed, amount: money(keepAmount) },
@@ -133,8 +111,7 @@ export function AddOption({
           {t.open}
         </button>
         <p className="qs-add-hint">{fill(t.openHint, { name: first })}</p>
-        {/* The result lands out here rather than in the modal, because a send
-            closes the modal. A held text is its own answer, not a failure. */}
+        {/* Outside the modal, since a send closes it. A held text isn't a failure. */}
         {state.ok && state.sent && !pending && (
           <p className={state.smsDelivered ? "qs-ok" : state.smsHeldUntil ? "qs-held" : "qs-err"}>
             {state.smsDelivered
@@ -156,8 +133,7 @@ export function AddOption({
             if (!pending) setOpen(false);
           }}
         >
-          {/* Clicks inside the panel must not reach the backdrop above, or
-              every tap on a field closes the form. */}
+          {/* Stop clicks reaching the backdrop, or every tap closes the form. */}
           <div className={`qsm-panel ${box}`} onClick={(e) => e.stopPropagation()}>
             <div className="qsm-head">
               <h2 className="ao-title">{t.title}</h2>
@@ -181,9 +157,8 @@ export function AddOption({
                 formAction(fd);
               }}
             >
-              {/* What they are already holding. Editable on the first pass,
-                  because "Concrete Driveways" off the job row is a guess and
-                  the customer is about to read it. */}
+              {/* Editable on the first pass: the service name is a guess and the
+                  customer will read it. */}
               {converting ? (
                 <fieldset className="qsm-step">
                   <legend>
@@ -285,8 +260,7 @@ export function AddOption({
                 </label>
               </fieldset>
 
-              {/* The question a customer staring at two prices actually has.
-                  Optional, and off by default. */}
+              {/* "Which would you pick?" Optional, off by default. */}
               <div className="qsm-rec">
                 <p className="ao-label">{t.recommendLabel}</p>
                 <div className="qsm-chips">
@@ -312,9 +286,8 @@ export function AddOption({
                 </div>
               </div>
 
-              {/* What is about to be on their phone, priced, in order. The last
-                  place anybody can notice that Option B has last week's number
-                  on it. */}
+              {/* What will be on their phone, priced and in order: the last chance
+                  to spot a stale price. */}
               <div className="qsm-preview">
                 <p className="ao-label">{fill(t.previewLabel, { name: first })}</p>
                 <ul className="qsm-preview-list">
