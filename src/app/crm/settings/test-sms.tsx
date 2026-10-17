@@ -72,12 +72,10 @@ export function TestSms({
         </div>
       </dl>
 
-      {/* Every one of these numbers gets texted on every money moment, so an
-          unrecognised one is worth chasing down. Naming the source isn't enough
-          on its own: someone looking at a wrong number needs to be told which
-          of the two places to go and fix it, or they edit the env var in Vercel
-          and watch the texts keep arriving at the profile number that outranks
-          it. Each line below answers "so where do I change it". */}
+      {/*
+        Each number is texted on every money moment. Each line says where to change it: editing the env var
+        doesn't help when a profile number outranks it.
+      */}
       {recipients.length > 0 && (
         <p className="crm-muted crm-sm sms-envnote">
           {recipients.some((r) => r.source === "profile") && (

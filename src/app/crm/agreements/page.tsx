@@ -26,8 +26,7 @@ export default async function AgreementsPage() {
   const locale = isLocale(rawLocale) ? rawLocale : "en";
   const t = dict(locale);
 
-  // RLS already scopes these: a contractor only sees their own agreement and the
-  // jobs assigned to them, so this page works for both roles unchanged.
+  // RLS scopes these (contractors see their own agreement and assigned jobs), so both roles share the page.
   const agreements = await listAllAgreements(session);
   const staff = await listStaff(session);
   const quotes = await listQuotes(session);

@@ -5,8 +5,7 @@ import { exchangeAndStore } from "@/lib/crm/gcal";
 
 export const dynamic = "force-dynamic";
 
-// Google redirects here after consent. Verify the owner session + state cookie,
-// then exchange the code for a refresh token and store it.
+// Verify the owner session and state cookie before exchanging the code.
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session || session.staff.role !== "owner") {

@@ -19,23 +19,12 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
   const session = await getSession();
   const base = await crmBase();
 
-  // Somebody opening the CRM drains the held-message queue, the same way every
-  // outbound text already does on its way past.
-  //
-  // The queue had exactly two timers - the 13:00 and 22:00 UTC crons - and no
-  // way of noticing it had stopped. If the morning run does not happen (a
-  // rotated CRON_SECRET answers it with a 401, and a 401 looks like nothing at
-  // all), a text held until 8am sits there until the evening run, and a text
-  // that fails there sits until tomorrow. Meanwhile the office is in the app
-  // all morning, which is the one thing we know is happening.
-  //
-  // Free when there is nothing to do: one indexed SELECT that returns no rows,
-  // after() so it is off the response's critical path, and claimMessage means
-  // racing a cron or another tab still sends each text once.
+  // Opening the CRM also drains the held-message queue, a backstop for the 13:00/22:00 UTC crons failing
+  // silently (e.g. a rotated CRON_SECRET 401s). Free when empty (one indexed SELECT, in after()); claimMessage
+  // keeps each text single-send when racing a cron or another tab.
   if (session) await flushInBackground();
   const isOwner = session?.staff.role === "owner";
-  // Read into a local first: narrowing `session?.staff.locale` doesn't tell
-  // TypeScript anything about `session` itself, which may be null here.
+  // Narrowing `session?.staff.locale` doesn't narrow `session` itself.
   const rawLocale = session?.staff.locale;
   const locale = isLocale(rawLocale) ? rawLocale : "en";
   const t = dict(locale);
@@ -45,23 +34,19 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
       {session && (
         <header className="crm-topbar">
           <div className="crm-topbar-inner">
-            {/* Menu first, hard against the left edge. Same nine
-                destinations, same labels, same order - this is muscle memory
-                for the two people who live in it - but behind one button now
-                rather than strung across the bar. The list is built here
-                rather than in the client component so the owner-only items
-                never reach a contractor's browser at all. */}
+            {/*
+              Built here, not in the client component, so owner-only items never reach a contractor's browser.
+              Labels and order are muscle memory: don't reshuffle.
+            */}
             <CrmNav
               base={base}
               items={[
-                // A quote detail page is somewhere you got to FROM the
-                // pipeline, so that is what stays lit while you are on it.
+                // Quote detail pages are reached from the pipeline, so it stays lit.
                 { href: "/", label: t.nav.pipeline, also: ["/quotes"] },
                 { href: "/calendar", label: t.nav.calendar },
                 { href: "/customers", label: t.nav.customers },
                 { href: "/agreements", label: t.nav.agreements },
-                // Everybody has a Money page; a contractor's shows only their
-                // own jobs, so for them it sits with the shared items.
+                // A contractor's Money page shows only their jobs, so it sits with the shared items.
                 ...(isOwner ? [] : [{ href: "/money", label: t.nav.money }]),
                 ...(isOwner
                   ? [
@@ -84,9 +69,7 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
             <div className="crm-topbar-right">
               <span className="crm-who">
                 <span className="crm-who-name">{session.staff.full_name || session.user.email}</span>
-                {/* Was amber, the same colour the nav now uses for "you are
-                    here". One accent, one meaning: a role that never changes
-                    does not need the loudest colour on the bar. */}
+                {/* Not amber: that accent means "you are here". */}
                 <em>{isOwner ? t.nav.owner : t.nav.contractor}</em>
               </span>
               <LogoutButton base={base} label={t.nav.signOut} />

@@ -5,18 +5,12 @@ import { useActionState, useState } from "react";
 import { cancelHeldMessage } from "./actions";
 import type { ScheduleState } from "./types";
 
-// Stopping a text that is still sitting in the queue.
-//
-// Two different acts wearing one button, and the difference is what the text
-// carries. A reminder is just a reminder: stop it and nothing else about the
-// job changes. The text that carries the quote IS the quote, so stopping that
-// one clears the price, the wording and the customer's link along with it, and
-// says so in full before it does anything, because none of it comes back.
+// Stopping a reminder changes nothing else. The text that carries the quote IS the quote: stopping it
+// clears the price, wording and customer link, so it says so in full first.
 
 export function CancelHeldText({
   quoteId,
   messageId,
-  // The text is the quote itself, not a message about the job.
   isQuote,
   isOwner,
 }: {
@@ -28,8 +22,7 @@ export function CancelHeldText({
   const [confirming, setConfirming] = useState(false);
   const [state, action, pending] = useActionState<ScheduleState, FormData>(cancelHeldMessage, { ok: false });
 
-  // A contractor looking at a held quote gets told why there is no button
-  // rather than left wondering whether the page is broken.
+  // A contractor is told why there's no button.
   if (isQuote && !isOwner) {
     return <p className="msg-cancel-note">Only the owner can cancel a quote before it sends.</p>;
   }
@@ -45,7 +38,7 @@ export function CancelHeldText({
     action(fd);
   };
 
-  // The plain case: one button, one line, no ceremony. Nothing is lost.
+  // Plain case: nothing is lost.
   if (!isQuote) {
     return (
       <form action={submit} className="msg-cancel">
@@ -68,9 +61,7 @@ export function CancelHeldText({
         </button>
       ) : (
         <form action={submit}>
-          {/* Spelled out rather than summarised. Every line here is something
-              the owner cannot get back, and a warning that says "are you sure"
-              and nothing else is a warning nobody reads. */}
+          {/* Spelled out: every line is something the owner can't get back. */}
           <p className="msg-cancel-warn">
             The text never sends, the price and the five sections are cleared, any line items are removed, the
             customer&apos;s link stops working, and the job goes back to New. None of it can be undone.

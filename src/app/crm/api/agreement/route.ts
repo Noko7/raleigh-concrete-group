@@ -2,11 +2,8 @@ import { getSession } from "@/lib/crm/auth";
 import { AGREEMENT_BUCKET, SUPABASE_URL, SERVICE_KEY } from "@/lib/crm/env";
 import { getAgreement } from "@/lib/crm/queries";
 
-// Authenticated proxy for a stored contract. Unlike the media proxy this takes
-// an agreement ID rather than a storage path: the row is fetched as the
-// logged-in user, so RLS decides whether they may see it (owner = any,
-// contractor = their own onboarding doc or a job assigned to them). A
-// contractor therefore can't read another crew member's contract by guessing.
+// Takes an agreement ID, not a storage path: the row is read as the user, so RLS decides access
+// (owner = any; contractor = their onboarding doc or assigned jobs).
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session) return new Response("Unauthorized", { status: 401 });
@@ -36,7 +33,7 @@ export async function GET(request: Request) {
     status: 200,
     headers: {
       "Content-Type": upstream.headers.get("content-type") ?? "application/octet-stream",
-      // Never let a stored file be MIME-sniffed into executable HTML.
+      // No MIME-sniffing a stored file into executable HTML.
       "X-Content-Type-Options": "nosniff",
       "Content-Disposition": "inline",
       "Cache-Control": "private, no-store",

@@ -6,11 +6,7 @@ import { PhotoUpload } from "@/app/crm/photo-upload";
 import { completeJob } from "./actions";
 import type { FinishState } from "./types";
 
-// The owner's own "mark completed" button. Same server action the crew's job
-// page calls, so the before/after requirement holds here too - an owner
-// closing a job out from a desk still leaves a record of the work, and the
-// uploaders are right here so meeting that requirement doesn't mean chasing
-// the contractor for photos they already took.
+// Same server action as the crew's page, so the before/after photo requirement holds for owners too.
 export function CompleteCard({
   id,
   title,

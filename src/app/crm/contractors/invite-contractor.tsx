@@ -41,8 +41,7 @@ export function InviteContractor() {
             Invite created for <strong>{state.phone}</strong>.
             {state.smsSent ? " We texted them the link." : ""}
           </p>
-          {/* Always show the link: the invite is valid even when the text fails,
-              and this is the only place it can be recovered from. */}
+          {/* Always shown: the invite is valid even if the text failed, and this is the only place to recover it. */}
           <code className="crm-code">{state.link}</code>
           <p className="crm-muted crm-sm">
             {state.smsNote ?? "It works once and expires in 7 days. Their account appears here once they finish."}

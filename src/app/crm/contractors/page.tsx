@@ -13,8 +13,7 @@ import { revokeContractorInvite, setContractorActive } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-// Numbers are stored E.164 (+19198733919) so the SMS providers accept them;
-// show them the way you'd read them out loud.
+// Stored E.164 for the SMS providers; shown readable.
 function prettyPhone(raw: string | null): string {
   if (!raw) return "N/A";
   const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(raw.trim());
@@ -23,8 +22,6 @@ function prettyPhone(raw: string | null): string {
 
 export default async function ContractorsPage() {
   const session = await requireOwner();
-  // The crew list, the invites and the signed agreements are three unrelated
-  // tables; fetch them together rather than three round-trips deep.
   const [staff, rawInvites, allAgreements] = await Promise.all([
     listStaff(session),
     listInvites(session),
@@ -32,8 +29,7 @@ export default async function ContractorsPage() {
   ]);
   const contractors = staff.filter((s) => s.role === "contractor");
 
-  // Every invite with where it actually got to, so an unfinished signup is
-  // visible instead of just silently missing from the crew list.
+  // So an unfinished signup is visible instead of silently missing.
   const now = Date.now();
   const invites = rawInvites.map((i) => {
     const expired = new Date(i.expires_at).getTime() <= now;
@@ -48,7 +44,7 @@ export default async function ContractorsPage() {
             : "sent";
     return { ...i, state };
   });
-  // Anything still actionable stays at the top; finished/dead ones drop below.
+  // Actionable invites first.
   const liveInvites = invites.filter((i) => i.state === "sent" || i.state === "started");
   const doneInvites = invites.filter((i) => i.state !== "sent" && i.state !== "started").slice(0, 15);
 
@@ -60,7 +56,6 @@ export default async function ContractorsPage() {
     expired: { label: "Expired", cls: "ag-badge-void" },
   };
 
-  // One fetch for the whole page (batched above), then bucket by contractor.
   const byStaff = new Map<string, typeof allAgreements>();
   for (const a of allAgreements) {
     if (a.kind !== "contractor" || !a.staff_id) continue;
@@ -170,9 +165,7 @@ export default async function ContractorsPage() {
                     <td>{c.email}</td>
                     <td>{prettyPhone(c.phone)}</td>
                     <td>
-                      {/* "Anything" is the honest label for no rules set: the
-                          lead still reaches them via the primary-contractor
-                          fallback, so an empty list is not "nothing". */}
+                      {/* "Anything" for no rules: leads still reach them via the primary-contractor fallback. */}
                       {c.service_types?.length ? (
                         <span className="crm-sm">{c.service_types.join(", ")}</span>
                       ) : (
@@ -198,7 +191,7 @@ export default async function ContractorsPage() {
                     <td>
                       {(() => {
                         const list = byStaff.get(c.id) ?? [];
-                        // Show the signed one if there is one, otherwise the most recent.
+                        // The signed one if any, else the most recent.
                         const headline = list.find((a) => a.status === "signed") ?? list[0];
                         return headline ? (
                           <AgreementStatusBadge status={headline.status} />

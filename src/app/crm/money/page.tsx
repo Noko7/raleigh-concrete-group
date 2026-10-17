@@ -13,17 +13,9 @@ import { SettleForm } from "./settle-form";
 export const dynamic = "force-dynamic";
 
 /**
- * The cash board. The owner sees the whole business; a contractor sees their
- * own jobs and the income on each (CrewMoney), from the same board.
- *
- * Reads top to bottom as an accounts page should: what the totals are, then
- * anything that makes a total untrustworthy, then the entries those totals are
- * sums of. Nothing on it is a figure you cannot open and check.
- *
- * The fee balance is the number this page exists for, so it is the only one
- * given a colour. Card jobs pay it automatically and never appear there; cash
- * jobs do, and that column is the entire cost of being flexible about how
- * customers pay - stated plainly rather than discovered at the end of a month.
+ * Owner sees the whole business; a contractor sees their own jobs (CrewMoney) from the same board.
+ * Order: totals, then anything that makes a total untrustworthy, then the entries they sum.
+ * The fee balance is the only coloured figure: card jobs pay it automatically, cash jobs accrue it.
  */
 export default async function MoneyPage({
   searchParams,
@@ -43,8 +35,7 @@ export default async function MoneyPage({
   const crew = board.contractors
     .filter((c) => c.staffId)
     .map((c) => ({ id: c.staffId as string, name: c.name }));
-  // What the flagged rows are doing to the figures above them, so the panel can
-  // say how wrong the page is rather than only that it is wrong somewhere.
+  // How much the flagged rows distort the figures, not just that they do.
   const ghostOwing = board.attention
     .filter((a) => a.kind === "paid_no_payments")
     .reduce((sum, a) => sum + a.effectCents, 0);
@@ -54,8 +45,7 @@ export default async function MoneyPage({
       <div className="crm-page-head">
         <div>
           <h1>Money</h1>
-          {/* Only ever rendered when there is something being left out. A
-              switch for a state you are not in is one more thing to read. */}
+          {/* Only shown when something is being left out. */}
           {board.testCount > 0 && (
             <p className="crm-muted crm-sm money-tests">
               {board.includingTests ? (
@@ -93,11 +83,7 @@ export default async function MoneyPage({
         </p>
       )}
 
-      {/* Above the figures, not below them, and worded as a warning rather than
-          a note: every total on this page is a sum over rows, so a read that
-          came back at its ceiling means the numbers underneath are too small.
-          Somebody reconciling against a bank statement has to know that before
-          they read the first one, not after. */}
+      {/* Above the figures, as a warning: a capped read means every total below is too small. */}
       {board.truncated.length > 0 && (
         <p className="crm-empty money-truncated">
           <strong>These totals are incomplete.</strong> This page reads the most recent{" "}
@@ -107,10 +93,7 @@ export default async function MoneyPage({
         </p>
       )}
 
-      {/* The figures the business actually runs on. Money first and in the
-          order it moves, owed-to-you last because it is the one that turns
-          into a phone call - then the value of everything quoted to get any
-          of it. */}
+      {/* Money in the order it moves; owed-to-you last (it becomes a phone call), then the value quoted. */}
       <div className="crm-stats">
         <div className="crm-stat">
           <strong>{usd(board.collectedCents)}</strong>
@@ -128,22 +111,14 @@ export default async function MoneyPage({
           <strong>{usd(board.feeBalanceCents)}</strong>
           <span>Your fees, still owed to you</span>
         </div>
-        {/* The dollar value of every quote that has gone out, won or not -
-            the size of the pipeline, where the figures before it are what
-            came of it. Not subject to the row ceilings warned about above:
-            every sent quote is read, so "all time" means all time. A dash
-            rather than $0 when the read fails, because "we have never quoted
-            anybody" and "the query broke" look identical as a zero. */}
+        {/* Every sent quote, won or not; not subject to the row ceilings. A dash rather than $0 when the read fails. */}
         <div className="crm-stat">
           <strong>{board.quotesSentAllTime ? usd(board.quotesSentAllTime.cents) : "-"}</strong>
           <span>Quotes sent, all time</span>
         </div>
       </div>
 
-      {/* One per customer, not one per text. Worth saying once: the job pages
-          have their own "Quotes sent" list which counts versions, and two
-          numbers with the same name that disagree is how somebody stops
-          trusting both of them. */}
+      {/* Per customer, not per text: the job pages' "Quotes sent" counts versions, and the two must not be confused. */}
       {board.quotesSentAllTime != null && board.quotesSentAllTime.count > 0 && (
         <p className="crm-muted crm-sm money-quote-note">
           Quotes sent is the total of {board.quotesSentAllTime.count}{" "}
@@ -152,9 +127,7 @@ export default async function MoneyPage({
         </p>
       )}
 
-      {/* Directly under the figures it is about. A page that quietly reports a
-          wrong number is worse than one that reports a wrong number and says
-          which rows made it wrong, and this is the second kind. */}
+      {/* Directly under the figures it affects, naming the rows that make them wrong. */}
       {board.attention.length > 0 && (
         <section className="crm-card cash-attention">
           <h2 className="crm-card-title">Check these {board.attention.length} rows</h2>
@@ -203,8 +176,7 @@ export default async function MoneyPage({
         </section>
       )}
 
-      {/* How the money arrived. The whole reason to look at this is the split:
-          the cash half is the half that doesn't pay the office on its way past. */}
+      {/* The split matters: cash doesn't pay the office on its way past. */}
       <section className="crm-card">
         <h2 className="crm-card-title">Last {MONEY_WINDOW_DAYS} days · {usd(board.recentCents)}</h2>
         {board.byMethod.length === 0 ? (

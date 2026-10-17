@@ -5,8 +5,7 @@ import { googleAuthUrl, googleConfigured } from "@/lib/crm/gcal";
 
 export const dynamic = "force-dynamic";
 
-// Owner-only: kick off the Google OAuth consent flow. We stash a random state in
-// an httpOnly cookie and verify it on the callback to block CSRF.
+// Owner-only. A random state in an httpOnly cookie, verified on the callback, blocks CSRF.
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session || session.staff.role !== "owner") {

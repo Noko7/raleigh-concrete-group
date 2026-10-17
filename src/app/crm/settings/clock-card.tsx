@@ -11,19 +11,12 @@ import {
 import type { QueueHealth } from "@/lib/crm/queries";
 import { DRIFT_TOLERANCE_SECONDS, type ClockCheck } from "@/lib/crm/time-check";
 
-// What time the app thinks it is, and whether that can be trusted.
-//
-// Worth a panel of its own because two things now hang off it: every date on
-// every screen is rendered in Raleigh time rather than the server's UTC, and
-// texts are held between 7pm and 8am. Both are silently wrong if the clock is
-// wrong, and a clock is the one component that never announces its own failure.
+// Every date is rendered in Raleigh time and texts are held 7pm-8am; both are silently wrong if the
+// clock is, and a clock never reports its own failure.
 export function ClockCard({ check, queue }: { check: ClockCheck; queue: QueueHealth }) {
   const at = now();
   const quiet = inQuietHours(at);
-  // A text whose hour came and went and is still sitting in the queue is the
-  // one symptom that says the drain itself has stopped. Everything else about a
-  // stuck queue looks completely normal: the rows are there, correctly marked
-  // as waiting, and every screen agrees they are waiting.
+  // An overdue text still queued is the one symptom of a stopped drain.
   const stuck = queue.overdue > 0;
   const drift = check.driftSeconds ?? 0;
   const accurate = check.ok && Math.abs(drift) <= DRIFT_TOLERANCE_SECONDS;
@@ -113,8 +106,7 @@ export function ClockCard({ check, queue }: { check: ClockCheck; queue: QueueHea
           <dt>Clock check</dt>
           <dd>
             {!check.ok ? (
-              // Not being able to reach a time server says nothing about our own
-              // clock, so this is grey rather than red.
+              // Grey, not red: an unreachable time server says nothing about our clock.
               <span className="crm-muted">Couldn&apos;t reach a time source to compare against. {check.error}</span>
             ) : accurate ? (
               <>

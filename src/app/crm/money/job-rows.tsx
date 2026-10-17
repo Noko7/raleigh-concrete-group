@@ -6,16 +6,7 @@ import Link from "next/link";
 import { METHOD_LABELS, usd, type PaymentMethod } from "@/lib/crm/fees";
 import type { JobMoney } from "@/lib/crm/money";
 
-// Every approved job with money attached to it, and what that money did.
-//
-// The page used to list only the jobs that still owed something, which answers
-// "who do I chase" and nothing else. The question underneath it - what is this
-// job worth, what has come in, what did the office take, what is left - had no
-// home, so it got worked out on a phone call with a contractor reading numbers
-// off his own screen.
-//
-// A row opens rather than navigates: the whole point is comparing one job with
-// the ones around it, and a page load loses that.
+// Every approved job with money on it. A row expands rather than navigating, so jobs can be compared.
 
 function day(iso: string | null) {
   if (!iso) return "-";
@@ -31,14 +22,12 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
 
   const rows = useMemo(() => {
     const list = jobs.filter((j) => {
-      // Same rule as the figure at the top of the page: a job that left the
-      // pipeline is not a customer anybody is chasing, whatever its balance.
+      // Same rule as the page total: off-books jobs aren't chased.
       if (filter === "owing") return j.onBooks && j.ledger.dueCents > 0;
       if (filter === "settled") return j.ledger.dueCents === 0 && j.ledger.paidCents > 0;
       return true;
     });
-    // Most owed first while chasing, most recent first when browsing: the sort
-    // follows what the filter says you are doing.
+    // Sort follows the filter: most owed when chasing, most recent when browsing.
     return filter === "owing"
       ? [...list].sort((a, b) => b.ledger.dueCents - a.ledger.dueCents)
       : [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -108,10 +97,7 @@ export function JobRows({ jobs, base }: { jobs: JobMoney[]; base: string }) {
                       <Link href={`${base}/quotes/${j.id}`}>{j.name}</Link>
                       <span className="led-sub">
                         {j.status}
-                        {/* It took money and then left the pipeline. Its cash
-                            is still in the takings; its balance is nobody's to
-                            chase. Worth saying on the row, because the numbers
-                            beside it follow a different rule from the rest. */}
+                        {/* Off the books: its cash still counts in takings, its balance isn't chased, so the row says so. */}
                         {j.isTest && <em className="led-offbooks">test</em>}
                         {!j.onBooks && <em className="led-offbooks">off the books</em>}
                       </span>

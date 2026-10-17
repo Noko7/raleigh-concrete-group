@@ -6,15 +6,8 @@ import Link from "next/link";
 import { METHOD_LABELS, crewIncomeCents, usd, type PaymentMethod } from "@/lib/crm/fees";
 import type { JobMoney } from "@/lib/crm/money";
 
-// A contractor's own jobs, and what each one is worth to them.
-//
-// The owner's table answers "what did the office take"; this one answers the
-// crew's question, which is the same arithmetic read from the other side: the
-// job is worth this, the office's cut is that, so this much is yours - and of
-// it, this much has come in and this much is still with the customer.
-//
-// Same ledger, same function, so a figure here can never disagree with the
-// owner's board or with the job's own page.
+// The owner's arithmetic read from the crew's side: job value, office cut, theirs, and how much has come
+// in. Same ledger function, so figures can't disagree with the owner's board or the job page.
 
 function day(iso: string | null) {
   if (!iso) return "-";

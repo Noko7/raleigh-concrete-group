@@ -3,13 +3,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/crm/auth";
 import { AGREEMENT_BUCKET, SUPABASE_URL, SERVICE_KEY } from "@/lib/crm/env";
 
-// Owner-only: issues a short-lived, single-object signed upload URL for the
-// private agreements bucket. Same shape as the public /api/upload-url route,
-// but gated on an owner session - contractors never upload contracts, they
-// sign them in DocuSeal.
-//
-// The object name is server-generated, so there is no client-supplied path
-// component to traverse with.
+// Owner-only signed upload URL for the private agreements bucket (contractors sign in DocuSeal, never
+// upload). The object name is server-generated, so there is no path to traverse.
 const ALLOWED_TYPES = new Set([
   "application/pdf",
   "image/jpeg",

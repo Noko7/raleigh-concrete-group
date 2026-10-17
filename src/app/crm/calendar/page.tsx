@@ -31,15 +31,11 @@ export default async function CalendarPage({
   const { google } = await searchParams;
 
   const [quotes, staff] = await Promise.all([listScheduled(session), listStaff(session)]);
-  // Who each appointment belongs to. Read from the staff table rather than
-  // carried on the quote, so a contractor who changes their name changes it
-  // everywhere at once. A contractor's own RLS only shows them themselves,
-  // which is right: their calendar is all theirs anyway.
+  // From the staff table so a rename applies everywhere. Contractor RLS shows only themselves.
   const names = staffNameMap(staff);
   const events: CalEvent[] = [];
   for (const q of quotes) {
-    // Enough on each event to act without opening the job: the panel shows the
-    // phone and address so you can call or navigate straight from the calendar.
+    // Phone and address on each event so you can call or navigate straight from the calendar.
     const common = {
       id: q.id,
       title: q.name || "Customer",
@@ -50,28 +46,17 @@ export default async function CalendarPage({
       assignedTo: q.assigned_to ?? null,
       assignedName: q.assigned_to ? (names.get(q.assigned_to) ?? null) : null,
     };
-    // Booked work day = a job install (only ever set once a customer accepts).
+    // Booked work day (only set once a customer accepts).
     if (q.scheduled_date) {
       events.push({ ...common, date: q.scheduled_date, kind: "job", time: q.scheduled_time });
     }
-    // An in-person quote visit: a real slot with a drive attached.
+    // In-person quote visit.
     const visitDate = visitDateOf(q);
     if (visitDate) {
       events.push({ ...common, date: visitDate, kind: "inperson", time: q.visit_time });
     }
-    // The slot an online customer offered in case photos aren't enough to price
-    // the job. It used to be left off the calendar on the grounds that a card on
-    // a day tells the crew to be somewhere and nobody is going anywhere - true,
-    // but it meant the one appointment somebody still has to answer was the one
-    // appointment you couldn't see. It shows now, faded and labelled Not booked,
-    // and it is the only kind you cannot drag: nothing here is agreed yet, so
-    // there is nothing to reschedule and nobody to text about it.
-    //
-    // Only while it is still an open question. Once the job is booked, or the
-    // lead is lost or finished, the slot the customer offered weeks ago is not
-    // something anybody still has to answer - and a faded card that can never
-    // be actioned is the kind of thing people learn to look past, taking the
-    // live ones with it.
+    // An online customer's fallback slot: shown faded as "Not booked", and not draggable (nothing is agreed,
+    // so nothing to reschedule). Only while still an open question: never on booked, lost or finished jobs.
     const requested = requestedVisitOf(q);
     const stillOpen =
       !q.scheduled_date && q.status !== "lost" && q.status !== "completed" && q.status !== "paid";
@@ -80,9 +65,7 @@ export default async function CalendarPage({
     }
   }
 
-  // Everyone who could be on this calendar, plus anyone actually on it - a
-  // deactivated contractor still has last month's jobs and still needs a name
-  // and a colour against them.
+  // Plus anyone on the calendar: a deactivated contractor's past jobs still need a name and colour.
   const crew = [
     ...staff.filter((s) => s.role === "contractor" && s.active),
     ...staff.filter((s) => !(s.role === "contractor" && s.active) && events.some((e) => e.assignedTo === s.id)),
@@ -103,9 +86,7 @@ export default async function CalendarPage({
 
       {notice && <div className={`crm-banner crm-banner-${notice.tone}`}>{notice.text}</div>}
 
-      {/* One line rather than a card. Google sync is set up once and then never
-          thought about again, so it shouldn't take the top third of the page
-          above the thing you actually came here to look at. */}
+      {/* One line, not a card: Google sync is set up once. */}
       {isOwner && (
         <details className="cal-gcal" open={!status.connected && configured}>
           <summary>
@@ -153,9 +134,7 @@ export default async function CalendarPage({
         </details>
       )}
 
-      {/* The roster, not just the people who happen to have something booked:
-          an empty week for somebody is worth being able to see, and the legend
-          is how a colour becomes a name. */}
+      {/* The full roster, so an empty week is visible and every colour has a name. */}
       <CalendarView events={events} crew={crew} base={base} locale={locale} />
     </main>
   );

@@ -14,13 +14,10 @@ export function NewQuoteForm({ contractors }: { contractors: ContractorOption[] 
   const [open, setOpen] = useState(false);
   const [quoteType, setQuoteType] = useState("");
   const [sendText, setSendText] = useState(false);
-  // The crew can book an estimate for today - the lead-time floor is a rule
-  // for what a customer may request on the website, not for what the office
-  // may agree to on a call.
+  // The lead-time floor applies to website requests, not what the office agrees on a call.
   const today = todayYmd();
 
-  // Collapse once it saves - the new lead shows up on the board above via
-  // revalidatePath, so a filled-in form left open just invites a duplicate.
+  // Collapse once saved (the lead appears via revalidatePath) so the open form doesn't invite a duplicate.
   useEffect(() => {
     if (state.ok) {
       setOpen(false);
@@ -53,9 +50,7 @@ export function NewQuoteForm({ contractors }: { contractors: ContractorOption[] 
       <div className="crm-editor-row">
         <label className="crm-field">
           <span>Service</span>
-          {/* The same list the public form offers, because this is what
-              routes the lead to a contractor. A typed "driveway" would not
-              match the "Driveway" rule and would quietly fall through. */}
+          {/* Same list as the public form: this routes the lead, and a typed value wouldn't match the rules. */}
           <select name="service" className="crm-input" defaultValue="">
             <option value="">Not sure yet</option>
             {quoteServiceOptions.map((s) => (
@@ -81,9 +76,7 @@ export function NewQuoteForm({ contractors }: { contractors: ContractorOption[] 
         </label>
       </div>
 
-      {/* Auto is the default and matches what a web lead does. The override
-          is here because a commercial job is often a specific person's work
-          regardless of what the job-type rules say. */}
+      {/* Auto matches a web lead; the override is for jobs that belong to a specific person regardless of rules. */}
       <label className="crm-field">
         <span>Assign to</span>
         <select name="assigned_to" className="crm-input" defaultValue="">
@@ -96,9 +89,7 @@ export function NewQuoteForm({ contractors }: { contractors: ContractorOption[] 
         </select>
       </label>
 
-      {/* Booking the estimate while they are still on the phone is the whole
-          point of taking the call. Only asked for an in-person quote, since
-          that is the only kind where somebody drives out. */}
+      {/* In-person only: the only kind where someone drives out. */}
       {quoteType === "inperson" && (
         <div className="crm-editor-row">
           <label className="crm-field">
@@ -133,9 +124,7 @@ export function NewQuoteForm({ contractors }: { contractors: ContractorOption[] 
         <AutoTextarea name="details" className="crm-input" rows={2} placeholder="Whatever they told you on the phone" />
       </label>
 
-      {/* Off by default. A call-in lead normally needs no text at all - you
-          just spoke to them - so this is for the case where you promised
-          something on the call and want it in writing. */}
+      {/* Off by default: you just spoke to them. For when something promised on the call should be in writing. */}
       <fieldset className="crm-sections">
         <legend>
           <label className="svc-check">

@@ -23,12 +23,8 @@ const DAY_NAMES: Record<Locale, string[]> = {
 const HOURS = Array.from({ length: WORK_HOUR_MAX - WORK_HOUR_MIN + 1 }, (_, i) => WORK_HOUR_MIN + i);
 
 /**
- * When this person takes on-site quote visits.
- *
- * It is a preference, not a rule: it decides which slots a CUSTOMER is offered
- * on the public quote form, and nothing else. A contractor booking a visit from
- * their own job page is still free to pick any time, because fitting a visit
- * around a real day is exactly the thing a fixed window can't do.
+ * A preference, not a rule: only decides which slots CUSTOMERS are offered on the public form. Contractors
+ * booking from their job page can pick any time.
  */
 export function WorkHoursForm({ hours, locale }: { hours: WorkHours; locale: Locale }) {
   const [state, formAction, pending] = useActionState(saveWorkHours, initial);
@@ -39,8 +35,7 @@ export function WorkHoursForm({ hours, locale }: { hours: WorkHours; locale: Loc
 
   const backwards = end < start;
   const noDays = days.length === 0;
-  // The whole point of the panel, shown as the thing it produces. Two numbers
-  // and a checkbox row don't tell anybody how many appointments a day that is.
+  // Shown as the slots it produces, which two numbers and checkboxes don't convey.
   const preview = backwards ? [] : slotsFor({ startHour: start, endHour: end, days });
   const names = DAY_NAMES[locale] ?? WEEKDAY_LABELS;
 
@@ -105,9 +100,7 @@ export function WorkHoursForm({ hours, locale }: { hours: WorkHours; locale: Loc
 
       <p className="crm-muted crm-sm">{t.settings.hoursNote}</p>
 
-      {/* Said before the round-trip as well as after it: these two are the
-          mistakes that leave somebody unbookable, and finding out on submit is
-          finding out too late to connect it to what you changed. */}
+      {/* Warned before submit too: these mistakes leave someone unbookable. */}
       {backwards && <p className="crm-auth-error">{t.settings.hoursBackwards}</p>}
       {noDays && !backwards && <p className="crm-auth-error">{t.settings.hoursNoDays}</p>}
       {state.error && <p className="crm-auth-error">{state.error}</p>}
