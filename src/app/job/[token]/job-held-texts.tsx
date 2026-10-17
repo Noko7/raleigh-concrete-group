@@ -4,18 +4,8 @@ import { isHeld, type QuoteMessage } from "@/lib/crm/queries";
 
 import { SendHeldNow } from "@/app/crm/quotes/[id]/send-held-now";
 
-// The crew's view of anything this job has written but not yet sent.
-//
-// The office has had this on the CRM job page for a while; the crew had no
-// equivalent, which meant the person who actually pressed Send was the one
-// person who could not see what had become of it. They were told "scheduled for
-// 8:00 AM" once, in a toast, and after that the job page looked identical
-// whether the text was queued, sent, or quietly lost.
-//
-// Only held rows appear. This is not a second message log - the crew do not
-// need a transcript of every text the office has ever sent this customer. It is
-// one question, answered when the answer is "not yet": is anything still
-// waiting, and do you want it to go now?
+// Held texts only, so the person who pressed Send can see whether it's still waiting and send it now.
+// Not a second message log.
 export function JobHeldTexts({
   quoteId,
   messages,

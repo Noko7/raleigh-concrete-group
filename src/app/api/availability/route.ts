@@ -3,22 +3,12 @@ import { NextResponse } from "next/server";
 import { MAX_JOBS_PER_DAY, countJobsOn, resolveAssignee, visitAvailability } from "@/lib/crm/queries";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-// Public, token-free availability check used by the customer scheduling UIs.
-//
-//   type=job    booked work days. Still one a day for the whole business, so
-//               the answer is a yes/no on the date.
-//   type=quote  in-person quote visits. These stack an hour apart on ONE
-//               contractor's calendar, so the answer is that person's slots for
-//               the day and which of them are spoken for.
-//
-// Times only, never names: this endpoint answers to anyone, so it must not leak
-// who is on the calendar or which customer is in a slot.
-//
-// The `service` parameter is what decides whose calendar is read. A lead routes
-// to the contractor who takes that job type (staff.service_types), falling back
-// to the primary contractor - so checking against the primary regardless, as
-// this used to, answered about the wrong person's day for every lead the
-// routing rules sent elsewhere.
+// Public, token-free availability for the customer scheduling UIs.
+//   type=job    booked work days: one per day for the whole business, so yes/no on the date
+//   type=quote  in-person visits: stack an hour apart on ONE contractor's calendar, so that person's slots
+//               and which are taken
+// Times only, never names: anyone can call this.
+// `service` decides whose calendar: leads route by staff.service_types, falling back to the primary contractor.
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type") === "quote" ? "quote" : "job";
@@ -27,10 +17,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid date." }, { status: 400 });
   }
 
-  // Every call here is a database read, and the middleware's limiter only
-  // covers the CRM. Sized for somebody clicking around a month of dates
-  // looking for one that suits them, which is a lot of calls and exactly the
-  // behaviour the picker is for.
+  // Each call is a DB read and the middleware limiter only covers the CRM. Sized for someone clicking
+  // through a month of dates.
   if (await rateLimit(`avail:${clientIp(request)}`, 90, 5 * 60 * 1000)) {
     return NextResponse.json({ ok: false, error: "Too many requests." }, { status: 429 });
   }
@@ -46,8 +34,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    // A day with no slot left on it is full, however that came about: every
-    // hour booked, a pour taking the whole day, or a day they don't work.
+    // Full however it happened: every hour booked, an all-day pour, or a day off.
     available: works && !wholeDay && taken.length < slots.length,
     slots,
     taken,

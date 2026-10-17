@@ -8,18 +8,10 @@ import { confirmVisit } from "@/app/crm/quotes/[id]/actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
 import { DateField } from "./date-field";
 
-// Putting a real on-site appointment on the calendar. Two ways in:
-//
-//   online    the request came in as a photo quote and the customer offered a
-//             slot in case the job turned out to be too big to price remotely.
-//             Their suggestion is a one-tap button, because they already picked
-//             a time that works and retyping it is asking for the answer twice.
-//
-//   schedule  an in-person request with no date - the visit was cancelled off
-//             the calendar, or the row predates the form asking for one. There
-//             is nothing to accept, so the picker is the card.
-//
-// Either way it ends in confirmVisit, which is what texts the customer.
+// Booking an on-site visit. Two ways in:
+//   online    a photo quote whose customer offered a fallback slot: one-tap accept
+//   schedule  an in-person request with no date (cancelled, or predates the field): picker only
+// Both end in confirmVisit, which texts the customer.
 function pretty(s: string, locale: Locale): string {
   return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "long",
@@ -46,9 +38,7 @@ export function JobVisit({
   const t = dict(locale);
   const [state, formAction, pending] = useActionState<ScheduleState, FormData>(confirmVisit, { ok: false });
 
-  // The customer's own offered time if it's a real one, otherwise the first
-  // public slot as a sane starting point - the contractor isn't limited to
-  // this list themselves, this is only what the field opens on.
+  // The customer's offered time if valid, else the first public slot as a starting point.
   const fallbackTime = requestedTime && TIME_RE.test(requestedTime) ? requestedTime : DEFAULT_VISIT_SLOTS[0];
   const [time, setTime] = useState(fallbackTime);
 
@@ -65,9 +55,7 @@ export function JobVisit({
           value={to24Hour(time, "08:00")}
           onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
         />
-        {/* confirmVisit reads FormData directly rather than component state,
-            so the picked time still needs its own hidden field with the same
-            name the old <select> carried. */}
+        {/* confirmVisit reads FormData, so the time needs a hidden field. */}
         <input type="hidden" name="time" value={time} />
       </label>
       <DateField
@@ -104,9 +92,7 @@ export function JobVisit({
             </button>
           </form>
 
-          {/* Tucked away only when there's a suggestion to accept. With nothing
-              offered, hiding the picker behind a toggle would hide the card's
-              entire reason for existing. */}
+          {/* Only folded when there's a suggestion; otherwise the picker is the whole card. */}
           <details className="js-other">
             <summary>{t.contractorJob.visitOther}</summary>
             {picker}

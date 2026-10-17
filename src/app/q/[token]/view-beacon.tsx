@@ -2,8 +2,7 @@
 
 import { useEffect } from "react";
 
-// Records a customer view once per page load (kept out of server render so bot
-// prefetches and link unfurlers don't inflate the count).
+// Client-side so bot prefetches and link unfurlers don't inflate the count.
 export function ViewBeacon({ token }: { token: string }) {
   useEffect(() => {
     const key = `cq_viewed_${token}`;

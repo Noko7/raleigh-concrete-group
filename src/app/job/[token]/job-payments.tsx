@@ -16,27 +16,16 @@ export type PaymentRow = {
   status: string;
   paid_at: string | null;
   created_at: string;
-  /** The office's cut this payment carried. Only ever non-zero on a card. */
+  /** Office cut in cents. Non-zero only on card rows. */
   fee_cents: number;
 };
 
 const pct = (rate: number) => `${Math.round(rate * 1000) / 10}%`;
 
 /**
- * The crew's money card.
- *
- * Two numbers and two buttons, in that order, because that is the whole job:
- * what the customer still owes, what the crew owes the office, send a card
- * link, or write down what was handed over.
- *
- * The two ways to get paid sit side by side and neither is styled as the
- * fallback. Half of these jobs settle in cash in a driveway, and an app that
- * treats that as the sad path is an app the crew works around - which is how
- * the office ends up finding out about $4,000 three weeks later.
- *
- * The fee is stated plainly and always, whole: the cut, the rate behind it,
- * what has already been paid and how, and what is left. A percentage somebody
- * discovers at the end of a month is a percentage they argue about.
+ * What the customer owes, what the crew owes the office, send a card link, or record what was handed over.
+ * Card and cash sit side by side, neither styled as the fallback: if cash is the sad path, crews work
+ * around the app. The fee is always stated in full (cut, rate, paid, left).
  */
 export function JobPayments({
   id,
@@ -61,19 +50,19 @@ export function JobPayments({
   totalCents: number;
   paidCents: number;
   dueCents: number;
-  /** A second deposit from an approved change, still to come in. 0 when none. */
+  /** Cents. 0 when none. */
   dueNowCents?: number;
-  /** The office's whole fee on the job. */
+  /** Cents. */
   feeTotalCents: number;
   feeRate: number;
   /** False until the first payment; the rate can still change before then. */
   feeRateFrozen: boolean;
-  /** Fee already taken out of card payments. */
+  /** Cents taken out of card payments. */
   feeCollectedCents: number;
   feeDueCents: number;
-  /** What they have already sent the office for this job. */
+  /** Cents already sent to the office for this job. */
   feeSettledCents?: number;
-  /** Taken off the fee by the office on this job. Already out of feeTotalCents. */
+  /** Cents; already excluded from feeTotalCents. */
   feeWaivedCents?: number;
   rows: PaymentRow[];
 }) {
@@ -115,15 +104,12 @@ export function JobPayments({
         </dl>
       </div>
 
-      {/* The second deposit, when a change asked for one: the figure to collect
-          first, said before anything else on the card. */}
+      {/* Collect this first. */}
       {!settled && dueNowCents > 0 && (
         <p className="jp-now">{fill(t.dueNow, { now: usd(dueNowCents), rest: usd(dueCents - dueNowCents) })}</p>
       )}
 
-      {/* The office's cut, and where it stands. The three lines under it always
-          add up to it, so nobody has to do the subtraction. Only the last note
-          changes with how the job is paid: the fee is the same either way. */}
+      {/* The lines under it always add up to it; only the last note depends on how the job is paid. */}
       <div className={`jp-fee${feeDueCents > 0 ? " jp-fee-owed" : ""}`}>
         <span className="jp-fee-label">{t.feeTitle}</span>
         <strong>{usd(feeTotalCents)}</strong>
@@ -184,8 +170,7 @@ export function JobPayments({
                 <input type="hidden" name="method" value={method} />
 
                 <span className="jp-label">{t.method}</span>
-                {/* Buttons, not a dropdown. This is filled in one-handed on a
-                    phone, outdoors, and a select is three taps and a scroll. */}
+                {/* Buttons, not a select: filled in one-handed, outdoors. */}
                 <div className="jp-methods" role="radiogroup" aria-label={t.method}>
                   {RECORDED_METHODS.map((m) => (
                     <button
@@ -210,11 +195,8 @@ export function JobPayments({
                       name="amount"
                       type="text"
                       inputMode="decimal"
-                      // Seeded with the balance because that is what a crew is
-                      // usually handed, and they can type over it in one tap.
-                      // The deposit when one is due, not the whole balance: a
-                      // pre-filled full balance is how a deposit once got
-                      // recorded as the job paid in full.
+                      // Seeded with the deposit when one is due, else the balance. Never the full balance while a deposit is
+                      // due: that's how a deposit got recorded as paid in full.
                       defaultValue={String(fromCents(dueNowCents > 0 ? dueNowCents : dueCents))}
                       autoComplete="off"
                       disabled={saving}
@@ -267,10 +249,7 @@ export function JobPayments({
                     day: "numeric",
                   })}
                   {r.status === "pending" && ` · ${t.waiting}`}
-                  {/* The office took this one off the books. It has to say so
-                      here too: the crew recorded it, and a row the two screens
-                      count differently is how somebody ends up chasing a balance
-                      that is already settled - or not chasing one that isn't. */}
+                  {/* Shown here too so both screens count the row the same way. */}
                   {r.status === "voided" && ` · ${t.voided}`}
                   {r.refunded_cents > 0 && ` · ${usd(r.refunded_cents)} ${t.refunded}`}
                   {(r.status === "paid" || r.status === "refunded") &&

@@ -5,13 +5,8 @@ import { pgAdmin } from "@/lib/crm/rest";
 import { parseFunnelEvent } from "@/lib/funnel";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-// Quote-funnel beacons (see src/lib/funnel.ts). One row per event into
-// site_funnel_events, which only the service role can touch.
-//
-// Always answers 204: this is a beacon nobody is waiting on, and a visitor must
-// never see an error because a step went uncounted. Rate-limited per IP so a
-// script can't fill the table - a real person filling in the form sends a few
-// dozen at most.
+// Quote-funnel beacons (see src/lib/funnel.ts) into site_funnel_events (service role only).
+// Always 204: a visitor must never see an error over an uncounted step. Rate-limited per IP.
 export async function POST(request: Request) {
   const noContent = new NextResponse(null, { status: 204 });
   if (!ADMIN_READY) return noContent;

@@ -2,16 +2,13 @@ import { NextResponse } from "next/server";
 
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-// Issues a short-lived, single-object signed upload URL for the quote-uploads
-// bucket. The browser no longer holds blanket anon write access to Storage:
-// every upload must first be authorized here (rate-limited, type-checked), and
-// the actual PUT is scoped to one server-named object via the signed token.
+// Short-lived single-object signed upload URL for quote-uploads. The browser has no anon write access:
+// every upload is authorized here (rate-limited, type-checked).
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const BUCKET = "quote-uploads";
 
-// Photos + the short clips a phone produces. Kept in sync with the bucket's
-// allowed_mime_types in supabase/schema.sql.
+// Keep in sync with the bucket's allowed_mime_types in supabase/schema.sql.
 const ALLOWED_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -33,7 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Uploads are not configured." }, { status: 503 });
   }
 
-  // Deter automated abuse of the storage bucket (cost / quota).
+  // Deter storage abuse (cost, quota).
   const ip = clientIp(request);
   if (await rateLimit(`upload:${ip}`, 40, 10 * 60 * 1000)) {
     return NextResponse.json({ ok: false, error: "Too many uploads. Please try again later." }, { status: 429 });
@@ -52,8 +49,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Unsupported file type." }, { status: 400 });
   }
 
-  // Server-controlled object name: no client-supplied path component, so there's
-  // nothing to traverse with.
+  // Server-named object: nothing to traverse with.
   const obj = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
 
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/upload/sign/${BUCKET}/${obj}`, {

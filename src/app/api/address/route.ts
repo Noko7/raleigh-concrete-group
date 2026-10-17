@@ -2,20 +2,13 @@ import { NextResponse } from "next/server";
 
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-// Free US address autocomplete via the US Census Geocoder (authoritative TIGER
-// data, house-number level). No API key, no billing. We proxy it server-side
-// because the Census endpoint doesn't send CORS headers for browser fetches.
-//
-// Which makes this an open proxy on our domain, and it needs its own limit:
-// the middleware only rate-limits the CRM surface, so nothing was standing
-// between a script and an unbounded number of outbound requests made in our
-// name - our function invocations, our reputation with the Census.
+// Free US Census Geocoder autocomplete (no key), proxied because Census sends no CORS headers. That makes
+// it an open proxy on our domain, so it has its own rate limit.
 
 type CensusMatch = { matchedAddress?: string };
 type CensusResponse = { result?: { addressMatches?: CensusMatch[] } };
 
-// Keep proper capitalization: title-case words but leave 2-letter state codes
-// and 5-digit ZIPs alone.
+// Title-case words; leave state codes and ZIPs alone.
 function prettyAddress(raw: string): string {
   return raw
     .split(", ")
@@ -34,16 +27,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") ?? "").trim();
 
-  // Census needs a fairly complete address to match; skip tiny queries. Checked
-  // before the limiter so a short query costs nobody a slot - the form fires
-  // one of these as somebody types.
+  // Census needs a fairly complete address. Checked before the limiter so short queries cost no slot.
   if (q.length < 6) {
     return NextResponse.json({ suggestions: [] });
   }
 
-  // Generous: this is a real person typing an address into a debounced field,
-  // and a limit that bites them is a lost lead. It is here to stop a loop, not
-  // to ration the form.
+  // Generous: a person typing into a debounced field. Stops loops, not the form.
   if (await rateLimit(`address:${clientIp(request)}`, 60, 5 * 60 * 1000)) {
     return NextResponse.json({ suggestions: [] }, { status: 429 });
   }

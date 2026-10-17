@@ -16,12 +16,10 @@ export const metadata: Metadata = {
 export default async function JoinPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const invite = await getUsableInvite(token);
-  // The shell renders in English; the form itself re-renders in whichever
-  // language they pick, since they have no account to read a preference from.
+  // No account yet to read a preference from.
   const t = dict("en");
 
-  // One message for every unusable case - unknown, revoked, used, expired - so
-  // this page can't be used to work out which tokens exist.
+  // One message for unknown, revoked, used and expired, so tokens can't be enumerated.
   if (!invite) {
     return (
       <main className="cq-wrap">
@@ -44,8 +42,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
     );
   }
 
-  // Only counted once the invite is known good, so a mistyped URL doesn't show
-  // up in the CRM as the contractor opening their link.
+  // Only once the invite is known good, so a mistyped URL doesn't count as an open.
   await markInviteOpened(invite);
 
   return (

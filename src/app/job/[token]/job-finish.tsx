@@ -8,21 +8,13 @@ import type { FinishState } from "@/app/crm/quotes/[id]/types";
 import { PhotoUpload } from "@/app/crm/photo-upload";
 import { AutoTextarea } from "@/components/auto-textarea";
 
-// The three things that cause a callback when they're skipped, in the order a
-// crew actually does them. Names match the values the server records.
-//
-// "Photos taken" used to be the fourth box. It isn't a box any more: the
-// before and after shots are uploaded here and the server refuses to close the
-// job without them, so ticking a checkbox to say they exist would be asking
-// someone to confirm something the page can already see.
+// What causes callbacks when skipped, in the order a crew does them. Names match the server's values.
+// Photos aren't a box: the server refuses to close the job without the uploads.
 const CHECKS = ["work", "clean", "customer"] as const;
 type Check = (typeof CHECKS)[number];
 
-// Marking the work done texts the customer a thank you and a review request, so
-// it isn't something to fire off with a mis-tap while the phone is in a pocket.
-// The checklist is the deliberate step: it's a prompt, not a gate, but it puts
-// "did you clean up" in front of someone before they close the job rather than
-// after the customer calls about it.
+// Marking done texts the customer a thank-you and review request, so it's not a one-tap action. The
+// checklist is a prompt, not a gate.
 export function JobFinish({
   id,
   locale,
@@ -68,8 +60,7 @@ export function JobFinish({
     <section className="js-card jf-card">
       <h2 className="js-title">{t.contractorJob.finishTitle}</h2>
 
-      {/* Outside the form on purpose: uploading is its own round trip, and a
-          file input inside the close-out form would submit with it. */}
+      {/* Outside the form: a file input inside it would submit with it. */}
       <div className="jf-photos">
         <p className="js-lead">{t.contractorJob.photosRequired}</p>
         <div className="jf-photo-row">

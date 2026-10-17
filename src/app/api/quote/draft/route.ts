@@ -6,15 +6,9 @@ import { pgAdmin } from "@/lib/crm/rest";
 import { isValidUsPhone, UUID_RE } from "@/lib/quote-submit";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-// A quote form in progress (supabase/quote-drafts.sql). The form sends what the
-// customer has typed once there's a name and a number to call, again as they go
-// on, and one last time - with `left: true` - if they close the tab without
-// sending it. That last one texts the owner, once per form, so somebody who got
-// stuck on the address at 11pm is a phone call in the morning rather than a
-// Clarity recording nobody watches.
-//
-// Always 204, like /api/funnel: the customer is never waiting on this and must
-// never see it fail. It is a safety net under /api/quote, not a step of it.
+// A quote form in progress. Saved once there's a name and number, as they go, and finally with
+// `left: true` if they leave without sending, which texts the owner once per form.
+// Always 204 like /api/funnel: a safety net under /api/quote that the customer must never see fail.
 
 const STEPS = new Set(["contact", "service", "schedule"]);
 
@@ -43,7 +37,7 @@ export async function POST(request: Request) {
     // Nothing to call back is nothing worth keeping.
     if (!UUID_RE.test(submissionId) || !isValidUsPhone(phone)) return noContent;
 
-    // A few saves per step and one on the way out. Sized for a person, not a loop.
+    // Sized for a person, not a loop.
     if (await rateLimit(`draft:${clientIp(request)}`, 60, 10 * 60 * 1000)) return noContent;
 
     const stepRaw = str(body.step, 16);
@@ -64,8 +58,7 @@ export async function POST(request: Request) {
     };
     if (left) row.left_at = now;
 
-    // Upsert on the form's id. Only the columns above are written, so a save
-    // never clears lead_id or alerted_at on a form that's already been sent.
+    // Upsert on the form's id. Only these columns are written, so lead_id and alerted_at survive.
     const res = await pgAdmin("quote_drafts?on_conflict=submission_id", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -76,17 +69,13 @@ export async function POST(request: Request) {
       return noContent;
     }
 
-    // Each alert is a text to the owner, so it has its own, much tighter limit:
-    // a person abandons a form or two, not a dozen. Past it the draft is still
-    // saved and listed in the CRM; only the text is skipped.
+    // Each alert texts the owner, so a much tighter limit. Past it the draft is still saved; only the text is skipped.
     if (left && (await rateLimit(`draft-alert:${clientIp(request)}`, 3, 60 * 60 * 1000))) {
       console.warn("[draft] abandoned-form alerts rate limited", { ip: clientIp(request) });
       return noContent;
     }
 
-    // They already sent a request from another form - a second tab, or the
-    // form opened again - so this one isn't a lost lead and texting the owner
-    // "not sent" would be wrong.
+    // They already sent a request (another tab or reopened form), so this isn't a lost lead.
     if (left && (await recentLeadFrom(phone))) {
       await pgAdmin(`quote_drafts?submission_id=eq.${submissionId}&alerted_at=is.null`, {
         method: "PATCH",
@@ -97,9 +86,7 @@ export async function POST(request: Request) {
     }
 
     if (left) {
-      // Claim the alert: only a form that hasn't been sent and hasn't already
-      // been alerted comes back from this, so two "left" beacons for one form
-      // (pagehide fires more than once on some phones) still text once.
+      // Claims the alert so repeated "left" beacons (pagehide fires twice on some phones) text once.
       const claim = await pgAdmin(
         `quote_drafts?submission_id=eq.${submissionId}&lead_id=is.null&alerted_at=is.null`,
         {
@@ -139,8 +126,7 @@ export async function POST(request: Request) {
   return noContent;
 }
 
-// A lead from this number in the last few hours, matched on the digits so
-// "(919) 691-8744" and "9196918744" are the same person.
+// Matched on digits so formatting differences are the same person.
 const RECENT_LEAD_HOURS = 6;
 async function recentLeadFrom(phone: string): Promise<boolean> {
   const digits = phone.replace(/\D/g, "").slice(-10);

@@ -4,17 +4,14 @@ import { useState } from "react";
 
 import { dict, type Locale } from "@/lib/crm/i18n";
 
-// Pre-fills with the number the owner invited, but the contractor can change it:
-// the owner often only has the number they were given, not the phone the crew
-// member actually carries. Redeeming the link already creates their account, so
-// letting them also choose where alerts go adds nothing an attacker couldn't
-// already do.
+// Editable: the owner may only have the number they were given. Redeeming the link already creates the
+// account, so choosing the alert number adds no attack surface.
 function prettyPhone(raw: string): string {
   const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(raw.trim());
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : raw;
 }
 
-// Mirrors toE164 on the server so a bad number is caught before a round trip.
+// Mirrors the server's toE164 for a fast answer.
 function looksLikeUsPhone(raw: string): boolean {
   const t = raw.trim();
   if (t.startsWith("+")) {
@@ -49,7 +46,7 @@ export function JoinForm({
     e.preventDefault();
     setError("");
 
-    // Check what we can here for a fast answer; the server re-checks all of it.
+    // The server re-checks all of it.
     if (fullName.trim().length < 2) return setError(t.join.needName);
     if (!looksLikeUsPhone(alertPhone)) return setError(t.join.badPhone);
     if (password.length < 8) return setError(t.join.needPassword);

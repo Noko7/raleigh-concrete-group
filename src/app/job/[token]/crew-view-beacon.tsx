@@ -4,9 +4,8 @@ import { useEffect } from "react";
 
 import { recordCrewView } from "./crew-view-actions";
 
-// Counts the contractor opening this job, from the browser so a prefetch or a
-// page refresh after saving something doesn't count. A reload within a couple
-// of minutes is the same visit, not a second one.
+// From the browser so prefetches and post-save refreshes don't count. A reload within this window is the
+// same visit.
 const SAME_VISIT_MS = 2 * 60 * 1000;
 
 export function CrewViewBeacon({ token }: { token: string }) {
