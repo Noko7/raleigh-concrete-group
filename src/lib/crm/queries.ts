@@ -796,7 +796,9 @@ export async function finishMessage(
         : {}),
     });
     if (!res.ok) {
+      // Recording the outcome matters more than the retry bookkeeping, so try it on its own.
       console.error("[sms-queue] could not record the result of a held message", { status: res.status });
+      await patch(outcome);
     }
   } catch (e) {
     console.error("[sms-queue] could not record the result of a held message", e);

@@ -170,7 +170,7 @@ export default async function MoneyPage({
             </table>
           </div>
           <p className="crm-muted crm-sm cash-note">
-            <code>supabase/money-audit.sql</code> lists the same rows straight from the database, and has the
+            <code>supabase/queries/money-audit.sql</code> lists the same rows straight from the database, and has the
             statements to fix each kind once you have decided what each one should have been.
           </p>
         </section>
