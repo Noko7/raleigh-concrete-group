@@ -37,6 +37,7 @@ import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET, AGREEMENT_BUCKET } from "./en
 // Cents, for the two places a change order has to compare money to money.
 // fees.ts imports nothing of ours, so this edge only ever points one way.
 import { toCents } from "./fees";
+import { changeOrderRefusal, jobPatchRefusal, refusalBasis } from "./permissions";
 import { pgUser, pgAdmin } from "./rest";
 import { MAX_SEND_ATTEMPTS, RETRY_BACKOFF_MINUTES, planRetry } from "./send-retry";
 
@@ -112,10 +113,33 @@ export async function updateQuoteResult(
   // instead, scoped to a job that is still assigned to them, which is exactly
   // what their own update rule allows.
   const losing = session.staff.role !== "owner" && patch.status === "lost";
+  // That write skips the database's guard on the money columns, because the
+  // service role is exempt from it. So the same rule is applied here, to the
+  // whole patch, against the row as the contractor can still see it: Lost is
+  // theirs to set, but it does not carry a new price or a Paid along with it.
+  let unchangedSince = "";
+  if (losing) {
+    const before = await getQuote(session, id);
+    if (!before) return { quote: null, error: "You can't change this job. It may have been reassigned to someone else." };
+    const refusal = jobPatchRefusal(session.staff.role, before, patch, session.staff.id);
+    if (refusal) return { quote: null, error: refusal };
+    // Written only if the row still holds what that check read.
+    for (const [column, value] of Object.entries(refusalBasis(before, patch))) {
+      unchangedSince +=
+        value === null
+          ? `&${column}=is.null`
+          : typeof value === "boolean"
+            ? `&${column}=is.${value}`
+            : `&${column}=eq.${encodeURIComponent(String(value))}`;
+    }
+  }
   const path = `quote_requests?id=eq.${encodeURIComponent(id)}`;
   const init = { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(patch) };
   const res = losing
-    ? await pgAdmin(`${path}&assigned_to=eq.${encodeURIComponent(session.staff.id)}&archived_at=is.null`, init)
+    ? await pgAdmin(
+        `${path}&assigned_to=eq.${encodeURIComponent(session.staff.id)}&archived_at=is.null${unchangedSince}`,
+        init,
+      )
     : await pgUser(path, session.accessToken, init);
 
   if (!res.ok) {
@@ -143,7 +167,9 @@ export async function updateQuoteResult(
   if (!rows[0]) {
     return {
       quote: null,
-      error: "You can't change this job. It may have been reassigned to someone else.",
+      error: losing
+        ? "This job changed while you were saving - the customer may have just answered, or it was reassigned. Reload it and try again."
+        : "You can't change this job. It may have been reassigned to someone else.",
     };
   }
   return { quote: rows[0] };
@@ -2169,14 +2195,19 @@ export async function requestChange(
     }
   }
 
-  const { quote, error } = await updateQuoteResult(session, id, {
+  const changePatch: Partial<Quote> = {
     change_note: note,
     change_amount: amount,
     change_requested_at: new Date().toISOString(),
     change_requested_by: session.staff.id,
     change_lines: changeLines,
     change_deposit_cents: deposit,
-  });
+  };
+  // Against the computed total, lines and all: a contractor's change may only raise it.
+  const refusal = jobPatchRefusal(session.staff.role, current, changePatch, session.staff.id);
+  if (refusal) return { ok: false, error: refusal };
+
+  const { quote, error } = await updateQuoteResult(session, id, changePatch);
   if (!quote) {
     return {
       ok: false,
@@ -2215,7 +2246,11 @@ export type ChangeResponseResult = {
   note?: string | null;
   /** The second deposit the approved change asked for, in cents, if any. */
   depositCents?: number | null;
+  /** The change on the job is not the one the customer's page showed. Nothing was written. */
+  stale?: boolean;
 };
+
+const STALE_CHANGE_ERROR ="This change was updated, please reload the page.";
 
 /**
  * The customer's answer, from behind their own quote link.
@@ -2231,6 +2266,8 @@ export type ChangeResponseResult = {
 export async function recordChangeResponse(
   token: string,
   action: "accept" | "decline",
+  /** The change_requested_at the customer's page displayed; null from a page opened before it sent one. */
+  shownRequestedAt: string | null = null,
 ): Promise<ChangeResponseResult> {
   if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
 
@@ -2243,7 +2280,7 @@ export async function recordChangeResponse(
   // for them to do - which is the truth.
   if (!q.change_requested_at || q.change_amount == null) return { ok: true, duplicate: true };
 
-  return applyChange(q.id, action === "accept");
+  return applyChange(q.id, action === "accept", {}, shownRequestedAt);
 }
 
 /**
@@ -2259,6 +2296,10 @@ export async function recordChangeAgreed(
   session: Session,
   id: string,
 ): Promise<ChangeResponseResult> {
+  // Owner only, checked again here because this runs with the service role:
+  // nothing downstream of this line would stop a contractor's call.
+  const refusal = changeOrderRefusal(session.staff.role, { agreed: true });
+  if (refusal) return { ok: false, error: refusal };
   const by = session.staff.full_name || session.staff.email || "Staff";
   return applyChange(id, true, { recorded_by: by });
 }
@@ -2267,6 +2308,7 @@ async function applyChange(
   quoteId: string,
   accept: boolean,
   extraMeta: Record<string, unknown> = {},
+  shownRequestedAt: string | null = null,
 ): Promise<ChangeResponseResult> {
   const action = accept ? "accept" : "decline";
 
@@ -2278,13 +2320,22 @@ async function applyChange(
   // call, made by the caller once this has landed: a change can push a paid job
   // back into owing money OR finish paying one off, and both directions have to
   // come from the same function or they drift. See /api/change-response.
-  const res = await pgAdmin("rpc/apply_change_response", {
-    method: "POST",
-    body: JSON.stringify({ p_id: quoteId, p_accept: accept }),
-  });
+  // The page's change_requested_at is checked under the row lock (stage1-price-lockdown.sql).
+  const call = (args: Record<string, unknown>) =>
+    pgAdmin("rpc/apply_change_response", { method: "POST", body: JSON.stringify(args) });
+  const args = { p_id: quoteId, p_accept: accept };
+  let res = shownRequestedAt ? await call({ ...args, p_requested_at: shownRequestedAt }) : await call(args);
+  // PGRST202 = no such function signature: code deployed before the SQL. Answer as before rather than fail.
+  if (!res.ok && shownRequestedAt) {
+    const code = await res.json().then((b: { code?: unknown }) => b?.code, () => null);
+    if (code === "PGRST202") {
+      console.error("[change-response] apply_change_response has no p_requested_at - run supabase/stage1-price-lockdown.sql");
+      res = await call(args);
+    }
+  }
   if (!res.ok) return { ok: false, error: "Could not save your answer. Please call us." };
   const out = (await res.json()) as {
-    status: "ok" | "none";
+    status: "ok" | "none" | "stale";
     quote?: Quote;
     from?: number | null;
     to?: number | null;
@@ -2293,6 +2344,7 @@ async function applyChange(
     new_lines?: unknown;
     deposit_cents?: number | null;
   };
+  if (out.status === "stale") return { ok: false, stale: true, error: STALE_CHANGE_ERROR };
   // Answered in another tab between the read above and the lock.
   if (out.status !== "ok" || !out.quote) return { ok: true, duplicate: true };
 

@@ -375,6 +375,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 lines={changeStartLines(boughtLines(options), quote.quote_amount, quote.service)}
                 jobHasLines={boughtLines(options).length > 0}
                 canBreakDown={packages.length === 0}
+                canApplyAgreed={isOwner}
                 locale={locale}
               />
             </div>

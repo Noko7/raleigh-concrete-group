@@ -8,7 +8,7 @@ import { getStaffPhoneById, recordChangeResponse } from "@/lib/crm/queries";
 // The customer answering a change order from their quote link. Separate from /api/quote-response: it
 // concerns an already-agreed job and shares nothing but the page.
 export async function POST(request: Request) {
-  let body: { token?: unknown; action?: unknown };
+  let body: { token?: unknown; action?: unknown; requested_at?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -18,8 +18,14 @@ export async function POST(request: Request) {
   const token = typeof body.token === "string" ? body.token : "";
   const action = body.action === "accept" || body.action === "decline" ? body.action : null;
   if (!action) return NextResponse.json({ ok: false, error: "Invalid request." }, { status: 400 });
+  // The change the page showed. Absent from a page opened before it was sent, which then answers whatever is pending.
+  const requestedAt = body.requested_at ?? null;
+  if (requestedAt !== null && (typeof requestedAt !== "string" || !Number.isFinite(Date.parse(requestedAt)))) {
+    return NextResponse.json({ ok: false, error: "Invalid request." }, { status: 400 });
+  }
 
-  const result = await recordChangeResponse(token, action);
+  const result = await recordChangeResponse(token, action, requestedAt);
+  if (result.stale) return NextResponse.json({ ok: false, stale: true, error: result.error }, { status: 409 });
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
 
   // Nothing was waiting: nobody is told again, and the customer still sees success.

@@ -341,11 +341,18 @@ there. So:
 1. Run `supabase/schema.sql` first (if you haven't), then `supabase/crm.sql`, then `supabase/agreements.sql`, `supabase/quote-options.sql`, `supabase/quote-packages.sql`, `supabase/scheduling.sql`, `supabase/scheduled-time.sql`, `supabase/crew-reminders.sql`, `supabase/invites.sql`, `supabase/invite-tracking.sql`, `supabase/locale.sql`, `supabase/appointments.sql`, `supabase/change-orders.sql` and `supabase/payment-corrections.sql` in the SQL Editor. Once
    `supabase/payments.sql` is in (see **Getting paid** below), run
    `supabase/least-privilege.sql` last - it is what stops a contractor rewriting
-   the money columns on their own jobs.
+   the money columns on their own jobs - and then `supabase/stage1-price-lockdown.sql`
+   (after `fee-waiver.sql`), which stops a contractor changing the price of a job
+   the customer has approved except through a change order the customer approves.
+   `stage1-price-lockdown.verify.sql` checks it; `stage1-price-lockdown.undo.sql` reverts it.
+   It also replaces `apply_change_response`, so after it do not re-run
+   `least-privilege.sql`, `fee-waiver.sql`, `change-order-lines.sql` or
+   `change-deposit.sql`. Run it before deploying the code that ships with it; the
+   code still works against the old database in the meantime.
 
    `supabase/crew-reminders.sql` also (re)adds `scheduled_time`, so running just
    that one file is enough to fix "Could not save that date" when confirming a
-   work day. Every file is safe to re-run.
+   work day. Every file is safe to re-run except the four marked "superseded" at the top (least-privilege, fee-waiver, change-order-lines, change-deposit): re-running them undoes the Stage 1 price lock.
 2. Confirm Vercel env vars exist: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (the CRM needs the service-role key).
 3. Create your owner login: Supabase → **Authentication → Users → Add user** (email + password), then run the promote snippet at the bottom of `supabase/crm.sql`.
 4. **Subdomain:** in Vercel → Project → **Domains**, add `crm.raleighconcrete.net`; in your DNS registrar add the **CNAME** Vercel shows (typically `crm` → `cname.vercel-dns.com`). Routing to the CRM is already wired in `src/middleware.ts`. (Until DNS is live you can also reach it at `raleighconcrete.net/crm`.)

@@ -6,6 +6,7 @@ import { getSession } from "@/lib/crm/auth";
 import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/constants";
 import { syncQuoteToCalendar } from "@/lib/crm/gcal";
 import { alertOwner, notifyAssignment, notifyComplete } from "@/lib/crm/notify";
+import { jobPatchRefusal } from "@/lib/crm/permissions";
 import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
 
@@ -26,6 +27,11 @@ export async function moveQuote(id: string, status: string): Promise<MoveResult>
   if (status === "quoted" && !current.quote_sent_at) patch.quote_sent_at = new Date().toISOString();
   if (status === "completed" && !current.completed_at) patch.completed_at = new Date().toISOString();
   if (status === "paid" && !current.paid_at) patch.paid_at = new Date().toISOString();
+
+  // The crew move their own cards, except onto or off Paid: that is the
+  // ledger's word, or the owner's. Same rule as the database's.
+  const refusal = jobPatchRefusal(session.staff.role, current, patch);
+  if (refusal) return { ok: false, error: refusal };
 
   const updated = await updateQuote(session, id, patch);
   if (!updated) return { ok: false, error: "Could not move this quote." };

@@ -1,5 +1,10 @@
 -- Raleigh Concrete Group - a change request can ask for a second deposit
--- Run this AFTER change-order-lines.sql. Safe to re-run.
+-- Run this AFTER change-order-lines.sql.
+--
+-- SUPERSEDED by stage1-price-lockdown.sql, which replaces the
+-- apply_change_response() defined here. Once stage 1 is in, do not re-run
+-- this file: it would add the old two-argument version back beside the new
+-- one, and the API cannot choose between the two.
 --
 -- A change that adds materials usually needs money up front to buy them. Dave's
 -- patio grew by $1,390 of materials: he sends that now, and the rest is paid

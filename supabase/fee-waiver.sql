@@ -1,5 +1,9 @@
 -- Raleigh Concrete Group - the owner can waive part of the office fee on a job
 --
+-- SUPERSEDED by stage1-price-lockdown.sql, which replaces the
+-- guard_quote_money_columns() defined here. Once stage 1 is in, do not re-run
+-- this file: it would put the old guard back and silently undo stage 1.
+--
 -- The fee is the rate on the whole job total. Sometimes part of that total is
 -- not the office's to take a cut of - a change order that only passed through
 -- material costs, say - and the owner needs to take that slice off by hand.

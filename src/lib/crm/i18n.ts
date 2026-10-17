@@ -496,6 +496,7 @@ const en = {
     linesTitle: "New price breakdown",
     linesGone: "The old breakdown comes off and the job goes back to one price.",
     sameTotalNewLines: "Same total as before. They're approving the new breakdown.",
+    lowerIsOffice: "Lowering an approved price is done by the office.",
     depositToggle: "Ask for a second deposit up front",
     depositHint: "For materials on the added work. {name} pays it on approval, and the rest when the work is done.",
     depositLabel: "Second deposit",

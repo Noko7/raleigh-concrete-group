@@ -81,6 +81,7 @@ import {
   type OptionChoice,
 } from "@/lib/crm/queries";
 import { jobLedger, resyncJobPaidState, settleJobIfPaid } from "@/lib/crm/payments";
+import { changeOrderRefusal, jobPatchRefusal } from "@/lib/crm/permissions";
 import type { Quote } from "@/lib/crm/types";
 import type { QuoteOptionDraft, QuotePackageDraft } from "@/lib/crm/constants";
 import type { ChangeState, FinishState, SaveState, ScheduleState } from "./types";
@@ -433,6 +434,13 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
         : { type: "quote_sent", meta: { amount: effectiveAmount } },
     );
   }
+
+  // The whole patch, checked against who is asking before anything is written.
+  // The editors already hide the price once the customer has answered, but a
+  // hidden box is not a rule: this is the one that refuses a contractor
+  // re-pricing an approved job, or marking their own job paid. The owner passes.
+  const refusal = jobPatchRefusal(session.staff.role, current, patch);
+  if (refusal) return { ok: false, error: refusal };
 
   if (!sending && Object.keys(patch).length === 0 && !optionRows && !packageRows) return { ok: true };
 
@@ -896,6 +904,20 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
 
   // The customer already said yes (phone, on site) - apply it now, no text.
   const agreed = String(formData.get("agreed") ?? "") === "yes";
+  // Owner only. It moves the price of an agreed job with nobody asked, so for
+  // the crew the customer's own Approve is the only way a new total lands. The
+  // card doesn't offer it to them; this is the rule, not the hidden checkbox.
+  // A contractor's change may only raise the total, since they can reach the customer's Approve
+  // themselves. With lines the new total is their sum, as requestChange works it out; a figure
+  // that isn't a number is left to requestChange to refuse as such.
+  const newTotal = lines.length > 0 ? optionsTotal(lines) : Number(raw);
+  const notAllowed = changeOrderRefusal(session.staff.role, {
+    agreed,
+    customerName: current.name,
+    fromTotal: current.quote_amount,
+    toTotal: Number.isFinite(newTotal) ? newTotal : undefined,
+  });
+  if (notAllowed) return { ok: false, error: notAllowed };
 
   // A second deposit, when the box is ticked: what they send up front if they
   // approve, typed in dollars. Only when they are being asked - agreed in

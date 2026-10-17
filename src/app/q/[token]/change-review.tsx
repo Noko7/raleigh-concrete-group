@@ -23,6 +23,7 @@ type Mode = "choose" | "sending" | "done" | "declined";
 
 export function ChangeReview({
   token,
+  requestedAt,
   note,
   fromCents,
   toCents,
@@ -33,6 +34,8 @@ export function ChangeReview({
   payHref = null,
 }: {
   token: string;
+  /** Which change this is (its change_requested_at), so an answer can't land on a different one. */
+  requestedAt: string;
   /** What the crew said is changing, word for word. */
   note: string;
   /** The total they agreed to. */
@@ -59,6 +62,7 @@ export function ChangeReview({
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("choose");
   const [error, setError] = useState("");
+  const [stale, setStale] = useState(false);
 
   const diff = toCents - fromCents;
   const dueCents = Math.max(0, toCents - paidCents);
@@ -77,15 +81,16 @@ export function ChangeReview({
       const res = await fetch("/api/change-response", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, action }),
+        body: JSON.stringify({ token, action, requested_at: requestedAt }),
       });
-      const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
+      const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string; stale?: boolean };
       if (res.ok && json.ok) {
         setMode(action === "accept" ? "done" : "declined");
         // Re-render the page into its ordinary confirmed view, now carrying the
         // new total and balance.
         router.refresh();
       } else {
+        setStale(json.stale === true);
         setError(json.error || "Something went wrong. Please call us.");
         setMode("choose");
       }
@@ -210,14 +215,23 @@ export function ChangeReview({
         )}
       </dl>
 
-      <div className="cr-acts">
-        <button type="button" className="cr-yes" onClick={() => answer("accept")} disabled={mode === "sending"}>
-          {mode === "sending" ? "One moment…" : "Approve this change"}
-        </button>
-        <button type="button" className="cr-no" onClick={() => answer("decline")} disabled={mode === "sending"}>
-          No, keep it as it was
-        </button>
-      </div>
+      {stale ? (
+        // What is on screen is no longer what is on the job; only a reload shows the real one.
+        <div className="cr-acts">
+          <button type="button" className="cr-yes" onClick={() => window.location.reload()}>
+            Reload the page
+          </button>
+        </div>
+      ) : (
+        <div className="cr-acts">
+          <button type="button" className="cr-yes" onClick={() => answer("accept")} disabled={mode === "sending"}>
+            {mode === "sending" ? "One moment…" : "Approve this change"}
+          </button>
+          <button type="button" className="cr-no" onClick={() => answer("decline")} disabled={mode === "sending"}>
+            No, keep it as it was
+          </button>
+        </div>
+      )}
 
       {error && <p className="cr-err">{error}</p>}
       <p className="cr-fine">
