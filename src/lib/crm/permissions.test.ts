@@ -15,21 +15,59 @@ import assert from "node:assert/strict";
 import {
   ANSWER_COLUMNS,
   CHANGE_COLUMNS,
+  CONTACT_COLUMNS,
   OFFICE_ONLY_COLUMNS,
   PRICE_COLUMNS,
   changeOrderRefusal,
   customerHasAnswered,
   jobPatchRefusal,
+  refusalBasis,
   type JobForPermissions,
 } from "./permissions.ts";
 
 const OWNER = "owner";
 const CREW = "contractor";
+const CREW_ID = "crew-1";
+
+// Spelled out rather than read from the module, so dropping a column from
+// permissions.ts fails here instead of quietly shrinking what is tested. Same
+// lists as the guard in supabase/stage1-price-lockdown.sql.
+const OFFICE_ONLY = [
+  "fee_rate",
+  "fee_total_cents",
+  "fee_waived_cents",
+  "fee_waived_note",
+  "is_test",
+  "archived_at",
+  "paid_at",
+  "deposit_target_cents",
+];
+const CONTACT = ["phone", "email"];
+const PRICE = ["quote_amount", "discount_accepted"];
+const ANSWER = ["customer_response", "customer_responded_at"];
+const CHANGE = [
+  "change_note",
+  "change_amount",
+  "change_requested_at",
+  "change_requested_by",
+  "change_lines",
+  "change_deposit_cents",
+];
+
+test("the column groups are exactly the guard's", () => {
+  assert.deepEqual([...OFFICE_ONLY_COLUMNS], OFFICE_ONLY);
+  assert.deepEqual([...CONTACT_COLUMNS], CONTACT);
+  assert.deepEqual([...PRICE_COLUMNS], PRICE);
+  assert.deepEqual([...ANSWER_COLUMNS], ANSWER);
+  assert.deepEqual([...CHANGE_COLUMNS], CHANGE);
+});
 
 // A job in each of the states that matter. Money columns as PostgREST returns
 // them - numeric can arrive as a string.
 const base = {
   name: "Dave Smith",
+  phone: "9195550142",
+  email: "dave@example.com",
   quote_amount: "8250.00",
   discount_accepted: false,
   customer_responded_at: null,
@@ -82,6 +120,8 @@ function anotherValue(column: string, job: JobForPermissions): unknown {
   if (column === "customer_response") return now === null ? "declined" : null;
   if (column.endsWith("_at")) return "2026-10-17T09:00:00.000Z";
   if (column.endsWith("_note")) return "something else";
+  if (column === "phone") return "9195550199";
+  if (column === "email") return "someone@example.com";
   if (column === "fee_rate") return 0;
   return typeof now === "number" ? now + 1 : 100;
 }
@@ -100,7 +140,7 @@ test("answered is accepted, or declined and still Lost", () => {
 
 // ── The price ───────────────────────────────────────────────────────────────
 
-for (const column of PRICE_COLUMNS) {
+for (const column of PRICE) {
   test(`contractor may change ${column} before the customer answers`, () => {
     assert.equal(jobPatchRefusal(CREW, open, { [column]: anotherValue(column, open) }), null);
   });
@@ -146,7 +186,7 @@ test("a column the write doesn't carry is not a change", () => {
 
 // ── The customer's answer ───────────────────────────────────────────────────
 
-for (const column of ANSWER_COLUMNS) {
+for (const column of ANSWER) {
   test(`contractor may NOT change ${column} once answered`, () => {
     assert.ok(jobPatchRefusal(CREW, approved, { [column]: anotherValue(column, approved) }));
   });
@@ -179,7 +219,7 @@ test("contractor may reopen a declined quote the office moved off Lost (saveQuot
 
 // ── Columns that are never the crew's ───────────────────────────────────────
 
-for (const column of OFFICE_ONLY_COLUMNS) {
+for (const column of [...OFFICE_ONLY, ...CONTACT]) {
   for (const job of [open, approved]) {
     const when = job.customer_response ? "after" : "before";
     test(`contractor may NOT change ${column} ${when} the customer answers`, () => {
@@ -190,6 +230,16 @@ for (const column of OFFICE_ONLY_COLUMNS) {
     });
   }
 }
+
+test("the phone and email refusal says who changes them", () => {
+  assert.equal(
+    jobPatchRefusal(CREW, approved, { email: "new@example.com" }),
+    "Only the office can change the customer's phone or email.",
+  );
+  assert.ok(jobPatchRefusal(CREW, open, { email: null }));
+  // Written back as they are is not a change.
+  assert.equal(jobPatchRefusal(CREW, approved, { phone: "9195550142", email: "dave@example.com" }), null);
+});
 
 test("an unknown role is held to the contractor's rules", () => {
   assert.ok(jobPatchRefusal("", approved, { quote_amount: 1 }));
@@ -266,22 +316,70 @@ test("everyday writes on an approved job are untouched", () => {
 
 // ── A change order ──────────────────────────────────────────────────────────
 
-test("contractor may send a change order on an approved job (requestChange)", () => {
-  const patch = {
-    change_note: "Patio two feet wider",
-    change_amount: 9400,
-    change_requested_at: "2026-10-17T09:00:00.000Z",
-    change_requested_by: "crew-1",
-    change_lines: null,
-    change_deposit_cents: null,
-  };
-  assert.equal(jobPatchRefusal(CREW, approved, patch), null);
-  // A change can lower the total too - the customer still has to approve it.
-  assert.equal(jobPatchRefusal(CREW, approved, { ...patch, change_amount: 7000 }), null);
+// How requestChange opens one.
+const opening = {
+  change_note: "Patio two feet wider",
+  change_amount: 9400,
+  change_requested_at: "2026-10-17T09:00:00.000Z",
+  change_requested_by: CREW_ID,
+  change_lines: null,
+  change_deposit_cents: null,
+};
+
+test("contractor may send a change order that raises the total (requestChange)", () => {
+  assert.equal(jobPatchRefusal(CREW, approved, opening), null);
+  assert.equal(jobPatchRefusal(CREW, approved, opening, CREW_ID), null);
+  assert.equal(jobPatchRefusal(CREW, approved, { ...opening, change_amount: "8250.01" }, CREW_ID), null);
+});
+
+test("contractor may send the same total with a new breakdown", () => {
+  const lines = [{ title: "Slab", description: null, amount: 8250 }];
+  assert.equal(jobPatchRefusal(CREW, approved, { ...opening, change_amount: 8250, change_lines: lines }, CREW_ID), null);
+});
+
+test("contractor may NOT send a change order that lowers the total - they can reach the customer's Approve", () => {
+  for (const amount of [8249.99, "8249.99", 7000, 0]) {
+    assert.equal(
+      jobPatchRefusal(CREW, approved, { ...opening, change_amount: amount }, CREW_ID),
+      "Lowering an approved price is done by the office.",
+      String(amount),
+    );
+  }
+  // Against the agreed total in cents, the figure the fee is worked out from.
+  assert.equal(jobPatchRefusal(CREW, approved, { ...opening, change_amount: 8249.995 }, CREW_ID), null);
+  assert.ok(jobPatchRefusal(CREW, approved, { ...opening, change_amount: 8249.994 }, CREW_ID));
+  assert.ok(jobPatchRefusal(CREW, scheduled, { ...opening, change_amount: 1 }, CREW_ID));
+});
+
+test("owner may send a change order that lowers the total", () => {
+  assert.equal(jobPatchRefusal(OWNER, approved, { ...opening, change_amount: 7000, change_requested_by: "owner-1" }, "owner-1"), null);
+});
+
+test("a change order opened in somebody else's name is refused", () => {
+  assert.equal(
+    jobPatchRefusal(CREW, approved, { ...opening, change_requested_by: "owner-1" }, CREW_ID),
+    "A change order can only be sent in your own name.",
+  );
+  assert.ok(jobPatchRefusal(CREW, approved, { ...opening, change_requested_by: null }, CREW_ID));
+  const { change_requested_by: _dropped, ...unnamed } = opening;
+  assert.ok(jobPatchRefusal(CREW, approved, unnamed, CREW_ID));
+});
+
+test("sendChangeOrder refuses a lower total from anybody but the owner", () => {
+  assert.equal(
+    changeOrderRefusal(CREW, { agreed: false, fromTotal: "8250.00", toTotal: 7000 }),
+    "Lowering an approved price is done by the office.",
+  );
+  assert.equal(changeOrderRefusal(CREW, { agreed: false, fromTotal: "8250.00", toTotal: 8250 }), null);
+  assert.equal(changeOrderRefusal(CREW, { agreed: false, fromTotal: "8250.00", toTotal: 9400 }), null);
+  assert.equal(changeOrderRefusal(OWNER, { agreed: true, fromTotal: "8250.00", toTotal: 7000 }), null);
+  assert.ok(changeOrderRefusal("", { agreed: false, fromTotal: 100, toTotal: 99 }));
+  // A total that was never given is not a lower one.
+  assert.equal(changeOrderRefusal(CREW, { agreed: false, fromTotal: "8250.00" }), null);
 });
 
 test("contractor may withdraw a pending change (cancelChange clears all six)", () => {
-  const clear = Object.fromEntries(CHANGE_COLUMNS.map((c) => [c, null]));
+  const clear = Object.fromEntries(CHANGE.map((c) => [c, null]));
   assert.equal(jobPatchRefusal(CREW, pending, clear), null);
 });
 
@@ -318,4 +416,39 @@ test("the no-text refusal tells the crew what to do instead", () => {
     "Only the owner can apply a change without texting the customer. Send it to Dave to approve instead - nothing moves until they do.",
   );
   assert.match(changeOrderRefusal(CREW, { agreed: true }) ?? "", /send it to the customer to approve/i);
+});
+
+// ── The Lost write the server makes for a contractor ────────────────────────
+
+test("a Lost write is pinned to the answer and status it was checked against", () => {
+  assert.deepEqual(refusalBasis(open, { status: "lost" }), {
+    status: "quoted",
+    customer_response: null,
+    change_requested_at: null,
+  });
+});
+
+test("every guarded column the write carries is pinned too, at its value when checked", () => {
+  const basis = refusalBasis(open, {
+    status: "lost",
+    quote_amount: 6000,
+    discount_accepted: true,
+    phone: "9195550199",
+    internal_notes: "gone with another crew",
+  });
+  assert.deepEqual(basis, {
+    status: "quoted",
+    customer_response: null,
+    change_requested_at: null,
+    quote_amount: "8250.00",
+    discount_accepted: false,
+    phone: "9195550142",
+  });
+});
+
+test("change_lines is not pinned (jsonb), change_requested_at stands in for it", () => {
+  const basis = refusalBasis(pending, { status: "lost", change_lines: null, change_amount: null });
+  assert.equal("change_lines" in basis, false);
+  assert.equal(basis.change_requested_at, "2026-10-12T12:00:00+00:00");
+  assert.equal(basis.change_amount, "9400.00");
 });

@@ -314,6 +314,9 @@ end;
 $function$;
 
 -- The only thing that moves the price of an agreed job. Service role only.
+-- Re-read before the change-order follow-up (stage1-price-lockdown.sql section
+-- 3 replaces it): md5 of pg_get_functiondef identical to the text below, one
+-- overload only, ACL {postgres=X/postgres,service_role=X/postgres}.
 CREATE OR REPLACE FUNCTION public.apply_change_response(p_id uuid, p_accept boolean)
  RETURNS jsonb
  LANGUAGE plpgsql

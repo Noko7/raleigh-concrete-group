@@ -907,7 +907,16 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   // Owner only. It moves the price of an agreed job with nobody asked, so for
   // the crew the customer's own Approve is the only way a new total lands. The
   // card doesn't offer it to them; this is the rule, not the hidden checkbox.
-  const notAllowed = changeOrderRefusal(session.staff.role, { agreed, customerName: current.name });
+  // A contractor's change may only raise the total, since they can reach the customer's Approve
+  // themselves. With lines the new total is their sum, as requestChange works it out; a figure
+  // that isn't a number is left to requestChange to refuse as such.
+  const newTotal = lines.length > 0 ? optionsTotal(lines) : Number(raw);
+  const notAllowed = changeOrderRefusal(session.staff.role, {
+    agreed,
+    customerName: current.name,
+    fromTotal: current.quote_amount,
+    toTotal: Number.isFinite(newTotal) ? newTotal : undefined,
+  });
   if (notAllowed) return { ok: false, error: notAllowed };
 
   // A second deposit, when the box is ticked: what they send up front if they

@@ -1,5 +1,10 @@
 -- Raleigh Concrete Group - a change order can carry its own price breakdown
--- Run this AFTER change-orders.sql and quote-options.sql. Safe to re-run.
+-- Run this AFTER change-orders.sql and quote-options.sql.
+--
+-- SUPERSEDED by stage1-price-lockdown.sql, which replaces the
+-- apply_change_response() defined here. Once stage 1 is in, do not re-run
+-- this file: it would add the old two-argument version back beside the new
+-- one, and the API cannot choose between the two.
 --
 -- A customer asking for a change on a booked job usually asks a second question
 -- straight after: "so what does that come to, and where does it go?" A change

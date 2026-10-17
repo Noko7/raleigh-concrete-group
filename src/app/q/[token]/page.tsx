@@ -149,6 +149,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
     const pendingChange =
       quote.change_requested_at && quote.change_amount != null
         ? {
+            requestedAt: quote.change_requested_at,
             note: quote.change_note ?? "",
             fromCents: toCents(quote.quote_amount),
             toCents: toCents(quote.change_amount),
@@ -169,6 +170,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
         {pendingChange && (
           <ChangeReview
             token={token}
+            requestedAt={pendingChange.requestedAt}
             note={pendingChange.note}
             fromCents={pendingChange.fromCents}
             toCents={pendingChange.toCents}

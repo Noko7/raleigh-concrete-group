@@ -1,6 +1,9 @@
 -- Raleigh Concrete Group - least privilege on the money columns
 -- Run this AFTER crm.sql and payments.sql, once, in Supabase -> SQL Editor.
--- Safe to re-run.
+--
+-- SUPERSEDED by stage1-price-lockdown.sql, which replaces the
+-- guard_quote_money_columns() defined here. Once stage 1 is in, do not re-run
+-- this file: it would put the old guard back and silently undo stage 1.
 --
 -- Why this file exists.
 --

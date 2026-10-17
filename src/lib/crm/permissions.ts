@@ -22,6 +22,9 @@
 //
 // Pure on purpose - no network, no database, no server-only imports - so the
 // rules are unit tested (permissions.test.ts) and safe to import anywhere.
+// (The .ts extensions are for that runner; both modules import nothing.)
+import { firstNameOf } from "./constants.ts";
+import { toCents } from "./fees.ts";
 
 /** The parts of a job the rules read. A full Quote satisfies it. */
 export type JobForPermissions = {
@@ -32,6 +35,8 @@ export type JobForPermissions = {
 
 /** A write about to be made to that job: only the keys it sets. */
 export type JobPatch = Partial<Record<string, unknown>>;
+
+type Money = number | string | null | undefined;
 
 /**
  * Has the customer answered this quote, as every customer-facing screen reads
@@ -61,6 +66,9 @@ export const OFFICE_ONLY_COLUMNS = [
   "paid_at",
   "deposit_target_cents",
 ] as const;
+
+/** Who every text and receipt about the job goes to. */
+export const CONTACT_COLUMNS = ["phone", "email"] as const;
 
 /** The agreed price. Frozen for the crew once the customer has answered. */
 export const PRICE_COLUMNS = ["quote_amount", "discount_accepted"] as const;
@@ -101,9 +109,11 @@ function changes(job: JobForPermissions, patch: JobPatch, column: string): boole
   return next !== now;
 }
 
-function firstNameOf(name: unknown): string {
-  return (typeof name === "string" ? name.trim().split(/\s+/)[0] : "") || "The customer";
+function customerFirstName(name: unknown): string {
+  return firstNameOf(typeof name === "string" ? name : "", "The customer");
 }
+
+export const LOWER_CHANGE_REFUSAL = "Lowering an approved price is done by the office.";
 
 /**
  * Why this person may not make this write to this job, or null if they may.
@@ -111,10 +121,17 @@ function firstNameOf(name: unknown): string {
  * `role` is the staff role. Only "owner" is exempt; anything else is held to
  * the contractor's rules, so an unexpected role fails closed. The message is
  * shown as-is on the crew's screen, in the same voice as the rest of them.
+ * `actorId` is who is writing; when given, a change order opened in anybody
+ * else's name is refused, as the database refuses it.
  */
-export function jobPatchRefusal(role: string, job: JobForPermissions, patch: JobPatch): string | null {
+export function jobPatchRefusal(
+  role: string,
+  job: JobForPermissions,
+  patch: JobPatch,
+  actorId?: string | null,
+): string | null {
   if (role === "owner") return null;
-  const first = firstNameOf(job.name);
+  const first = customerFirstName(job.name);
 
   // Paid, and moving off it. Every other status the crew set today stays
   // theirs: booking, releasing a day, marking it done, a phone approval,
@@ -134,6 +151,10 @@ export function jobPatchRefusal(role: string, job: JobForPermissions, patch: Job
       return "The deposit on a change is set when the customer approves that change. Send them a change order to ask for one.";
     }
     return "Only the office can change that on a job.";
+  }
+
+  if (CONTACT_COLUMNS.some((c) => changes(job, patch, c))) {
+    return "Only the office can change the customer's phone or email.";
   }
 
   if (customerHasAnswered(job)) {
@@ -157,6 +178,15 @@ export function jobPatchRefusal(role: string, job: JobForPermissions, patch: Job
     if (touched && !clearsAll) {
       return "There's already a change waiting on the customer. Withdraw it first.";
     }
+  } else if (patch.change_requested_at != null) {
+    // Opening one. The crew can reach the customer's link, so whatever they
+    // open they can also approve: theirs may only raise the total.
+    if (actorId !== undefined && (patch.change_requested_by ?? null) !== actorId) {
+      return "A change order can only be sent in your own name.";
+    }
+    if (toCents(patch.change_amount as Money) < toCents(job.quote_amount as Money)) {
+      return LOWER_CHANGE_REFUSAL;
+    }
   }
 
   return null;
@@ -168,11 +198,39 @@ export function jobPatchRefusal(role: string, job: JobForPermissions, patch: Job
  * `agreed` is the "already agreed - don't text them" option: the new total goes
  * straight onto the job with nobody asked. That is the price moving without the
  * customer's say-so on record, so it is the owner's alone. Anybody may send a
- * change for the customer to approve.
+ * change for the customer to approve, but only the owner one that lowers the
+ * total (`toTotal` below `fromTotal`).
  */
-export function changeOrderRefusal(role: string, input: { agreed: boolean; customerName?: string | null }): string | null {
-  if (role === "owner" || !input.agreed) return null;
-  const first = firstNameOf(input.customerName);
+export function changeOrderRefusal(
+  role: string,
+  input: {
+    agreed: boolean;
+    customerName?: string | null;
+    /** The total the customer agreed to, and the one the change asks for. */
+    fromTotal?: Money;
+    toTotal?: Money;
+  },
+): string | null {
+  if (role === "owner") return null;
+  if (input.toTotal !== undefined && toCents(input.toTotal) < toCents(input.fromTotal)) return LOWER_CHANGE_REFUSAL;
+  if (!input.agreed) return null;
+  const first = customerFirstName(input.customerName);
   const who = first === "The customer" ? "the customer" : first;
   return `Only the owner can apply a change without texting the customer. Send it to ${who} to approve instead - nothing moves until they do.`;
+}
+
+/**
+ * The values jobPatchRefusal decided on, as column -> value, for a write that
+ * cannot rely on the database guard (the service role skips it). Filtering the
+ * write on these means a row that moved in between - the customer answering,
+ * say - matches nothing instead of being written over. change_lines is left
+ * out because jsonb is not matched by equality in a filter; change_requested_at
+ * already pins a pending change.
+ */
+export function refusalBasis(job: JobForPermissions, patch: JobPatch): Record<string, unknown> {
+  const columns = new Set<string>(["status", "customer_response", "change_requested_at"]);
+  for (const c of [...OFFICE_ONLY_COLUMNS, ...CONTACT_COLUMNS, ...PRICE_COLUMNS, ...ANSWER_COLUMNS, ...CHANGE_COLUMNS]) {
+    if (c in patch && c !== "change_lines") columns.add(c);
+  }
+  return Object.fromEntries([...columns].map((c) => [c, job[c] ?? null]));
 }

@@ -345,6 +345,10 @@ there. So:
    (after `fee-waiver.sql`), which stops a contractor changing the price of a job
    the customer has approved except through a change order the customer approves.
    `stage1-price-lockdown.verify.sql` checks it; `stage1-price-lockdown.undo.sql` reverts it.
+   It also replaces `apply_change_response`, so after it do not re-run
+   `least-privilege.sql`, `fee-waiver.sql`, `change-order-lines.sql` or
+   `change-deposit.sql`. Run it before deploying the code that ships with it; the
+   code still works against the old database in the meantime.
 
    `supabase/crew-reminders.sql` also (re)adds `scheduled_time`, so running just
    that one file is enough to fix "Could not save that date" when confirming a

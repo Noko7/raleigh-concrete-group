@@ -22,6 +22,11 @@
 --   * a change order already in front of the customer: rewrite change_amount
 --     after they have read it, and the figure their Approve applies is not the
 --     one they were shown.
+--   * a change order of their own that LOWERS the total. The contractor can
+--     read their job's public_token (and the text that carried the link), so
+--     they can press the customer's Approve themselves. A contractor's change
+--     may therefore only raise the total; lowering one is the owner's.
+--   * the customer's phone and email, which every text and receipt goes to.
 --
 -- The owner's rule, which this file enforces for everyone who is not the owner
 -- and not the server:
@@ -43,6 +48,12 @@
 -- them writes a column this refuses. The exemption is unchanged from
 -- least-privilege.sql: `auth.uid() is null` is the service role (its key has no
 -- `sub`), and owners pass on is_owner().
+--
+-- Section 3 replaces apply_change_response so the customer's Approve applies
+-- only the change their page showed them (see there). Run the whole file at
+-- once: it is one transaction.
+
+begin;
 
 -- ── 1. quote_requests ───────────────────────────────────────────────────────
 -- Same function name and trigger as before, so CREATE OR REPLACE swaps the body
@@ -113,6 +124,12 @@ begin
     raise exception 'the deposit is set by an approved change order' using errcode = '42501';
   end if;
 
+  -- Who the office texts and emails about the job.
+  if new.phone is distinct from old.phone or new.email is distinct from old.email then
+    raise exception 'the customer''s phone and email are changed by the office'
+      using errcode = '42501';
+  end if;
+
   -- ── Once the customer has answered ──
 
   if answered then
@@ -147,6 +164,20 @@ begin
               and new.change_lines is null and new.change_deposit_cents is null) then
     raise exception 'a change is already waiting on the customer; withdraw it first'
       using errcode = '42501';
+  end if;
+
+  -- ── Opening a change order ──
+  -- The contractor can reach the customer's link, so whatever they open they
+  -- can also approve. Compared in cents against quote_amount, the total the
+  -- fee is worked out from (toCents in fees.ts): change_amount is the new
+  -- total, not a difference (apply_change_response sets quote_amount to it).
+  if old.change_requested_at is null and new.change_requested_at is not null then
+    if new.change_requested_by is distinct from auth.uid() then
+      raise exception 'a change order is sent in your own name' using errcode = '42501';
+    end if;
+    if round(coalesce(new.change_amount, 0) * 100) < round(coalesce(old.quote_amount, 0) * 100) then
+      raise exception 'lowering an approved price is done by the office' using errcode = '42501';
+    end if;
   end if;
 
   return new;
@@ -229,3 +260,77 @@ drop trigger if exists qp_guard_line_prices on public.quote_packages;
 create trigger qp_guard_line_prices
   before insert or update or delete on public.quote_packages
   for each row execute function public.guard_quote_line_prices();
+
+-- ── 3. The customer's Approve applies what they were shown ──────────────────
+-- /api/change-response sends only the token and accept/decline, and this
+-- applied whatever the row held when it took the lock. If the change was
+-- withdrawn and a different one opened while the customer's page was open,
+-- their Approve landed on a figure they never saw. The page now sends the
+-- change_requested_at it displayed; a mismatch under the lock is 'stale' and
+-- nothing is written.
+--
+-- p_requested_at defaults to null, which skips the check: a call with only
+-- p_id and p_accept (a page opened before this ran, recordChangeAgreed) behaves
+-- exactly as before. Otherwise the body is the live one, verbatim.
+--
+-- A new argument is a new signature, so the old one is dropped rather than
+-- left beside it as an overload, and the grants are restated: a new function
+-- is executable by PUBLIC, and this one must stay service-role only.
+drop function if exists public.apply_change_response(uuid, boolean);
+
+create or replace function public.apply_change_response(p_id uuid, p_accept boolean, p_requested_at timestamptz default null)
+ returns jsonb
+ language plpgsql
+ security definer
+ set search_path to 'public'
+as $function$
+declare
+  q public.quote_requests;
+  v_from numeric; v_to numeric; v_note text; v_lines jsonb; v_old jsonb; v_sum numeric;
+  v_deposit integer; v_paid bigint;
+begin
+  select * into q from public.quote_requests where id = p_id for update;
+  if not found or q.change_requested_at is null or q.change_amount is null then
+    return jsonb_build_object('status', 'none');
+  end if;
+  if p_requested_at is not null and q.change_requested_at is distinct from p_requested_at then
+    return jsonb_build_object('status', 'stale');
+  end if;
+  v_from := q.quote_amount; v_to := q.change_amount; v_note := q.change_note; v_lines := q.change_lines;
+  v_deposit := q.change_deposit_cents;
+  select coalesce(jsonb_agg(jsonb_build_object('title', o.title, 'description', o.description, 'amount', o.amount,
+           'required', o.required, 'customer_response', o.customer_response) order by o.sort_order, o.created_at), '[]'::jsonb)
+    into v_old from public.quote_options o where o.quote_id = p_id;
+  if p_accept and v_lines is not null then
+    if jsonb_array_length(v_lines) > 0 then
+      select coalesce(sum((l->>'amount')::numeric), 0) into v_sum from jsonb_array_elements(v_lines) l;
+      if round(v_sum, 2) <> round(v_to, 2) then
+        raise exception 'change lines (%) do not add up to the new total (%)', v_sum, v_to;
+      end if;
+    end if;
+    delete from public.quote_options where quote_id = p_id;
+    insert into public.quote_options (quote_id, title, description, amount, required, sort_order, customer_response, responded_at)
+    select p_id, l->>'title', nullif(l->>'description', ''), (l->>'amount')::numeric, true, (t.ord - 1)::int, 'accepted', now()
+    from jsonb_array_elements(v_lines) with ordinality as t(l, ord);
+  end if;
+  select coalesce(sum(p.amount_cents - p.refunded_cents), 0) into v_paid
+    from public.quote_payments p where p.quote_id = p_id and p.status in ('paid', 'refunded');
+  update public.quote_requests set
+    quote_amount = case when p_accept then v_to else quote_amount end,
+    deposit_target_cents = case when p_accept and v_deposit is not null then (v_paid + v_deposit)::int else deposit_target_cents end,
+    change_note = null, change_amount = null, change_requested_at = null, change_requested_by = null,
+    change_lines = null, change_deposit_cents = null
+  where id = p_id returning * into q;
+  return jsonb_build_object('status', 'ok', 'quote', to_jsonb(q), 'from', v_from, 'to', v_to, 'note', v_note,
+    'old_lines', v_old, 'new_lines', v_lines, 'deposit_cents', case when p_accept then v_deposit else null end,
+    'paid_cents', v_paid);
+end;
+$function$;
+
+revoke all on function public.apply_change_response(uuid, boolean, timestamptz) from public, anon, authenticated;
+grant execute on function public.apply_change_response(uuid, boolean, timestamptz) to service_role;
+
+commit;
+
+-- PostgREST caches function signatures; this makes it pick up the new one now.
+notify pgrst, 'reload schema';

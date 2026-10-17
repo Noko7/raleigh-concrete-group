@@ -96,7 +96,8 @@ export function ChangeOrder({
    * Whether to offer "already agreed - don't text them", which puts the new
    * total on the job with nobody asked. The owner's alone: for the crew a new
    * total lands only when the customer approves it. sendChangeOrder refuses
-   * it from anybody else regardless.
+   * it from anybody else regardless. Also whether the change may lower the total,
+   * which is the owner's alone too.
    */
   canApplyAgreed?: boolean;
   locale: Locale;
@@ -204,7 +205,10 @@ export function ChangeOrder({
   const showDeposit = asking && !depositProblem && valid;
   // A new total, or the same total with a new breakdown: "same price, but show
   // me where it goes" is a real change for the customer to approve.
-  const composed = valid && note.trim().length >= 3 && (diffCents !== 0 || linesChanged) && !depositProblem;
+  // The server refuses a contractor's lower total (changeOrderRefusal); said here before they write it all up.
+  const lowerRefused = !canApplyAgreed && diffCents < 0;
+  const composed =
+    valid && note.trim().length >= 3 && (diffCents !== 0 || linesChanged) && !depositProblem && !lowerRefused;
 
   // The symptom of the bug this whole step exists for: the job says it is fully
   // paid and nobody has finished the work. It can be legitimate - a customer may
@@ -648,7 +652,9 @@ export function ChangeOrder({
             balance has always been the total minus what has come in. */}
         {sums}
 
-        {refundCents > 0 && (
+        {lowerRefused && <p className="co-warn">{t.changeOrder.lowerIsOffice}</p>}
+
+        {refundCents > 0 && !lowerRefused && (
           <p className="co-warn">{fill(t.changeOrder.refundWarn, { amount: money(refundCents) })}</p>
         )}
 
