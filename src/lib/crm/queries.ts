@@ -1,6 +1,7 @@
 // Server-only data access for the CRM. Reads/writes that belong to a logged-in
 // user go through pgUser (RLS enforces owner/contractor scoping). Token-page
 // lookups, view tracking and signed URLs use pgAdmin (no user context).
+import { offlineAcceptanceRefusal, repeatAnswer, unansweredFilter } from "./answered";
 import { todayYmd, ymdInDays } from "./clock";
 import {
   CHANGE_NOTE_MAX,
@@ -1707,18 +1708,9 @@ export async function recordCustomerResponse(
   // A decline on a job the office has since moved off Lost is not an answer
   // any more: the quote was put back in front of them, and saying yes to it
   // now is the whole point of reopening it. See isOpenAgain.
-  const already = isOpenAgain(q) ? null : q.customer_response;
-  if (already) {
-    const want = input.action === "accept" ? "accepted" : "declined";
-    if (already === want) return { ok: true, duplicate: true };
-    return {
-      ok: false,
-      error:
-        already === "accepted"
-          ? "You've already approved this quote. Give us a call if you need to change anything."
-          : "You've already declined this quote. Give us a call if you've changed your mind.",
-    };
-  }
+  const openAgain = isOpenAgain(q);
+  const already = openAgain ? null : q.customer_response;
+  if (already) return repeatAnswer(already, input.action);
 
   const [options, packages] = await Promise.all([
     listQuoteOptionsAdmin(q.id),
@@ -1824,10 +1816,12 @@ export async function recordCustomerResponse(
     eventType = "customer_accepted";
   }
 
+  // Conditional on the row still holding the state checked above. Two submissions can both pass that
+  // check; the second then matches no row here and is answered from what the first one wrote.
   const savePatch = (body: Partial<Quote>) =>
-    pgAdmin(`quote_requests?id=eq.${q.id}`, {
+    pgAdmin(`quote_requests?id=eq.${q.id}${unansweredFilter(openAgain)}&select=id`, {
       method: "PATCH",
-      headers: { Prefer: "return=minimal" },
+      headers: { Prefer: "return=representation" },
       body: JSON.stringify(body),
     });
 
@@ -1844,6 +1838,16 @@ export async function recordCustomerResponse(
     upd = await savePatch(withoutTimes);
   }
   if (!upd.ok) return { ok: false, error: "Could not save your response. Please call us." };
+  const written = (await upd.json().catch(() => [])) as unknown[];
+  if (written.length === 0) {
+    const again = await pgAdmin(`quote_requests?id=eq.${q.id}&select=customer_response,status&limit=1`);
+    const now = again.ok
+      ? ((await again.json()) as Pick<Quote, "customer_response" | "status">[])[0]
+      : undefined;
+    const answered = now && !isOpenAgain(now) ? now.customer_response : null;
+    if (answered) return repeatAnswer(answered, input.action);
+    return { ok: false, error: "Could not save your response. Please call us." };
+  }
 
   // Stamp each line item with its own answer, so the record of what was bought
   // survives any later edit to the quote and the crew can read it off the job
@@ -1947,25 +1951,9 @@ export async function recordOfflineAcceptance(
   const q = await getQuote(session, id);
   if (!q) return { ok: false, error: "You don't have access to this quote." };
 
-  // Already answered. Not "duplicate: silently fine" like the customer's own
-  // double-tap: a person is typing this in, and if the answer on file
-  // disagrees with the call they have just had, somebody needs to look at it
-  // rather than have it overwritten.
-  if (q.customer_response === "accepted") {
-    return { ok: false, error: "This quote is already marked approved." };
-  }
-  if (q.customer_response === "declined" || q.status === "lost") {
-    return {
-      ok: false,
-      error: "This quote is marked declined. Ask the office to reopen it before recording an approval.",
-    };
-  }
-  // Writing "approved" onto a finished job would drag its status back to
-  // approved and lose the completion behind it. Whatever needs correcting there
-  // is not this form's to correct.
-  if (q.status === "completed" || q.status === "paid") {
-    return { ok: false, error: "This job is already closed out. Nothing left to approve." };
-  }
+  // Already answered, or closed out. See offlineAcceptanceRefusal.
+  const refusal = offlineAcceptanceRefusal(q);
+  if (refusal) return { ok: false, error: refusal };
   // There has to be a number for them to have agreed to.
   if (q.quote_amount == null || Number(q.quote_amount) <= 0) {
     return { ok: false, error: "Put a price on this quote before recording an approval." };
@@ -2027,16 +2015,39 @@ export async function recordOfflineAcceptance(
     patch.preferred_times = [time && TIME_RE.test(time) ? time : null];
   }
 
-  const { quote: updated, error } = await updateQuoteResult(session, id, patch);
+  // Conditional on no answer being on file, so two people recording the same call (or the customer
+  // tapping their link meanwhile) can't both write. Zero rows: someone got there first, or RLS hid it.
+  const save = async (body: Partial<Quote>): Promise<{ rows: number } | { error: string }> => {
+    const res = await pgUser(
+      `quote_requests?id=eq.${encodeURIComponent(id)}&customer_response=is.null&select=id`,
+      session.accessToken,
+      { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(body) },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error("[offline-acceptance] failed", { id, status: res.status, body: text });
+      return { error: `Could not save (error ${res.status}). Please try again or call the office.` };
+    }
+    return { rows: ((await res.json().catch(() => [])) as unknown[]).length };
+  };
+
+  let saved = await save(patch);
   // preferred_times predates nothing here, but it is the one column in this
   // patch that a database can be missing (supabase/appointments.sql), and the
   // retry costs nothing next to losing a recorded approval over an hour.
-  if (!updated && patch.preferred_times !== undefined) {
+  if ("error" in saved && patch.preferred_times !== undefined) {
     const { preferred_times: _dropped, ...withoutTimes } = patch;
-    const retry = await updateQuoteResult(session, id, withoutTimes);
-    if (!retry.quote) return { ok: false, error: retry.error ?? error ?? "Could not record that approval." };
-  } else if (!updated) {
-    return { ok: false, error: error ?? "Could not record that approval." };
+    saved = await save(withoutTimes);
+  }
+  if ("error" in saved) return { ok: false, error: saved.error };
+  if (saved.rows === 0) {
+    const now = await getQuote(session, id);
+    return {
+      ok: false,
+      error:
+        (now && offlineAcceptanceRefusal(now)) ??
+        "You can't change this job. It may have been reassigned to someone else.",
+    };
   }
 
   // Stamp the line items with their answers, after the quote row and
