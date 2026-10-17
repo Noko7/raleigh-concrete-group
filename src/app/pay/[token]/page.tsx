@@ -10,6 +10,7 @@ import {
   usd,
   type PaymentMethod,
 } from "@/lib/crm/fees";
+import { firstNameOf } from "@/lib/crm/constants";
 import { jobLedger, payeeState, reconcileCheckout } from "@/lib/crm/payments";
 import { getQuoteByToken } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay } from "@/lib/site-data";
@@ -68,7 +69,7 @@ export default async function PayPage({
   // the webhook is ever misconfigured: payments still land, just a beat later.
   const justPaid = done ? await reconcileCheckout(done) : null;
 
-  const firstName = quote.name.trim().split(/\s+/)[0] || quote.name;
+  const firstName = firstNameOf(quote.name, quote.name);
   const accepted = quote.customer_response === "accepted" && quote.status !== "lost";
   const hasPrice = quote.quote_amount != null && Number(quote.quote_amount) > 0;
 

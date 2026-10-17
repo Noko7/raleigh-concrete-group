@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 
+import { cleanAmount } from "@/lib/crm/constants";
 import { fromCents, usd } from "@/lib/crm/fees";
 import { beginPayment, type PayState } from "./actions";
 
@@ -75,7 +76,7 @@ export function PayPanel({
   const isCustom = choice === "other";
   const selected = choices.find((c) => c.key === choice);
   // What the button will actually send. The server re-checks all of it.
-  const amount = isCustom ? custom.replace(/[$,\s]/g, "") : String(fromCents(selected?.cents ?? 0));
+  const amount = isCustom ? cleanAmount(custom) : String(fromCents(selected?.cents ?? 0));
   const customCents = Math.round(Number(amount) * 100);
   const customBad = isCustom && (!Number.isFinite(customCents) || customCents < 100 || customCents > dueCents);
 

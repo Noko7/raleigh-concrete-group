@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 
+import { firstNameOf } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { cancelAppointment } from "./actions";
 import type { ScheduleState } from "./types";
@@ -44,7 +45,7 @@ export function CancelAppointment({
   const isJob = kind === "job";
   // The first name is enough in a warning that already names the appointment,
   // and it is what the rest of the CRM uses when it addresses a customer.
-  const firstName = customerName.trim().split(/\s+/)[0] || customerName;
+  const firstName = firstNameOf(customerName, customerName);
 
   // Done: fold away. The date it was about has gone from the page above, so a
   // form still sitting open would be asking about something that isn't there.

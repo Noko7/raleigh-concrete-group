@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AutoTextarea } from "@/components/auto-textarea";
-import { dollars, PACKAGE_TITLE_MAX, packageLetter } from "@/lib/crm/constants";
+import { firstNameOf, dollars, PACKAGE_TITLE_MAX, packageLetter } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { addQuoteOption } from "./actions";
 import type { SaveState } from "./types";
@@ -57,7 +57,7 @@ export function AddOption({
   const [state, formAction, pending] = useActionState<SaveState, FormData>(addQuoteOption, { ok: false });
 
   const [open, setOpen] = useState(false);
-  const first = customerName.trim().split(/\s+/)[0] || customerName;
+  const first = firstNameOf(customerName, customerName);
   // Already a choice: they are adding a third, and the ones on the quote are
   // shown as context rather than asked for again.
   const converting = options.length === 0;

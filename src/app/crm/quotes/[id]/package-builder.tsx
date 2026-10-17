@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  dollars,
+  dollarsOrZero as usd,
   isChoice,
   MAX_QUOTE_PACKAGES,
   PACKAGE_DESC_MAX,
@@ -124,8 +124,6 @@ export function packagesMatch(a: PackageRow[], b: PackageRow[]): boolean {
   const y = norm(b);
   return x.length === y.length && x.every((v, i) => v === y[i]);
 }
-
-const usd = (n: number) => dollars(n) ?? "$0";
 
 export function PackageBuilder({
   rows,

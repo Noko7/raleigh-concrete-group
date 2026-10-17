@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { todayYmd } from "@/lib/crm/clock";
 import { UNASSIGNED_COLOR, crewColors, initials, shortName } from "@/lib/crm/crew-colors";
-import { DEFAULT_VISIT_SLOTS, to12Hour, to24Hour } from "@/lib/crm/constants";
+import { firstNameOf, DEFAULT_VISIT_SLOTS, to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 import { deleteEvent, moveEvent, type CalActionState } from "./actions";
 
@@ -914,7 +914,7 @@ function EventPanel({
             <label className="cal-panel-check">
               <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
               <span>
-                {fill(t.calendar.notifyLabel, { name: event.title.split(" ")[0] })}
+                {fill(t.calendar.notifyLabel, { name: firstNameOf(event.title, event.title) })}
                 <em>{t.calendar.notifyHint}</em>
               </span>
             </label>

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
+import { cleanAmount } from "@/lib/crm/constants";
 import { isRecordedMethod, usd } from "@/lib/crm/fees";
 import { recordSettlement } from "@/lib/crm/payments";
 import { getQuote, getStaffById } from "@/lib/crm/queries";
@@ -31,7 +32,7 @@ export async function recordFeeSettlement(_prev: SettleState, formData: FormData
   const target = await getStaffById(session, staffId);
   if (!target) return { ok: false, error: "That contractor no longer exists." };
 
-  const cleaned = String(formData.get("amount") ?? "").replace(/[$,\s]/g, "");
+  const cleaned = cleanAmount(formData.get("amount"));
   const dollars = Number(cleaned);
   if (!cleaned || !Number.isFinite(dollars) || dollars <= 0) {
     return { ok: false, error: "Enter how much they sent." };

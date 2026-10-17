@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { dict } from "@/lib/crm/i18n";
-import { dollars, packageLetter, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, type QuoteSectionField } from "@/lib/crm/constants";
+import { firstNameOf, dollars, packageLetter, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, type QuoteSectionField } from "@/lib/crm/constants";
 import { saveQuote } from "./actions";
 import {
   MoreWaysToPrice,
@@ -252,10 +252,10 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
         <span className="crm-paper-sub">
           {initial.customer_response === "declined"
             ? initial.status === "lost"
-              ? `${customerName.split(" ")[0]} declined this quote. Sending it again reopens it, and so does moving the job off Lost.`
-              : `${customerName.split(" ")[0]} declined, and the job has been moved off Lost. Saving or sending reopens the quote.`
+              ? `${firstNameOf(customerName, customerName)} declined this quote. Sending it again reopens it, and so does moving the job off Lost.`
+              : `${firstNameOf(customerName, customerName)} declined, and the job has been moved off Lost. Saving or sending reopens the quote.`
             : locked
-              ? `${customerName.split(" ")[0]} has answered. The line items are their record now.`
+              ? `${firstNameOf(customerName, customerName)} has answered. The line items are their record now.`
               : "What the customer gets, laid out the way they read it."}
         </span>
       </div>
@@ -323,7 +323,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
 
       {!confirming && (
         <CustomerPreview
-          firstName={customerName.split(" ")[0]}
+          firstName={firstNameOf(customerName, customerName)}
           price={amountValid ? amountNum : null}
           derived={derived}
           sections={sections}
@@ -336,7 +336,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
         <div className="crm-confirm">
           <h3>
             {correcting ? "Send the corrected quote" : awaitingReply ? "Send this quote again" : "Send this quote"} to{" "}
-            {customerName.split(" ")[0]}?
+            {firstNameOf(customerName, customerName)}?
           </h3>
           <p className="crm-muted crm-sm">
             {correcting
@@ -381,7 +381,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
           {/* Exactly what they'll read, drawn by the component their page uses. */}
           {blankSections.length === 0 ? (
             <CustomerPreview
-              firstName={customerName.split(" ")[0]}
+              firstName={firstNameOf(customerName, customerName)}
               price={amountValid ? amountNum : null}
               derived={derived}
               sections={sections}
@@ -452,7 +452,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
             </div>
           )}
           <p className="crm-muted crm-sm crm-editor-hint">
-            Send texts {customerName.split(" ")[0]} their link, good for {QUOTE_TTL_DAYS} days. The price is never in
+            Send texts {firstNameOf(customerName, customerName)} their link, good for {QUOTE_TTL_DAYS} days. The price is never in
             the text.
             {itemised
               ? " This quote has line items, so the customer answers each one and their total follows what they picked."

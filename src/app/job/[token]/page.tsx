@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { boughtLines, changeStartLines, dollars, requestedVisitOf, STATUS_LABELS, visitDateOf } from "@/lib/crm/constants";
+import { firstNameOf, boughtLines, changeStartLines, dollars, requestedVisitOf, STATUS_LABELS, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, inQuietHours, todayYmd } from "@/lib/crm/clock";
 import { depositDueNowCents, toCents } from "@/lib/crm/fees";
 import { crewEventText, quoteSends } from "@/lib/crm/events";
@@ -651,7 +651,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             // again, so the card says so instead of offering a button.
             awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
             sentAt={quote.quote_sent_at}
-            customerFirstName={quote.name.trim().split(/\s+/)[0] || quote.name}
+            customerFirstName={firstNameOf(quote.name, quote.name)}
           />
         )}
 

@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 
+import { cleanAmount } from "@/lib/crm/constants";
 import { MIN_PAYMENT_CENTS, jobLedger, startJobCheckout } from "@/lib/crm/payments";
 import { getQuoteByToken } from "@/lib/crm/queries";
 
@@ -25,7 +26,7 @@ export async function beginPayment(_prev: PayState, formData: FormData): Promise
     return { error: "There's nothing to pay on this job yet." };
   }
 
-  const raw = String(formData.get("amount") ?? "").replace(/[$,\s]/g, "");
+  const raw = cleanAmount(formData.get("amount"));
   const dollars = Number(raw);
   if (!Number.isFinite(dollars) || dollars <= 0) {
     return { error: "Enter how much you'd like to pay." };

@@ -25,6 +25,8 @@
 // rose, violet, orange, which are as far apart as this palette can put them.
 // Everything after that is filling in the gaps, and by then the initials are
 // doing most of the work anyway.
+import { firstNameOf } from "./constants";
+
 export const CREW_COLORS = [
   "#0ea5e9", // sky
   "#e11d48", // rose
@@ -82,6 +84,5 @@ export function initials(name?: string | null): string {
 
 /** The first name, which is what the office calls people. */
 export function shortName(name?: string | null): string {
-  const first = (name ?? "").trim().split(/\s+/)[0];
-  return first || "";
+  return firstNameOf(name ?? "", "");
 }
