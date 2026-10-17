@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { boughtLines, changeStartLines, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
+import { firstNameOf, boughtLines, changeStartLines, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
 import { depositDueNowCents, toCents } from "@/lib/crm/fees";
 import { SITE_ORIGIN } from "@/lib/crm/env";
@@ -182,7 +182,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   // ── What to do next ──
   // One card, one sentence, one button, worked out from where the job is. The
   // page has fifteen things on it; this is the one that moves the job along.
-  const firstName = quote.name.split(" ")[0];
+  const firstName = firstNameOf(quote.name, quote.name);
   const stageIndex = Math.max(0, STAGES.findIndex((st) => st.key === quote.status));
   const dueCents = money?.ledger.dueCents ?? 0;
   const next: { tone: "go" | "wait" | "done" | "lost"; title: string; body: string; href?: string; cta?: string } =

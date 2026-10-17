@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 
+import { firstNameOf } from "@/lib/crm/constants";
 import { getQuoteByToken } from "@/lib/crm/queries";
 import { businessName, links, phoneDisplay } from "@/lib/site-data";
 import { ConfirmActions } from "./confirm-actions";
@@ -27,7 +28,7 @@ export default async function ConfirmJobPage({ params }: { params: Promise<{ tok
   const quote = await getQuoteByToken("public_token", token);
   if (!quote) notFound();
 
-  const firstName = quote.name.split(" ")[0];
+  const firstName = firstNameOf(quote.name, quote.name);
   const alreadyConfirmed = !!quote.confirmed_at;
 
   return (

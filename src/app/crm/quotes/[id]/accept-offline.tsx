@@ -2,7 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 
-import { dollars, optionAmount, packageLetter, quoteTotal, TIME_RE, to12Hour, to24Hour } from "@/lib/crm/constants";
+import { firstNameOf, dollars, optionAmount, packageLetter, quoteTotal, TIME_RE, to12Hour, to24Hour } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { DateField } from "@/app/job/[token]/date-field";
 import { acceptOffline } from "./actions";
@@ -70,7 +70,7 @@ export function AcceptOffline({
   // when the customer asked not to be texted, or is still on the phone.
   const [notify, setNotify] = useState(true);
 
-  const first = customerName.trim().split(/\s+/)[0] || customerName;
+  const first = firstNameOf(customerName, customerName);
   const optional = options.filter((o) => !o.required);
   const required = options.filter((o) => o.required);
   const answered = optional.every((o) => choices[o.id]);

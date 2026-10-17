@@ -246,6 +246,26 @@ export function dollars(n: number | null | undefined): string | null {
   })}`;
 }
 
+/** A quote amount in DOLLARS as money, "$0" when there is none. Not ./fees `usd`, which takes cents. */
+export function dollarsOrZero(n: number): string {
+  return dollars(n) ?? "$0";
+}
+
+/** Dollars as typed by a person - "$4,000", " 4000.50 " - with the "$", commas and spaces taken out. */
+export function cleanAmount(raw: unknown): string {
+  return String(raw ?? "").replace(/[$,\s]/g, "");
+}
+
+/** cleanAmount, as a number. "" is 0 and junk is NaN, so each caller decides what it accepts. */
+export function parseDollars(raw: unknown): number {
+  return Number(cleanAmount(raw));
+}
+
+/** The first word of a name, or `fallback` when there is none. */
+export function firstNameOf(full: string, fallback: string): string {
+  return full.trim().split(/\s+/)[0] || fallback;
+}
+
 // No em dashes in anything a customer reads.
 //
 // Applied to every outbound text and to the quote body on save, rather than

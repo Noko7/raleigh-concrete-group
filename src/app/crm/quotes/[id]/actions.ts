@@ -18,6 +18,8 @@ import {
   optionAmount,
   optionsTotal,
   visitDateOf,
+  firstNameOf,
+  parseDollars,
 } from "@/lib/crm/constants";
 import { STATUSES, type Status } from "@/lib/crm/env";
 import { isRecordedMethod, toCents, usd, type RecordedMethod } from "@/lib/crm/fees";
@@ -401,7 +403,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
       if (reached && !(intent === "resend" && isOwner)) {
         return {
           ok: false,
-          error: `${current.name.trim().split(/\s+/)[0] || "The customer"} was already texted this quote and hasn't replied yet, so it won't send twice. If the quote itself was wrong, change the price or the wording and it goes out as a correction. If they say it never arrived, the owner can send it again.`,
+          error: `${firstNameOf(current.name, "The customer")} was already texted this quote and hasn't replied yet, so it won't send twice. If the quote itself was wrong, change the price or the wording and it goes out as a correction. If they say it never arrived, the owner can send it again.`,
           alreadySent: true,
         };
       }
@@ -900,7 +902,7 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   // person, any money they handed over goes on the payments card.
   let depositCents: number | null = null;
   if (!agreed && String(formData.get("deposit_on") ?? "") === "yes") {
-    const typed = Number(String(formData.get("deposit") ?? "").replace(/[$,\s]/g, ""));
+    const typed = parseDollars(formData.get("deposit"));
     depositCents = Number.isFinite(typed) ? Math.round(typed * 100) : NaN;
   }
 
@@ -911,7 +913,7 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
   if (agreed && String(formData.get("paid_on") ?? "") === "yes") {
     const method = String(formData.get("paid_method") ?? "");
     if (!isRecordedMethod(method)) return { ok: false, error: "Pick how they paid for the change." };
-    const typed = Number(String(formData.get("paid_amount") ?? "").replace(/[$,\s]/g, ""));
+    const typed = parseDollars(formData.get("paid_amount"));
     if (!Number.isFinite(typed) || typed <= 0) return { ok: false, error: "Enter how much they paid for the change." };
     paidNow = { method, amountCents: Math.round(typed * 100) };
   }
@@ -954,7 +956,7 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     ...(agreed ? { agreed: true } : {}),
   });
 
-  const firstName = quote.name.trim().split(/\s+/)[0] || quote.name;
+  const firstName = firstNameOf(quote.name, quote.name);
 
   // Already agreed - on the phone, or on site. There is nobody to ask, so
   // nobody is texted and the price moves now, through the same transaction

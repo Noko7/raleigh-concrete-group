@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ymdInDays } from "@/lib/crm/clock";
-import { DECLINE_CREDIT, DEFAULT_VISIT_SLOTS, dollars, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, packageLetter, quoteTotal } from "@/lib/crm/constants";
+import { DECLINE_CREDIT, DEFAULT_VISIT_SLOTS, dollarsOrZero as usd, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, packageLetter, quoteTotal } from "@/lib/crm/constants";
 import { SectionText } from "@/components/section-text";
 import { DEFAULT_DEPOSIT_PERCENT, depositCents, usd as money } from "@/lib/crm/fees";
 
@@ -54,7 +54,6 @@ function pretty(s: string): string {
   const d = new Date(`${s}T00:00:00`);
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 }
-const usd = (n: number) => dollars(n) ?? "$0";
 const DEPOSIT_LABEL = `${DEFAULT_DEPOSIT_PERCENT}%`;
 
 export function QuoteActions({

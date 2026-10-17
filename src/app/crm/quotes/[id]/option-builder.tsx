@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 
-import { dollars, MAX_QUOTE_OPTIONS, OPTION_TITLE_MAX } from "@/lib/crm/constants";
+import { dollarsOrZero as usd, MAX_QUOTE_OPTIONS, OPTION_TITLE_MAX } from "@/lib/crm/constants";
 import type { dict } from "@/lib/crm/i18n";
 import { AutoTextarea } from "@/components/auto-textarea";
 
@@ -99,8 +99,6 @@ export function rowsMatch(a: OptionRow[], b: OptionRow[]): boolean {
   const y = norm(b);
   return x.length === y.length && x.every((v, i) => v === y[i]);
 }
-
-const usd = (n: number) => dollars(n) ?? "$0";
 
 // The everyday parts of a concrete job, one tap each. A label, not a category
 // the system knows about: the crew can rename any of them, and a breakdown that

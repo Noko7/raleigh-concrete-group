@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { DECLINE_CREDIT, dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, slotsFor } from "@/lib/crm/constants";
+import { firstNameOf, DECLINE_CREDIT, dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, slotsFor } from "@/lib/crm/constants";
 import { depositDueNowCents, toCents, usd } from "@/lib/crm/fees";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, getWorkHours, isOpenAgain, isQuoteExpired, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
@@ -87,7 +87,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   // A declined quote the office has moved off Lost is back on offer, so it
   // shows as the quote rather than as "thanks for letting us know".
   const responded = isOpenAgain(quote) ? null : quote.customer_response;
-  const firstName = quote.name.split(" ")[0];
+  const firstName = firstNameOf(quote.name, quote.name);
 
   // Only the sections that were actually filled in. An owner can't send a
   // quote with one blank, but a draft viewed early can have gaps and a

@@ -12,7 +12,7 @@
 // [sms] prefix so they can be diagnosed.
 import { phoneDisplay } from "@/lib/site-data";
 import { clockLabel, hourLabel, inQuietHours, nextSendableAt, now, QUIET_FROM_HOUR, QUIET_UNTIL_HOUR } from "./clock";
-import { dollars, noEmDash, QUOTE_TTL_DAYS, STALE_LEAD_HOURS, visitDateOf } from "./constants";
+import { firstNameOf, dollars, noEmDash, QUOTE_TTL_DAYS, STALE_LEAD_HOURS, visitDateOf } from "./constants";
 import { SITE_ORIGIN } from "./env";
 // Named apart from the local dollars-only `usd` below: money that came from the
 // ledger is in cents and must be printed with them, or a $6,172.50 deposit goes
@@ -761,7 +761,7 @@ type QuoteInfo = {
 
 export type ChosenOption = { title: string; amount: number };
 
-const firstName = (full: string) => full.trim().split(/\s+/)[0] || "there";
+const firstName = (full: string) => firstNameOf(full, "there");
 
 // The line items on a crew or owner text, with their prices. "Approved" on a
 // quote with options does not say what to build, and a crew reading only the

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
+import { cleanAmount, firstNameOf } from "@/lib/crm/constants";
 import { isRecordedMethod, toCents, usd } from "@/lib/crm/fees";
 import { notifyPaymentCorrected, notifyPayLink } from "@/lib/crm/notify";
 import {
@@ -35,7 +36,7 @@ function refreshMoneyViews(id: string) {
 
 /** Dollars as typed by a person - "$4,000", "4000.50" - to whole cents. */
 function parseAmount(raw: unknown): number | null {
-  const cleaned = String(raw ?? "").replace(/[$,\s]/g, "");
+  const cleaned = cleanAmount(raw);
   if (!cleaned) return null;
   const n = Number(cleaned);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -97,7 +98,7 @@ export async function sendPayLink(_prev: PaymentState, formData: FormData): Prom
     return { ok: true, message: `Saved. The text goes out ${sent.sendAfterLabel ?? "in the morning"}.` };
   }
   if (!sent?.ok) return { ok: false, error: "The text didn't send. Call the office." };
-  return { ok: true, message: `Payment link texted to ${quote.name.split(" ")[0]}.` };
+  return { ok: true, message: `Payment link texted to ${firstNameOf(quote.name, quote.name)}.` };
 }
 
 // ── Money the crew took in person ───────────────────────────────────────────
@@ -242,7 +243,7 @@ export async function correctRecordedPayment(_prev: PaymentState, formData: Form
   // that says money arrived when none did). The honest answer is that the row
   // should not exist, which is what voiding is for - so say so, rather than
   // refusing with "enter what they paid" to somebody who just did.
-  const typed = String(formData.get("amount") ?? "").replace(/[$,\s]/g, "");
+  const typed = cleanAmount(formData.get("amount"));
   if (typed !== "" && Number(typed) === 0) {
     return {
       ok: false,
@@ -409,7 +410,7 @@ export async function setFeeWaiver(_prev: PaymentState, formData: FormData): Pro
   const quote = id ? await getQuote(session, id) : null;
   if (!quote) return { ok: false, error: "You don't have access to this job." };
 
-  const typed = String(formData.get("amount") ?? "").replace(/[$,\s]/g, "");
+  const typed = cleanAmount(formData.get("amount"));
   const dollars = typed === "" ? 0 : Number(typed);
   if (!Number.isFinite(dollars) || dollars < 0) return { ok: false, error: "Enter the amount to waive, or 0 to clear it." };
   const cents = Math.round(dollars * 100);

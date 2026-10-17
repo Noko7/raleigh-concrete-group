@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 
-import { CHANGE_NOTE_MAX, sameChangeLines, type ChangeLineDraft } from "@/lib/crm/constants";
+import { CHANGE_NOTE_MAX, firstNameOf, parseDollars, sameChangeLines, type ChangeLineDraft } from "@/lib/crm/constants";
 import { RECORDED_METHODS, usd as money, type PaymentMethod } from "@/lib/crm/fees";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { sendChangeOrder, withdrawChangeOrder } from "./actions";
@@ -127,7 +127,7 @@ export function ChangeOrder({
     lines.map((l) => ({ ...blankRow(true), title: l.title, description: l.description ?? "", amount: String(l.amount) })),
   );
 
-  const first = customerName.trim().split(/\s+/)[0] || customerName;
+  const first = firstNameOf(customerName, customerName);
   const card = tone === "light" ? "co co-light" : "co";
 
   // How the customer's text went, rendered in whichever branch the card is
@@ -185,7 +185,7 @@ export function ChangeOrder({
   // Only while the box can be seen: a change that ends up owing them money
   // back hides it, and a tick left behind must not block or ride along.
   const asking = depositOn && refundCents === 0;
-  const depositCentsVal = asking ? Math.round(Number(deposit.replace(/[$,\s]/g, "")) * 100) : 0;
+  const depositCentsVal = asking ? Math.round(parseDollars(deposit) * 100) : 0;
   const depositProblem = !asking
     ? null
     : !Number.isFinite(depositCentsVal) || depositCentsVal < 100
