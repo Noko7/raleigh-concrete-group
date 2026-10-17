@@ -784,9 +784,19 @@ const en = {
     // A second deposit from an approved change, still waiting to come in.
     dueNow: "Second deposit due now: {now}. The other {rest} is due when the work is done.",
     noPrice: "No price on this job yet, so there's nothing to collect.",
-    // The debt the cash board is built around. Named plainly, because a
-    // contractor should never be surprised by it at the end of a month.
-    owedTitle: "Your fee to the office",
+    // The office's cut on the job, laid out whole: what it is and why, what
+    // has already been paid and how, and what is left. A contractor should
+    // never be surprised by it at the end of a month.
+    feeTitle: "Office fee",
+    feeRate: "{rate} of the {total} job.",
+    // Before any money moves the rate is a preview - an intro-rate job can
+    // become a standard one if another job of theirs is paid first.
+    feeRateLocks: "{rate} of the {total} job. The rate locks in when the first payment comes in.",
+    feePaidCard: "Taken out of card payments",
+    feePaidHand: "You sent the office",
+    feeStillOwed: "Still owed",
+    // On a payment row: the part of it that went to the office.
+    rowFee: "{amount} office fee",
     // The same three numbers said in the office's voice rather than the crew's.
     // "You owe" is right on a contractor's phone and wrong on the owner's desk.
     officeCut: "Office cut",

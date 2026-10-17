@@ -16,7 +16,11 @@ export type PaymentRow = {
   status: string;
   paid_at: string | null;
   created_at: string;
+  /** The office's cut this payment carried. Only ever non-zero on a card. */
+  fee_cents: number;
 };
+
+const pct = (rate: number) => `${Math.round(rate * 1000) / 10}%`;
 
 /**
  * The crew's money card.
@@ -30,8 +34,9 @@ export type PaymentRow = {
  * treats that as the sad path is an app the crew works around - which is how
  * the office ends up finding out about $4,000 three weeks later.
  *
- * The fee line is stated plainly and always, even when it is zero. A percentage
- * somebody discovers at the end of a month is a percentage they argue about.
+ * The fee is stated plainly and always, whole: the cut, the rate behind it,
+ * what has already been paid and how, and what is left. A percentage somebody
+ * discovers at the end of a month is a percentage they argue about.
  */
 export function JobPayments({
   id,
@@ -41,6 +46,10 @@ export function JobPayments({
   paidCents,
   dueCents,
   dueNowCents = 0,
+  feeTotalCents,
+  feeRate,
+  feeRateFrozen,
+  feeCollectedCents,
   feeDueCents,
   feeSettledCents = 0,
   rows,
@@ -53,6 +62,13 @@ export function JobPayments({
   dueCents: number;
   /** A second deposit from an approved change, still to come in. 0 when none. */
   dueNowCents?: number;
+  /** The office's whole fee on the job. */
+  feeTotalCents: number;
+  feeRate: number;
+  /** False until the first payment; the rate can still change before then. */
+  feeRateFrozen: boolean;
+  /** Fee already taken out of card payments. */
+  feeCollectedCents: number;
   feeDueCents: number;
   /** What they have already sent the office for this job. */
   feeSettledCents?: number;
@@ -102,11 +118,29 @@ export function JobPayments({
         <p className="jp-now">{fill(t.dueNow, { now: usd(dueNowCents), rest: usd(dueCents - dueNowCents) })}</p>
       )}
 
-      {/* What they owe the office, and how it gets there. Only the second line
-          changes: the fee is the same either way, and only the route differs. */}
+      {/* The office's cut, and where it stands. The three lines under it always
+          add up to it, so nobody has to do the subtraction. Only the last note
+          changes with how the job is paid: the fee is the same either way. */}
       <div className={`jp-fee${feeDueCents > 0 ? " jp-fee-owed" : ""}`}>
-        <span className="jp-fee-label">{t.owedTitle}</span>
-        <strong>{usd(feeDueCents)}</strong>
+        <span className="jp-fee-label">{t.feeTitle}</span>
+        <strong>{usd(feeTotalCents)}</strong>
+        <span className="jp-fee-note">
+          {fill(feeRateFrozen ? t.feeRate : t.feeRateLocks, { rate: pct(feeRate), total: usd(totalCents) })}
+        </span>
+        <dl className="jp-fee-split">
+          <div>
+            <dt>{t.feePaidCard}</dt>
+            <dd>{usd(feeCollectedCents)}</dd>
+          </div>
+          <div>
+            <dt>{t.feePaidHand}</dt>
+            <dd>{usd(feeSettledCents)}</dd>
+          </div>
+          <div className="jp-fee-left">
+            <dt>{t.feeStillOwed}</dt>
+            <dd>{usd(feeDueCents)}</dd>
+          </div>
+        </dl>
         <span className="jp-fee-note">
           {feeDueCents <= 0
             ? feeSettledCents > 0
@@ -235,6 +269,9 @@ export function JobPayments({
                       that is already settled - or not chasing one that isn't. */}
                   {r.status === "voided" && ` · ${t.voided}`}
                   {r.refunded_cents > 0 && ` · ${usd(r.refunded_cents)} ${t.refunded}`}
+                  {(r.status === "paid" || r.status === "refunded") &&
+                    r.fee_cents > 0 &&
+                    ` · ${fill(t.rowFee, { amount: usd(r.fee_cents) })}`}
                 </span>
                 <span className="jp-row-amount">{usd(r.amount_cents - r.refunded_cents)}</span>
               </li>
