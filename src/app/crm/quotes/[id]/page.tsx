@@ -39,6 +39,7 @@ import { CancelAppointment } from "./cancel-appointment";
 import { QuotePayments } from "./quote-payments";
 import { ScheduleCard } from "./schedule-card";
 import { EstimateCard } from "./estimate-card";
+import { ExtendQuote } from "./extend-quote";
 import { preferredSlots } from "./types";
 import { rotateTokens, setTestFlag } from "./status-actions";
 
@@ -466,6 +467,11 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               quote_cleanup: quote.quote_cleanup,
             }}
           />
+
+          {/* Sent and unanswered: how long the link stays open, and a way to push it out. */}
+          {quote.quote_sent_at && !quote.customer_response && quote.status !== "lost" && (
+            <ExtendQuote id={quote.id} expiresAt={quote.quote_expires_at} />
+          )}
 
           {/* Every price this customer has been given; where a quote is
               retracted or another option goes out. */}

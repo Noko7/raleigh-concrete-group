@@ -1,5 +1,5 @@
 // Plain-English activity log, shared by the job page and Security dashboard.
-import { clockLabel } from "./clock";
+import { BUSINESS_TZ, clockLabel } from "./clock";
 import { dollars, STATUS_LABELS } from "./constants";
 import { usd } from "./fees";
 import { fill, type Dict } from "./i18n";
@@ -336,6 +336,13 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return "No longer a test lead (counted on the Money page again)";
     case "links_rotated":
       return "Customer/job links regenerated (old links disabled)";
+    case "quote_extended": {
+      const until =
+        typeof m.to === "string"
+          ? new Date(m.to).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: BUSINESS_TZ })
+          : null;
+      return `Quote extended ${Number(m.days)} days${until ? ` (good through ${until})` : ""}`;
+    }
     case "quote_created_manually":
       return `Lead logged by staff${m.by ? ` (${String(m.by)})` : ""}`;
     default:
