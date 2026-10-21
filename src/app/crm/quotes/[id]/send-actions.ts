@@ -221,3 +221,35 @@ export async function retractQuote(_prev: ScheduleState, formData: FormData): Pr
       "The job is back in New with no price on it.",
   };
 }
+
+// Days a quote can be extended by, counted from today.
+const EXTEND_DAYS = [30, 60, 90];
+
+/**
+ * Keep a sent quote open longer, or reopen an expired one, without resending it. The customer's link starts
+ * working again as is; nobody is texted.
+ */
+export async function extendQuote(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+
+  const id = String(formData.get("id") ?? "");
+  const days = Number(formData.get("days"));
+  if (!id) return { ok: false, error: "Missing quote id." };
+  if (!EXTEND_DAYS.includes(days)) return { ok: false, error: "Pick 30, 60 or 90 days." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this quote." };
+  if (!current.quote_sent_at) return { ok: false, error: "Send the quote first." };
+  if (current.customer_response) return { ok: false, error: "The customer already answered this quote." };
+
+  const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  const updated = await updateQuote(session, id, { quote_expires_at: until });
+  if (!updated) return { ok: false, error: "Could not extend this quote. Please try again." };
+
+  await addEvent(session, id, "quote_extended", { days, from: current.quote_expires_at, to: until });
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/q/[token]", "page");
+  return { ok: true, message: `Quote extended. It's now good for ${days} days.` };
+}
