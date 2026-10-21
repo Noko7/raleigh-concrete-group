@@ -19,7 +19,7 @@ import { deleteEvent, moveEvent, type CalActionState } from "./actions";
 // draggable). It's shown because it's the only date here still needing an answer.
 export type CalKind = "job" | "inperson" | "online";
 
-// Nobody agreed to it: faded styling, "Not booked", no drag/reschedule/cancel.
+// Nobody agreed to it: faded styling, "Not booked", no drag or cancel. "Schedule estimate" books it.
 const isRequested = (k: CalKind) => k === "online";
 
 export type CalEvent = {
@@ -766,15 +766,20 @@ function EventPanel({
               )}
             </dl>
 
-            {/* Reschedule and Cancel are for dates we hold; on a requested slot
-                both would text about an appointment nobody made. Confirming it
-                happens from Open job. */}
-            {isRequested(event.kind) && (
-              <p className="cal-panel-note">{fill(t.calendar.requestedNote, { name: event.title })}</p>
-            )}
+            {isRequested(event.kind) && <p className="cal-panel-note">{t.calendar.requestedNote}</p>}
 
             <div className="cal-panel-actions">
-              <button type="button" className="crm-btn crm-btn-primary" onClick={onOpen}>
+              {/* A suggested slot has nothing to cancel; scheduling it books the estimate (moveEvent). */}
+              {isRequested(event.kind) && (
+                <button type="button" className="crm-btn crm-btn-primary" onClick={() => setMode("move")} disabled={busy}>
+                  {t.estimate.schedule}
+                </button>
+              )}
+              <button
+                type="button"
+                className={`crm-btn ${isRequested(event.kind) ? "crm-btn-ghost" : "crm-btn-primary"}`}
+                onClick={onOpen}
+              >
                 {t.calendar.openJob}
               </button>
               {!isRequested(event.kind) && (
@@ -830,17 +835,24 @@ function EventPanel({
               {/* moveEvent reads FormData, so the time needs a named field. */}
               <input type="hidden" name="time" value={time} />
             </label>
-            <p className="crm-muted crm-sm">{isJob ? t.calendar.moveNoteJob : t.calendar.moveNoteVisit}</p>
-            <label className="cal-panel-check">
-              <input type="checkbox" checked={notifyMove} onChange={(e) => setNotifyMove(e.target.checked)} />
-              <span>
-                {t.schedule.notifyMoved}
-                <em>{t.schedule.notifyMovedHint}</em>
-              </span>
-            </label>
+            {/* A first booking always texts: that's how the customer finds out. */}
+            {isRequested(event.kind) ? (
+              <p className="crm-muted crm-sm">{t.estimate.texts}</p>
+            ) : (
+              <>
+                <p className="crm-muted crm-sm">{isJob ? t.calendar.moveNoteJob : t.calendar.moveNoteVisit}</p>
+                <label className="cal-panel-check">
+                  <input type="checkbox" checked={notifyMove} onChange={(e) => setNotifyMove(e.target.checked)} />
+                  <span>
+                    {t.schedule.notifyMoved}
+                    <em>{t.schedule.notifyMovedHint}</em>
+                  </span>
+                </label>
+              </>
+            )}
             <div className="cal-panel-actions">
               <button type="submit" className="crm-btn crm-btn-primary" disabled={busy}>
-                {busy ? t.calendar.saving : t.calendar.saveNewTime}
+                {busy ? t.calendar.saving : isRequested(event.kind) ? t.estimate.save : t.calendar.saveNewTime}
               </button>
               <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setMode("view")} disabled={busy}>
                 {t.common.cancel}

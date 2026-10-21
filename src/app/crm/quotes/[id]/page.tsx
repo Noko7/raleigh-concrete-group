@@ -38,6 +38,7 @@ import { QuoteSends } from "./quote-sends";
 import { CancelAppointment } from "./cancel-appointment";
 import { QuotePayments } from "./quote-payments";
 import { ScheduleCard } from "./schedule-card";
+import { EstimateCard } from "./estimate-card";
 import { preferredSlots } from "./types";
 import { rotateTokens, setTestFlag } from "./status-actions";
 
@@ -119,6 +120,13 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
 
   // The lead time limits customers, not the business: any day from today.
   const minJobDate = todayYmd();
+  // Book or move the estimate visit, until a work day is booked. Plans jobs are priced from the drawings.
+  const showEstimate =
+    !quote.scheduled_date &&
+    quote.quote_type !== "plans" &&
+    quote.status !== "lost" &&
+    quote.status !== "completed" &&
+    quote.status !== "paid";
   // Scheduling only once the customer has said yes.
   const showSchedule = quote.customer_response === "accepted" && quote.status !== "lost";
   // ...and until then, a way to record a verbal yes. Only on a sent, priced
@@ -284,6 +292,19 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
       <div className="jb-grid">
         {/* ── The work: whichever step is live, then the quote ── */}
         <div className="jb-main">
+          {showEstimate && (
+            <div className="jb-o-step" id="estimate">
+              <EstimateCard
+                id={quote.id}
+                date={visitDate ?? offeredVisit}
+                time={quote.visit_time}
+                booked={Boolean(visitDate)}
+                minDate={minJobDate}
+                locale={locale}
+              />
+            </div>
+          )}
+
           {showOfflineAccept && (
             <div className="jb-o-step" id="accept">
               <AcceptOffline
