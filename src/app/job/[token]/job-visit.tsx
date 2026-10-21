@@ -8,9 +8,9 @@ import { confirmVisit } from "@/app/crm/quotes/[id]/schedule-actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
 import { DateField } from "./date-field";
 
-// Booking an on-site visit. Two ways in:
-//   online    a photo quote whose customer offered a fallback slot: one-tap accept
-//   schedule  an in-person request with no date (cancelled, or predates the field): picker only
+// Booking the estimate visit. Two ways in:
+//   online    a photo quote, maybe with a slot the customer suggested (the picker starts on it)
+//   schedule  an in-person request with no date (cancelled, or predates the field)
 // Both end in confirmVisit, which texts the customer.
 function pretty(s: string): string {
   return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
@@ -42,65 +42,45 @@ export function JobVisit({
   const fallbackTime = requestedTime && TIME_RE.test(requestedTime) ? requestedTime : DEFAULT_VISIT_SLOTS[0];
   const [time, setTime] = useState(fallbackTime);
 
-  // Only an online request arrives with something to accept.
+  // What the customer suggested, shown above a picker that starts on it: often it doesn't suit the crew.
   const offered = mode === "online" ? requestedDate : null;
-
-  const picker = (
-    <form action={formAction} className="jv-form">
-      <input type="hidden" name="id" value={id} />
-      <label className="js-time">
-        <span>{t.contractorJob.visitTime}</span>
-        <input
-          type="time"
-          value={to24Hour(time, "08:00")}
-          onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
-        />
-        {/* confirmVisit reads FormData, so the time needs a hidden field. */}
-        <input type="hidden" name="time" value={time} />
-      </label>
-      <DateField
-        name="date"
-        minDate={minDate}
-        defaultValue={requestedDate ?? ""}
-        locale={locale}
-        className="js-date"
-      />
-      <button type="submit" className="js-confirm" disabled={pending}>
-        {pending ? t.contractorJob.visitConfirming : t.contractorJob.visitConfirm}
-      </button>
-    </form>
-  );
 
   return (
     <section className="js-card jv-card">
       <h2 className="js-title">{mode === "schedule" ? t.contractorJob.visitScheduleTitle : t.contractorJob.visitTitle}</h2>
-      <p className="js-lead">{mode === "schedule" ? t.contractorJob.visitScheduleLead : t.contractorJob.visitLead}</p>
-
       {offered ? (
-        <>
-          <form action={formAction}>
-            <input type="hidden" name="id" value={id} />
-            <input type="hidden" name="date" value={offered} />
-            <input type="hidden" name="time" value={fallbackTime} />
-            <div className="jv-asked">
-              <span className="jv-asked-label">{t.contractorJob.visitAsked}</span>
-              <strong className="jv-asked-day">{pretty(offered)}</strong>
-              <strong className="jv-asked-time">{fallbackTime}</strong>
-            </div>
-            <button type="submit" className="js-confirm" disabled={pending}>
-              {pending ? t.contractorJob.visitConfirming : t.contractorJob.visitConfirm}
-            </button>
-          </form>
-
-          {/* Only folded when there's a suggestion; otherwise the picker is the whole card. */}
-          <details className="js-other">
-            <summary>{t.contractorJob.visitOther}</summary>
-            {picker}
-          </details>
-        </>
+        <div className="jv-asked">
+          <span className="jv-asked-label">{t.contractorJob.visitAsked}</span>
+          <strong className="jv-asked-day">{pretty(offered)}</strong>
+          <strong className="jv-asked-time">{fallbackTime}</strong>
+        </div>
       ) : (
-        picker
+        <p className="js-lead">{mode === "schedule" ? t.contractorJob.visitScheduleLead : t.contractorJob.visitLead}</p>
       )}
+
+      <form action={formAction} className="jv-form">
+        <input type="hidden" name="id" value={id} />
+        <label className="js-time">
+          <span>{t.contractorJob.visitTime}</span>
+          <input
+            type="time"
+            value={to24Hour(time, "08:00")}
+            onChange={(e) => e.target.value && setTime(to12Hour(e.target.value))}
+          />
+          {/* confirmVisit reads FormData, so the time needs a hidden field. */}
+          <input type="hidden" name="time" value={time} />
+        </label>
+        <DateField
+          name="date"
+          minDate={minDate}
+          defaultValue={requestedDate ?? ""}
+          locale={locale}
+          className="js-date"
+        />
+        <button type="submit" className="js-confirm" disabled={pending}>
+          {pending ? t.contractorJob.visitConfirming : t.contractorJob.visitConfirm}
+        </button>
+      </form>
 
       <p className="js-hint">{t.contractorJob.visitNote}</p>
 

@@ -2379,8 +2379,8 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 
 /* Scheduling the on-site visit. Same white card and grey border as the quote
    card below it, so the page reads as one stack of cards rather than a set of
-   differently-styled panels competing for attention. The offered slot is a
-   full-width tap target that already holds the answer. */
+   differently-styled panels competing for attention. The suggested slot sits
+   above the picker, which starts on it. */
 .jv-asked {
   display: flex; flex-direction: column; gap: 0.1rem;
   background: #faf8f4; border: 1px solid #ddd8ce; border-radius: 0.7rem;

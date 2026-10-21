@@ -6,7 +6,7 @@ import { getSession } from "@/lib/crm/auth";
 import { clearGoogleToken, syncQuoteToCalendar } from "@/lib/crm/gcal";
 import { notifyVisitMoved } from "@/lib/crm/notify";
 import { addEvent, getQuote, getStaffById, rescheduleVisit } from "@/lib/crm/queries";
-import { cancelAppointment, setJobDate } from "@/app/crm/quotes/[id]/schedule-actions";
+import { cancelAppointment, confirmVisit, setJobDate } from "@/app/crm/quotes/[id]/schedule-actions";
 
 export type CalActionState = { ok: boolean; error?: string; message?: string };
 
@@ -49,6 +49,12 @@ export async function moveEvent(_prev: CalActionState, formData: FormData): Prom
   const time = String(formData.get("time") ?? "").slice(0, 12);
   const current = await getQuote(session, id);
   if (!current) return { ok: false, error: "You don't have access to this quote." };
+
+  // A customer's suggested slot isn't booked yet; saving a time here books it.
+  if (current.quote_type === "online") {
+    const booked = await confirmVisit({ ok: false }, formData);
+    return booked.ok ? { ok: true, message: booked.message } : { ok: false, error: booked.error };
+  }
 
   const result = await rescheduleVisit(session, id, date, time);
   if (!result.ok) return { ok: false, error: result.error ?? "Could not move that visit." };
