@@ -5,6 +5,7 @@ import { useActionState, useState } from "react";
 import { CHANGE_NOTE_MAX, firstNameOf, parseDollars, sameChangeLines, type ChangeLineDraft } from "@/lib/crm/constants";
 import { RECORDED_METHODS, usd as money, type PaymentMethod } from "@/lib/crm/fees";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { SpellTextarea } from "@/components/spell-field";
 import { sendChangeOrder, withdrawChangeOrder } from "./change-order-actions";
 import { blankRow, filledRows, OptionBuilder, rowAmount, type OptionRow } from "./option-builder";
 import type { ChangeState } from "./types";
@@ -490,7 +491,7 @@ export function ChangeOrder({
         <label className="co-field">
           <span>{t.changeOrder.noteLabel}</span>
           {/* Sent word for word, so the hint says so: "extra concrete" can't be approved. */}
-          <textarea
+          <SpellTextarea
             rows={3}
             maxLength={CHANGE_NOTE_MAX}
             value={note}

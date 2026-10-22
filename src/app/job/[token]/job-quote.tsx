@@ -32,7 +32,7 @@ import {
   type StoredPackage,
 } from "@/app/crm/quotes/[id]/package-builder";
 import type { SaveState } from "@/app/crm/quotes/[id]/types";
-import { AutoTextarea } from "@/components/auto-textarea";
+import { SpellTextarea } from "@/components/spell-field";
 import {
   blankSections,
   CustomerPreview,
@@ -273,7 +273,7 @@ export function JobQuote({
         {hasLegacySummary && (
           <label className="jq-field">
             <span>{t.contractorJob.quoteSummary}</span>
-            <AutoTextarea name="quote_summary" rows={3} value={what} onChange={(e) => setWhat(e.target.value)} />
+            <SpellTextarea name="quote_summary" rows={3} value={what} onChange={(e) => setWhat(e.target.value)} />
           </label>
         )}
 

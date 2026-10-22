@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { AutoTextarea } from "@/components/auto-textarea";
+import { SpellInput, SpellTextarea } from "@/components/spell-field";
 import { firstNameOf, dollars, PACKAGE_TITLE_MAX, packageLetter } from "@/lib/crm/constants";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
 import { addQuoteOption } from "./save-actions";
@@ -169,7 +169,7 @@ export function AddOption({
                   <div className="qsm-row">
                     <label className="qsm-field qsm-field-wide">
                       <span>{t.name}</span>
-                      <input
+                      <SpellInput
                         name="keep_title"
                         value={keepTitle}
                         onChange={(e) => setKeepTitle(e.target.value)}
@@ -192,7 +192,7 @@ export function AddOption({
                   </div>
                   <label className="qsm-field">
                     <span>{t.covers}</span>
-                    <AutoTextarea
+                    <SpellTextarea
                       name="keep_desc"
                       rows={2}
                       value={keepDesc}
@@ -224,7 +224,7 @@ export function AddOption({
                 <div className="qsm-row">
                   <label className="qsm-field qsm-field-wide">
                     <span>{t.name}</span>
-                    <input
+                    <SpellInput
                       name="add_title"
                       value={addTitle}
                       onChange={(e) => setAddTitle(e.target.value)}
@@ -249,7 +249,7 @@ export function AddOption({
                 </div>
                 <label className="qsm-field">
                   <span>{t.covers}</span>
-                  <AutoTextarea
+                  <SpellTextarea
                     name="add_desc"
                     rows={2}
                     value={addDesc}

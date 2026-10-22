@@ -4381,3 +4381,39 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .crm-crew-view { display: block; }
 .crm-crew-view-closed { color: #f87171; }
 .kb-pill-alert { background: rgba(248, 113, 113, 0.15); border: 1px solid #f87171; color: #fca5a5; }
+
+/* ── Spell check on quote fields (components/spell-field.tsx) ──
+   The overlay is a see-through copy of the field's text laid exactly over it:
+   only the squiggles show, and taps pass straight through to the field. */
+.sp-wrap { position: relative; display: block; }
+.sp-overlay {
+  position: absolute; z-index: 1; margin: 0; pointer-events: none; overflow: hidden;
+  color: transparent; background: transparent; border-style: solid; border-color: transparent;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+}
+/* One line, like the input it covers: no wrapping, centred like input text. */
+.sp-overlay-line { white-space: pre; display: flex; align-items: center; }
+.sp-bad {
+  text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: #dc2626;
+  text-decoration-thickness: 1.5px; text-underline-offset: 3px; text-decoration-skip-ink: none;
+}
+/* One tap per fix, under the box: tapping a word inside a phone's text box
+   moves the cursor rather than opening anything. */
+.sp-fixes { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; font-size: 0.8rem; font-weight: 400; }
+.sp-fix {
+  display: inline-flex; align-items: stretch; overflow: hidden;
+  border: 1px solid rgba(220, 38, 38, 0.35); border-radius: 999px; background: rgba(220, 38, 38, 0.06);
+}
+.sp-fix-btn { background: none; border: 0; padding: 0.3rem 0.65rem; font: inherit; color: inherit; cursor: pointer; }
+.sp-fix-btn s { color: #dc2626; }
+.sp-fix-word { padding: 0.3rem 0.65rem; color: #dc2626; }
+.sp-add {
+  background: none; border: 0; border-left: 1px solid rgba(220, 38, 38, 0.25); padding: 0.3rem 0.6rem;
+  font: inherit; font-size: 0.75rem; color: inherit; opacity: 0.75; cursor: pointer;
+}
+.sp-add:hover, .sp-fix-btn:hover { background: rgba(220, 38, 38, 0.1); }
+.sp-more { align-self: center; opacity: 0.7; }
+@media (max-width: 640px) {
+  /* Thumb-sized: these get tapped on a job site. */
+  .sp-fix-btn, .sp-add, .sp-fix-word { min-height: 36px; display: inline-flex; align-items: center; }
+}

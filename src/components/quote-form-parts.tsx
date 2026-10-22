@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { AutoTextarea } from "@/components/auto-textarea";
+import { SpellTextarea } from "@/components/spell-field";
 import { QuoteSections } from "@/components/quote-sections";
 import {
   dollars,
@@ -96,7 +96,7 @@ export function SectionsEditor({
                   </button>
                 )}
               </div>
-              <AutoTextarea
+              <SpellTextarea
                 id={id}
                 name={field}
                 rows={2}

@@ -86,6 +86,12 @@ const nextConfig: NextConfig = {
         source: "/images/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
+      // The spell-check dictionary: the version is in the filename, so a new
+      // dictionary arrives under a new name and this one never changes.
+      {
+        source: "/spell/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
       // The CRM must never be framed (clickjacking) — belt-and-suspenders with
       // X-Frame-Options via the modern frame-ancestors directive.
       {
