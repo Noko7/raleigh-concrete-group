@@ -28,7 +28,8 @@ export type QuotePdfData = {
   totalNote: string | null;
   // Above the link: an invitation to approve, or on an approved quote, where to pay and check in.
   linkLabel: string;
-  quoteUrl: string;
+  // Null when the customer's page wouldn't show this quote (it lapsed): no link to a dead end.
+  quoteUrl: string | null;
 };
 
 const PAGE_W = 612;
@@ -299,10 +300,10 @@ async function layout(data: QuotePdfData, logoPng: Uint8Array | null, scale: num
   const note = data.totalNote ? wrapText(t(data.totalNote), regular, k(9), innerW) : [];
   // Label and link on one line when they fit, else the link under it.
   const linkLabel = `${t(data.linkLabel)} `;
-  const url = t(data.quoteUrl);
+  const url = data.quoteUrl ? t(data.quoteUrl) : "";
   const linkW = bold.widthOfTextAtSize(linkLabel, k(9)) + regular.widthOfTextAtSize(url, k(9));
-  const linkRows = linkW <= innerW ? 1 : 2;
-  const boxH = k(40) + note.length * k(12) + k(8) + linkRows * k(12);
+  const linkRows = !url ? 0 : linkW <= innerW ? 1 : 2;
+  const boxH = k(40) + note.length * k(12) + (linkRows ? k(8) + linkRows * k(12) : 0);
   room(boxH + k(16));
   y -= k(16);
   page.drawRectangle({ x: MARGIN, y: y - boxH, width: CONTENT_W, height: boxH, color: SHADE });
@@ -314,10 +315,12 @@ async function layout(data: QuotePdfData, logoPng: Uint8Array | null, scale: num
     y -= k(12);
     draw(l, MARGIN + 14, k(9), regular, MUTED);
   }
-  y -= k(20);
-  draw(linkLabel, MARGIN + 14, k(9), bold);
-  if (linkRows === 2) y -= k(12);
-  draw(url, linkRows === 1 ? MARGIN + 14 + bold.widthOfTextAtSize(linkLabel, k(9)) : MARGIN + 14, k(9), regular, MUTED);
+  if (linkRows) {
+    y -= k(20);
+    draw(linkLabel, MARGIN + 14, k(9), bold);
+    if (linkRows === 2) y -= k(12);
+    draw(url, linkRows === 1 ? MARGIN + 14 + bold.widthOfTextAtSize(linkLabel, k(9)) : MARGIN + 14, k(9), regular, MUTED);
+  }
   y = boxBottom;
 
   // ── What's included: label column left, the contractor's words right ──

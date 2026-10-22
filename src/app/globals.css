@@ -2260,6 +2260,7 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .job-head .job-title { margin-bottom: 0.35rem; }
 .job-back { display: inline-block; color: #6b7280; font-weight: 700; font-size: 0.9rem; text-decoration: none; margin-bottom: 1.1rem; }
 .job-back:hover { color: var(--amber); }
+.job-pdf { margin-left: 1.25rem; }
 
 /* Quoting and finishing from the job page. Muted borders so the amber schedule
    card stays the loudest thing on screen when a date still needs confirming. */

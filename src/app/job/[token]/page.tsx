@@ -222,6 +222,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         <Link href={`${base}/`} className="job-back">
           {t.contractorJob.backToJobs}
         </Link>
+        {/* The quote as the customer got it, at any stage: for resending, or the truck. */}
+        {quote.quote_amount != null && (
+          <a href={`/crm/api/quote-pdf?id=${quote.id}`} className="job-back job-pdf">
+            {t.contractorJob.downloadPdf}
+          </a>
+        )}
 
         {/* Read at arm's length outdoors: large and heavy, emphasis by size, not colour. */}
         <div className="job-key">

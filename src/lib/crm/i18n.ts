@@ -600,6 +600,7 @@ const en = {
     reschedNoteVisit: "The customer and the crew get a text with the new visit time.",
     status: "Status",
     backToJobs: "← All my jobs",
+    downloadPdf: "Download quote PDF",
     typeInPerson: "In-person quote",
     typeOnline: "Online quote",
     typePlans: "Priced from plans",

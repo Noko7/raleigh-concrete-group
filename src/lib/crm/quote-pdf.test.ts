@@ -151,6 +151,11 @@ test("the real logo embeds", async () => {
   assert.ok(plainBytes(pdf).includes("/Subtype /Image"));
 });
 
+test("a copy without the customer link still lays out on one page", async () => {
+  const r = await fitQuotePdf({ ...base, quoteUrl: null }, null);
+  assert.deepEqual([r.pages, r.scale], [1, 1]);
+});
+
 test("a broken logo falls back to the name in text", async () => {
   const pdf = await buildQuotePdf(base, new Uint8Array([1, 2, 3]));
   assert.equal((await PDFDocument.load(pdf)).getPageCount(), 1);
