@@ -944,6 +944,7 @@ The database's state is written down in the repo, not remembered:
 | `supabase/migrations/undo/` | The undo for each migration. Stage 1: `undo/20261017221826_stage1_price_lockdown.undo.sql`. Stage 3: `undo/20261017222017_stage3_hardening.undo.sql`. Undo newest first (stage 3 before stage 1). |
 | `supabase/migrations/verify/` | Checks for a migration. `verify/20261017221826_stage1_price_lockdown.verify.sql` tests the stage 1 guard and ends in `ROLLBACK`. |
 | `supabase/schema.sql` | The whole live public schema (tables, indexes, RLS, policies, functions, triggers, grants), generated from the catalog. **Reference only, do not run.** |
+| `supabase/bootstrap.sql` | Builds that same schema, plus the storage buckets, on a **new, empty** Supabase project (e.g. a dev copy). Paste it into the SQL Editor and run it once; the comments at its top and bottom cover the rest (env vars, making yourself owner). No data. Never run it on production. |
 | `supabase/snapshots/` | What the live database looked like just before stage 1 and stage 3. |
 | `supabase/queries/` | Ops queries, not schema changes: `audit.sql` (read-only health check), `money-audit.sql` (fixes are opt-in, `where false`), `queue-backlog.sql`. |
 | `supabase/archive/` | The 33 SQL Editor files the database was built from before migrations were tracked. All live. **Never re-run them**: several would undo later changes. Its README gives the order they ran in and which ones are destructive. |
@@ -962,7 +963,8 @@ The database's state is written down in the repo, not remembered:
    (2026-06-11 to 2026-10-17) that have no file here; their SQL is in
    `supabase/archive/` (listed in its README).
 3. Regenerate `supabase/schema.sql` from the live catalog (the queries are named
-   in its header) and commit it with the migration.
+   in its header), make the same change in `supabase/bootstrap.sql`, and commit
+   both with the migration.
 4. New functions in `public` only get `EXECUTE` for `postgres`: grant
    `service_role` (and `authenticated`, if RLS calls it) explicitly.
 
