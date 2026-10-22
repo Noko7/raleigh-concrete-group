@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 
 import { dollarsOrZero as usd, MAX_QUOTE_OPTIONS, OPTION_TITLE_MAX } from "@/lib/crm/constants";
 import type { dict } from "@/lib/crm/i18n";
-import { AutoTextarea } from "@/components/auto-textarea";
+import { SpellInput, SpellTextarea } from "@/components/spell-field";
 
 // The line-item builder, shared by the CRM editor and the crew's job page.
 // Controlled: the parent owns the rows, since it also needs the total and the
@@ -255,7 +255,7 @@ export function OptionBuilder({
           <div className="qo-row-main">
             <label className="qo-field qo-field-title">
               <span>{t.itemTitle}</span>
-              <input
+              <SpellInput
                 value={r.title}
                 onChange={(e) => set(r.key, { title: e.target.value })}
                 maxLength={OPTION_TITLE_MAX}
@@ -278,7 +278,7 @@ export function OptionBuilder({
 
           <label className="qo-field">
             <span>{t.itemDesc}</span>
-            <AutoTextarea
+            <SpellTextarea
               rows={2}
               value={r.description}
               onChange={(e) => set(r.key, { description: e.target.value })}

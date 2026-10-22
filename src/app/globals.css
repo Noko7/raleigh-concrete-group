@@ -4382,3 +4382,19 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .crm-crew-view { display: block; }
 .crm-crew-view-closed { color: #f87171; }
 .kb-pill-alert { background: rgba(248, 113, 113, 0.15); border: 1px solid #f87171; color: #fca5a5; }
+
+/* ── Spell check on quote fields (components/spell-field.tsx) ──
+   The overlay is a see-through copy of the field's text laid exactly over it:
+   only the squiggles show, and taps pass straight through to the field. */
+.sp-wrap { position: relative; display: block; }
+.sp-overlay {
+  position: absolute; z-index: 1; margin: 0; pointer-events: none; overflow: hidden;
+  color: transparent; background: transparent; border-style: solid; border-color: transparent;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+}
+/* One line, like the input it covers: no wrapping, centred like input text. */
+.sp-overlay-line { white-space: pre; display: flex; align-items: center; }
+.sp-bad {
+  text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: #dc2626;
+  text-decoration-thickness: 1.5px; text-underline-offset: 3px; text-decoration-skip-ink: none;
+}

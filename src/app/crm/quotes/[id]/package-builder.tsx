@@ -9,7 +9,7 @@ import {
   packageLetter,
 } from "@/lib/crm/constants";
 import type { dict } from "@/lib/crm/i18n";
-import { AutoTextarea } from "@/components/auto-textarea";
+import { SpellInput, SpellTextarea } from "@/components/spell-field";
 
 // The "or instead" builder, shared by the CRM editor and the crew's job page.
 // Mirrors OptionBuilder (controlled, JSON in a hidden input) since they sit on
@@ -215,7 +215,7 @@ export function PackageBuilder({
           <div className="qc-card-main">
             <label className="qo-field qo-field-title">
               <span>{t.itemTitle}</span>
-              <input
+              <SpellInput
                 value={r.title}
                 onChange={(e) => set(r.key, { title: e.target.value })}
                 maxLength={PACKAGE_TITLE_MAX}
@@ -238,7 +238,7 @@ export function PackageBuilder({
 
           <label className="qo-field">
             <span>{t.itemDesc}</span>
-            <AutoTextarea
+            <SpellTextarea
               rows={2}
               value={r.description}
               onChange={(e) => set(r.key, { description: e.target.value })}

@@ -31,7 +31,7 @@ import {
   type StoredPackage,
 } from "./package-builder";
 import type { SaveState } from "./types";
-import { AutoTextarea } from "@/components/auto-textarea";
+import { SpellTextarea } from "@/components/spell-field";
 import {
   blankSections as blanksOf,
   CustomerPreview,
@@ -290,7 +290,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
       {hasLegacySummary && (
         <label className="jq-field">
           <span>Older quote summary (shown only while the sections above are blank)</span>
-          <AutoTextarea name="quote_summary" rows={3} value={summary} onChange={(e) => setSummary(e.target.value)} />
+          <SpellTextarea name="quote_summary" rows={3} value={summary} onChange={(e) => setSummary(e.target.value)} />
         </label>
       )}
 

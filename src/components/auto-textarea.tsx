@@ -1,17 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, type TextareaHTMLAttributes } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, type Ref, type TextareaHTMLAttributes } from "react";
 
 // A textarea that grows to fit its content. Everything multi-line here is written on a phone, where a
 // fixed `rows={2}` box scrolls the text out of sight. `rows` becomes a MINIMUM.
-// Drop-in: same props as <textarea>, controlled or uncontrolled.
+// Drop-in: same props as <textarea>, controlled or uncontrolled. `ref` reaches the textarea too.
 export function AutoTextarea({
+  ref: outerRef,
   value,
   onChange,
   onInput,
   style,
   ...rest
-}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & { ref?: Ref<HTMLTextAreaElement> }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
 
   const fit = useCallback(() => {
@@ -50,7 +51,11 @@ export function AutoTextarea({
   return (
     <textarea
       {...rest}
-      ref={ref}
+      ref={(el) => {
+        ref.current = el;
+        if (typeof outerRef === "function") outerRef(el);
+        else if (outerRef) outerRef.current = el;
+      }}
       value={value}
       onChange={(e) => {
         // From the event target, so uncontrolled boxes grow too.
