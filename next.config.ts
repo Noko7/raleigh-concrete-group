@@ -50,6 +50,7 @@ const nextConfig: NextConfig = {
   // serverless function's bundle unless named here.
   outputFileTracingIncludes: {
     "/q/[token]/pdf": ["./public/images/logo_horizontal.png"],
+    "/crm/api/quote-pdf": ["./public/images/logo_horizontal.png"],
   },
   async redirects() {
     return [
