@@ -722,8 +722,11 @@ const en = {
   // what it's doing.
   heldText: {
     title: "Waiting to send",
-    lead: "These texts are written and queued. They go out on their own, or you can send one now.",
+    lead: "These texts are written and queued. They go out on their own, or you can send one now or cancel it.",
     send: "Send now",
+    confirm: "Send it now?",
+    confirmYes: "Yes, send it now",
+    confirmNo: "Not yet",
     sending: "Sending…",
     sent: "Sent. It has gone out now rather than waiting.",
     hint: "Sends it straight away instead of waiting its turn.",

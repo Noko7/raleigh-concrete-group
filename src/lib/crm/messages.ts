@@ -1,3 +1,6 @@
+// Texts that carry the quote itself: cancelling one before it sends cancels the quote (send-actions.ts).
+export const QUOTE_TEXT_KINDS: ReadonlySet<string> = new Set(["quote_ready", "quote_updated"]);
+
 // Labels for the message log's `kind` keys. Unknown kinds fall back to the raw key, not a blank row.
 export const MESSAGE_LABELS: Record<string, string> = {
   new_quote: "New lead alert",

@@ -270,7 +270,13 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
 
         {/* Above everything: an unsent text is the customer not knowing
             something we think they know. Renders nothing when the queue is empty. */}
-        <JobHeldTexts quoteId={quote.id} messages={messages} quiet={inQuietHours()} locale={locale} />
+        <JobHeldTexts
+          quoteId={quote.id}
+          messages={messages}
+          quiet={inQuietHours()}
+          isOwner={session.staff.role === "owner"}
+          locale={locale}
+        />
 
         {/* Appointment cards first: time-critical and self-contained. Pricing
             needs the photos and notes, so it's at the bottom. Cards depend on stage. */}

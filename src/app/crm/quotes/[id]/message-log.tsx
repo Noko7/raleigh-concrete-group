@@ -1,12 +1,9 @@
 import { BUSINESS_TZ, clockLabel, inQuietHours } from "@/lib/crm/clock";
-import { messageLabel, roleLabel } from "@/lib/crm/messages";
+import { messageLabel, QUOTE_TEXT_KINDS, roleLabel } from "@/lib/crm/messages";
 import { isCancellable, isCancelled, isHeld, type QuoteMessage } from "@/lib/crm/queries";
 
 import { CancelHeldText } from "./cancel-held-text";
 import { SendHeldNow } from "./send-held-now";
-
-// Keep in step with QUOTE_TEXT_KINDS in send-actions.ts, which decides what actually happens.
-const QUOTE_KINDS = new Set(["quote_ready", "quote_updated"]);
 
 // Every text this job produced and whether it left. Sends are best-effort (an outage must never fail a
 // quote), so this is the trace, kept on the job. <details> instead of a modal so it works without client
@@ -93,7 +90,7 @@ export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; is
                   <CancelHeldText
                     quoteId={m.quote_id}
                     messageId={m.id}
-                    isQuote={QUOTE_KINDS.has(m.kind)}
+                    isQuote={QUOTE_TEXT_KINDS.has(m.kind)}
                     isOwner={isOwner}
                   />
                 )}

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
 import { QUOTE_SECTION_FIELDS } from "@/lib/crm/constants";
+import { QUOTE_TEXT_KINDS } from "@/lib/crm/messages";
 import { sendHeldMessageNow } from "@/lib/crm/notify";
 import {
   addEvent,
@@ -130,9 +131,6 @@ export async function cancelHeldMessage(_prev: ScheduleState, formData: FormData
       : "That text has been stopped. It will not send.",
   };
 }
-
-// Texts that carry the quote itself; cancelling one cancels the quote.
-const QUOTE_TEXT_KINDS = new Set(["quote_ready", "quote_updated"]);
 
 /**
  * The wipe shared by retracting and cancelling a quote, which must clear the
