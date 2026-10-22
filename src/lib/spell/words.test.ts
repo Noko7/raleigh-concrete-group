@@ -45,6 +45,16 @@ test("flags a real word that's almost always a slip, with the word meant", () =>
   assert.equal(findMisspellings("Tare out the patio", (w) => sp.correct(w))[0].meant, "Tear");
 });
 
+test("his past misspellings get the word he meant, not the dictionary's guess", () => {
+  const meant = (text: string) => findMisspellings(text, (w) => sp.correct(w)).map((m) => m.meant);
+  assert.deepEqual(meant("taken through the Bulder association"), ["Builder"]);
+  assert.deepEqual(meant("the sosation is approved"), ["association"]);
+  assert.deepEqual(meant("left clean and very prefecional"), ["professional"]);
+  assert.deepEqual(meant("Escavate and intall"), ["Excavate", "install"]);
+  // And a sent-quote term that isn't a mistake.
+  assert.deepEqual(flagged("rust-inhibitive primer"), []);
+});
+
 test("positions point at the word, so a fix replaces exactly it", () => {
   const text = "Pour and finsh, then finsh the edges";
   const ms = findMisspellings(text, (w) => sp.correct(w));

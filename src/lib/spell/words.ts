@@ -11,7 +11,7 @@ export const TRADE_WORDS = [
   "rolloff", "sawcut", "sawcuts", "sawcutting", "fibermesh", "wythe", "quikrete", "sakrete", "cmu",
   "hoa", "hvac", "llc", "nds", "psi", "sq", "ft", "lf", "cy", "yd", "yds", "mil", "pre", "precast",
   "regrade", "regrading", "downspout", "downspouts", "dumpster", "bobcat", "skidsteer", "stoop",
-  "flatwork", "broomed", "troweled", "troweling", "underlayment", "doweled", "doweling", "edger", "edgers",
+  "flatwork", "inhibitive", "broomed", "troweled", "troweling", "underlayment", "doweled", "doweling", "edger", "edgers",
 ] as const;
 
 // Real words that are almost always a slip in a quote, flagged anyway with the
@@ -22,11 +22,23 @@ export const CONFUSABLES: Record<string, string> = {
   boarder: "border",
 };
 
+// Misspellings from quotes already sent, with what was meant. Spelled by
+// sound, so the dictionary's guesses miss ("Bulder" -> "Boulder"); these win.
+export const KNOWN_FIXES: Record<string, string> = {
+  escavate: "excavate",
+  escavation: "excavation",
+  intall: "install",
+  demollish: "demolish",
+  bulder: "builder",
+  sosation: "association",
+  prefecional: "professional",
+};
+
 export type Misspelling = {
   start: number;
   end: number;
   word: string;
-  // Set for a confusable: the word that was almost certainly meant.
+  // Set when the fix is known (a confusable, or one of KNOWN_FIXES).
   meant?: string;
 };
 
@@ -60,7 +72,7 @@ export function findMisspellings(text: string, isWord: (w: string) => boolean): 
     }
     // "tie-in", "pre-pour": fine if the whole thing is a word, or every part is.
     const ok = known(word, isWord) || (word.includes("-") && word.split("-").every((p) => known(p, isWord)));
-    if (!ok) out.push({ start, end, word: m[0] });
+    if (!ok) out.push({ start, end, word: m[0], ...(KNOWN_FIXES[lower] && { meant: matchCase(KNOWN_FIXES[lower], word) }) });
   }
   return out;
 }
