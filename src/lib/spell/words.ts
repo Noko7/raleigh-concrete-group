@@ -14,32 +14,14 @@ export const TRADE_WORDS = [
   "flatwork", "inhibitive", "broomed", "troweled", "troweling", "underlayment", "doweled", "doweling", "edger", "edgers",
 ] as const;
 
-// Real words that are almost always a slip in a quote, flagged anyway with the
-// word that was meant. "tare out" turns up again and again for "tear out".
-export const CONFUSABLES: Record<string, string> = {
-  tare: "tear",
-  tareing: "tearing",
-  boarder: "border",
-};
-
-// Misspellings from quotes already sent, with what was meant. Spelled by
-// sound, so the dictionary's guesses miss ("Bulder" -> "Boulder"); these win.
-export const KNOWN_FIXES: Record<string, string> = {
-  escavate: "excavate",
-  escavation: "excavation",
-  intall: "install",
-  demollish: "demolish",
-  bulder: "builder",
-  sosation: "association",
-  prefecional: "professional",
-};
+// Real words that are almost always a slip in a quote, underlined anyway.
+// "tare out" turns up again and again for "tear out".
+export const CONFUSABLES = new Set(["tare", "tareing", "boarder"]);
 
 export type Misspelling = {
   start: number;
   end: number;
   word: string;
-  // Set when the fix is known (a confusable, or one of KNOWN_FIXES).
-  meant?: string;
 };
 
 // A word: letters with inner apostrophes or hyphens ("don't", "tie-in").
@@ -66,13 +48,13 @@ export function findMisspellings(text: string, isWord: (w: string) => boolean): 
     if (word.length > 1 && word === word.toUpperCase()) continue;
 
     const lower = word.toLowerCase();
-    if (CONFUSABLES[lower]) {
-      out.push({ start, end, word: m[0], meant: matchCase(CONFUSABLES[lower], word) });
+    if (CONFUSABLES.has(lower)) {
+      out.push({ start, end, word: m[0] });
       continue;
     }
     // "tie-in", "pre-pour": fine if the whole thing is a word, or every part is.
     const ok = known(word, isWord) || (word.includes("-") && word.split("-").every((p) => known(p, isWord)));
-    if (!ok) out.push({ start, end, word: m[0], ...(KNOWN_FIXES[lower] && { meant: matchCase(KNOWN_FIXES[lower], word) }) });
+    if (!ok) out.push({ start, end, word: m[0] });
   }
   return out;
 }
@@ -86,35 +68,4 @@ function known(word: string, isWord: (w: string) => boolean): boolean {
   // The dictionary is case-aware: "raleigh" is wrong but "Raleigh" is right,
   // and a capitalised first word of a sentence should pass as its lower case.
   return isWord(word) || isWord(lower) || isWord(lower[0].toUpperCase() + lower.slice(1));
-}
-
-/**
- * The dictionary's suggestions, best first for how the crew misspell: a
- * dropped letter ("finsh") is far likelier than a wrong one, so a suggestion
- * that still holds every typed letter in order ("finish") outranks one that
- * swaps a letter ("finch"). Otherwise the dictionary's own order stands.
- */
-export function rankSuggestions(typed: string, suggestions: string[]): string[] {
-  const t = typed.toLowerCase();
-  const keeps = (s: string) => {
-    let i = 0;
-    for (const ch of s.toLowerCase()) if (ch === t[i]) i++;
-    return i === t.length;
-  };
-  return suggestions
-    .map((s, i) => ({ s, i, rank: keeps(s) ? 0 : 1 }))
-    .sort((a, b) => a.rank - b.rank || a.i - b.i)
-    .map((x) => x.s);
-}
-
-/** The replacement in the same case as what was typed: "Tare" -> "Tear". */
-export function matchCase(replacement: string, typed: string): string {
-  if (typed.length > 1 && typed === typed.toUpperCase()) return replacement.toUpperCase();
-  if (typed[0] && typed[0] === typed[0].toUpperCase()) return replacement[0].toUpperCase() + replacement.slice(1);
-  return replacement;
-}
-
-/** `text` with the word at [start, end) swapped for `replacement`. */
-export function replaceAt(text: string, start: number, end: number, replacement: string): string {
-  return text.slice(0, start) + replacement + text.slice(end);
 }

@@ -12,11 +12,10 @@ import {
 } from "react";
 
 import { AutoTextarea } from "@/components/auto-textarea";
-import { loadSpeller, onWordsChanged, type Speller } from "@/lib/spell/speller";
-import { findMisspellings, matchCase, replaceAt, type Misspelling } from "@/lib/spell/words";
+import { loadSpeller, type Speller } from "@/lib/spell/speller";
+import { findMisspellings, type Misspelling } from "@/lib/spell/words";
 
-// Quote fields with a red squiggle under misspelled words and, below the box,
-// one-tap fixes. The squiggles are drawn on a see-through copy of the text
+// Quote fields with a red squiggle under misspelled words. The squiggles are drawn on a see-through copy of the text
 // laid exactly over the field (pointer-events off, so every tap still lands in
 // the field); the field itself is untouched, so typing, autocorrect and
 // selection behave as before. The browser's own checker is switched off here,
@@ -31,9 +30,6 @@ const MIRRORED = [
   "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
   "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
 ] as const;
-
-// More than this and the list under the box becomes its own wall of text.
-const MAX_FIXES = 6;
 
 export function SpellTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
@@ -123,15 +119,12 @@ function SpellShell({
   const [speller, setSpeller] = useState<Speller | null>(null);
   const [text, setText] = useState(() => String(value ?? defaultValue ?? ""));
   const [caret, setCaret] = useState<number | null>(null);
-  const [, setWordsVersion] = useState(0);
 
   useEffect(() => {
     let live = true;
     loadSpeller().then((s) => live && setSpeller(s));
-    const off = onWordsChanged(() => setWordsVersion((v) => v + 1));
     return () => {
       live = false;
-      off();
     };
   }, []);
 
@@ -184,53 +177,12 @@ function SpellShell({
     ? findMisspellings(text, speller.isWord).filter((m) => caret === null || caret < m.start || caret > m.end)
     : [];
 
-  // Every occurrence of a misspelling is fixed by one tap.
-  const fixes = new Map<string, Misspelling[]>();
-  for (const m of issues) fixes.set(m.word, [...(fixes.get(m.word) ?? []), m]);
-
-  const apply = (word: string, replacement: string) => {
-    const el = fieldRef.current;
-    if (!el) return;
-    let next = el.value;
-    // From the end, so earlier positions stay right.
-    for (const m of [...(fixes.get(word) ?? [])].reverse()) {
-      if (next.slice(m.start, m.end) === word) next = replaceAt(next, m.start, m.end, replacement);
-    }
-    setNativeValue(el, next);
-    setText(next);
-  };
-
   return (
     <div className="sp-wrap">
       {children(fieldRef, handlers)}
       {speller && (
         <div ref={overlayRef} className={multiline ? "sp-overlay" : "sp-overlay sp-overlay-line"} aria-hidden="true">
           <Marked text={text} issues={issues} />
-        </div>
-      )}
-      {speller && fixes.size > 0 && (
-        <div className="sp-fixes" role="group" aria-label="Spelling">
-          {[...fixes.entries()].slice(0, MAX_FIXES).map(([word, at]) => {
-            const fix = at[0].meant ?? speller.suggest(word)[0];
-            return (
-              <span key={word} className="sp-fix">
-                {fix ? (
-                  <button type="button" className="sp-fix-btn" onClick={() => apply(word, matchCase(fix, word))}>
-                    <s>{word}</s> <span aria-hidden="true">→</span> <strong>{matchCase(fix, word)}</strong>
-                  </button>
-                ) : (
-                  <span className="sp-fix-word">{word}</span>
-                )}
-                {/* A confusable is a real word; "Add" is for names and terms the dictionary lacks. */}
-                {!at[0].meant && (
-                  <button type="button" className="sp-add" onClick={() => speller.addOwn(word)} title="Add to dictionary">
-                    Add
-                  </button>
-                )}
-              </span>
-            );
-          })}
-          {fixes.size > MAX_FIXES && <span className="sp-more">+{fixes.size - MAX_FIXES} more</span>}
         </div>
       )}
     </div>
@@ -253,12 +205,4 @@ function Marked({ text, issues }: { text: string; issues: Misspelling[] }) {
   // A trailing newline still needs its line, or the last row sits one line short.
   parts.push(`${text.slice(at)}​`);
   return <>{parts}</>;
-}
-
-// Set the value the way typing does, so a controlled field's onChange runs and
-// the form's state (and Save) see the fix.
-function setNativeValue(el: Field, value: string) {
-  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-  Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(el, value);
-  el.dispatchEvent(new Event("input", { bubbles: true }));
 }

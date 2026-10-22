@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 
 import nspell from "nspell";
 
-import { findMisspellings, matchCase, rankSuggestions, replaceAt } from "./words.ts";
+import { findMisspellings } from "./words.ts";
 
 const dir = new URL("../../../public/spell/", import.meta.url);
 const sp = nspell(readFileSync(new URL("en-us-4.0.0.aff", dir), "utf8"), readFileSync(new URL("en-us-4.0.0.dic", dir), "utf8"));
@@ -21,7 +21,9 @@ test("catches the misspellings that show up in real quotes", () => {
     "intall",
     "demollish",
   ]);
-  assert.deepEqual(sp.suggest("Escavate").slice(0, 1), ["Excavate"]);
+  // And the sound-alike ones from quotes already sent.
+  assert.deepEqual(flagged("taken through the Bulder association, very prefecional"), ["Bulder", "prefecional"]);
+  assert.deepEqual(flagged("the sosation is approved"), ["sosation"]);
 });
 
 test("leaves trade words, measurements, abbreviations and links alone", () => {
@@ -38,47 +40,22 @@ test("leaves trade words, measurements, abbreviations and links alone", () => {
   for (const s of ok) assert.deepEqual(flagged(s), [], s);
 });
 
-test("flags a real word that's almost always a slip, with the word meant", () => {
-  const [m] = findMisspellings("Will tare out old driveway", (w) => sp.correct(w));
-  assert.equal(m.word, "tare");
-  assert.equal(m.meant, "tear");
-  assert.equal(findMisspellings("Tare out the patio", (w) => sp.correct(w))[0].meant, "Tear");
+test("underlines a real word that's almost always a slip", () => {
+  assert.deepEqual(flagged("Will tare out old driveway"), ["tare"]);
+  assert.deepEqual(flagged("Tare out the patio"), ["Tare"]);
 });
 
-test("his past misspellings get the word he meant, not the dictionary's guess", () => {
-  const meant = (text: string) => findMisspellings(text, (w) => sp.correct(w)).map((m) => m.meant);
-  assert.deepEqual(meant("taken through the Bulder association"), ["Builder"]);
-  assert.deepEqual(meant("the sosation is approved"), ["association"]);
-  assert.deepEqual(meant("left clean and very prefecional"), ["professional"]);
-  assert.deepEqual(meant("Escavate and intall"), ["Excavate", "install"]);
-  // And a sent-quote term that isn't a mistake.
+test("a sent-quote term that isn't a mistake stays clean", () => {
   assert.deepEqual(flagged("rust-inhibitive primer"), []);
 });
 
-test("positions point at the word, so a fix replaces exactly it", () => {
+test("positions point at each word, so the underline lands under it", () => {
   const text = "Pour and finsh, then finsh the edges";
-  const ms = findMisspellings(text, (w) => sp.correct(w));
   assert.deepEqual(
-    ms.map((m) => text.slice(m.start, m.end)),
-    ["finsh", "finsh"],
+    findMisspellings(text, (w) => sp.correct(w)).map((m) => [m.start, text.slice(m.start, m.end)]),
+    [
+      [9, "finsh"],
+      [21, "finsh"],
+    ],
   );
-  let fixed = text;
-  for (const m of [...ms].reverse()) fixed = replaceAt(fixed, m.start, m.end, "finish");
-  assert.equal(fixed, "Pour and finish, then finish the edges");
-});
-
-test("a suggestion that keeps every typed letter comes first", () => {
-  const best = (w: string) => rankSuggestions(w, sp.suggest(w))[0];
-  assert.equal(best("finsh"), "finish");
-  assert.equal(best("Escavate"), "Excavate");
-  assert.equal(best("intall"), "install");
-  assert.equal(best("demollish"), "demolish");
-  assert.equal(best("seperate"), "separate");
-  assert.equal(best("replacment"), "replacement");
-});
-
-test("matchCase keeps how the word was typed", () => {
-  assert.equal(matchCase("excavate", "Escavate"), "Excavate");
-  assert.equal(matchCase("tear", "TARE"), "TEAR");
-  assert.equal(matchCase("tear", "tare"), "tear");
 });
