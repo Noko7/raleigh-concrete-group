@@ -15,6 +15,7 @@ import { listCrewViews } from "@/lib/crm/crew-views";
 import { usd } from "@/lib/crm/fees";
 import {
   getQuote,
+  isQuoteExpired,
   listAgreementsForQuote,
   listContractors,
   listEvents,
@@ -258,6 +259,10 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             <a href={mapsLink} target="_blank" rel="noreferrer" className="crm-btn crm-btn-ghost">Map</a>
           )}
           <a href={customerLink} target="_blank" rel="noreferrer" className="crm-btn crm-btn-ghost">Their quote page</a>
+          {/* The PDF refuses what the quote page won't price: no amount yet, or expired. */}
+          {quote.quote_amount != null && !isQuoteExpired(quote) && (
+            <a href={`${customerLink}/pdf`} className="crm-btn crm-btn-ghost">Download PDF</a>
+          )}
         </nav>
       </header>
 

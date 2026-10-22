@@ -447,6 +447,11 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
 
         <ContactButtons />
         <p className="cq-fine">Questions about your quote? Just call or text. We&apos;re happy to walk you through it.</p>
+        {hasPrice && (
+          <p className="cq-fine">
+            <a href={`/q/${token}/pdf`}>Download a PDF copy</a>
+          </p>
+        )}
       </div>
     </main>
   );
