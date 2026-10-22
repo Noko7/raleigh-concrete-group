@@ -11,7 +11,9 @@ import { inflateSync } from "node:zlib";
 
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
-import { buildQuotePdf, pdfText, wrapText, type QuotePdfData } from "./quote-pdf.ts";
+import { fitQuotePdf, pdfText, unwrapLines, wrapText, type QuotePdfData } from "./quote-pdf.ts";
+
+const buildQuotePdf = async (d: QuotePdfData, logo: Uint8Array | null) => (await fitQuotePdf(d, logo)).pdf;
 
 const base: QuotePdfData = {
   businessName: "Raleigh Concrete Group",
@@ -99,6 +101,35 @@ test("hostile text renders as text and adds nothing a reader would run", async (
   // And it still opens.
   const reread = await PDFDocument.load(pdf);
   assert.ok(reread.getPageCount() >= 1);
+});
+
+test("pasted hard-wrapped text rejoins; real line breaks stay", () => {
+  assert.deepEqual(unwrapLines("Clean the work area, and dress the patio\nedges"), ["Clean the work area, and dress the patio edges"]);
+  assert.deepEqual(unwrapLines("• Sweep\npremium sand.\n• Next item"), ["• Sweep premium sand.", "• Next item"]);
+  assert.deepEqual(unwrapLines("Section 1:\n- Cut the slope\nForm each section"), ["Section 1:", "- Cut the slope", "Form each section"]);
+  assert.deepEqual(unwrapLines("Total Area: 440\n\nnext para"), ["Total Area: 440", "", "next para"]);
+});
+
+// Real quotes run from "Not applicable" in four sections to ~5,000 characters
+// of bullet lists, so both ends are pinned: a sparse quote at full size on one
+// page, a middling one shrunk onto one page, a huge one at full size over two.
+const words = (n: number) => Array.from({ length: n }, (_, i) => `* Compact and grade the base, line ${i}, to a firm and stable surface.`).join("\n");
+
+test("a sparse quote is one page at full size", async () => {
+  const r = await fitQuotePdf({ ...base, sections: [["Scope", "Remove existing patio."], ["Permits", "Not applicable"]] }, null);
+  assert.deepEqual([r.pages, r.scale], [1, 1]);
+});
+
+test("a quote a little too long for one page shrinks onto one", async () => {
+  const r = await fitQuotePdf({ ...base, sections: [["Scope", words(40)]] }, null);
+  assert.equal(r.pages, 1);
+  assert.ok(r.scale < 1);
+});
+
+test("a quote far too long for one page runs over at full size", async () => {
+  const r = await fitQuotePdf({ ...base, sections: [["Scope", words(90)]] }, null);
+  assert.ok(r.pages >= 2);
+  assert.equal(r.scale, 1);
 });
 
 test("a long quote flows onto more pages instead of running off the bottom", async () => {
