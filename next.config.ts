@@ -46,6 +46,11 @@ const RETIRED_LOCATION_REDIRECTS = locationKeys.flatMap((location) =>
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // The quote PDF reads the logo from disk; files in public/ aren't in a
+  // serverless function's bundle unless named here.
+  outputFileTracingIncludes: {
+    "/q/[token]/pdf": ["./public/images/logo_horizontal.png"],
+  },
   async redirects() {
     return [
       ...RETIRED_LOCATION_REDIRECTS,
