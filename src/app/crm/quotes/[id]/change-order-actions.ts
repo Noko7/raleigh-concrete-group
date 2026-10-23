@@ -5,10 +5,12 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/crm/auth";
 import { optionsTotal, firstNameOf, parseDollars } from "@/lib/crm/constants";
 import { isRecordedMethod, toCents, usd, type RecordedMethod } from "@/lib/crm/fees";
-import { notifyChangeRequested, type SendResult } from "@/lib/crm/notify";
+import { notifyChangeRequested, notifyChangeWithdrawn, type SendResult } from "@/lib/crm/notify";
 import {
   addEvent,
   cancelChange,
+  cancelQueuedFor,
+  customerTextWentOut,
   getQuote,
   parseQuoteOptions,
   recordChangeAgreed,
@@ -230,14 +232,56 @@ export async function withdrawChangeOrder(_prev: ChangeState, formData: FormData
   const result = await cancelChange(session, id);
   if (!result.ok) return { ok: false, error: result.error ?? "Could not withdraw that change." };
 
+  // The change text may still be held for quiet hours: stop it, or it goes out
+  // in the morning pointing at a change that's gone.
+  const nowIso = new Date().toISOString();
+  const stopped = await cancelQueuedFor(id, nowIso, {
+    kind: "change_requested",
+    detail: "Cancelled: the change was withdrawn.",
+  });
+  // If it already reached them, their link now shows nothing to approve, so say so.
+  const reached = before?.change_requested_at
+    ? await customerTextWentOut(id, "change_requested", before.change_requested_at)
+    : false;
+  let told: SendResult | null = null;
+  if (reached && before) {
+    told = await notifyChangeWithdrawn({
+      id,
+      name: before.name,
+      phone: before.phone,
+      service: before.service,
+      address: before.address,
+      scheduled_date: before.scheduled_date,
+      scheduled_time: before.scheduled_time,
+      public_token: before.public_token,
+      job_token: before.job_token,
+    }).catch((): SendResult => ({ ok: false, provider: "unknown", detail: "Send failed" }));
+  }
+
   await addEvent(session, id, "change_withdrawn", {
     note: before?.change_note ?? null,
     to: before?.change_amount ?? null,
+    texts_cancelled: stopped,
+    customer_told: told ? told.ok || Boolean(told.held) : false,
   });
-  // No customer text: whoever withdrew it just spoke to them.
 
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm");
   revalidatePath("/job/[token]", "page");
-  return { ok: true, message: "Change withdrawn. The price is unchanged." };
+
+  const firstName = firstNameOf(before?.name ?? "", before?.name ?? "");
+  let message = "Change withdrawn. The price is unchanged.";
+  if (stopped > 0 && !reached) message += ` The text to ${firstName} was stopped before it went out.`;
+  else if (told?.ok) message += ` ${firstName} was texted that it's withdrawn.`;
+  else if (told?.held) message += ` ${firstName} will be texted that it's withdrawn ${told.sendAfterLabel ?? "in the morning"}.`;
+  if (told && !told.ok && !told.held) {
+    return {
+      ok: true,
+      message,
+      warning: `${firstName} already had the change text, and the "it's withdrawn" text didn't send${
+        told.detail ? `: ${told.detail}` : ""
+      }. Give them a call so they don't look for it.`,
+    };
+  }
+  return { ok: true, message };
 }
