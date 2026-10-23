@@ -546,6 +546,27 @@ export async function notifyChangeRequested(q: QuoteInfo, note: string): Promise
   );
 }
 
+/**
+ * The change they were texted about has been withdrawn, so their link no
+ * longer shows it. Without this they open the link to nothing to approve.
+ */
+export async function notifyChangeWithdrawn(q: QuoteInfo): Promise<SendResult> {
+  return sendSmsResult(
+    q.phone,
+    text([
+      `Hi ${firstName(q.name)},`,
+      "please ignore the change we texted you about. It's been withdrawn, and your price is the same as you agreed.",
+      "",
+      q.scheduled_date ? `Your date doesn't move: ${dayAndTime(q)}.` : null,
+      q.scheduled_date ? "" : null,
+      "Questions, just call.",
+      "",
+      BUSINESS,
+    ]),
+    { quoteId: q.id, kind: "change_withdrawn", role: "customer" },
+  );
+}
+
 /** Their answer, to the office and the crew. */
 export async function notifyChangeAnswered(
   q: QuoteInfo,

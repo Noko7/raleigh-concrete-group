@@ -85,6 +85,9 @@ export function ChangeOrder({
   const [pullState, pullAction, pulling] = useActionState<ChangeState, FormData>(withdrawChangeOrder, { ok: false });
 
   const [step, setStep] = useState<Step>("closed");
+  // Which form ran last, so a withdraw's outcome isn't hidden behind the
+  // earlier send's "Change sent" (both states stay ok after they land).
+  const [last, setLast] = useState<"send" | "pull" | null>(null);
   const [note, setNote] = useState("");
   // Seeded with today's total: most changes adjust it, and editing a familiar
   // figure beats retyping one onto an agreed job.
@@ -276,7 +279,7 @@ export function ChangeOrder({
 
         <p className="co-hint">{t.changeOrder.waitingHint}</p>
 
-        <form action={pullAction} className="co-pull">
+        <form action={pullAction} onSubmit={() => setLast("pull")} className="co-pull">
           <input type="hidden" name="id" value={id} />
           <button type="submit" className="co-pull-btn" disabled={pulling}>
             {pulling ? t.changeOrder.withdrawing : t.changeOrder.withdraw}
@@ -288,8 +291,29 @@ export function ChangeOrder({
     );
   }
 
+  // Withdrawn, including whether the customer was told. A warning here means
+  // they hold a text for a change that's gone, so it must stay visible.
+  if (last === "pull" && pullState.ok) {
+    return (
+      <section className={card}>
+        <p className="co-ok">{pullState.message}</p>
+        {pullState.warning && <p className="co-err">{pullState.warning}</p>}
+        <button
+          type="button"
+          className="co-open"
+          onClick={() => {
+            setLast(null);
+            setStep("compose");
+          }}
+        >
+          {t.changeOrder.open}
+        </button>
+      </section>
+    );
+  }
+
   // Sent. Folded to the outcome, including how the customer's text went.
-  if (state.ok) {
+  if (last === "send" && state.ok) {
     return (
       <section className={card}>
         <p className="co-ok">{state.message}</p>
@@ -394,6 +418,7 @@ export function ChangeOrder({
             fd.set("deposit", deposit);
           // The total this preview used; the server refuses if the job was repriced since.
             fd.set("shown_total", String(totalCents));
+            setLast("send");
             formAction(fd);
           }}
         >

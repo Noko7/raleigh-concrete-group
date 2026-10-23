@@ -269,24 +269,50 @@ export async function cancelMessage(id: string, quoteId: string, nowIso: string)
 }
 
 /**
- * Cancel every queued text for a job. Retracting a quote must also stop a text
- * held overnight about it. Returns how many were stopped.
+ * Cancel every queued text for a job, or only those of one `kind`. Retracting a
+ * quote must also stop a text held overnight about it; withdrawing a change
+ * stops its own. Returns how many were stopped.
  */
-export async function cancelQueuedFor(quoteId: string, nowIso: string): Promise<number> {
+export async function cancelQueuedFor(
+  quoteId: string,
+  nowIso: string,
+  opts: { kind?: string; detail?: string } = {},
+): Promise<number> {
   try {
     const res = await pgAdmin(
       `quote_messages?quote_id=eq.${encodeURIComponent(quoteId)}` +
+        (opts.kind ? `&kind=eq.${encodeURIComponent(opts.kind)}` : "") +
         `&sent_at=is.null&cancelled_at=is.null&send_after=not.is.null`,
       {
         method: "PATCH",
         headers: { Prefer: "return=representation" },
-        body: JSON.stringify({ cancelled_at: nowIso, detail: "Cancelled: the quote was retracted." }),
+        body: JSON.stringify({ cancelled_at: nowIso, detail: opts.detail ?? "Cancelled: the quote was retracted." }),
       },
     );
     if (!res.ok) return 0;
     return ((await res.json()) as unknown[]).length;
   } catch {
     return 0;
+  }
+}
+
+/**
+ * Has a customer text of this kind, raised since `sinceIso`, reached them or
+ * started to? Delivered rows are ok; a claimed held row (sent_at set) may be
+ * at the provider now. Cancelled rows never went. Errs to true on a failed
+ * read: an extra "never mind" beats a customer left with a dead link.
+ */
+export async function customerTextWentOut(quoteId: string, kind: string, sinceIso: string): Promise<boolean> {
+  try {
+    const res = await pgAdmin(
+      `quote_messages?quote_id=eq.${encodeURIComponent(quoteId)}&kind=eq.${encodeURIComponent(kind)}` +
+        `&role=eq.customer&created_at=gte.${encodeURIComponent(sinceIso)}&cancelled_at=is.null` +
+        `&or=(ok.is.true,sent_at.not.is.null)&select=id&limit=1`,
+    );
+    if (!res.ok) return true;
+    return ((await res.json()) as unknown[]).length > 0;
+  } catch {
+    return true;
   }
 }
 

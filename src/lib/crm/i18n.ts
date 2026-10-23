@@ -559,7 +559,7 @@ const en = {
     cancel: "Never mind",
     waitingTitle: "Change waiting on the customer",
     waitingLead: "{name} has the change and hasn't answered yet. The price is still the old one until they approve it.",
-    waitingHint: "You'll get a text the moment they answer. If they'd rather settle it on the phone, withdraw it and the price stays as it is.",
+    waitingHint: "You'll get a text the moment they answer. If they'd rather settle it on the phone, withdraw it and the price stays as it is. If the text already reached them, they're texted that it's withdrawn.",
     withdraw: "Withdraw this change",
     withdrawing: "Withdrawing…",
     nowTotal: "Agreed total",
