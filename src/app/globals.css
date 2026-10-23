@@ -1971,6 +1971,7 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cq-confirm-eyebrow { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; color: var(--amber-dark); margin-bottom: 0.5rem; }
 .cq-confirm-eyebrow-muted { color: rgba(43, 26, 18, 0.55); }
 .cq-confirm-title { font-family: var(--font-headline), sans-serif; font-size: 2.4rem; line-height: 1.05; margin-bottom: 0.85rem; }
+.cq-confirm-title-sub { font-size: 1.6rem; }
 .cq-confirm-date { font-size: 1.05rem; color: rgba(43, 26, 18, 0.85); margin-bottom: 1rem; }
 .cq-confirm-date strong { color: #2b1a12; }
 .cq-confirm-price { display: inline-flex; align-items: center; gap: 0.6rem; background: #fff; border: 2px solid var(--amber); border-radius: 0.9rem; padding: 0.7rem 1.25rem; margin-bottom: 1.1rem; font-family: var(--font-headline), sans-serif; font-size: 1.8rem; color: #2b1a12; }

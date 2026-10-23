@@ -164,15 +164,26 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             payHref={payee.ok ? `/pay/${token}` : null}
           />
         )}
-        <div className="cq-confirm cq-confirm-ok">
-          <div className="cq-confirm-badge">
-            <CheckMark />
-          </div>
-          <p className="cq-confirm-eyebrow">{awaitingDate ? "Quote Approved" : "Booking Confirmed"}</p>
-          <h1 className="cq-confirm-title">
-            {awaitingDate ? "Thanks" : "You're all set"}
-            {firstName ? `, ${firstName}` : ""}!
-          </h1>
+        {/* While a change waits, this is the job as it stands, not a "you're all
+            set" (they aren't: there's a question above). */}
+        <div className={pendingChange ? "cq-confirm" : "cq-confirm cq-confirm-ok"}>
+          {pendingChange ? (
+            <>
+              <p className="cq-confirm-eyebrow cq-confirm-eyebrow-muted">Your job as it stands</p>
+              <h2 className="cq-confirm-title cq-confirm-title-sub">What you&apos;ve approved so far</h2>
+            </>
+          ) : (
+            <>
+              <div className="cq-confirm-badge">
+                <CheckMark />
+              </div>
+              <p className="cq-confirm-eyebrow">{awaitingDate ? "Quote Approved" : "Booking Confirmed"}</p>
+              <h1 className="cq-confirm-title">
+                {awaitingDate ? "Thanks" : "You're all set"}
+                {firstName ? `, ${firstName}` : ""}!
+              </h1>
+            </>
+          )}
           {awaitingDate ? (
             <p className="cq-confirm-date">
               We&apos;re checking the crew&apos;s schedule and will text you to confirm your installation date.
@@ -246,7 +257,9 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               )}
             </p>
           )}
-          {payee.ok && ledger.dueCents > 0 && (
+          {/* Not while a change waits: the balance is about to move, and the
+              change card offers its own payment once approved. */}
+          {payee.ok && ledger.dueCents > 0 && !pendingChange && (
             <Link href={`/pay/${token}`} className="cq-btn cq-btn-primary cq-confirm-pay">
               {dueNowCents > 0
                 ? `Pay the ${usd(dueNowCents)} deposit`
@@ -257,9 +270,11 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           )}
 
           <p className="cq-confirm-note">
-            {awaitingDate
-              ? "If none of those days end up working, we'll call you to find one that does. Thanks for choosing Raleigh Concrete Group."
-              : "We'll text a reminder before we arrive. Thanks for choosing Raleigh Concrete Group."}
+            {pendingChange
+              ? "Nothing here changes unless you approve the change above. Questions, just call or text."
+              : awaitingDate
+                ? "If none of those days end up working, we'll call you to find one that does. Thanks for choosing Raleigh Concrete Group."
+                : "We'll text a reminder before we arrive. Thanks for choosing Raleigh Concrete Group."}
           </p>
           <ContactButtons />
           <Image
