@@ -1480,6 +1480,7 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .crm-btn-primary:disabled { opacity: 0.6; cursor: default; }
 .crm-btn-ghost { background: rgba(255, 255, 255, 0.08); border-color: var(--crm-border); color: var(--crm-text); }
 .crm-btn-ghost:hover { background: rgba(255, 255, 255, 0.16); }
+.crm-btn-ghost.crm-lang-on { border-color: var(--amber); color: var(--amber); background: rgba(194, 104, 42, 0.1); }
 .crm-btn-send { background: #16a34a; color: #fff; }
 .crm-btn-send:hover { background: #15803d; }
 .crm-btn-send:disabled { opacity: 0.6; cursor: default; }

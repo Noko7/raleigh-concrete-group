@@ -3,16 +3,19 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 
-import { METHOD_LABELS, crewIncomeCents, usd, type PaymentMethod } from "@/lib/crm/fees";
+import { crewIncomeCents, usd, type PaymentMethod } from "@/lib/crm/fees";
+import { dict, fill, intlLocale } from "@/lib/crm/i18n";
 import type { JobMoney } from "@/lib/crm/money";
 
 // The owner's arithmetic read from the crew's side: job value, office cut, theirs, and how much has come
 // in. Same ledger function, so figures can't disagree with the owner's board or the job page.
 
-function day(iso: string | null) {
+function day(iso: string | null, locale: string) {
   if (!iso) return "-";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return Number.isNaN(d.getTime())
+    ? "-"
+    : d.toLocaleDateString(intlLocale(locale), { month: "short", day: "numeric", year: "numeric" });
 }
 
 type Filter = "all" | "owing" | "settled";
@@ -21,11 +24,22 @@ export function CrewJobRows({
   jobs,
   base,
   statusLabels,
+  locale,
 }: {
   jobs: JobMoney[];
   base: string;
   statusLabels: Record<string, string>;
+  locale: string;
 }) {
+  const t = dict(locale);
+  const m = t.crewMoney;
+  const payStatus: Record<string, string> = {
+    pending: m.payStatusPending,
+    paid: m.payStatusPaid,
+    failed: m.payStatusFailed,
+    refunded: m.payStatusRefunded,
+    voided: m.payStatusVoided,
+  };
   const [open, setOpen] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -57,7 +71,7 @@ export function CrewJobRows({
   return (
     <section className="crm-card">
       <div className="led-head">
-        <h2 className="crm-card-title">Income by job</h2>
+        <h2 className="crm-card-title">{m.byJob}</h2>
         <div className="led-filters">
           {(["all", "owing", "settled"] as Filter[]).map((f) => (
             <button
@@ -67,7 +81,7 @@ export function CrewJobRows({
               onClick={() => setFilter(f)}
               aria-pressed={filter === f}
             >
-              {f === "owing" ? "Still to collect" : f === "settled" ? "Paid in full" : "Every job"}
+              {f === "owing" ? m.filterOwing : f === "settled" ? m.filterSettled : m.filterAll}
             </button>
           ))}
         </div>
@@ -76,24 +90,24 @@ export function CrewJobRows({
       {rows.length === 0 ? (
         <p className="crm-muted">
           {filter === "owing"
-            ? "Every customer of yours has paid in full."
+            ? m.emptyOwing
             : filter === "settled"
-              ? "No job of yours is paid in full yet."
-              : "Once a customer approves one of your jobs, it shows up here."}
+              ? m.emptySettled
+              : m.emptyAll}
         </p>
       ) : (
         <div className="crm-table-wrap led-wrap">
           <table className="crm-table led-table">
             <thead>
               <tr>
-                <th>Customer</th>
-                <th className="led-num">Job</th>
-                <th className="led-num">Office fee</th>
-                <th className="led-num">Your income</th>
-                <th className="led-num">Collected</th>
-                <th className="led-num">Still to collect</th>
-                <th className="led-num">Fee you owe</th>
-                <th aria-label="Detail" />
+                <th>{m.colCustomer}</th>
+                <th className="led-num">{m.colJob}</th>
+                <th className="led-num">{m.colFee}</th>
+                <th className="led-num">{m.colIncome}</th>
+                <th className="led-num">{m.colCollected}</th>
+                <th className="led-num">{m.colDue}</th>
+                <th className="led-num">{m.colFeeOwed}</th>
+                <th aria-label={m.colDetail} />
               </tr>
             </thead>
             <tbody>
@@ -104,9 +118,9 @@ export function CrewJobRows({
                     <td>
                       <Link href={`${base}/quotes/${j.id}`}>{j.name}</Link>
                       <span className="led-sub">
-                        {statusLabels[j.status] ?? j.status} · {day(j.createdAt)}
-                        {j.isTest && <em className="led-offbooks">test</em>}
-                        {!j.onBooks && <em className="led-offbooks">closed</em>}
+                        {statusLabels[j.status] ?? j.status} · {day(j.createdAt, locale)}
+                        {j.isTest && <em className="led-offbooks">{m.tagTest}</em>}
+                        {!j.onBooks && <em className="led-offbooks">{m.tagClosed}</em>}
                       </span>
                     </td>
                     <td className="led-num">{usd(j.ledger.totalCents)}</td>
@@ -124,7 +138,13 @@ export function CrewJobRows({
                         aria-expanded={isOpen}
                         onClick={() => setOpen(isOpen ? null : j.id)}
                       >
-                        {isOpen ? "Hide" : `${j.payments.length || "no"} ${j.payments.length === 1 ? "payment" : "payments"}`}
+                        {isOpen
+                          ? m.hide
+                          : j.payments.length === 0
+                            ? m.paymentsNone
+                            : j.payments.length === 1
+                              ? m.paymentsOne
+                              : fill(m.paymentsMany, { n: j.payments.length })}
                       </button>
                     </td>
                   </tr>,
@@ -132,26 +152,26 @@ export function CrewJobRows({
                     <tr key={`${j.id}:detail`} className="led-detail-row">
                       <td colSpan={8}>
                         {j.payments.length === 0 ? (
-                          <p className="crm-muted crm-sm">No payments recorded on this job yet.</p>
+                          <p className="crm-muted crm-sm">{m.noPayments}</p>
                         ) : (
                           <table className="led-inner">
                             <thead>
                               <tr>
-                                <th>Date</th>
-                                <th>Method</th>
-                                <th>Status</th>
-                                <th className="led-num">Amount</th>
-                                <th className="led-num">Refunded</th>
-                                <th className="led-num">Office fee taken</th>
-                                <th>Note</th>
+                                <th>{m.colDate}</th>
+                                <th>{m.colMethod}</th>
+                                <th>{m.colStatus}</th>
+                                <th className="led-num">{m.colAmount}</th>
+                                <th className="led-num">{m.colRefunded}</th>
+                                <th className="led-num">{m.colFeeTaken}</th>
+                                <th>{m.colNote}</th>
                               </tr>
                             </thead>
                             <tbody>
                               {j.payments.map((p) => (
                                 <tr key={p.id}>
-                                  <td className="led-when">{day(p.paid_at ?? p.created_at)}</td>
-                                  <td>{METHOD_LABELS[p.method as PaymentMethod] ?? p.method}</td>
-                                  <td>{p.status}</td>
+                                  <td className="led-when">{day(p.paid_at ?? p.created_at, locale)}</td>
+                                  <td>{t.payments.methods[p.method as PaymentMethod] ?? p.method}</td>
+                                  <td>{payStatus[p.status] ?? p.status}</td>
                                   <td className="led-num">{usd(p.amount_cents)}</td>
                                   <td className="led-num">{p.refunded_cents > 0 ? usd(p.refunded_cents) : "-"}</td>
                                   <td className="led-num">{p.fee_cents > 0 ? usd(p.fee_cents) : "-"}</td>
@@ -170,7 +190,7 @@ export function CrewJobRows({
             <tfoot>
               <tr>
                 <td>
-                  {rows.length} {rows.length === 1 ? "job" : "jobs"}
+                  {rows.length === 1 ? m.jobsOne : fill(m.jobsMany, { n: rows.length })}
                 </td>
                 <td className="led-num">{usd(totals.total)}</td>
                 <td className="led-num">{usd(totals.fee)}</td>

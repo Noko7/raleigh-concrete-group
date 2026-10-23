@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { CHANGE_NOTE_MAX, firstNameOf, parseDollars, sameChangeLines, type ChangeLineDraft } from "@/lib/crm/constants";
 import { RECORDED_METHODS, usd as money, type PaymentMethod } from "@/lib/crm/fees";
-import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, fill, type Locale } from "@/lib/crm/i18n";
 import { SpellTextarea } from "@/components/spell-field";
 import { sendChangeOrder, withdrawChangeOrder } from "./change-order-actions";
 import { blankRow, filledRows, OptionBuilder, rowAmount, type OptionRow } from "./option-builder";
@@ -121,7 +121,7 @@ export function ChangeOrder({
       {state.sent === false && (
         <p className="co-err">
           {fill(t.changeOrder.textFailed, { to: state.smsTo ?? "" })}
-          {state.smsError ? ` ${state.smsError}` : ""}
+          {state.smsError ? ` ${tr(locale, state.smsError)}` : ""}
         </p>
       )}
       {state.smsHeldUntil && <p className="co-hint">{fill(t.changeOrder.textHeld, { when: state.smsHeldUntil })}</p>}
@@ -286,7 +286,7 @@ export function ChangeOrder({
           </button>
         </form>
         {delivery}
-        {pullState.error && <p className="co-err">{pullState.error}</p>}
+        {pullState.error && <p className="co-err">{tr(locale, pullState.error)}</p>}
       </section>
     );
   }
@@ -296,8 +296,8 @@ export function ChangeOrder({
   if (last === "pull" && pullState.ok) {
     return (
       <section className={card}>
-        <p className="co-ok">{pullState.message}</p>
-        {pullState.warning && <p className="co-err">{pullState.warning}</p>}
+        <p className="co-ok">{tr(locale, pullState.message)}</p>
+        {pullState.warning && <p className="co-err">{tr(locale, pullState.warning)}</p>}
         <button
           type="button"
           className="co-open"
@@ -316,8 +316,8 @@ export function ChangeOrder({
   if (last === "send" && state.ok) {
     return (
       <section className={card}>
-        <p className="co-ok">{state.message}</p>
-        {state.warning && <p className="co-err">{state.warning}</p>}
+        <p className="co-ok">{tr(locale, state.message)}</p>
+        {state.warning && <p className="co-err">{tr(locale, state.warning)}</p>}
         {delivery}
       </section>
     );
@@ -501,7 +501,7 @@ export function ChangeOrder({
           </div>
         </form>
 
-        {state.error && <p className="co-err">{state.error}</p>}
+        {state.error && <p className="co-err">{tr(locale, state.error)}</p>}
       </section>
     );
   }
@@ -629,7 +629,7 @@ export function ChangeOrder({
         </div>
       </div>
 
-      {state.error && <p className="co-err">{state.error}</p>}
+      {state.error && <p className="co-err">{tr(locale, state.error)}</p>}
     </section>
   );
 }

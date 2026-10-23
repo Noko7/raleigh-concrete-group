@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { dollars } from "@/lib/crm/constants";
-import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, fill, intlLocale, type Locale } from "@/lib/crm/i18n";
 import type { QuoteSend } from "@/lib/crm/events";
 import { AddOption, type SentOption } from "./add-option";
 import { retractQuote } from "./send-actions";
@@ -14,8 +14,8 @@ import type { ScheduleState } from "./types";
 // only stores the current quote.
 
 // Raleigh time.
-function stamp(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
+function stamp(iso: string, locale: Locale) {
+  return new Date(iso).toLocaleString(intlLocale(locale), {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -77,7 +77,7 @@ export function QuoteSends({
                   <span className={`qs-amount${s.amount == null ? "" : " qs-has-amount"}`}>
                     {dollars(s.amount) ?? t.quoteLog.noPrice}
                   </span>
-                  <span className="qs-when">{stamp(s.at)}</span>
+                  <span className="qs-when">{stamp(s.at, locale)}</span>
                   {/* Two columns so every tag aligns regardless of how many a row has. */}
                   <span className="qs-flag">
                     {s.live && <em className="qs-tag qs-tag-live">{t.quoteLog.current}</em>}
@@ -116,8 +116,8 @@ export function QuoteSends({
       {/* Owner only, two steps: someone has already made one mistake on this job. */}
       {canRetract && sends.length > 0 && (
         <div className="qs-retract">
-          {state.error && <p className="qs-err">{state.error}</p>}
-          {state.ok && state.message && <p className="qs-ok">{state.message}</p>}
+          {state.error && <p className="qs-err">{tr(locale, state.error)}</p>}
+          {state.ok && state.message && <p className="qs-ok">{tr(locale, state.message)}</p>}
 
           {!confirming ? (
             <button type="button" className="qs-retract-open" onClick={() => setConfirming(true)}>

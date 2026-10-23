@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { METHOD_LABELS, crewIncomeCents, usd, type PaymentMethod } from "@/lib/crm/fees";
-import { dict } from "@/lib/crm/i18n";
+import { crewIncomeCents, usd, type PaymentMethod } from "@/lib/crm/fees";
+import { dict, fill } from "@/lib/crm/i18n";
 import { MONEY_WINDOW_DAYS, type MoneyBoard } from "@/lib/crm/money";
 import type { Session } from "@/lib/crm/types";
 import { CrewJobRows } from "./crew-job-rows";
@@ -21,24 +21,27 @@ export function CrewMoney({ session, board, base }: { session: Session; board: M
   const collectedCents = jobs.reduce((sum, j) => sum + j.ledger.paidCents, 0);
   const toCollectCents = jobs.reduce((sum, j) => sum + (j.onBooks ? j.ledger.dueCents : 0), 0);
   const owedCents = mine?.balanceCents ?? 0;
-  const t = dict("en");
+  const t = dict(session.staff.locale);
+  const m = t.crewMoney;
 
   return (
     <main className="crm-page crm-page-wide">
       <div className="crm-page-head">
         <div>
-          <h1>Money</h1>
+          <h1>{m.title}</h1>
           {board.testCount > 0 && (
             <p className="crm-muted crm-sm money-tests">
               {board.includingTests ? (
                 <>
-                  Practice leads are <strong>in</strong> these figures.{" "}
-                  <Link href={`${base}/money`}>Hide the {board.testCount} test {board.testCount === 1 ? "lead" : "leads"}</Link>
+                  {m.testsIn}{" "}
+                  <Link href={`${base}/money`}>
+                    {board.testCount === 1 ? m.testsInLinkOne : fill(m.testsInLink, { n: board.testCount })}
+                  </Link>
                 </>
               ) : (
                 <>
-                  {board.testCount} test {board.testCount === 1 ? "lead is" : "leads are"} left out of the figures
-                  below. <Link href={`${base}/money?tests=1`}>Show them</Link>
+                  {board.testCount === 1 ? m.testsOutOne : fill(m.testsOut, { n: board.testCount })}{" "}
+                  <Link href={`${base}/money?tests=1`}>{m.testsOutLink}</Link>
                 </>
               )}
             </p>
@@ -48,45 +51,47 @@ export function CrewMoney({ session, board, base }: { session: Session; board: M
 
       {board.truncated.length > 0 && (
         <p className="crm-empty money-truncated">
-          <strong>These totals are incomplete.</strong> This page reads the most recent{" "}
-          {board.truncated.join(" and ")}, and there are more than it loads.
+          <strong>{m.truncatedLead}</strong>{" "}
+          {fill(m.truncated, { what: board.truncated.join(` ${m.truncatedAnd} `) })}
         </p>
       )}
 
       <div className="crm-stats">
         <div className="crm-stat">
           <strong>{usd(incomeCents)}</strong>
-          <span>Your income, after the office fee</span>
+          <span>{m.income}</span>
         </div>
         <div className="crm-stat">
           <strong>{usd(collectedCents)}</strong>
-          <span>Collected from customers</span>
+          <span>{m.collected}</span>
         </div>
         <div className="crm-stat">
           <strong>{usd(toCollectCents)}</strong>
-          <span>Customers still owe you</span>
+          <span>{m.stillOwed}</span>
         </div>
         <div className={`crm-stat${owedCents > 0 ? " cash-stat-owed" : ""}`}>
           <strong>{usd(owedCents)}</strong>
-          <span>Fee you still owe the office</span>
+          <span>{m.feeOwed}</span>
         </div>
       </div>
 
-      <CrewJobRows jobs={jobs} base={base} statusLabels={t.status} />
+      <CrewJobRows jobs={jobs} base={base} statusLabels={t.status} locale={session.staff.locale} />
 
       <section className="crm-card">
-        <h2 className="crm-card-title">Last {MONEY_WINDOW_DAYS} days · {usd(board.recentCents)}</h2>
+        <h2 className="crm-card-title">
+          {fill(m.recent, { days: MONEY_WINDOW_DAYS })} · {usd(board.recentCents)}
+        </h2>
         {board.byMethod.length === 0 ? (
-          <p className="crm-muted">No payments in the last {MONEY_WINDOW_DAYS} days.</p>
+          <p className="crm-muted">{fill(m.recentNone, { days: MONEY_WINDOW_DAYS })}</p>
         ) : (
           <ul className="cash-methods">
-            {board.byMethod.map((m) => (
-              <li key={m.method}>
-                <span>{METHOD_LABELS[m.method as PaymentMethod] ?? m.method}</span>
-                <strong>{usd(m.cents)}</strong>
+            {board.byMethod.map((row) => (
+              <li key={row.method}>
+                <span>{t.payments.methods[row.method as PaymentMethod] ?? row.method}</span>
+                <strong>{usd(row.cents)}</strong>
                 <i
                   aria-hidden="true"
-                  style={{ width: `${board.recentCents > 0 ? Math.round((m.cents / board.recentCents) * 100) : 0}%` }}
+                  style={{ width: `${board.recentCents > 0 ? Math.round((row.cents / board.recentCents) * 100) : 0}%` }}
                 />
               </li>
             ))}
@@ -94,11 +99,7 @@ export function CrewMoney({ session, board, base }: { session: Session; board: M
         )}
       </section>
 
-      <p className="crm-muted crm-sm cash-note">
-        Your income is each job&apos;s total after change orders, less the office fee on it. A card payment pays the
-        office its fee on the way past. Cash, check, Zelle and Venmo don&apos;t, so that fee stays owed until you send
-        it over. Fee you owe counts every fee you&apos;ve already sent, including any not tied to one job.
-      </p>
+      <p className="crm-muted crm-sm cash-note">{m.note}</p>
     </main>
   );
 }

@@ -3,15 +3,15 @@
 import { useActionState, useState } from "react";
 
 import { to12Hour, to24Hour } from "@/lib/crm/constants";
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, intlLocale, type Locale } from "@/lib/crm/i18n";
 import { setJobDate } from "@/app/crm/quotes/[id]/schedule-actions";
 import type { PreferredSlot, ScheduleState } from "@/app/crm/quotes/[id]/types";
 import { DateField } from "./date-field";
 
 // Same server action as the CRM (same RLS and customer text), laid out for a phone. Only for jobs with no
 // date; moving an existing date is JobReschedule.
-function pretty(s: string): string {
-  return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
+function pretty(s: string, locale: Locale): string {
+  return new Date(`${s}T00:00:00`).toLocaleDateString(intlLocale(locale), {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -66,7 +66,7 @@ export function JobSchedule({
               <input type="hidden" name="date" value={p.date} />
               <input type="hidden" name="time" value={overridden ? time : (p.time ?? time)} />
               <button type="submit" className="js-choice" disabled={pending}>
-                <span className="js-choice-date">{pretty(p.date)}</span>
+                <span className="js-choice-date">{pretty(p.date, locale)}</span>
                 {/* A day alone reads as "any time", which is how a crew turns up at 9 for a 7 o'clock pour. */}
                 {p.time && !overridden && <span className="js-choice-time">{p.time}</span>}
                 <span className="js-choice-cta">{t.contractorJob.schedConfirm}</span>
@@ -88,8 +88,8 @@ export function JobSchedule({
         </form>
       </details>
 
-      {state.error && <p className="js-err">{state.error}</p>}
-      {state.ok && state.message && <p className="js-ok">{state.message}</p>}
+      {state.error && <p className="js-err">{tr(locale, state.error)}</p>}
+      {state.ok && state.message && <p className="js-ok">{tr(locale, state.message)}</p>}
     </section>
   );
 }

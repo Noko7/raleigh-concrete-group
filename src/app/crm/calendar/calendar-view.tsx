@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { todayYmd } from "@/lib/crm/clock";
 import { UNASSIGNED_COLOR, crewColors, initials, shortName } from "@/lib/crm/crew-colors";
 import { firstNameOf, DEFAULT_VISIT_SLOTS, to12Hour, to24Hour } from "@/lib/crm/constants";
-import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
+import { dict, fill, intlLocale, tr, type Dict, type Locale } from "@/lib/crm/i18n";
 import { deleteEvent, moveEvent, type CalActionState } from "./actions";
 
 // Two things somebody shows up for, and one nobody has agreed to:
@@ -71,9 +71,7 @@ function CrewBadge({
 const kindLabel = (t: Dict, k: CalKind) =>
   k === "job" ? t.calendar.kindJob : k === "online" ? t.calendar.kindOnline : t.calendar.kindInPerson;
 
-// Month and weekday names via Intl. Currently always en-US: the locale argument
-// is ignored.
-const intlLocale = (_l: Locale) => "en-US";
+// Month and weekday names via Intl, so Spanish gets "enero" without a second table.
 
 function monthNames(locale: Locale): string[] {
   const f = new Intl.DateTimeFormat(intlLocale(locale), { month: "long", timeZone: "UTC" });
@@ -91,7 +89,9 @@ function weekdayNames(locale: Locale): [string, string][] {
     // 2024-09-01 was a Sunday. Read in UTC so the header can't shift by a day.
     const d = new Date(Date.UTC(2024, 8, 1 + i));
     const full = long.format(d);
-    return [full.charAt(0).toUpperCase() + full.slice(1), narrow.format(d).toUpperCase()];
+    // Spanish writes miércoles as X, or the header reads M M for martes and miércoles.
+    const initial = locale === "es" && i === 3 ? "X" : narrow.format(d).toUpperCase();
+    return [full.charAt(0).toUpperCase() + full.slice(1), initial];
   });
 }
 
@@ -238,18 +238,18 @@ export function CalendarView({
   useEffect(() => {
     const s = moveState.ok ? moveState.message : moveState.error;
     if (s) {
-      setToast(s);
+      setToast(tr(locale, s));
       if (moveState.ok) setSelected(null);
     }
-  }, [moveState]);
+  }, [moveState, locale]);
 
   useEffect(() => {
     const s = delState.ok ? delState.message : delState.error;
     if (s) {
-      setToast(s);
+      setToast(tr(locale, s));
       if (delState.ok) setSelected(null);
     }
-  }, [delState]);
+  }, [delState, locale]);
 
   useEffect(() => {
     if (!toast) return;
@@ -523,7 +523,7 @@ export function CalendarView({
                     ))}
                     {hidden > 0 && (
                       <button type="button" className="cal-more" onClick={() => setOpenDay(key)}>
-                        +{hidden} more
+                        {fill(t.calendar.more, { n: hidden })}
                       </button>
                     )}
                   </div>
@@ -892,9 +892,9 @@ function EventPanel({
           </form>
         )}
 
-        {error && <p className="crm-auth-error">{error}</p>}
+        {error && <p className="crm-auth-error">{tr(locale, error)}</p>}
         <a className="cal-panel-link" href={`${base}/quotes/${event.id}`}>
-          View the full job
+          {t.misc.viewFullJob}
         </a>
       </aside>
     </div>

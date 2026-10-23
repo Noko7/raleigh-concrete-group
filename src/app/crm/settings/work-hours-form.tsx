@@ -10,14 +10,18 @@ import {
   slotsFor,
   type WorkHours,
 } from "@/lib/crm/constants";
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, type Locale } from "@/lib/crm/i18n";
 import { saveWorkHours } from "./actions";
 import type { SaveState } from "./types";
 
 const initial: SaveState = { ok: true };
 
+// Spanish day names live here rather than in the dictionary: they are three
+// letters each and pair one-to-one with WEEKDAY_LABELS, so a nested object in
+// i18n.ts would be seven keys to say what one array already says.
 const DAY_NAMES: Record<Locale, string[]> = {
   en: WEEKDAY_LABELS,
+  es: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
 };
 
 const HOURS = Array.from({ length: WORK_HOUR_MAX - WORK_HOUR_MIN + 1 }, (_, i) => WORK_HOUR_MIN + i);
@@ -103,7 +107,7 @@ export function WorkHoursForm({ hours, locale }: { hours: WorkHours; locale: Loc
       {/* Warned before submit too: these mistakes leave someone unbookable. */}
       {backwards && <p className="crm-auth-error">{t.settings.hoursBackwards}</p>}
       {noDays && !backwards && <p className="crm-auth-error">{t.settings.hoursNoDays}</p>}
-      {state.error && <p className="crm-auth-error">{state.error}</p>}
+      {state.error && <p className="crm-auth-error">{tr(locale, state.error)}</p>}
       {state.saved && !state.error && <p className="crm-saved">{t.settings.saved}</p>}
 
       <button type="submit" className="crm-btn crm-btn-primary" disabled={pending || backwards || noDays}>

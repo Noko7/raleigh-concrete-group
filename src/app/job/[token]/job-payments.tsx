@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { recordManualPayment, sendPayLink, type PaymentState } from "@/app/crm/quotes/[id]/payment-actions";
 import { RECORDED_METHODS, fromCents, usd, type PaymentMethod } from "@/lib/crm/fees";
-import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { dict, fill, intlLocale, type Locale } from "@/lib/crm/i18n";
 
 const initial: PaymentState = { ok: false };
 
@@ -244,7 +244,7 @@ export function JobPayments({
               >
                 <span className="jp-row-how">{t.methods[r.method as PaymentMethod] ?? r.method}</span>
                 <span className="jp-row-when">
-                  {new Date(r.paid_at ?? r.created_at).toLocaleDateString("en-US", {
+                  {new Date(r.paid_at ?? r.created_at).toLocaleDateString(intlLocale(locale), {
                     month: "short",
                     day: "numeric",
                   })}

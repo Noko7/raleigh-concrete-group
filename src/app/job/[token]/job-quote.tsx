@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { dollars, QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm/constants";
-import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, fill, intlLocale, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/save-actions";
 import {
   MoreWaysToPrice,
@@ -168,7 +168,7 @@ export function JobQuote({
   // exception is a quiet "correct it" action for a price typed wrong.
   if (awaitingReply && !open) {
     const when = sentAt
-      ? new Date(sentAt).toLocaleString("en-US", {
+      ? new Date(sentAt).toLocaleString(intlLocale(locale), {
           dateStyle: "medium",
           timeStyle: "short",
           timeZone: BUSINESS_TZ,
@@ -234,9 +234,10 @@ export function JobQuote({
           value={derived ? String(derivedTotal) : price}
           onChange={setPrice}
           derived={derived}
-          derivedLabel={choice ? "Headline price: the option you'd recommend plus extras" : undefined}
+          derivedLabel={choice ? t.quoteForm.headlineDerived : undefined}
+          locale={locale}
         />
-        <SectionsEditor sections={sections} onChange={setSection} />
+        <SectionsEditor sections={sections} onChange={setSection} locale={locale} />
 
         {/*
           Always open: "what am I paying for" wins jobs. Adding a line makes the price card their sum; on a quote
@@ -261,6 +262,7 @@ export function JobQuote({
           <PickOneSuggestion
             rows={rows}
             hasChoice={filledPackages(pkgRows).length > 0}
+            locale={locale}
             onConvert={() => {
               setPkgRows(packagesFromOptionRows(rows));
               setRows([]);
@@ -284,6 +286,7 @@ export function JobQuote({
           sections={sections}
           {...previewOf(rows)}
           choice={choice}
+          locale={locale}
         />
 
         <p className="js-hint">
@@ -315,7 +318,7 @@ export function JobQuote({
       </form>
 
       {/* A refused duplicate isn't an error, so it reads as a note. */}
-      {state.error && !pending && <p className={state.alreadySent ? "js-hint" : "js-err"}>{state.error}</p>}
+      {state.error && !pending && <p className={state.alreadySent ? "js-hint" : "js-err"}>{tr(locale, state.error)}</p>}
       {result}
     </section>
   );

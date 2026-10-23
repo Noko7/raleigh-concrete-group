@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { DEFAULT_VISIT_SLOTS, TIME_RE, to12Hour, to24Hour } from "@/lib/crm/constants";
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, intlLocale, type Locale } from "@/lib/crm/i18n";
 import { confirmVisit } from "@/app/crm/quotes/[id]/schedule-actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
 import { DateField } from "./date-field";
@@ -12,8 +12,8 @@ import { DateField } from "./date-field";
 //   online    a photo quote, maybe with a slot the customer suggested (the picker starts on it)
 //   schedule  an in-person request with no date (cancelled, or predates the field)
 // Both end in confirmVisit, which texts the customer.
-function pretty(s: string): string {
-  return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
+function pretty(s: string, locale: Locale): string {
+  return new Date(`${s}T00:00:00`).toLocaleDateString(intlLocale(locale), {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -51,7 +51,7 @@ export function JobVisit({
       {offered ? (
         <div className="jv-asked">
           <span className="jv-asked-label">{t.contractorJob.visitAsked}</span>
-          <strong className="jv-asked-day">{pretty(offered)}</strong>
+          <strong className="jv-asked-day">{pretty(offered, locale)}</strong>
           <strong className="jv-asked-time">{fallbackTime}</strong>
         </div>
       ) : (
@@ -84,8 +84,8 @@ export function JobVisit({
 
       <p className="js-hint">{t.contractorJob.visitNote}</p>
 
-      {state.error && <p className="js-err">{state.error}</p>}
-      {state.ok && state.message && <p className="js-ok">{state.message}</p>}
+      {state.error && <p className="js-err">{tr(locale, state.error)}</p>}
+      {state.ok && state.message && <p className="js-ok">{tr(locale, state.message)}</p>}
     </section>
   );
 }

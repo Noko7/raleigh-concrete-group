@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { SpellInput, SpellTextarea } from "@/components/spell-field";
 import { firstNameOf, dollars, PACKAGE_TITLE_MAX, packageLetter } from "@/lib/crm/constants";
-import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, fill, type Locale } from "@/lib/crm/i18n";
 import { addQuoteOption } from "./save-actions";
 import type { SaveState } from "./types";
 
@@ -302,7 +302,7 @@ export function AddOption({
                 <p className="ao-hint">{t.previewNote}</p>
               </div>
 
-              {state.error && !pending && <p className="ao-err">{state.error}</p>}
+              {state.error && !pending && <p className="ao-err">{tr(locale, state.error)}</p>}
 
               <div className="ao-acts">
                 <button type="submit" className="ao-go" disabled={!ready || pending}>

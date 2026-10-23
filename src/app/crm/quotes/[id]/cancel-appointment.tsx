@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { firstNameOf } from "@/lib/crm/constants";
-import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, fill, type Locale } from "@/lib/crm/i18n";
 import { cancelAppointment } from "./schedule-actions";
 import type { ScheduleState } from "./types";
 
@@ -41,7 +41,7 @@ export function CancelAppointment({
   if (state.ok) {
     return (
       <div className="ca">
-        <p className="ca-msg ca-ok">{state.message}</p>
+        <p className="ca-msg ca-ok">{tr(locale, state.message)}</p>
       </div>
     );
   }
@@ -96,7 +96,7 @@ export function CancelAppointment({
         </div>
       </form>
 
-      {state.error && <p className="ca-msg ca-err">{state.error}</p>}
+      {state.error && <p className="ca-msg ca-err">{tr(locale, state.error)}</p>}
     </div>
   );
 }
