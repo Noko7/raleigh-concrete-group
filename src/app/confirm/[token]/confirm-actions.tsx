@@ -5,6 +5,15 @@ import { useRouter } from "next/navigation";
 
 type Mode = "choose" | "submitting" | "confirmed" | "reschedule";
 
+/** Shown right after confirming, and by the page on any later visit. */
+export function Confirmed() {
+  return (
+    <div className="cq-result cq-result-ok">
+      <h3>Confirmed. See you then.</h3>
+    </div>
+  );
+}
+
 export function ConfirmActions({ token }: { token: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("choose");
@@ -33,22 +42,12 @@ export function ConfirmActions({ token }: { token: string }) {
     }
   }
 
-  if (mode === "confirmed") {
-    return (
-      <div className="cq-result cq-result-ok">
-        <p className="cq-result-eyebrow">Confirmed</p>
-        <h3>You&apos;re all set. See you then.</h3>
-        <p className="cq-result-note">Thanks for confirming. We&apos;ll be in touch if anything comes up.</p>
-      </div>
-    );
-  }
+  if (mode === "confirmed") return <Confirmed />;
 
   if (mode === "reschedule") {
     return (
       <div className="cq-result">
-        <p className="cq-result-eyebrow">Got it</p>
-        <h3>We&apos;ll reach out to reschedule</h3>
-        <p className="cq-result-note">No problem. We&apos;ll call you shortly to find a better day.</p>
+        <h3>We&apos;ll call you to find a better day</h3>
       </div>
     );
   }

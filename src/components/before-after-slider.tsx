@@ -8,6 +8,8 @@ type BeforeAfterSliderProps = {
   afterSrc: string;
   beforeAlt: string;
   afterAlt: string;
+  /** What the job was, shown under the slider. The handle and Before/After tags say how to use it. */
+  label?: string;
 };
 
 export function BeforeAfterSlider({
@@ -15,6 +17,7 @@ export function BeforeAfterSlider({
   afterSrc,
   beforeAlt,
   afterAlt,
+  label,
 }: BeforeAfterSliderProps) {
   const [position, setPosition] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,54 +54,61 @@ export function BeforeAfterSlider({
   }, [onTouchMove]);
 
   return (
-    <div
-      ref={containerRef}
-      className="ba-slider"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerLeave={onPointerUp}
-      role="img"
-      aria-label="Before and after comparison"
-    >
-      {/* After: base layer, full width. */}
-      <div className="ba-layer ba-after">
-        <Image
-          src={afterSrc}
-          alt={afterAlt}
-          fill
-          sizes="(max-width:768px) 100vw, 800px"
-          className="ba-img"
-          quality={90}
-        />
-        <span className="ba-label ba-label-right">After</span>
-      </div>
+    <figure>
+      <div
+        ref={containerRef}
+        className="ba-slider"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+        role="img"
+        aria-label={label ? `${label}: before and after` : "Before and after comparison"}
+      >
+        {/* After: base layer, full width. */}
+        <div className="ba-layer ba-after">
+          <Image
+            src={afterSrc}
+            alt={afterAlt}
+            fill
+            sizes="(max-width:768px) 100vw, 800px"
+            className="ba-img"
+            quality={90}
+          />
+          <span className="ba-label ba-label-right">After</span>
+        </div>
 
-      {/* Before: clipped to the left of the handle. */}
-      <div className="ba-layer ba-before" style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}>
-        <Image
-          src={beforeSrc}
-          alt={beforeAlt}
-          fill
-          sizes="(max-width:768px) 100vw, 800px"
-          className="ba-img"
-          quality={90}
-        />
-        <span className="ba-label ba-label-left">Before</span>
-      </div>
+        {/* Before: clipped to the left of the handle. */}
+        <div className="ba-layer ba-before" style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}>
+          <Image
+            src={beforeSrc}
+            alt={beforeAlt}
+            fill
+            sizes="(max-width:768px) 100vw, 800px"
+            className="ba-img"
+            quality={90}
+          />
+          <span className="ba-label ba-label-left">Before</span>
+        </div>
 
-      <div className="ba-divider" style={{ left: `${position}%` }}>
-        <div
-          className="ba-handle"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M8 7l-5 5 5 5V7zm8 0v10l5-5-5-5z" />
-          </svg>
+        <div className="ba-divider" style={{ left: `${position}%` }}>
+          <div
+            className="ba-handle"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 7l-5 5 5 5V7zm8 0v10l5-5-5-5z" />
+            </svg>
+          </div>
         </div>
       </div>
-    </div>
+      {label && (
+        <figcaption className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+          {label}
+        </figcaption>
+      )}
+    </figure>
   );
 }

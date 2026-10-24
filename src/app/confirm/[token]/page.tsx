@@ -4,8 +4,9 @@ import { notFound } from "next/navigation";
 
 import { firstNameOf } from "@/lib/crm/constants";
 import { getQuoteByToken } from "@/lib/crm/queries";
-import { businessName, links, phoneDisplay } from "@/lib/site-data";
-import { ConfirmActions } from "./confirm-actions";
+import { ContactButtons } from "@/components/contact-buttons";
+import { businessName } from "@/lib/site-data";
+import { ConfirmActions, Confirmed } from "./confirm-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,6 @@ export default async function ConfirmJobPage({ params }: { params: Promise<{ tok
       <div className="cq-card">
         <header className="cq-head">
           <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="cq-logo" priority />
-          <p className="cq-eyebrow">Confirm Your Job</p>
         </header>
 
         <h1 className="cq-title">Hi {firstName},</h1>
@@ -55,24 +55,12 @@ export default async function ConfirmJobPage({ params }: { params: Promise<{ tok
         )}
 
         {alreadyConfirmed ? (
-          <div className="cq-result cq-result-ok">
-            <p className="cq-result-eyebrow">Confirmed</p>
-            <h3>You&apos;re all set. See you then.</h3>
-            <p className="cq-result-note">Thanks for confirming. We&apos;ll be in touch if anything comes up.</p>
-          </div>
+          <Confirmed />
         ) : (
           <ConfirmActions token={token} />
         )}
 
-        <div className="cq-cta">
-          <a href={links.call} className="cq-btn cq-btn-primary">
-            Call {phoneDisplay}
-          </a>
-          <a href={links.text} className="cq-btn cq-btn-secondary">
-            Text Us
-          </a>
-        </div>
-        <p className="cq-fine">Questions? Just call or text. We&apos;re happy to help.</p>
+        <ContactButtons />
       </div>
     </main>
   );

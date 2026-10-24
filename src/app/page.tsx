@@ -4,17 +4,15 @@ import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { HeroMarquee } from "@/components/hero-marquee";
+import { MobileBar, QUOTE_CTA, QuoteCta, ServiceCard, SiteFooter } from "@/components/site-chrome";
 import { SiteHeader } from "@/components/site-header";
 import {
   aboutParagraphs,
-  businessName,
   commercialNav,
   coreServices,
   galleryImages,
   homeStats,
   links,
-  locationKeys,
-  locations,
   phoneDisplay,
   processSteps,
   residentialNav,
@@ -62,19 +60,16 @@ export default function Home() {
               priority
               className="mx-auto mb-6 h-auto w-auto max-w-[280px] drop-shadow-lg md:max-w-[440px]"
             />
-            <span className="mb-4 inline-block text-xs font-bold uppercase tracking-[0.22em] text-amber-accent">
-              Concrete &amp; Hardscaping · Raleigh, NC
-            </span>
             <h1 className="mx-auto mb-5 max-w-4xl font-headline text-6xl leading-[0.92] text-ivory md:text-8xl">
               Raleigh Concrete Contractors.
             </h1>
             <p className="mx-auto mb-8 max-w-xl text-lg leading-relaxed text-slate-300">
-              Residential and commercial concrete done right the first time: driveways, patios,
-              walkways, retaining walls and pavers, built by a crew that actually shows up.
+              Driveways, patios, walkways, retaining walls and pavers for homes and businesses
+              across the Triangle.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <a href="/#quote" className="cta-primary text-base">
-                Get a Free Estimate
+              <a href={links.quote} className="cta-primary text-base">
+                {QUOTE_CTA}
               </a>
               <a href={links.call} className="cta-secondary text-base">
                 Call or Text {phoneDisplay}
@@ -91,52 +86,25 @@ export default function Home() {
           <h2 className="mb-6 font-headline text-4xl text-ivory">See the Before &amp; After</h2>
           <div className="grid gap-6 md:grid-cols-2">
             {homeBeforeAfter.map((pair) => (
-              <div key={pair.label}>
-                <BeforeAfterSlider
-                  beforeSrc={pair.before}
-                  afterSrc={pair.after}
-                  beforeAlt={`Raleigh ${pair.label} before`}
-                  afterAlt={`Raleigh ${pair.label} after`}
-                />
-                <p className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  {pair.label} · Drag to Compare
-                </p>
-              </div>
+              <BeforeAfterSlider
+                key={pair.label}
+                beforeSrc={pair.before}
+                afterSrc={pair.after}
+                beforeAlt={`Raleigh ${pair.label} before`}
+                afterAlt={`Raleigh ${pair.label} after`}
+                label={pair.label}
+              />
             ))}
           </div>
         </section>
 
         <section className="mx-auto w-full max-w-6xl px-4 pb-10 pt-6 md:px-8">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-3 gap-3">
             {homeStats.map((stat) => (
               <div key={stat.label} className="stat-card text-center">
                 <p className="stat-value">{stat.value}</p>
                 <p className="stat-label">{stat.label}</p>
               </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="mx-auto w-full max-w-6xl px-4 py-10 md:px-8">
-          <span className="mb-2 block text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
-            Our Services
-          </span>
-          <h2 className="mb-8 font-headline text-4xl text-ivory">
-            Expert Concrete Services You Can Rely On
-          </h2>
-          <div className="grid gap-5 md:grid-cols-3">
-            {coreServices.map((service) => (
-              <Link
-                key={service.slug}
-                href={`/services/${service.slug}`}
-                className="group rounded-2xl border border-amber-accent/30 bg-amber-accent/5 p-6 transition hover:-translate-y-1 hover:border-amber-accent/60 hover:bg-amber-accent/10"
-              >
-                <h3 className="mb-2 font-headline text-2xl text-ivory">{service.name}</h3>
-                <p className="text-sm leading-relaxed text-slate-300">{service.blurb}</p>
-                <span className="mt-4 inline-block text-sm font-bold uppercase tracking-[0.12em] text-amber-accent opacity-70 transition group-hover:opacity-100">
-                  View {service.navLabel} →
-                </span>
-              </Link>
             ))}
           </div>
         </section>
@@ -156,9 +124,6 @@ export default function Home() {
               />
             </div>
             <div>
-              <span className="mb-2 block text-xs font-bold uppercase tracking-[0.22em] text-amber-accent">
-                Welcome to Raleigh Concrete Group
-              </span>
               <h2 className="mb-4 font-headline text-4xl text-ivory">
                 A Concrete Contractor You Can Actually Trust
               </h2>
@@ -168,8 +133,8 @@ export default function Home() {
                 </p>
               ))}
               <div className="mt-2 flex flex-wrap items-center gap-4">
-                <a href="/#quote" className="cta-primary">
-                  Get My Free Estimate
+                <a href={links.quote} className="cta-primary">
+                  {QUOTE_CTA}
                 </a>
                 <Link
                   href="/about"
@@ -184,16 +149,7 @@ export default function Home() {
 
         <section className="border-y border-white/10 bg-black/20">
           <div className="mx-auto w-full max-w-6xl px-4 py-14 md:px-8">
-            <div className="mb-3 text-center">
-              <span className="text-xs font-bold uppercase tracking-[0.22em] text-amber-accent">
-                Simple &amp; Stress-Free
-              </span>
-              <h2 className="mt-2 font-headline text-4xl text-ivory">What to Expect</h2>
-            </div>
-            <p className="mx-auto mb-12 max-w-2xl text-center leading-relaxed text-slate-300">
-              Getting started is easy. Here&apos;s exactly how we take your project from first call to
-              finished concrete.
-            </p>
+            <h2 className="mb-10 text-center font-headline text-4xl text-ivory">What to Expect</h2>
             <div className="grid gap-6 md:grid-cols-3">
               {processSteps.map((step, i) => (
                 <div key={step.title} className="process-step">
@@ -204,21 +160,29 @@ export default function Home() {
               ))}
             </div>
             <div className="mt-10 text-center">
-              <a href="/#quote" className="cta-primary">
-                Start My Free Estimate
+              <a href={links.quote} className="cta-primary">
+                {QUOTE_CTA}
               </a>
             </div>
           </div>
         </section>
 
         <section className="mx-auto w-full max-w-6xl px-4 py-14 md:px-8">
-          <h2 className="mb-2 font-headline text-4xl text-ivory">
+          <h2 className="mb-8 font-headline text-4xl text-ivory">
             Services We Offer Across the Triangle
           </h2>
-          <p className="mb-8 max-w-2xl leading-relaxed text-slate-300">
-            From home upgrades to commercial flatwork, we handle a wide range of concrete and
-            hardscaping projects. We&apos;ll help you choose the right option during your free quote.
-          </p>
+          {/* Core services get a card; everything else is a chip under Residential or Commercial. */}
+          <div className="mb-6 grid gap-5 md:grid-cols-3">
+            {coreServices.map((service) => (
+              <ServiceCard
+                key={service.slug}
+                href={`/services/${service.slug}`}
+                title={service.name}
+                blurb={service.blurb}
+                featured
+              />
+            ))}
+          </div>
           <div className="grid gap-6 md:grid-cols-2">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
               <h3 className="mb-4 font-headline text-2xl text-amber-accent">Residential Services</h3>
@@ -268,68 +232,12 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8">
-          <div className="rounded-3xl bg-ivory p-8 text-center text-[#2b1a12] md:p-12">
-            <h2 className="mb-3 font-headline text-4xl text-[#2b1a12] md:text-5xl">
-              Get Your Free Concrete Estimate
-            </h2>
-            <p className="mx-auto mb-7 max-w-2xl text-[#2b1a12]/80">
-              Tell us a little about your project and we&apos;ll get you a free, written price.
-              For driveways and slabs we can often quote without coming out. Just add your address.
-            </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <a href="/#quote" className="rounded-full bg-[#2b1a12] px-7 py-3.5 text-base font-bold text-white transition hover:bg-[#3a241a]">
-                Get a Free Estimate
-              </a>
-              <a href={links.call} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
-                Call Now
-              </a>
-              <a href={links.text} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
-                Text Now
-              </a>
-            </div>
-          </div>
-        </section>
+        <QuoteCta heading="Get Your Free Concrete Quote" />
 
-        <footer className="border-t border-white/10 bg-black/20">
-          <div className="mx-auto w-full max-w-6xl px-4 py-8 md:px-8">
-            <div className="mb-5 flex flex-wrap gap-2">
-              <span className="mr-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-                Serving:
-              </span>
-              {locationKeys.map((key) => (
-                <Link
-                  key={key}
-                  href={`/${key}`}
-                  className="text-sm font-semibold text-slate-300 transition hover:text-amber-accent"
-                >
-                  {locations[key].city}
-                </Link>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">
-              <span className="font-headline text-2xl text-ivory">{businessName}</span>
-              <div className="flex flex-col items-start gap-1 md:items-end">
-                <Link
-                  href="/privacy-policy"
-                  className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300 transition hover:text-amber-accent"
-                >
-                  Privacy Policy
-                </Link>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300 md:text-right">
-                  {businessName} · Concrete &amp; Hardscaping · {phoneDisplay}
-                </p>
-              </div>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter />
       </main>
 
-      <div className="mobile-bar">
-        <a href="/#quote" className="cta-primary flex-1 justify-center">Free Estimate</a>
-        <a href={links.call} className="cta-secondary flex-1 justify-center">Call</a>
-        <a href={links.text} className="cta-secondary flex-1 justify-center">Text</a>
-      </div>
+      <MobileBar />
     </>
   );
 }

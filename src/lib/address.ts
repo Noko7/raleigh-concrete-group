@@ -26,4 +26,4 @@ export function isFullAddress(raw: string): boolean {
   return parts.length >= 2 && parts.every((p) => p.length >= 2);
 }
 
-export const ADDRESS_HINT = "Enter the full address, including city and state. Example: 123 Main St, Raleigh, NC";
+export const ADDRESS_HINT = "Include the city and state.";

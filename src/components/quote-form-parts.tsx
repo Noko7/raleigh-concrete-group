@@ -215,9 +215,8 @@ export function CustomerPreview({
               <span className="cq-price-label">{derived ? "Your total" : "Your price"}</span>
               {/* No total until the customer picks, same as the customer page. */}
               <span className="cq-price-value">{!derived && price != null && price > 0 ? dollars(price) : "-"}</span>
-              <span className="cq-price-sub">
-                {derived ? "Shown once they pick their options" : "Free quote · no obligation until you approve"}
-              </span>
+              {/* A note for the crew, not something the customer sees. */}
+              {derived && <span className="cq-price-sub">Shown once they pick their options</span>}
             </div>
           )}
           {filled.length > 0 && (

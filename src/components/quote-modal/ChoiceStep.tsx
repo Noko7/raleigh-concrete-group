@@ -12,7 +12,6 @@ export function ChoiceStep({
   return (
     <div className="qm-body">
       <h2 className="qm-title">Get your free quote</h2>
-      <p className="qm-sub">Pick one. Both are free and there&apos;s no obligation.</p>
       {/* The whole card is the tap target. */}
       <div className="qm-choices">
         <button className="qm-choice qm-choice--main" onClick={() => pickMode("online")}>
@@ -23,7 +22,6 @@ export function ChoiceStep({
             <span className="qm-choice-title">Online quote</span>
             <span className="qm-choice-desc">Send a photo. We text you the price.</span>
           </span>
-          <span className="qm-choice-badge">Fastest</span>
           <IconArrow />
         </button>
         <button className="qm-choice" onClick={() => pickMode("inperson")}>

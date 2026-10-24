@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { MobileBar, SiteFooter } from "@/components/site-chrome";
 import { SiteHeader } from "@/components/site-header";
-import { businessName, links, locationKeys, locations, phoneDisplay, phoneHref } from "@/lib/site-data";
+import { businessName, phoneDisplay, phoneHref } from "@/lib/site-data";
 
 const EFFECTIVE_DATE = "June 17, 2026";
 
@@ -89,37 +90,10 @@ export default function TermsPage() {
           </div>
         </section>
 
-        <footer className="border-t border-white/10 bg-black/20">
-          <div className="mx-auto w-full max-w-6xl px-4 py-8 md:px-8">
-            <div className="mb-5 flex flex-wrap gap-2">
-              <span className="mr-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-                Serving:
-              </span>
-              {locationKeys.map((key) => (
-                <Link
-                  key={key}
-                  href={`/${key}`}
-                  className="text-sm font-semibold text-slate-300 transition hover:text-amber-accent"
-                >
-                  {locations[key].city}
-                </Link>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">
-              <span className="font-headline text-2xl text-ivory">{businessName}</span>
-              <p className="text-right text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-                {businessName} &middot; Concrete &amp; Hardscaping &middot; {phoneDisplay}
-              </p>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter />
       </main>
 
-      <div className="mobile-bar">
-        <a href="/#quote" className="cta-primary flex-1 justify-center">Free Estimate</a>
-        <a href={links.call} className="cta-secondary flex-1 justify-center">Call</a>
-        <a href={links.text} className="cta-secondary flex-1 justify-center">Text</a>
-      </div>
+      <MobileBar />
     </>
   );
 }

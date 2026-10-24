@@ -1177,21 +1177,15 @@ export const processSteps: ProcessStep[] = [
 
 export type Stat = { value: string; label: string };
 export const homeStats: Stat[] = [
+  // Facts only: a stat that isn't a number ("Local", "Free") is a tagline.
   { value: "5.0★", label: "Rated on Google" },
   { value: "20+ Yrs", label: "Combined Crew Experience" },
-  { value: "Local", label: "Raleigh-Based Team" },
-  { value: "Free", label: "Written Quotes" },
+  { value: "Since 2020", label: "Serving the Triangle" },
 ];
 
 export const aboutParagraphs: string[] = [
   "Finding a concrete contractor you can actually count on in Raleigh shouldn't be this hard. At Raleigh Concrete Group, our crews have poured and built countless driveways, patios, walkways and retaining walls across the Triangle, and we treat every job like it's at our own home.",
   "Whether you need a brand-new driveway, a backyard patio you'll actually use, or a commercial slab done on schedule, we start with a free, detailed quote so you know the price before we ever break ground. Our crews are experienced, respectful on site, and familiar with local codes across Raleigh and the surrounding towns.",
-];
-
-export const valueProps = [
-  "We Show Up On Time",
-  "Clear, Honest Pricing",
-  "Clean Job Sites Every Time",
 ];
 
 export type GalleryImage = { src: string; alt: string };

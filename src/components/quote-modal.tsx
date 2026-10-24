@@ -700,7 +700,6 @@ function Modal({ onClose }: { onClose: () => void }) {
 
             {current === "contact" && (
               <ContactStep
-                totalSteps={totalSteps}
                 data={data}
                 set={set}
                 addressVerified={addressVerified}
@@ -713,7 +712,6 @@ function Modal({ onClose }: { onClose: () => void }) {
 
             {current === "service" && (
               <ServiceStep
-                totalSteps={totalSteps}
                 mode={mode}
                 data={data}
                 set={set}
@@ -729,7 +727,6 @@ function Modal({ onClose }: { onClose: () => void }) {
             {/* In-person books a visit; online picks a fallback slot. */}
             {current === "schedule" && (
               <ScheduleStep
-                totalSteps={totalSteps}
                 mode={mode}
                 minDate={minDate}
                 data={data}

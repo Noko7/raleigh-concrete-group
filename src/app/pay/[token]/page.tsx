@@ -13,7 +13,8 @@ import {
 import { firstNameOf } from "@/lib/crm/constants";
 import { jobLedger, payeeState, reconcileCheckout } from "@/lib/crm/payments";
 import { getQuoteByToken } from "@/lib/crm/queries";
-import { businessName, links, phoneDisplay } from "@/lib/site-data";
+import { ContactButtons } from "@/components/contact-buttons";
+import { businessName } from "@/lib/site-data";
 import { PayPanel } from "./pay-panel";
 
 export const dynamic = "force-dynamic";
@@ -22,19 +23,6 @@ export const metadata: Metadata = {
   title: { absolute: "Pay for Your Project | Raleigh Concrete Group" },
   robots: { index: false, follow: false },
 };
-
-function ContactButtons() {
-  return (
-    <div className="cq-cta">
-      <a href={links.call} className="cq-btn cq-btn-primary">
-        Call {phoneDisplay}
-      </a>
-      <a href={links.text} className="cq-btn cq-btn-secondary">
-        Text Us
-      </a>
-    </div>
-  );
-}
 
 function payDate(iso: string | null): string {
   if (!iso) return "";
@@ -75,7 +63,6 @@ export default async function PayPage({
       <main className="cq-wrap">
         <div className="cq-confirm">
           <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="cq-logo" priority />
-          <p className="cq-confirm-eyebrow cq-confirm-eyebrow-muted">Nothing due</p>
           <h1 className="cq-confirm-title">Hi {firstName}, there&apos;s nothing to pay here yet.</h1>
           <p className="cq-confirm-note">
             {quote.customer_response === "declined"
@@ -103,22 +90,19 @@ export default async function PayPage({
       <div className="cq-card pay-card">
         <header className="cq-head">
           <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="cq-logo" priority />
-          <p className="cq-eyebrow">{settled ? "Paid in full" : "Your payment"}</p>
         </header>
 
         {/* Receipt first, only right after paying: a quietly smaller balance
             leaves them unsure it went through. */}
         {justPaid?.status === "paid" && (
           <div className="pay-receipt">
-            <p className="pay-receipt-eyebrow">Payment received</p>
-            <strong>{usd(justPaid.amount_cents)}</strong>
-            <p>Thanks {firstName} - your card went through. A receipt is on its way to you from Stripe.</p>
+            <strong>{usd(justPaid.amount_cents)} received</strong>
+            <p>Stripe is emailing your receipt.</p>
           </div>
         )}
         {done && justPaid?.status === "pending" && (
           <div className="pay-note">
-            Your bank is still confirming this one. It usually takes a moment - refresh this page shortly and it&apos;ll
-            show up below.
+            Your bank is still confirming this payment. Refresh in a moment and it&apos;ll show below.
           </div>
         )}
         {back && !settled && <div className="pay-note">No payment was taken. Nothing has changed on your job.</div>}
@@ -162,8 +146,7 @@ export default async function PayPage({
 
         {settled ? (
           <p className="cq-lead pay-done">
-            Your project is paid in full. Thank you for supporting a local crew - if you were happy with the work, a
-            review means the world to us.
+            Paid in full. Thank you!
           </p>
         ) : payee.ok ? (
           <PayPanel
@@ -179,18 +162,12 @@ export default async function PayPage({
           // onboarding); give them the way that works.
           <div className="pay-offline">
             <h2>Pay your crew directly</h2>
-            <p>
-              Card payment isn&apos;t set up on this job. Your crew can take cash, check, Zelle or Venmo on site - or
-              give us a call and we&apos;ll sort it out with you.
-            </p>
+            <p>Cash, check, Zelle or Venmo on site.</p>
           </div>
         )}
 
         <ContactButtons />
-        <p className="cq-fine">
-          Questions about your balance? Call or text and we&apos;ll walk you through it. Nothing is ever charged
-          automatically.
-        </p>
+        <p className="cq-fine">Nothing is ever charged automatically.</p>
       </div>
     </main>
   );

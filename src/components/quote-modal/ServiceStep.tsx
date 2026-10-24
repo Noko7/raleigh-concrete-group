@@ -6,7 +6,6 @@ import { IconCamera, IconCheck, IconClose } from "./icons";
 import { StepHead, type FormState, type Mode } from "./shared";
 
 export function ServiceStep({
-  totalSteps,
   mode,
   data,
   set,
@@ -17,7 +16,6 @@ export function ServiceStep({
   hasDetails,
   errorMsg,
 }: {
-  totalSteps: number;
   mode: Mode | null;
   data: FormState;
   set: (patch: Partial<FormState>) => void;
@@ -30,7 +28,7 @@ export function ServiceStep({
 }) {
   return (
     <div className="qm-body">
-      <StepHead n={2} of={totalSteps} title="What are we pouring?" sub="Tap one. Not sure? Pick Other." />
+      <StepHead title="What are we pouring?" />
       {/* Tiles, not a <select>: every choice visible, one tap. */}
       <div className="qm-tiles" role="radiogroup" aria-label="What do you need?">
         {quoteServiceOptions.map((option) => {
@@ -66,9 +64,7 @@ export function ServiceStep({
           {files.length ? "Add more photos" : "Add a photo of the spot"}
         </span>
         <span className="qm-dropzone-hint">
-          {mode === "online"
-            ? "Required - at least one photo so we can price it. Up to 8 photos or videos."
-            : "Optional, but it gets you a faster price. Up to 8 photos or videos."}
+          {mode === "online" ? "Required · up to 8 photos or videos" : "Optional · up to 8 photos or videos"}
         </span>
       </label>
       {fileError && <p className="qm-err">{fileError}</p>}

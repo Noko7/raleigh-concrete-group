@@ -7,9 +7,10 @@ import { firstNameOf, DECLINE_CREDIT, dollars, QUOTE_SECTION_FIELDS, QUOTE_SECTI
 import { depositDueNowCents, toCents, usd } from "@/lib/crm/fees";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
 import { getQuoteByToken, getWorkHours, isOpenAgain, isQuoteExpired, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
-import { businessName, links, phoneDisplay, testimonials } from "@/lib/site-data";
+import { businessName, testimonials } from "@/lib/site-data";
 import { ChangeReview } from "./change-review";
 import { QuoteActions } from "./quote-actions";
+import { ContactButtons } from "@/components/contact-buttons";
 import { QuoteSections } from "@/components/quote-sections";
 import { ViewBeacon } from "./view-beacon";
 
@@ -30,19 +31,6 @@ function CheckMark() {
     <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="m5 12.5 4.5 4.5L19 6.5" />
     </svg>
-  );
-}
-
-function ContactButtons() {
-  return (
-    <div className="cq-cta">
-      <a href={links.call} className="cq-btn cq-btn-primary">
-        Call {phoneDisplay}
-      </a>
-      <a href={links.text} className="cq-btn cq-btn-secondary">
-        Text Us
-      </a>
-    </div>
   );
 }
 
@@ -99,7 +87,6 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
       <main className="cq-wrap">
         <div className="cq-confirm">
           <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="cq-logo" priority />
-          <p className="cq-confirm-eyebrow cq-confirm-eyebrow-muted">Quote expired</p>
           <h1 className="cq-confirm-title">Hi {firstName}, this quote has expired.</h1>
           <p className="cq-confirm-note">
             Quotes are good for {QUOTE_TTL_DAYS} days so our pricing stays accurate. Give us a call or send a text and
@@ -168,19 +155,14 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             set" (they aren't: there's a question above). */}
         <div className={pendingChange ? "cq-confirm" : "cq-confirm cq-confirm-ok"}>
           {pendingChange ? (
-            <>
-              <p className="cq-confirm-eyebrow cq-confirm-eyebrow-muted">Your job as it stands</p>
-              <h2 className="cq-confirm-title cq-confirm-title-sub">What you&apos;ve approved so far</h2>
-            </>
+            <h2 className="cq-confirm-title cq-confirm-title-sub">What you&apos;ve approved so far</h2>
           ) : (
             <>
               <div className="cq-confirm-badge">
                 <CheckMark />
               </div>
-              <p className="cq-confirm-eyebrow">{awaitingDate ? "Quote Approved" : "Booking Confirmed"}</p>
               <h1 className="cq-confirm-title">
-                {awaitingDate ? "Thanks" : "You're all set"}
-                {firstName ? `, ${firstName}` : ""}!
+                Thanks{firstName ? `, ${firstName}` : ""}. {awaitingDate ? "Quote approved." : "You're booked."}
               </h1>
             </>
           )}
@@ -273,8 +255,8 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
             {pendingChange
               ? "Nothing here changes unless you approve the change above. Questions, just call or text."
               : awaitingDate
-                ? "If none of those days end up working, we'll call you to find one that does. Thanks for choosing Raleigh Concrete Group."
-                : "We'll text a reminder before we arrive. Thanks for choosing Raleigh Concrete Group."}
+                ? "If none of those days work out, we'll call you to find one that does."
+                : "We'll text a reminder before we arrive."}
           </p>
           <ContactButtons />
           <Image
@@ -295,10 +277,10 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
       <main className="cq-wrap">
         <ViewBeacon token={token} />
         <div className="cq-confirm">
-          <p className="cq-confirm-eyebrow cq-confirm-eyebrow-muted">Quote Declined</p>
-          <h1 className="cq-confirm-title">Thanks for letting us know{firstName ? `, ${firstName}` : ""}</h1>
+          <h1 className="cq-confirm-title">Quote declined</h1>
           <p className="cq-confirm-note">
-            No hard feelings. If anything changes, we&apos;re a quick call or text away and we&apos;d still love to help.
+            Thanks for letting us know{firstName ? `, ${firstName}` : ""}. If anything changes, we&apos;re a call or
+            text away.
           </p>
           <ContactButtons />
           <Image
@@ -337,22 +319,12 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
     )}
     </>
   );
-  // Trust markers echo the site's published copy; no warranty or licensing
-  // claims, per policy in site-data.ts.
-  const trust = (
-    <ul className="cq-trust">
-      <li>Local Raleigh crew</li>
-      <li>Clear pricing, no surprises</li>
-      <li>We show up when we say</li>
-    </ul>
-  );
   return (
     <main className="cq-wrap">
       <ViewBeacon token={token} />
       <div className="cq-card">
         <header className="cq-head">
           <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="cq-logo" priority />
-          <p className="cq-eyebrow">Your Concrete Quote</p>
         </header>
 
         <h1 className="cq-title">Hi {firstName},</h1>
@@ -375,7 +347,6 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
               <div className="cq-price">
                 <span className="cq-price-label">Your price</span>
                 <span className="cq-price-value">{amount}</span>
-                <span className="cq-price-sub">Free quote · no obligation until you approve</span>
                 {/* Under the price, which the deadline is about. Only once sent. */}
                 {quote.quote_expires_at && (
                   <span className="cq-expiry">Good through {prettyDate(quote.quote_expires_at.slice(0, 10))}</span>
@@ -387,7 +358,6 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
                 Good through {prettyDate(quote.quote_expires_at.slice(0, 10))}
               </p>
             )}
-            {!built && trust}
           </>
         ) : (
           <p className="cq-lead">
@@ -426,12 +396,10 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
           <details className="cq-details">
             <summary>
               <span>Show job details</span>
-              <span className="cq-details-sub">What&apos;s included, step by step</span>
             </summary>
             {details}
           </details>
         )}
-        {built && trust}
 
         {/* Below the decision: checked after liking the number, and every line
             above Approve is more scrolling. */}
@@ -461,7 +429,6 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
         )}
 
         <ContactButtons />
-        <p className="cq-fine">Questions about your quote? Just call or text. We&apos;re happy to walk you through it.</p>
         {hasPrice && (
           <p className="cq-fine">
             <a href={`/q/${token}/pdf`}>Download a PDF copy</a>

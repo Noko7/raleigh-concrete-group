@@ -6,17 +6,15 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { FaqSection } from "@/components/faq-section";
 import { GalleryCarousel } from "@/components/gallery-carousel";
 import { JsonLd } from "@/components/json-ld";
+import { CtaButtons, MobileBar, QuoteCta, ServiceCard, SiteFooter } from "@/components/site-chrome";
 import { SiteHeader } from "@/components/site-header";
 import { breadcrumbSchema, faqSchema, serviceSchema } from "@/lib/seo";
 import {
-  businessName,
   cityServicesFor,
   coreServices,
   galleryImages,
   getCityServiceContent,
   getService,
-  links,
-  phoneDisplay,
   type LocationKey,
   serviceSingular,
 } from "@/lib/site-data";
@@ -77,9 +75,6 @@ export function CityServicePage({
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_30%,rgba(194,104,42,0.18),transparent_48%)]" />
           <div className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 md:px-8 lg:grid-cols-2 lg:items-center">
             <div>
-              <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-amber-accent">
-                Serving {city}, NC
-              </p>
               <h1 className="mb-5 font-headline text-4xl leading-[1] text-ivory md:text-6xl">
                 {content.heading}
               </h1>
@@ -88,28 +83,19 @@ export function CityServicePage({
                   {p}
                 </p>
               ))}
-              <div className="mt-2 flex flex-wrap gap-3">
-                <a href="#quote" className="cta-primary text-base">
-                  Get Free Quote
-                </a>
-                <a href={links.call} className="cta-secondary text-base">
-                  Call {phoneDisplay}
-                </a>
+              <div className="mt-2">
+                <CtaButtons />
               </div>
             </div>
             <div>
               {service.beforeAfter ? (
-                <div>
-                  <BeforeAfterSlider
-                    beforeSrc={service.beforeAfter.before}
-                    afterSrc={service.beforeAfter.after}
-                    beforeAlt={`${service.name} in ${city} before`}
-                    afterAlt={`${service.name} in ${city} after`}
-                  />
-                  <p className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                    {service.beforeAfter.label} · Drag to Compare
-                  </p>
-                </div>
+                <BeforeAfterSlider
+                  beforeSrc={service.beforeAfter.before}
+                  afterSrc={service.beforeAfter.after}
+                  beforeAlt={`${service.name} in ${city} before`}
+                  afterAlt={`${service.name} in ${city} after`}
+                  label={service.beforeAfter.label}
+                />
               ) : (
                 <div className="overflow-hidden rounded-2xl border border-white/10">
                   <Image
@@ -160,27 +146,7 @@ export function CityServicePage({
           <GalleryCarousel images={galleryImages} />
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8" id="quote">
-          <div className="rounded-3xl bg-ivory p-8 text-center text-[#2b1a12] md:p-12">
-            <h2 className="mb-3 font-headline text-4xl text-[#2b1a12] md:text-5xl">
-              Free {serviceSingular(service)} Quote in {city}
-            </h2>
-            <p className="mx-auto mb-7 max-w-2xl text-[#2b1a12]/80">
-              Tell us a little about your project and we&apos;ll get you a free, written price.
-            </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <a href="#quote" className="rounded-full bg-[#2b1a12] px-7 py-3.5 text-base font-bold text-white transition hover:bg-[#3a241a]">
-                Get My Free Quote
-              </a>
-              <a href={links.call} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
-                Call Now
-              </a>
-              <a href={links.text} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
-                Text Now
-              </a>
-            </div>
-          </div>
-        </section>
+        <QuoteCta heading={`Free ${serviceSingular(service)} Quote in ${city}`} />
 
         <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
@@ -207,19 +173,12 @@ export function CityServicePage({
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {otherCoreInCity.map((other) => (
-                  <Link
+                  <ServiceCard
                     key={other.slug}
                     href={`/${locationKey}/${other.slug}`}
-                    className="group rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:-translate-y-1 hover:border-amber-accent/50 hover:bg-white/10"
-                  >
-                    <h3 className="mb-2 font-headline text-2xl text-ivory">
-                      {other.name} in {city}
-                    </h3>
-                    <p className="text-sm leading-relaxed text-slate-300">{other.blurb}</p>
-                    <span className="mt-3 inline-block text-sm font-bold uppercase tracking-[0.12em] text-amber-accent opacity-70 transition group-hover:opacity-100">
-                      View Details →
-                    </span>
-                  </Link>
+                    title={`${other.name} in ${city}`}
+                    blurb={other.blurb}
+                  />
                 ))}
               </div>
             </>
@@ -232,17 +191,7 @@ export function CityServicePage({
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {otherServicesElsewhere.map((other) => (
-                  <Link
-                    key={other.slug}
-                    href={`/services/${other.slug}`}
-                    className="group rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:-translate-y-1 hover:border-amber-accent/50 hover:bg-white/10"
-                  >
-                    <h3 className="mb-2 font-headline text-2xl text-ivory">{other.name}</h3>
-                    <p className="text-sm leading-relaxed text-slate-300">{other.blurb}</p>
-                    <span className="mt-3 inline-block text-sm font-bold uppercase tracking-[0.12em] text-amber-accent opacity-70 transition group-hover:opacity-100">
-                      View Details →
-                    </span>
-                  </Link>
+                  <ServiceCard key={other.slug} href={`/services/${other.slug}`} title={other.name} blurb={other.blurb} />
                 ))}
               </div>
             </>
@@ -258,29 +207,10 @@ export function CityServicePage({
           </div>
         </section>
 
-        <footer className="border-t border-white/10 bg-black/20">
-          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-8 md:px-8">
-            <span className="font-headline text-2xl text-ivory">{businessName}</span>
-            <div className="flex flex-col items-end gap-1">
-              <Link
-                href="/privacy-policy"
-                className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300 transition hover:text-amber-accent"
-              >
-                Privacy Policy
-              </Link>
-              <p className="text-right text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-                {businessName} &middot; Concrete &amp; Hardscaping &middot; {city}, NC &middot; {phoneDisplay}
-              </p>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter />
       </main>
 
-      <div className="mobile-bar">
-        <a href="#quote" className="cta-primary flex-1 justify-center">Free Quote</a>
-        <a href={links.call} className="cta-secondary flex-1 justify-center">Call</a>
-        <a href={links.text} className="cta-secondary flex-1 justify-center">Text</a>
-      </div>
+      <MobileBar />
     </>
   );
 }

@@ -20,7 +20,6 @@ function isValidEmail(email: string): boolean {
 }
 
 export function ContactStep({
-  totalSteps,
   data,
   set,
   addressVerified,
@@ -29,7 +28,6 @@ export function ContactStep({
   honeypot,
   setHoneypot,
 }: {
-  totalSteps: number;
   data: FormState;
   set: (patch: Partial<FormState>) => void;
   addressVerified: boolean;
@@ -40,7 +38,7 @@ export function ContactStep({
 }) {
   return (
     <div className="qm-body">
-      <StepHead n={1} of={totalSteps} title="Your details" sub="Takes about 30 seconds." />
+      <StepHead title="Your details" />
       <label className="qm-label" htmlFor="qm-name">Your name</label>
       <input data-clarity-mask="true"
         id="qm-name"
@@ -65,11 +63,9 @@ export function ContactStep({
         inputMode="tel"
         placeholder="(919) 555-0123"
       />
-      {/* Fixed-height slot so the address field below doesn't move. */}
+      {/* Fixed-height slot so the address field below doesn't move when the error shows. */}
       <span className="qm-ac-status qm-slot">
-        {data.phone.trim() !== "" && !isValidPhone(data.phone)
-          ? "Enter a 10-digit number, like (919) 555-0123."
-          : "We text your price here. No spam."}
+        {data.phone.trim() !== "" && !isValidPhone(data.phone) ? "Enter a 10-digit number, like (919) 555-0123." : ""}
       </span>
       <label className="qm-label">Address of the job</label>
       <AddressAutocomplete

@@ -91,8 +91,7 @@ export function ChangeReview({
   if (mode === "done") {
     return (
       <div className="cr cr-ok">
-        <p className="cr-eyebrow">Change approved</p>
-        <h2 className="cr-title">Thanks - that&apos;s all updated</h2>
+        <h2 className="cr-title">Change approved</h2>
         <p className="cr-note">
           Your job is now {money(toCents)}
           {paidCents > 0 && dueCents > 0 ? `, with ${money(dueCents)} left to pay.` : "."}
@@ -117,8 +116,7 @@ export function ChangeReview({
   if (mode === "declined") {
     return (
       <div className="cr">
-        <p className="cr-eyebrow cr-eyebrow-muted">Change declined</p>
-        <h2 className="cr-title">No problem - nothing has changed</h2>
+        <h2 className="cr-title">Change declined</h2>
         <p className="cr-note">
           Your job stays as you approved it, at {money(fromCents)}
           {when ? `, on ${when}` : ""}. We&apos;ll give you a call if we need to talk it through.
@@ -129,8 +127,7 @@ export function ChangeReview({
 
   return (
     <div className="cr">
-      <p className="cr-eyebrow">A change to your job</p>
-      <h2 className="cr-title">Can you approve this?</h2>
+      <h2 className="cr-title">A change to your job</h2>
 
       {/* Their words first. The number means nothing without it. */}
       <p className="cr-note-body">{note}</p>
@@ -217,9 +214,6 @@ export function ChangeReview({
       )}
 
       {error && <p className="cr-err">{error}</p>}
-      <p className="cr-fine">
-        Not sure? Give us a call before you answer - we&apos;d rather talk it through than have you guess.
-      </p>
     </div>
   );
 }

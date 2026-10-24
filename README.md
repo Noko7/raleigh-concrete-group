@@ -36,6 +36,14 @@ Everything lives in `src/lib/site-data.ts`:
 - **`locations`** - city pages live at `/<city>` (linked from the footer, not the main nav).
 - **`galleryImages`**, **`sharedBeforeAfter`**, **`testimonials`**.
 
+Shared page pieces live in `src/components/site-chrome.tsx` (quote/call/text buttons, the closing quote block,
+service cards, footer, mobile bar), so a label or link changes in one place. Customer pages (quote, pay, confirm)
+share `src/components/contact-buttons.tsx`.
+
+**Copy rule:** no taglines, helper text or secondary labels (eyebrows over headings, "Drag to compare",
+"View details →", "No spam"). If a screen needs one to make sense, fix the layout instead. Validation messages,
+legal/SMS consent text and anything that explains a disabled button stay.
+
 ## Before launch - final touches
 1. **Phone** - set to `(919) 873-3919` in `site-data.ts`. ✅
 2. **Photos** - real project photos + logos are in `public/images/`. ✅ (They're large PNGs;

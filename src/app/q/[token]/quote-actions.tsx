@@ -272,8 +272,7 @@ export function QuoteActions({
   if (mode === "paying") {
     return (
       <div className="cq-result cq-result-ok">
-        <p className="cq-result-eyebrow">Quote approved</p>
-        <h3>Opening your secure checkout&hellip;</h3>
+        <h3>Quote approved. Opening checkout&hellip;</h3>
         <p className="cq-result-note">One moment. If nothing happens, tap the payment link we just texted you.</p>
       </div>
     );
@@ -287,8 +286,7 @@ export function QuoteActions({
     ];
     return (
       <div className="cq-result cq-result-ok">
-        <p className="cq-result-eyebrow">Quote approved</p>
-        <h3>Thanks! We&apos;ll confirm your date shortly</h3>
+        <h3>Quote approved</h3>
         {bought.length > 0 && <p className="cq-result-note">You approved: {bought.join(", ")}.</p>}
         <p className="cq-result-price">
           {discount && <span className="cq-result-save">${DECLINE_CREDIT} credit applied</span>}
@@ -309,9 +307,8 @@ export function QuoteActions({
   if (mode === "declined") {
     return (
       <div className="cq-result">
-        <p className="cq-result-eyebrow">Quote declined</p>
-        <h3>Thanks for letting us know</h3>
-        <p className="cq-result-note">No hard feelings. If anything changes, we&apos;re just a call or text away.</p>
+        <h3>Quote declined</h3>
+        <p className="cq-result-note">Thanks for letting us know. If anything changes, we&apos;re a call or text away.</p>
       </div>
     );
   }
@@ -319,7 +316,6 @@ export function QuoteActions({
   if (mode === "save") {
     return (
       <div className="cq-offer">
-        <p className="cq-offer-eyebrow">Wait, before you go</p>
         <h3>Here&apos;s a ${DECLINE_CREDIT} credit to earn your business.</h3>
         {built && running === 0 ? (
           <p className="cq-offer-price">It comes off whichever option you pick.</p>
@@ -352,10 +348,9 @@ export function QuoteActions({
     return (
       <div className="cq-schedule">
         <h3>Which days work for you?</h3>
+        {/* The date input's min already enforces the lead time, so it isn't spelled out here. */}
         <p className="cq-fine">
-          Pick up to {MAX_PREFERRED_DATES} days that suit you, starting {LEAD_TIME_DAYS} days from now, and the time
-          you&apos;d like us to start. Our crew will confirm one of them and text you back. Nothing is booked until
-          then.
+          Pick up to {MAX_PREFERRED_DATES} days and a start time. We&apos;ll text you to confirm one.
         </p>
         {/* Restate what they're approving before they commit. */}
         {built && (
@@ -469,10 +464,7 @@ export function QuoteActions({
             >
               Approve now, pay the crew directly
             </button>
-            <p className="cq-fine cq-pay-fine">
-              Cash, check, Zelle or Venmo on site - whatever suits you. You can still pay by card later from the link
-              we text you.
-            </p>
+            <p className="cq-fine cq-pay-fine">Cash, check, Zelle or Venmo on site.</p>
           </div>
         ) : (
           <button
@@ -504,10 +496,6 @@ export function QuoteActions({
               <h2 className="cq-opts-title">
                 {packages.length === 2 ? "Two ways to do this - pick one" : "Pick the one you'd like"}
               </h2>
-              <p className="cq-fine cq-alts-lead">
-                Same job, done differently. Tap the one you want and your total is worked out below. Not sure? Call or
-                text us and we&apos;ll talk it through.
-              </p>
               <ul className="cq-alt-list">
                 {packages.map((pkg, i) => {
                   const on = picked === pkg.id;
@@ -522,7 +510,8 @@ export function QuoteActions({
                     >
                       <button type="button" className="cq-alt" aria-pressed={on}>
                         <span className="cq-alt-top">
-                          <span className="cq-alt-letter">{`Option ${packageLetter(i)}`}</span>
+                          {/* Selection is said in the top row, so picking a card doesn't change its height. */}
+                          <span className="cq-alt-letter">{`Option ${packageLetter(i)}${on ? " · Selected" : ""}`}</span>
                           {pkg.recommended && <span className="cq-alt-flag">What we&apos;d pick</span>}
                         </span>
                         <span className="cq-alt-head">
@@ -540,7 +529,6 @@ export function QuoteActions({
                           less="Hide details"
                         />
                       )}
-                      <span className="cq-alt-mark">{on ? "Selected" : "Tap to choose"}</span>
                     </li>
                   );
                 })}
@@ -556,7 +544,6 @@ export function QuoteActions({
               {choice ? (
                 <>
                   <h2 className="cq-opts-title">Anything to add?</h2>
-                  <p className="cq-fine cq-alts-lead">These are priced the same whichever option you picked above.</p>
                   {discount && (
                     <p className="cq-fine cq-opt-todo">
                       Your ${DECLINE_CREDIT} credit is held. Answer each option and it comes off the total below.
@@ -626,13 +613,6 @@ export function QuoteActions({
           Decline
         </button>
       </div>
-
-      {/* Approving books nothing (they pick days, the crew confirm), so the
-          reassurance sits against the button. */}
-      <p className="cq-reassure">
-        Approving doesn&apos;t book a date. You&apos;ll pick a few days that suit you, and we&apos;ll text you back to
-        confirm one.
-      </p>
 
       {/* Phone only, and only while the real button is out of sight. */}
       {!ctaOnScreen && (

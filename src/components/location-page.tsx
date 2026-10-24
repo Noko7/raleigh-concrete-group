@@ -1,23 +1,20 @@
 import Image from "next/image";
-import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { FaqSection } from "@/components/faq-section";
 import { GalleryCarousel } from "@/components/gallery-carousel";
 import { JsonLd } from "@/components/json-ld";
+import { CtaButtons, MobileBar, QUOTE_CTA, QuoteCta, ServiceCard, SiteFooter } from "@/components/site-chrome";
 import { SiteHeader } from "@/components/site-header";
 import { breadcrumbSchema, faqSchema, serviceSchema } from "@/lib/seo";
 import {
-  businessName,
   coreServices,
   galleryImages,
   getLocationFaqs,
   links,
   locations,
-  phoneDisplay,
   testimonials,
-  valueProps,
   type LocationKey,
 } from "@/lib/site-data";
 
@@ -39,22 +36,6 @@ const processSteps = [
     body: "Our experienced crew gets the job done on schedule, cleans up after themselves, and treats your property like it's our own.",
   },
 ];
-
-function SharedCtaBar() {
-  return (
-    <div className="flex flex-wrap gap-3">
-      <a href="#quote" className="cta-primary text-base">
-        Get Free Quote
-      </a>
-      <a href={links.call} className="cta-secondary text-base">
-        Call Now
-      </a>
-      <a href={links.text} className="cta-secondary text-base">
-        Text Now
-      </a>
-    </div>
-  );
-}
 
 export function LocationPage({ locationKey }: LocationPageProps) {
   const location = locations[locationKey];
@@ -91,28 +72,11 @@ export function LocationPage({ locationKey }: LocationPageProps) {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_30%,rgba(194,104,42,0.18),transparent_48%)]" />
           <div className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 md:px-8 lg:grid-cols-2 lg:items-center">
             <div>
-              <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-amber-accent">
-                Serving {location.city} and surrounding areas
-              </p>
               <h1 className="mb-5 font-headline text-5xl leading-[0.95] text-ivory md:text-7xl">
                 {location.title}
               </h1>
               <p className="mb-8 max-w-lg text-lg text-slate-300">{location.description}</p>
-              <SharedCtaBar />
-              <div className="mt-8 grid max-w-sm grid-cols-3 gap-3">
-                <div className="stat-card text-center">
-                  <p className="stat-value">5.0★</p>
-                  <p className="stat-label">Google Rated</p>
-                </div>
-                <div className="stat-card text-center">
-                  <p className="stat-value">1-3 Day</p>
-                  <p className="stat-label">Installs</p>
-                </div>
-                <div className="stat-card text-center">
-                  <p className="stat-value">Trusted</p>
-                  <p className="stat-label">Local Crew</p>
-                </div>
-              </div>
+              <CtaButtons />
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-white/10 shadow-2xl shadow-black/50">
@@ -130,47 +94,23 @@ export function LocationPage({ locationKey }: LocationPageProps) {
           </div>
         </section>
 
-        <section className="border-y border-white/10 bg-black/20">
-          <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-5 md:px-8">
-            <p className="font-headline text-2xl text-amber-accent">Why Raleigh Concrete Group?</p>
-            <div className="flex flex-wrap gap-4">
-              {valueProps.map((point) => (
-                <span key={point} className="flex items-center gap-2 text-sm font-semibold text-ivory">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-accent text-black">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3" aria-hidden="true">
-                      <path d="m5 12.5 4.5 4.5L19 6.5" />
-                    </svg>
-                  </span>
-                  {point}
-                </span>
-              ))}
-            </div>
-            <a href="#quote" className="cta-primary cta-sm">
-              Get Quote
-            </a>
-          </div>
-        </section>
-
         <section className="mx-auto w-full max-w-6xl px-4 py-14 md:px-8">
           <h2 className="mb-8 font-headline text-4xl text-ivory">See the Before &amp; After</h2>
           <div className="grid gap-6 md:grid-cols-2">
             {location.beforeAfterPairs.map((pair) => (
-              <div key={pair.label}>
-                <BeforeAfterSlider
-                  beforeSrc={pair.before}
-                  afterSrc={pair.after}
-                  beforeAlt={`${location.city} before ${pair.label}`}
-                  afterAlt={`${location.city} after ${pair.label}`}
-                />
-                <p className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  {pair.label} · Drag to Compare
-                </p>
-              </div>
+              <BeforeAfterSlider
+                key={pair.label}
+                beforeSrc={pair.before}
+                afterSrc={pair.after}
+                beforeAlt={`${location.city} before ${pair.label}`}
+                afterAlt={`${location.city} after ${pair.label}`}
+                label={pair.label}
+              />
             ))}
           </div>
           <div className="mt-8 text-center">
-            <a href="#quote" className="cta-primary">
-              Get My Free Quote
+            <a href={links.quote} className="cta-primary">
+              {QUOTE_CTA}
             </a>
           </div>
         </section>
@@ -184,19 +124,13 @@ export function LocationPage({ locationKey }: LocationPageProps) {
           <h2 className="mb-6 font-headline text-4xl text-ivory">Concrete Services in {location.city}</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {coreServices.map((service) => (
-              <Link
+              <ServiceCard
                 key={service.slug}
                 href={`/${location.key}/${service.slug}`}
-                className="group rounded-2xl border border-amber-accent/30 bg-amber-accent/5 p-5 transition hover:-translate-y-1 hover:border-amber-accent/60 hover:bg-amber-accent/10"
-              >
-                <h3 className="mb-2 font-headline text-2xl text-ivory">
-                  {service.name} in {location.city}
-                </h3>
-                <p className="text-sm leading-relaxed text-slate-300">{service.blurb}</p>
-                <span className="mt-3 inline-block text-sm font-bold uppercase tracking-[0.12em] text-amber-accent opacity-70 transition group-hover:opacity-100">
-                  View {service.navLabel} →
-                </span>
-              </Link>
+                title={`${service.name} in ${location.city}`}
+                blurb={service.blurb}
+                featured
+              />
             ))}
           </div>
         </section>
@@ -231,29 +165,7 @@ export function LocationPage({ locationKey }: LocationPageProps) {
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8" id="quote">
-          <div className="rounded-3xl bg-ivory p-8 text-center text-[#2b1a12] md:p-12">
-            <h2 className="mb-3 font-headline text-4xl text-[#2b1a12] md:text-5xl">
-              Get Your Free {location.city} Quote
-            </h2>
-            <p className="mx-auto mb-7 max-w-2xl text-[#2b1a12]/80">
-              Tell us a little about your project and we&apos;ll get you a price, usually the same
-              day. For driveways and slabs we can often quote without coming out. Just add your
-              address.
-            </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <a href="#quote" className="rounded-full bg-[#2b1a12] px-7 py-3.5 text-base font-bold text-white transition hover:bg-[#3a241a]">
-                Get My Free Quote
-              </a>
-              <a href={links.call} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
-                Call Now
-              </a>
-              <a href={links.text} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
-                Text Now
-              </a>
-            </div>
-          </div>
-        </section>
+        <QuoteCta heading={`Get Your Free ${location.city} Quote`} />
 
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 md:px-8">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
@@ -270,29 +182,10 @@ export function LocationPage({ locationKey }: LocationPageProps) {
 
         <FaqSection faqs={faqs} heading={`Concrete in ${location.city}: FAQs`} />
 
-        <footer className="border-t border-white/10 bg-black/20">
-          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-8 md:px-8">
-            <span className="font-headline text-2xl text-ivory">{businessName}</span>
-            <div className="flex flex-col items-end gap-1">
-              <Link
-                href="/privacy-policy"
-                className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300 transition hover:text-amber-accent"
-              >
-                Privacy Policy
-              </Link>
-              <p className="text-right text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-                {businessName} · Concrete &amp; Hardscaping · {location.city}, NC · {phoneDisplay}
-              </p>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter />
       </main>
 
-      <div className="mobile-bar">
-        <a href="#quote" className="cta-primary flex-1 justify-center">Free Quote</a>
-        <a href={links.call} className="cta-secondary flex-1 justify-center">Call</a>
-        <a href={links.text} className="cta-secondary flex-1 justify-center">Text</a>
-      </div>
+      <MobileBar />
     </>
   );
 }
