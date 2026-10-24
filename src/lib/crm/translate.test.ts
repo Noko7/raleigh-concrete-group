@@ -48,6 +48,8 @@ test("asks Haiku for the strings in order, cheaply", async () => {
   // The rules ride in the system prompt, the same on every call.
   assert.match(String(p.system), /Never use an em dash/);
   assert.match(String(p.system), /same single job/);
+  assert.match(String(p.system), /Never invent anything/);
+  assert.match(String(p.system), /Make no assumptions/);
 });
 
 test("nothing to translate makes no call", async () => {
