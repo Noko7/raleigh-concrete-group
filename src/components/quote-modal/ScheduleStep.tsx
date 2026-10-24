@@ -58,7 +58,7 @@ export function ScheduleStep({
         sub={
           mode === "online"
             ? "Most jobs we price from photos. If yours needs a look, when's good? We'll text before anyone comes out."
-            : "Pick a day, then a time."
+            : undefined
         }
       />
       <label className="qm-label" htmlFor="qm-date">Day</label>
@@ -87,7 +87,7 @@ export function ScheduleStep({
               is needed
             </>
           ) : (
-            "Nothing is booked. We'll text you first."
+            ""
           )
         ) : dateChecking ? (
           "Checking that day…"
@@ -124,9 +124,6 @@ export function ScheduleStep({
           );
         })}
       </div>
-      {takenTimes.length > 0 && !dateFull && (
-        <span className="qm-ac-status qm-slot">Greyed-out times are already booked that day.</span>
-      )}
 
       {/* Send without a time and we call: a missing time costs a phone call, a missing lead costs the job. */}
       <button

@@ -167,7 +167,7 @@ export const QUOTE_SECTION_LABELS: Record<QuoteSectionField, string> = {
 // Placeholder text. Short: read on a phone on a job site.
 export const QUOTE_SECTION_HINTS: Record<QuoteSectionField, string> = {
   quote_scope: "What we're building, the size, and the finish.",
-  quote_permits: "Who pulls them, what they cost, or Not applicable.",
+  quote_permits: "Who pulls them, the fee as its own line item, or Not applicable.",
   quote_prep: "What comes out, what gets hauled away, how the base is built.",
   quote_pour: "Depth, reinforcement, concrete mix, and the finish.",
   quote_cleanup: "How the site is left, and when.",

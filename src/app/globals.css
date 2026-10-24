@@ -1050,17 +1050,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
   color: #2b1a12;
 }
 .qm-choice-desc { font-size: 0.95rem; color: rgba(43, 26, 18, 0.75); line-height: 1.35; }
-.qm-choice-badge {
-  position: absolute;
-  top: -0.7rem;
-  left: 1rem;
-  background: #2b1a12;
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-}
 .qm-choice-arrow { width: 22px; height: 22px; color: var(--amber-dark); }
 .qm-choice-foot { text-align: center; font-size: 0.95rem; color: rgba(43, 26, 18, 0.75); margin: 0.25rem 0 1rem; }
 .qm-choice-foot a { color: #2b1a12; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
@@ -1925,10 +1914,9 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cq-details > summary::-webkit-details-marker { display: none; }
 .cq-details > summary > span:first-child { font-weight: 800; font-size: 1rem; color: #2b1a12; }
 .cq-details > summary::after {
-  content: "+"; grid-column: 2; grid-row: 1 / span 2; font-size: 1.4rem; font-weight: 700; color: var(--amber-dark);
+  content: "+"; grid-column: 2; grid-row: 1; font-size: 1.4rem; font-weight: 700; color: var(--amber-dark);
 }
 .cq-details[open] > summary::after { content: "\2212"; }
-.cq-details-sub { grid-column: 1; font-size: 0.85rem; color: rgba(43, 26, 18, 0.65); }
 .cq-details > .cq-summary { margin: 0; padding-top: 0.2rem; }
 .cq-details > .cq-summary > h2 { display: none; }
 
@@ -1959,9 +1947,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
    a result - only ever visible at desktop widths, never on a narrow phone
    where every item is already forced onto its own line. Stacking removes
    the shared-line case entirely so desktop always matches mobile. */
-.cq-trust { list-style: none; margin: 0 0 1.25rem; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
-.cq-trust li { font-size: 0.82rem; font-weight: 700; color: rgba(43, 26, 18, 0.75); display: flex; align-items: center; gap: 0.35rem; }
-.cq-trust li::before { content: "✓"; color: var(--amber); font-weight: 800; }
 .cq-review { margin: 1.1rem 0 0; padding: 0.9rem 1rem; background: #fff; border-left: 3px solid var(--amber); border-radius: 0.6rem; }
 .cq-review p { font-size: 0.9rem; color: rgba(43, 26, 18, 0.85); font-style: italic; }
 .cq-review footer { margin-top: 0.4rem; font-size: 0.78rem; font-weight: 700; color: rgba(43, 26, 18, 0.6); }
@@ -2001,7 +1986,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cq-offer, .cq-schedule, .cq-result { background: #fff; border: 1px solid #ececec; border-radius: 0.9rem; padding: 1.4rem; margin-bottom: 1.1rem; text-align: center; }
 .cq-offer { border: 2px solid var(--amber); }
 .cq-result-ok { border: 2px solid var(--amber); background: rgba(194, 104, 42, 0.08); }
-.cq-offer-eyebrow { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--amber); }
 .cq-result-eyebrow { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--amber-dark); }
 .cq-result:not(.cq-result-ok) .cq-result-eyebrow { color: rgba(43, 26, 18, 0.55); }
 .cq-result-price { font-family: var(--font-headline), sans-serif; font-size: 2rem; color: #2b1a12; margin: 0.2rem 0 0.5rem; }
@@ -3607,7 +3591,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
    so it is a real <button> and the selected state is unmistakable at arm's
    length rather than a two-pixel ring. */
 .cq-alts { margin-bottom: 1.4rem; }
-.cq-alts-lead { margin: 0 0 0.75rem; }
 .cq-alt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
 /* The card is the <li>; the button inside it carries the label, letter and
    price and fills the card's width, so the tap target is the whole thing. */
@@ -3633,8 +3616,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cq-alt-title { font-weight: 800; font-size: 1.05rem; }
 .cq-alt-price { font-family: var(--font-headline), sans-serif; font-size: 1.5rem; white-space: nowrap; }
 .cq-alt-desc { margin: 0; font-size: 0.92rem; line-height: 1.45; color: rgba(43, 26, 18, 0.78); white-space: pre-wrap; }
-.cq-alt-mark { margin-top: 0.2rem; font-size: 0.85rem; font-weight: 800; color: rgba(43, 26, 18, 0.62); }
-.cq-alt-on .cq-alt-mark { color: var(--amber-dark); }
 .cq-confirm-item-pick { font-weight: 800; }
 
 /* Crew: the option they picked, leading what goes on the truck. */
@@ -3701,7 +3682,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .pay-history-amount em { font-style: normal; font-weight: 600; color: rgba(43, 26, 18, 0.55); }
 
 .pay-receipt { background: rgba(22, 163, 74, 0.1); border: 1px solid rgba(22, 163, 74, 0.4); border-radius: 0.9rem; padding: 1rem 1.15rem; margin-bottom: 1.1rem; color: #14532d; }
-.pay-receipt-eyebrow { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; margin: 0; }
 .pay-receipt strong { display: block; font-family: var(--font-headline), sans-serif; font-size: 2rem; line-height: 1.1; }
 .pay-receipt p { margin: 0.25rem 0 0; font-size: 0.9rem; }
 .pay-note { background: rgba(43, 26, 18, 0.06); border-radius: 0.7rem; padding: 0.75rem 0.9rem; margin-bottom: 1.1rem; font-size: 0.88rem; color: rgba(43, 26, 18, 0.8); }
@@ -3716,6 +3696,7 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .pay-choice:disabled { opacity: 0.6; cursor: not-allowed; }
 .pay-choice-amount { font-family: var(--font-headline), sans-serif; font-size: 1.7rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .pay-choice-note { font-size: 0.82rem; color: rgba(43, 26, 18, 0.7); }
+.pay-choice-other { justify-content: center; }
 .pay-choice-other .pay-choice-amount { font-size: 1.15rem; }
 .pay-custom { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(43, 26, 18, 0.6); }
 .pay-custom-field { display: flex; align-items: center; gap: 0.3rem; background: #fff; border: 2px solid rgba(43, 26, 18, 0.2); border-radius: 0.6rem; padding: 0.5rem 0.75rem; font-family: var(--font-headline), sans-serif; font-size: 1.5rem; color: #2b1a12; }
@@ -4081,12 +4062,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
   padding: 1.4rem 1.3rem; margin-bottom: 1.2rem; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
 }
 .cr-ok { border-color: #16a34a; }
-.cr-eyebrow {
-  font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em;
-  color: var(--amber-dark); margin-bottom: 0.35rem;
-}
-.cr-ok .cr-eyebrow { color: #15803d; }
-.cr-eyebrow-muted { color: #6b7280; }
 .cr-title { font-family: var(--font-headline), sans-serif; font-size: 1.6rem; line-height: 1.2; margin-bottom: 0.7rem; color: #0f172a; }
 /* Their words, set as the most readable thing in the block - the number below
    means nothing without it. */
@@ -4126,7 +4101,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cr-no:hover { border-color: #9ca3af; color: #1f2328; }
 .cr-no:disabled { opacity: 0.6; cursor: default; }
 .cr-err { margin-top: 0.7rem; color: #b91c1c; font-weight: 700; font-size: 0.9rem; }
-.cr-fine { margin-top: 0.9rem; font-size: 0.82rem; color: #6b7280; line-height: 1.5; }
 
 @media (max-width: 640px) {
   .cr { padding: 1.15rem 1rem; }

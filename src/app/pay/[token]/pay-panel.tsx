@@ -100,7 +100,6 @@ export function PayPanel({
           disabled={pending}
         >
           <span className="pay-choice-amount">Another amount</span>
-          <span className="pay-choice-note">Paying part of it today</span>
         </button>
       </div>
 
@@ -132,8 +131,7 @@ export function PayPanel({
       {/* Said before they tap: an unexpected Stripe page looks like an error,
           and an unrecognised statement name prompts a call to the bank. */}
       <p className="pay-fine">
-        Card, Apple Pay and Google Pay, handled securely by Stripe. Your payment goes straight to your crew, and your
-        statement will show {payeeName}.
+        Card, Apple Pay or Google Pay through Stripe. Your statement will show {payeeName}.
       </p>
     </form>
   );

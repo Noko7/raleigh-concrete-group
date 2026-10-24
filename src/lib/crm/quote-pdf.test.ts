@@ -27,7 +27,7 @@ const base: QuotePdfData = {
   sections: [["Scope", "Tear out and replace the driveway."]],
   packages: [],
   lines: [],
-  totalLabel: "Your price, all in",
+  totalLabel: "Your price",
   total: "$8,400",
   totalNote: null,
   linkLabel: "Ready to go ahead? Approve your quote online:",

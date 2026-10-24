@@ -87,8 +87,11 @@ export function AddressAutocomplete({
           "Looks good. Pick a match above if you see yours."
         ) : searchedEmpty ? (
           "No exact match yet. Keep typing your street, city and state."
-        ) : (
+        ) : value.trim() ? (
+          // Only once they've started: the placeholder already shows the format.
           ADDRESS_HINT
+        ) : (
+          ""
         )}
       </span>
       {showList && suggestions.length > 0 && (

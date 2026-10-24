@@ -544,7 +544,7 @@ const serviceFaqMap: Record<string, FaqItem[]> = {
   "retaining-walls": [
     {
       q: "Do I need a permit for a retaining wall?",
-      a: "Taller walls and walls that hold back significant slopes often require a permit and, in some cases, engineering. We'll let you know what your project needs and build to handle the load and drainage behind it.",
+      a: "Taller walls and walls that hold back significant slopes often require a permit and, in some cases, engineering. We'll let you know what your project needs and build to handle the load and drainage behind it. If yours needs one, the permit fee shows up on your quote as its own line.",
     },
     {
       q: "How do retaining walls handle drainage?",
@@ -638,7 +638,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
       },
       {
         q: "Do I need a permit to replace a driveway in Raleigh?",
-        a: "A like-for-like replacement usually doesn't, but widening the driveway or changing the apron where it meets the street can require approval from the City of Raleigh. We'll flag that before we begin.",
+        a: "A like-for-like replacement usually doesn't, but widening the driveway or changing the apron where it meets the street can require approval from the City of Raleigh. We'll flag that before we begin, and if it does, the permit fee shows up on your quote as its own line.",
       },
       {
         q: "Will tree roots crack my new Raleigh driveway?",
@@ -700,7 +700,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
     faqs: [
       {
         q: "Do I need a permit for a retaining wall in Raleigh?",
-        a: "Shorter landscape walls often don't, but taller walls (commonly four feet and up) and walls holding back significant load typically require a permit and sometimes engineering. We'll let you know what yours needs.",
+        a: "Shorter landscape walls often don't, but taller walls (commonly four feet and up) and walls holding back significant load typically require a permit and sometimes engineering. We'll let you know what yours needs. If yours needs one, the permit fee shows up on your quote as its own line.",
       },
       {
         q: "Why do retaining walls fail in Raleigh's clay soil?",
@@ -815,7 +815,7 @@ const cityServiceLocalContent: Record<string, PriorityContent> = {
     faqs: [
       {
         q: "Do I need a permit for a retaining wall in Morrisville?",
-        a: "Shorter landscape walls usually don't. Taller walls and any wall holding back a surcharge load, like a driveway or a slope above it, typically do, and can need an engineer's design. Thresholds vary by height and situation, so we look at your specific wall and tell you what it needs before we quote it rather than after.",
+        a: "Shorter landscape walls usually don't. Taller walls and any wall holding back a surcharge load, like a driveway or a slope above it, typically do, and can need an engineer's design. Thresholds vary by height and situation, so we look at your specific wall and tell you what it needs before we quote it rather than after. If yours needs one, the permit fee shows up on your quote as its own line.",
       },
       {
         q: "Why do so many Morrisville retaining walls lean or bulge?",
@@ -1177,21 +1177,15 @@ export const processSteps: ProcessStep[] = [
 
 export type Stat = { value: string; label: string };
 export const homeStats: Stat[] = [
+  // Facts only: a stat that isn't a number ("Local", "Free") is a tagline.
   { value: "5.0★", label: "Rated on Google" },
   { value: "20+ Yrs", label: "Combined Crew Experience" },
-  { value: "Local", label: "Raleigh-Based Team" },
-  { value: "Free", label: "Written Quotes" },
+  { value: "Since 2020", label: "Serving the Triangle" },
 ];
 
 export const aboutParagraphs: string[] = [
   "Finding a concrete contractor you can actually count on in Raleigh shouldn't be this hard. At Raleigh Concrete Group, our crews have poured and built countless driveways, patios, walkways and retaining walls across the Triangle, and we treat every job like it's at our own home.",
   "Whether you need a brand-new driveway, a backyard patio you'll actually use, or a commercial slab done on schedule, we start with a free, detailed quote so you know the price before we ever break ground. Our crews are experienced, respectful on site, and familiar with local codes across Raleigh and the surrounding towns.",
-];
-
-export const valueProps = [
-  "We Show Up On Time",
-  "Clear, Honest Pricing",
-  "Clean Job Sites Every Time",
 ];
 
 export type GalleryImage = { src: string; alt: string };

@@ -641,7 +641,7 @@ export const es: Dict = {
     },
     sectionHints: {
       quote_scope: "Qué vas a construir, el tamaño y el acabado.",
-      quote_permits: "Quién los tramita y cuánto cuestan.",
+      quote_permits: "Quién los tramita, y la tarifa como partida aparte.",
       quote_prep: "Qué se saca, qué se lleva y cómo se arma la base.",
       quote_pour: "Espesor, varilla o malla, la mezcla y el acabado.",
       quote_cleanup: "Cómo dejas el sitio, y cuándo.",
@@ -867,7 +867,7 @@ export const es: Dict = {
     labelPour: "Colado y acabado",
     labelCleanup: "Limpieza",
     hintScope: "Qué vamos a construir, el tamaño y el acabado.",
-    hintPermits: "Quién los saca, cuánto cuestan, o No aplica.",
+    hintPermits: "Quién los saca, la tarifa como partida aparte, o No aplica.",
     hintPrep: "Qué se quita, qué se retira, cómo se prepara la base.",
     hintPour: "Grosor, refuerzo, mezcla de concreto y el acabado.",
     hintCleanup: "Cómo queda el lugar, y cuándo.",

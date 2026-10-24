@@ -1,15 +1,14 @@
 import Image from "next/image";
-import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { FaqSection } from "@/components/faq-section";
 import { GalleryCarousel } from "@/components/gallery-carousel";
 import { JsonLd } from "@/components/json-ld";
+import { CtaButtons, MobileBar, QUOTE_CTA, QuoteCta, ServiceCard, SiteFooter } from "@/components/site-chrome";
 import { SiteHeader } from "@/components/site-header";
 import { breadcrumbSchema, faqSchema, serviceSchema } from "@/lib/seo";
 import {
-  businessName,
   clipboardImage,
   commercialServiceSlugs,
   coreServices,
@@ -17,26 +16,9 @@ import {
   getService,
   getServiceFaqs,
   links,
-  phoneDisplay,
   type Service,
   serviceSingular,
 } from "@/lib/site-data";
-
-function CtaBar() {
-  return (
-    <div className="flex flex-wrap gap-3">
-      <a href="#quote" className="cta-primary text-base">
-        Get Free Quote
-      </a>
-      <a href={links.call} className="cta-secondary text-base">
-        Call {phoneDisplay}
-      </a>
-      <a href={links.text} className="cta-secondary text-base">
-        Text Now
-      </a>
-    </div>
-  );
-}
 
 export function ServicePage({ service }: { service: Service }) {
   // Never show the same image for hero and showcase.
@@ -90,28 +72,11 @@ export function ServicePage({ service }: { service: Service }) {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_30%,rgba(194,104,42,0.18),transparent_48%)]" />
           <div className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 md:px-8 lg:grid-cols-2 lg:items-center">
             <div>
-              <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-amber-accent">
-                Concrete Raleigh
-              </p>
               <h1 className="mb-5 font-headline text-5xl leading-[0.95] text-ivory md:text-7xl">
                 {service.name}
               </h1>
               <p className="mb-8 max-w-lg text-lg text-slate-300">{service.intro}</p>
-              <CtaBar />
-              <div className="mt-8 grid max-w-sm grid-cols-3 gap-3">
-                <div className="stat-card text-center">
-                  <p className="stat-value">5.0★</p>
-                  <p className="stat-label">Google Rated</p>
-                </div>
-                <div className="stat-card text-center">
-                  <p className="stat-value">Free</p>
-                  <p className="stat-label">Quotes</p>
-                </div>
-                <div className="stat-card text-center">
-                  <p className="stat-value">Trusted</p>
-                  <p className="stat-label">Local Crew</p>
-                </div>
-              </div>
+              <CtaButtons />
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-white/10 shadow-2xl shadow-black/50">
@@ -144,9 +109,6 @@ export function ServicePage({ service }: { service: Service }) {
                 />
               </div>
               <div>
-                <span className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-amber-accent">
-                  Commercial Project Planning
-                </span>
                 <h2 className="mb-3 font-headline text-3xl text-ivory">Clear Scope. Clear Pricing.</h2>
                 <p className="text-slate-300">
                   Every commercial quote includes a clear scope, schedule expectations, and a direct
@@ -174,24 +136,20 @@ export function ServicePage({ service }: { service: Service }) {
                 ))}
               </ul>
               <div className="mt-7">
-                <a href="#quote" className="cta-primary">
-                  Get My Free Quote
+                <a href={links.quote} className="cta-primary">
+                  {QUOTE_CTA}
                 </a>
               </div>
             </div>
 
             {service.beforeAfter ? (
-              <div>
-                <BeforeAfterSlider
-                  beforeSrc={service.beforeAfter.before}
-                  afterSrc={service.beforeAfter.after}
-                  beforeAlt={`Raleigh ${service.name} before`}
-                  afterAlt={`Raleigh ${service.name} after`}
-                />
-                <p className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  {service.beforeAfter.label} · Drag to Compare
-                </p>
-              </div>
+              <BeforeAfterSlider
+                beforeSrc={service.beforeAfter.before}
+                afterSrc={service.beforeAfter.after}
+                beforeAlt={`Raleigh ${service.name} before`}
+                afterAlt={`Raleigh ${service.name} after`}
+                label={service.beforeAfter.label}
+              />
             ) : (
               <div className="overflow-hidden rounded-2xl border border-white/10">
                 <Image
@@ -213,28 +171,7 @@ export function ServicePage({ service }: { service: Service }) {
           <GalleryCarousel images={galleryImages} />
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-8" id="quote">
-          <div className="rounded-3xl bg-ivory p-8 text-center text-[#2b1a12] md:p-12">
-            <h2 className="mb-3 font-headline text-4xl text-[#2b1a12] md:text-5xl">
-              Get Your Free {serviceSingular(service)} Quote
-            </h2>
-            <p className="mx-auto mb-7 max-w-2xl text-[#2b1a12]/80">
-              Tell us a little about your project and we&apos;ll get you a free, written price.
-              For driveways and slabs we can often quote without coming out. Just add your address.
-            </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <a href="#quote" className="rounded-full bg-[#2b1a12] px-7 py-3.5 text-base font-bold text-white transition hover:bg-[#3a241a]">
-                Get My Free Quote
-              </a>
-              <a href={links.call} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
-                Call Now
-              </a>
-              <a href={links.text} className="rounded-full border-2 border-[#2b1a12] px-7 py-3.5 text-base font-bold text-[#2b1a12]">
-                Text Now
-              </a>
-            </div>
-          </div>
-        </section>
+        <QuoteCta heading={`Get Your Free ${serviceSingular(service)} Quote`} />
 
         <FaqSection faqs={faqs} heading={`${service.name} FAQs`} />
 
@@ -242,44 +179,15 @@ export function ServicePage({ service }: { service: Service }) {
           <h2 className="mb-6 font-headline text-3xl text-ivory">Other Services We Offer</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {otherServices.map((other) => (
-              <Link
-                key={other.slug}
-                href={`/services/${other.slug}`}
-                className="group rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:-translate-y-1 hover:border-amber-accent/50 hover:bg-white/10"
-              >
-                <h3 className="mb-2 font-headline text-2xl text-ivory">{other.name}</h3>
-                <p className="text-sm leading-relaxed text-slate-300">{other.blurb}</p>
-                <span className="mt-3 inline-block text-sm font-bold uppercase tracking-[0.12em] text-amber-accent opacity-70 transition group-hover:opacity-100">
-                  View Details →
-                </span>
-              </Link>
+              <ServiceCard key={other.slug} href={`/services/${other.slug}`} title={other.name} blurb={other.blurb} />
             ))}
           </div>
         </section>
 
-        <footer className="border-t border-white/10 bg-black/20">
-          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-8 md:px-8">
-            <span className="font-headline text-2xl text-ivory">{businessName}</span>
-            <div className="flex flex-col items-end gap-1">
-              <Link
-                href="/privacy-policy"
-                className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300 transition hover:text-amber-accent"
-              >
-                Privacy Policy
-              </Link>
-              <p className="text-right text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-                {businessName} · Concrete &amp; Hardscaping · {phoneDisplay}
-              </p>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter />
       </main>
 
-      <div className="mobile-bar">
-        <a href="#quote" className="cta-primary flex-1 justify-center">Free Quote</a>
-        <a href={links.call} className="cta-secondary flex-1 justify-center">Call</a>
-        <a href={links.text} className="cta-secondary flex-1 justify-center">Text</a>
-      </div>
+      <MobileBar />
     </>
   );
 }

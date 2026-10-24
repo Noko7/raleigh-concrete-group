@@ -139,8 +139,8 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
             <CallIcon />
             <span>{phoneDisplay}</span>
           </a>
-          <a href="/#quote" className="hdr-quote">
-            Free Estimate
+          <a href={links.quote} className="hdr-quote">
+            Free Quote
           </a>
         </div>
 
@@ -176,8 +176,8 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
             <a href={links.text} className="cta-secondary" onClick={close}>
               Text Now
             </a>
-            <a href="/#quote" className="hdr-quote" onClick={close}>
-              Free Estimate
+            <a href={links.quote} className="hdr-quote" onClick={close}>
+              Free Quote
             </a>
           </div>
         </div>
