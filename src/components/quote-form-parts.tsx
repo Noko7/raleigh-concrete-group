@@ -11,9 +11,12 @@ import {
   QUOTE_SECTION_LABELS,
   type QuoteSectionField,
 } from "@/lib/crm/constants";
+import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
 
 // Quote form pieces the customer reads back, shared by the crew's /job/<token> form and the owner's CRM
 // editor so both write and send the same thing. Each form keeps its own state and submit; these only draw.
+// `locale` is the writer's: their labels and hints follow it, but what they type and the preview of the
+// customer's page stay as the customer gets them (English).
 
 export type Sections = Record<QuoteSectionField, string>;
 
@@ -27,21 +30,34 @@ export function blankSections(sections: Sections): QuoteSectionField[] {
   return QUOTE_SECTION_FIELDS.filter((f) => !sections[f].trim());
 }
 
+// Section labels and hints in the writer's language. English reads the shared constants.
+function sectionText(t: Dict, locale: Locale | undefined) {
+  if (locale !== "es") return { labels: QUOTE_SECTION_LABELS, hints: QUOTE_SECTION_HINTS };
+  const f = t.quoteForm;
+  return {
+    labels: { quote_scope: f.labelScope, quote_permits: f.labelPermits, quote_prep: f.labelPrep, quote_pour: f.labelPour, quote_cleanup: f.labelCleanup },
+    hints: { quote_scope: f.hintScope, quote_permits: f.hintPermits, quote_prep: f.hintPrep, quote_pour: f.hintPour, quote_cleanup: f.hintCleanup },
+  } satisfies { labels: Record<QuoteSectionField, string>; hints: Record<QuoteSectionField, string> };
+}
+
 /** Styled as on the customer's quote page. Read-only when line items or packages derive it. */
 export function PriceCard({
   value,
   onChange,
   derived,
-  derivedLabel = "Total, from the price breakdown below",
+  derivedLabel,
+  locale,
 }: {
   value: string;
   onChange: (v: string) => void;
   derived: boolean;
   derivedLabel?: string;
+  locale?: Locale;
 }) {
+  const t = dict(locale);
   return (
     <label className="jq-price">
-      <span className="jq-price-label">{derived ? derivedLabel : "Price, all in"}</span>
+      <span className="jq-price-label">{derived ? (derivedLabel ?? t.quoteForm.priceDerived) : t.quoteForm.priceAllIn}</span>
       <span className="jq-price-row">
         <span className="jq-price-sign" aria-hidden="true">
           $
@@ -56,7 +72,7 @@ export function PriceCard({
           onChange={(e) => onChange(e.target.value)}
           placeholder="6500"
           readOnly={derived}
-          aria-label="Price in dollars"
+          aria-label={t.quoteForm.priceAria}
         />
       </span>
     </label>
@@ -68,20 +84,26 @@ export function SectionsEditor({
   sections,
   onChange,
   idPrefix = "jq",
+  locale,
 }: {
   sections: Sections;
   onChange: (field: QuoteSectionField, value: string) => void;
   idPrefix?: string;
+  locale?: Locale;
 }) {
+  const t = dict(locale);
+  const { labels, hints } = sectionText(t, locale);
   const done = QUOTE_SECTION_FIELDS.length - blankSections(sections).length;
   return (
     <div className="jq-included">
       <div className="jq-included-head">
-        <h3>What&apos;s included</h3>
+        <h3>{t.quoteForm.included}</h3>
         <span className={done === QUOTE_SECTION_FIELDS.length ? "jq-count jq-count-done" : "jq-count"}>
-          {done} of {QUOTE_SECTION_FIELDS.length} done
+          {fill(t.quoteForm.doneCount, { done, total: QUOTE_SECTION_FIELDS.length })}
         </span>
       </div>
+      {/* Only said in Spanish: a writer working in another language needs telling the customer reads it as typed. */}
+      {locale === "es" && <p className="crm-muted crm-sm">{t.quoteForm.includedNote}</p>}
       <ol className="jq-steps">
         {QUOTE_SECTION_FIELDS.map((field) => {
           const filled = sections[field].trim() !== "";
@@ -89,10 +111,11 @@ export function SectionsEditor({
           return (
             <li key={field} className={filled ? "jq-step jq-step-done" : "jq-step"}>
               <div className="jq-step-head">
-                <label htmlFor={id}>{QUOTE_SECTION_LABELS[field]}</label>
+                <label htmlFor={id}>{labels[field]}</label>
+                {/* The button reads in their language; what it writes is the customer's English. */}
                 {!filled && (
                   <button type="button" className="jq-na" onClick={() => onChange(field, NOT_APPLICABLE)}>
-                    Not applicable
+                    {t.quoteForm.notApplicable}
                   </button>
                 )}
               </div>
@@ -102,7 +125,7 @@ export function SectionsEditor({
                 rows={2}
                 value={sections[field]}
                 onChange={(e) => onChange(field, e.target.value)}
-                placeholder={QUOTE_SECTION_HINTS[field]}
+                placeholder={hints[field]}
               />
             </li>
           );
@@ -120,22 +143,24 @@ export function PickOneSuggestion({
   rows,
   hasChoice,
   onConvert,
+  locale,
 }: {
   rows: { title: string; amount: string; required: boolean }[];
   hasChoice: boolean;
   onConvert: () => void;
+  locale?: Locale;
 }) {
+  const t = dict(locale);
   const filled = rows.filter((r) => r.title.trim());
   if (hasChoice || filled.length < 2 || filled.some((r) => r.required)) return null;
   const sum = filled.reduce((n, r) => n + (Number(r.amount) || 0), 0);
   return (
     <div className="jq-pickone" role="note">
       <p>
-        <strong>Should they pick just one of these?</strong> Right now the customer can say yes to every line, and
-        their total adds them all up ({dollars(sum)} if they take everything).
+        <strong>{t.quoteForm.pickOneQ}</strong> {fill(t.quoteForm.pickOneBody, { sum: dollars(sum) ?? "$0" })}
       </p>
       <button type="button" className="jq-pickone-btn" onClick={onConvert}>
-        Make it pick one
+        {t.quoteForm.pickOneBtn}
       </button>
     </div>
   );
@@ -153,6 +178,7 @@ export function CustomerPreview({
   lines = [],
   extras = 0,
   choice = false,
+  locale,
 }: {
   firstName: string;
   price: number | null;
@@ -165,7 +191,10 @@ export function CustomerPreview({
   extras?: number;
   /** Priced two ways: the customer picks one first. */
   choice?: boolean;
+  /** The writer's language, for the toggle and note. The preview itself is the customer's English page. */
+  locale?: Locale;
 }) {
+  const t = dict(locale);
   const [open, setOpen] = useState(startOpen);
   const filled = QUOTE_SECTION_FIELDS.filter((f) => sections[f].trim());
   // Matches the customer page: scope, each line with its price, then the total.
@@ -174,11 +203,11 @@ export function CustomerPreview({
   return (
     <>
       <button type="button" className="jq-preview-toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {open ? "Hide preview" : `See what ${firstName} sees`}
+        {open ? t.quoteForm.previewHide : fill(t.quoteForm.previewShow, { name: firstName })}
       </button>
       {open && (
         <div className="jq-preview">
-          <p className="jq-preview-note">This is how it shows on {firstName}&apos;s phone.</p>
+          <p className="jq-preview-note">{fill(t.quoteForm.previewNote, { name: firstName })}</p>
           <p className="cq-title">Hi {firstName},</p>
           {/* A broken-down quote has no price card on the customer page (its total sits under the lines). */}
           {!breakdown && (

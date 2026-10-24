@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 
 import { to12Hour, to24Hour } from "@/lib/crm/constants";
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, type Locale } from "@/lib/crm/i18n";
 import { confirmVisit, setJobDate } from "@/app/crm/quotes/[id]/schedule-actions";
 import type { ScheduleState } from "@/app/crm/quotes/[id]/types";
 import { DateField } from "./date-field";
@@ -58,7 +58,7 @@ export function JobReschedule({
         <button type="button" className="jr-open" onClick={reopen}>
           {t.contractorJob.reschedule}
         </button>
-        {state.ok && state.message && <p className="js-ok jr-msg">{state.message}</p>}
+        {state.ok && state.message && <p className="js-ok jr-msg">{tr(locale, state.message)}</p>}
       </div>
     );
   }
@@ -105,7 +105,7 @@ export function JobReschedule({
         </div>
       </form>
 
-      {state.error && <p className="js-err jr-msg">{state.error}</p>}
+      {state.error && <p className="js-err jr-msg">{tr(locale, state.error)}</p>}
     </div>
   );
 }

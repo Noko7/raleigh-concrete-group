@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, type Locale } from "@/lib/crm/i18n";
 import { completeJob } from "@/app/crm/quotes/[id]/status-actions";
 import type { FinishState } from "@/app/crm/quotes/[id]/types";
 import { PhotoUpload } from "@/app/crm/photo-upload";
@@ -112,7 +112,7 @@ export function JobFinish({
         </button>
         {!hasPhotos && <p className="js-hint">{t.contractorJob.photosRequiredHint}</p>}
         {hasPhotos && !allTicked && <p className="js-hint">{t.contractorJob.finishAllRequired}</p>}
-        {state.error && <p className="js-err">{state.error}</p>}
+        {state.error && <p className="js-err">{tr(locale, state.error)}</p>}
 
         <button type="button" className="jq-cancel" onClick={() => setOpen(false)} disabled={pending}>
           {t.common.cancel}

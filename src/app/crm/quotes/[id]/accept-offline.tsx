@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 
 import { firstNameOf, dollars, optionAmount, packageLetter, quoteTotal, TIME_RE, to12Hour, to24Hour } from "@/lib/crm/constants";
-import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, fill, type Locale } from "@/lib/crm/i18n";
 import { DateField } from "@/app/job/[token]/date-field";
 import { acceptOffline } from "./schedule-actions";
 import type { ScheduleState } from "./types";
@@ -83,7 +83,7 @@ export function AcceptOffline({
   if (state.ok) {
     return (
       <section className={card}>
-        <p className="ao-ok">{state.message}</p>
+        <p className="ao-ok">{tr(locale, state.message)}</p>
       </section>
     );
   }
@@ -242,7 +242,7 @@ export function AcceptOffline({
         {nothingTaken && <p className="ao-hint">{t.acceptOffline.tookNothing}</p>}
       </form>
 
-      {state.error && <p className="ao-err">{state.error}</p>}
+      {state.error && <p className="ao-err">{tr(locale, state.error)}</p>}
     </section>
   );
 }

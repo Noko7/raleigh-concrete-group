@@ -1,5 +1,5 @@
 import { BUSINESS_TZ } from "@/lib/crm/clock";
-import { dict, type Dict, type Locale } from "@/lib/crm/i18n";
+import { dict, type Dict, intlLocale, type Locale } from "@/lib/crm/i18n";
 import type { Agreement, AgreementStatus } from "@/lib/crm/types";
 import { removeAgreement, setAgreementStatus } from "./actions";
 
@@ -14,8 +14,8 @@ const statusLabel = (t: Dict, s: AgreementStatus): string =>
 
 const ORDER: AgreementStatus[] = ["pending", "sent", "signed", "declined", "void"];
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
+function fmt(iso: string, locale: Locale) {
+  return new Date(iso).toLocaleDateString(intlLocale(locale), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -50,11 +50,11 @@ export function AgreementList({
             <div>
               <strong>{a.title}</strong>
               <div className="crm-muted crm-sm">
-                {t.agreements.added} {fmt(a.created_at)}
+                {t.agreements.added} {fmt(a.created_at, locale)}
                 {a.signed_at
-                  ? ` · ${t.agreements.signedOn} ${fmt(a.signed_at)}`
+                  ? ` · ${t.agreements.signedOn} ${fmt(a.signed_at, locale)}`
                   : a.sent_at
-                    ? ` · ${t.agreements.sent} ${fmt(a.sent_at)}`
+                    ? ` · ${t.agreements.sent} ${fmt(a.sent_at, locale)}`
                     : ""}
               </div>
             </div>

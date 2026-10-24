@@ -1,6 +1,9 @@
-// CRM wording, English only. Locale and dict() remain so callers didn't need rewriting. Client-safe.
+// CRM wording. English, plus Spanish (./i18n-es) for contractors with Spanish
+// turned on. Staff-facing only: customer pages and texts stay English. Client-safe.
+import { es } from "./i18n-es.ts";
+import { SERVER_ES, SERVER_ES_PARTS } from "./i18n-server-es.ts";
 
-export const LOCALES = ["en"] as const;
+export const LOCALES = ["en", "es"] as const;
 export type Locale = (typeof LOCALES)[number];
 
 export function isLocale(v: unknown): v is Locale {
@@ -9,6 +12,7 @@ export function isLocale(v: unknown): v is Locale {
 
 export const LOCALE_LABELS: Record<Locale, string> = {
   en: "English",
+  es: "Español",
 };
 
 const en = {
@@ -212,6 +216,9 @@ const en = {
     hoursBackwards: "The last visit can't be earlier than the first.",
     hoursNote:
       "This only changes what a customer is offered. You can still book a visit at any time from the job page.",
+    alertHintOwner: "Owners get a text for every new lead and every job update.",
+    alertHintCrew: "You'll get a text when a job is assigned to you.",
+    alertBlank: "Leave blank to turn texts off.",
   },
   calendar: {
     title: "Calendar",
@@ -270,6 +277,7 @@ const en = {
     notifyLabel: "Text {name} that it was cancelled",
     notifyHint: "Leave this on unless you have already spoken to them.",
     viewFullJob: "View the full job",
+    more: "+{n} more",
   },
   estimate: {
     title: "Estimate visit",
@@ -849,17 +857,118 @@ const en = {
     sessionExpired: "Your session expired. Please sign in again.",
     na: "N/A",
   },
+  crewMoney: {
+    title: "Money",
+    testsIn: "Practice leads are included in these figures.",
+    testsInLink: "Hide the {n} test leads",
+    testsInLinkOne: "Hide the test lead",
+    testsOut: "{n} test leads are left out of the figures below.",
+    testsOutOne: "1 test lead is left out of the figures below.",
+    testsOutLink: "Show them",
+    truncatedLead: "These totals are incomplete.",
+    truncated: "This page reads the most recent {what}, and there are more than it loads.",
+    truncatedAnd: "and",
+    income: "Your income, after the office fee",
+    collected: "Collected from customers",
+    stillOwed: "Customers still owe you",
+    feeOwed: "Fee you still owe the office",
+    recent: "Last {days} days",
+    recentNone: "No payments in the last {days} days.",
+    note: "Your income is each job's total after change orders, less the office fee on it. A card payment pays the office its fee on the way past. Cash, check, Zelle and Venmo don't, so that fee stays owed until you send it over. Fee you owe counts every fee you've already sent, including any not tied to one job.",
+    byJob: "Income by job",
+    filterOwing: "Still to collect",
+    filterSettled: "Paid in full",
+    filterAll: "Every job",
+    emptyOwing: "Every customer of yours has paid in full.",
+    emptySettled: "No job of yours is paid in full yet.",
+    emptyAll: "Once a customer approves one of your jobs, it shows up here.",
+    colCustomer: "Customer",
+    colJob: "Job",
+    colFee: "Office fee",
+    colIncome: "Your income",
+    colCollected: "Collected",
+    colDue: "Still to collect",
+    colFeeOwed: "Fee you owe",
+    colDetail: "Detail",
+    tagTest: "test",
+    tagClosed: "closed",
+    hide: "Hide",
+    paymentsNone: "no payments",
+    paymentsOne: "1 payment",
+    paymentsMany: "{n} payments",
+    noPayments: "No payments recorded on this job yet.",
+    colDate: "Date",
+    colMethod: "Method",
+    colStatus: "Status",
+    colAmount: "Amount",
+    colRefunded: "Refunded",
+    colFeeTaken: "Office fee taken",
+    colNote: "Note",
+    jobsOne: "1 job",
+    jobsMany: "{n} jobs",
+    payStatusPending: "pending",
+    payStatusPaid: "paid",
+    payStatusFailed: "failed",
+    payStatusRefunded: "refunded",
+    payStatusVoided: "voided",
+  },
+  misc: {
+    jobPhoto: "Job photo",
+    test: "Test",
+    viewFullJob: "View the full job",
+  },
+  quoteForm: {
+    priceAllIn: "Price, all in",
+    priceDerived: "Total, from the price breakdown below",
+    priceAria: "Price in dollars",
+    included: "What's included",
+    includedNote: "Write it in Spanish. Before it goes out, it is translated into English for you to check.",
+    doneCount: "{done} of {total} done",
+    notApplicable: "Not applicable",
+    labelScope: "Scope",
+    labelPermits: "Permits",
+    labelPrep: "Demolition and prep",
+    labelPour: "Pour and finish",
+    labelCleanup: "Clean up",
+    hintScope: "What we're building, the size, and the finish.",
+    hintPermits: "Who pulls them, what they cost, or Not applicable.",
+    hintPrep: "What comes out, what gets hauled away, how the base is built.",
+    hintPour: "Depth, reinforcement, concrete mix, and the finish.",
+    hintCleanup: "How the site is left, and when.",
+    pickOneQ: "Should they pick just one of these?",
+    pickOneBody: "Right now the customer can say yes to every line, and their total adds them all up ({sum} if they take everything).",
+    pickOneBtn: "Make it pick one",
+    previewShow: "See what {name} sees",
+    previewHide: "Hide preview",
+    previewNote: "This is how it shows on {name}'s phone.",
+    headlineDerived: "Headline price: the option you'd recommend plus extras",
+  },
+  english: {
+    translate: "Translate and review",
+    translating: "Translating…",
+    title: "What {name} gets, in English",
+    lead: "This is what goes out. Check it reads right, and fix anything before you send it.",
+    back: "Back to editing",
+    line: "Line {n}",
+    option: "Option {n}",
+    lineDesc: "Line {n} description",
+    optionDesc: "Option {n} description",
+    summary: "What's included",
+    note: "What's changing",
+  },
 };
 
 // TypeScript flags any missing or misspelled key.
 export type Dict = typeof en;
 
-// English only; the argument is accepted so callers passing a stored locale still compile.
-export function dict(_locale?: Locale | string | null): Dict {
-  return en;
+const DICTS: Record<Locale, Dict> = { en, es };
+
+// Anything unrecognised (an old or empty staff.locale) reads as English.
+export function dict(locale?: Locale | string | null): Dict {
+  return isLocale(locale) ? DICTS[locale] : en;
 }
 
-export const intlLocale = (_l?: Locale) => "en-US";
+export const intlLocale = (l?: Locale | string | null) => (l === "es" ? "es-US" : "en-US");
 
 /** Parsed at local midnight; `new Date(ymd)` reads a bare date as UTC and lands a day early. */
 export function longDay(ymd: string, locale: Locale): string {
@@ -877,3 +986,56 @@ export function fill(template: string, values: Record<string, string | number>):
     key in values ? String(values[key]) : whole,
   );
 }
+
+// ── Server messages ─────────────────────────────────────────────────────────
+// Server actions answer in English; tr() puts that answer in the reader's language where it's shown. Exact
+// text first, then the {placeholder} keys, whose captured parts are translated too when they're known.
+// Anything unknown comes back unchanged, so a new or reworded message reads in English, never blank.
+type ServerPattern = { re: RegExp; names: string[]; out: string };
+let serverPatterns: ServerPattern[] | null = null;
+let partPatterns: ServerPattern[] | null = null;
+
+function compile(catalog: Record<string, string>): ServerPattern[] {
+  return Object.entries(catalog)
+    .filter(([key]) => key.includes("{"))
+    .map(([key, out]) => {
+      const names: string[] = [];
+      const body = key
+        .split(/(\{\w+\})/)
+        .map((part) => {
+          const m = /^\{(\w+)\}$/.exec(part);
+          if (m) {
+            names.push(m[1]);
+            return "(.*?)";
+          }
+          return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        })
+        .join("");
+      return { re: new RegExp(`^${body}$`, "s"), names, out };
+    });
+}
+
+// Depth 0 is the whole message; deeper is text a placeholder captured, where the fragments apply too.
+function trEs(text: string, depth: number): string {
+  const exact = depth > 0 && text in SERVER_ES_PARTS ? SERVER_ES_PARTS[text] : SERVER_ES[text];
+  if (exact !== undefined) return exact;
+  if (depth > 2) return text;
+  serverPatterns ??= compile(SERVER_ES);
+  partPatterns ??= compile(SERVER_ES_PARTS);
+  for (const p of depth > 0 ? [...partPatterns, ...serverPatterns] : serverPatterns) {
+    const m = p.re.exec(text);
+    if (!m) continue;
+    return p.out.replace(/\{(\w+)\}/g, (whole, key: string) => {
+      const i = p.names.indexOf(key);
+      return i < 0 ? whole : trEs(m[i + 1] ?? "", depth + 1);
+    });
+  }
+  return text;
+}
+
+/** A server action's message in the reader's language: tr(locale, state.error). */
+export function tr<T extends string | null | undefined>(locale: Locale | string | null | undefined, text: T): T {
+  if (!text || locale !== "es") return text;
+  return trEs(text, 0) as T;
+}
+

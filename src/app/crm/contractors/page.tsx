@@ -9,7 +9,7 @@ import { EditContact } from "./edit-contact";
 import { StripePayee } from "./stripe-payee";
 import { InviteContractor } from "./invite-contractor";
 import { ResetPassword } from "./reset-password";
-import { revokeContractorInvite, setContractorActive } from "./actions";
+import { revokeContractorInvite, setContractorActive, setContractorLocale } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -153,6 +153,7 @@ export default async function ContractorsPage() {
                   <th>Phone</th>
                   <th>Job types</th>
                   <th>Status</th>
+                  <th>Spanish</th>
                   <th>Gets paid</th>
                   <th>Agreement</th>
                   <th></th>
@@ -178,6 +179,21 @@ export default async function ContractorsPage() {
                       ) : (
                         <span className="crm-badge crm-badge-lost">Inactive</span>
                       )}
+                    </td>
+                    <td>
+                      {/* Their CRM screens in Spanish; what customers get stays English. */}
+                      <form action={setContractorLocale} className="crm-lang-toggle">
+                        <input type="hidden" name="id" value={c.id} />
+                        <input type="hidden" name="locale" value={c.locale === "es" ? "en" : "es"} />
+                        <button
+                          type="submit"
+                          className={`crm-btn crm-btn-ghost${c.locale === "es" ? " crm-lang-on" : ""}`}
+                          aria-pressed={c.locale === "es"}
+                          title={c.locale === "es" ? "Spanish is on. Tap to switch them to English." : "Tap to show their CRM in Spanish."}
+                        >
+                          {c.locale === "es" ? "On" : "Off"}
+                        </button>
+                      </form>
                     </td>
                     <td>
                       <StripePayee

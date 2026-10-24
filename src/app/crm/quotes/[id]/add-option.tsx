@@ -3,9 +3,12 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { EnglishReview, type EnglishField } from "@/components/english-review";
 import { SpellInput, SpellTextarea } from "@/components/spell-field";
+import { toCustomerEnglish } from "@/lib/crm/translate-client";
+import type { TranslateField } from "@/lib/crm/translate-fields";
 import { firstNameOf, dollars, PACKAGE_TITLE_MAX, packageLetter } from "@/lib/crm/constants";
-import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, fill, type Locale } from "@/lib/crm/i18n";
 import { addQuoteOption } from "./save-actions";
 import type { SaveState } from "./types";
 
@@ -94,13 +97,62 @@ export function AddOption({
   const keepOk = !converting || (keepTitle.trim() !== "" && money(keepAmount) > 0);
   const ready = keepOk && addTitle.trim() !== "" && money(addAmount) > 0;
 
+  // Spanish mode: the names and descriptions go out in English, reviewed and editable before Send.
+  const spanish = locale === "es";
+  const [english, setEnglish] = useState<Record<string, string> | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
+  // Editing the Spanish after a review makes that English stale.
+  useEffect(() => setEnglish(null), [keepTitle, keepDesc, addTitle, addDesc]);
+  const all = dict(locale);
+  const newN = options.length + (converting ? 2 : 1);
+  const sources: { field: EnglishField; kind: TranslateField; text: string }[] = [
+    ...(converting
+      ? [
+          {
+            field: { key: "keep_title", label: fill(all.english.option, { n: 1 }), short: true },
+            kind: "Option title" as const,
+            text: keepTitle,
+          },
+          {
+            field: { key: "keep_desc", label: fill(all.english.optionDesc, { n: 1 }) },
+            kind: "Option description" as const,
+            text: keepDesc,
+          },
+        ]
+      : []),
+    {
+      field: { key: "add_title", label: fill(all.english.option, { n: newN }), short: true },
+      kind: "Option title" as const,
+      text: addTitle,
+    },
+    {
+      field: { key: "add_desc", label: fill(all.english.optionDesc, { n: newN }) },
+      kind: "Option description" as const,
+      text: addDesc,
+    },
+  ].filter((x) => x.text.trim() !== "");
+  const out = (key: string, typed: string) => english?.[key] ?? typed;
+
+  async function reviewInEnglish() {
+    setTranslating(true);
+    setTranslateError(null);
+    const res = await toCustomerEnglish(sources.map((x) => ({ field: x.kind, text: x.text })));
+    setTranslating(false);
+    if (!res.ok) {
+      setTranslateError(res.error);
+      return;
+    }
+    setEnglish(Object.fromEntries(sources.map((x, i) => [x.field.key, res.texts[i]])));
+  }
+
   // What the customer will see, in order; built here so it can't drift from the save.
   const preview = converting
     ? [
-        { title: keepTitle.trim() || t.previewUnnamed, amount: money(keepAmount) },
-        { title: addTitle.trim() || t.previewUnnamed, amount: money(addAmount) },
+        { title: out("keep_title", keepTitle).trim() || t.previewUnnamed, amount: money(keepAmount) },
+        { title: out("add_title", addTitle).trim() || t.previewUnnamed, amount: money(addAmount) },
       ]
-    : [...options, { title: addTitle.trim() || t.previewUnnamed, amount: money(addAmount) }];
+    : [...options, { title: out("add_title", addTitle).trim() || t.previewUnnamed, amount: money(addAmount) }];
 
   const box = tone === "light" ? "ao ao-light" : "ao";
 
@@ -154,6 +206,8 @@ export function AddOption({
               action={(fd) => {
                 fd.set("id", quoteId);
                 fd.set("recommend", String(recommend));
+                // The reviewed English goes out in place of what was typed.
+                if (english) for (const [key, value] of Object.entries(english)) fd.set(key, value);
                 formAction(fd);
               }}
             >
@@ -286,6 +340,16 @@ export function AddOption({
                 </div>
               </div>
 
+              {english && (
+                <EnglishReview
+                  fields={sources.map((x) => x.field)}
+                  values={english}
+                  onChange={(key, value) => setEnglish((e) => ({ ...(e ?? {}), [key]: value }))}
+                  customerFirstName={first}
+                  locale={locale}
+                />
+              )}
+
               {/* What will be on their phone, priced and in order: the last chance
                   to spot a stale price. */}
               <div className="qsm-preview">
@@ -302,12 +366,19 @@ export function AddOption({
                 <p className="ao-hint">{t.previewNote}</p>
               </div>
 
-              {state.error && !pending && <p className="ao-err">{state.error}</p>}
+              {state.error && !pending && <p className="ao-err">{tr(locale, state.error)}</p>}
+              {translateError && <p className="ao-err">{tr(locale, translateError)}</p>}
 
               <div className="ao-acts">
-                <button type="submit" className="ao-go" disabled={!ready || pending}>
-                  {pending ? t.sending : fill(t.send, { name: first })}
-                </button>
+                {spanish && !english ? (
+                  <button type="button" className="ao-go" disabled={!ready || translating} onClick={reviewInEnglish}>
+                    {translating ? all.english.translating : all.english.translate}
+                  </button>
+                ) : (
+                  <button type="submit" className="ao-go" disabled={!ready || pending}>
+                    {pending ? t.sending : fill(t.send, { name: first })}
+                  </button>
+                )}
                 <button type="button" className="ao-cancel" onClick={() => setOpen(false)} disabled={pending}>
                   {t.cancel}
                 </button>

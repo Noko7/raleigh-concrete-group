@@ -2,15 +2,15 @@ import Link from "next/link";
 
 import { requireSession } from "@/lib/crm/auth";
 import { BUSINESS_TZ } from "@/lib/crm/clock";
-import { dict, isLocale } from "@/lib/crm/i18n";
+import { dict, intlLocale, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { listAllAgreements, listQuotes, listStaff } from "@/lib/crm/queries";
 import { AgreementStatusBadge } from "./agreement-list";
 
 export const dynamic = "force-dynamic";
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
+function fmt(iso: string, locale: string) {
+  return new Date(iso).toLocaleDateString(intlLocale(locale), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -105,7 +105,7 @@ export default async function AgreementsPage() {
                       <td>
                         <AgreementStatusBadge status={a.status} locale={locale} />
                       </td>
-                      <td>{fmt(a.created_at)}</td>
+                      <td>{fmt(a.created_at, locale)}</td>
                       <td className="crm-row-actions">
                         {a.file_path && (
                           <a

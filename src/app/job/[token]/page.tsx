@@ -8,7 +8,7 @@ import { firstNameOf, boughtLines, changeStartLines, dollars, requestedVisitOf, 
 import { BUSINESS_TZ, inQuietHours, todayYmd } from "@/lib/crm/clock";
 import { depositDueNowCents, toCents } from "@/lib/crm/fees";
 import { crewEventText, quoteSends } from "@/lib/crm/events";
-import { dict, isLocale } from "@/lib/crm/i18n";
+import { dict, intlLocale, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
@@ -137,7 +137,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
 
   // Always en-US formatting, regardless of the contractor's locale.
   const fmtDay = (ymd: string) =>
-    new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", {
+    new Date(`${ymd}T00:00:00`).toLocaleDateString(intlLocale(locale), {
       weekday: "long",
       month: "long",
       day: "numeric",
@@ -145,7 +145,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // Raleigh time, with the hour, so stamps match the phone in hand and "this
   // morning" differs from "last Tuesday".
   const fmtStamp = (iso: string) =>
-    new Date(iso).toLocaleString("en-US", {
+    new Date(iso).toLocaleString(intlLocale(locale), {
       month: "short",
       day: "numeric",
       hour: "numeric",
@@ -500,7 +500,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             {photos.map((path) => (
               <a key={path} href={fileUrl(path)} target="_blank" rel="noreferrer" className="job-photo">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={fileUrl(path, 640)} alt="Job upload" loading="lazy" decoding="async" width={640} height={640} />
+                <img src={fileUrl(path, 640)} alt={t.misc.jobPhoto} loading="lazy" decoding="async" width={640} height={640} />
               </a>
             ))}
           </div>
@@ -514,7 +514,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               {ourPhotos.map((path) => (
                 <a key={path} href={fileUrl(path)} target="_blank" rel="noreferrer" className="job-photo">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={fileUrl(path, 640)} alt="Job photo" loading="lazy" decoding="async" width={640} height={640} />
+                  <img src={fileUrl(path, 640)} alt={t.misc.jobPhoto} loading="lazy" decoding="async" width={640} height={640} />
                 </a>
               ))}
             </div>

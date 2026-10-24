@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, LOCALES, LOCALE_LABELS, type Locale } from "@/lib/crm/i18n";
 import { saveSettings } from "./actions";
 import type { SaveState } from "./types";
 
@@ -37,6 +37,18 @@ export function SettingsForm({ fullName, phone, email, role, locale }: Props) {
       </label>
 
       <label className="crm-field">
+        <span>{t.settings.language}</span>
+        <select className="crm-input" name="locale" defaultValue={locale}>
+          {LOCALES.map((l) => (
+            <option key={l} value={l}>
+              {LOCALE_LABELS[l]}
+            </option>
+          ))}
+        </select>
+        <small className="crm-muted crm-sm">{t.settings.languageHint}</small>
+      </label>
+
+      <label className="crm-field">
         <span>{t.settings.alertNumber}</span>
         <input
           className="crm-input"
@@ -48,14 +60,11 @@ export function SettingsForm({ fullName, phone, email, role, locale }: Props) {
           autoComplete="tel"
         />
         <small className="crm-muted crm-sm">
-          {role === "owner"
-            ? "Owners get a text for every new lead and every job update."
-            : "You'll get a text when a job is assigned to you."}{" "}
-          Leave blank to turn texts off.
+          {role === "owner" ? t.settings.alertHintOwner : t.settings.alertHintCrew} {t.settings.alertBlank}
         </small>
       </label>
 
-      {state.error && <p className="crm-auth-error">{state.error}</p>}
+      {state.error && <p className="crm-auth-error">{tr(locale, state.error)}</p>}
       {state.saved && !state.error && <p className="crm-saved">{t.settings.saved}</p>}
 
       <button type="submit" className="crm-btn crm-btn-primary" disabled={pending}>

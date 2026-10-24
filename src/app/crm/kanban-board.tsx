@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { ymdInDays } from "@/lib/crm/clock";
 import { dollars, STATUSES, VISIT_GRACE_DAYS, visitDateOf, type Status } from "@/lib/crm/constants";
-import { dict, fill, type Dict, type Locale } from "@/lib/crm/i18n";
+import { dict, fill, intlLocale, tr, type Dict, type Locale } from "@/lib/crm/i18n";
 import { assignQuote, deleteQuote, moveQuote } from "./board-actions";
 
 export type BoardQuote = {
@@ -34,9 +34,9 @@ export type BoardQuote = {
   is_test: boolean;
 };
 
-function shortDate(ymd: string | null): string {
+function shortDate(ymd: string | null, locale: Locale): string {
   if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "";
-  return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", {
+  return new Date(`${ymd}T00:00:00`).toLocaleDateString(intlLocale(locale), {
     month: "short",
     day: "numeric",
   });
@@ -102,6 +102,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
   // Contractors get their own job page (the URL their texts link to); owners get the full editor.
   const cardHref = (q: BoardQuote) =>
     role === "contractor" && q.job_token ? `/job/${q.job_token}` : `${base}/quotes/${q.id}`;
+  // Column headings and the Move menu read from the translated status names.
   const statusLabel = (s: Status) => t.status[s];
   const router = useRouter();
   const [quotes, setQuotes] = useState<BoardQuote[]>(initialQuotes);
@@ -207,7 +208,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
       const res = await moveQuote(id, status);
       if (!res.ok) {
         setQuotes(prev);
-        flash(res.error ?? t.pipeline.errMove);
+        flash(tr(locale, res.error) ?? t.pipeline.errMove);
       } else {
         router.refresh();
       }
@@ -222,7 +223,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
       const res = await deleteQuote(id);
       if (!res.ok) {
         setQuotes(prev);
-        flash(res.error ?? t.pipeline.errDelete);
+        flash(tr(locale, res.error) ?? t.pipeline.errDelete);
       } else {
         flash(t.pipeline.deleted);
         router.refresh();
@@ -239,7 +240,7 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
       const res = await assignQuote(id, contractorId);
       if (!res.ok) {
         setQuotes(prev);
-        flash(res.error ?? t.pipeline.errAssign);
+        flash(tr(locale, res.error) ?? t.pipeline.errAssign);
       } else {
         router.refresh();
       }
@@ -370,14 +371,14 @@ export function KanbanBoard({ base, role, initialQuotes, contractors, nameMap, l
                     */}
                     {(() => {
                       const kind = typeLabel(q, t);
-                      const jobDate = shortDate(q.scheduled_date);
-                      const visitDate = shortDate(visitDateOf(q));
+                      const jobDate = shortDate(q.scheduled_date, locale);
+                      const visitDate = shortDate(visitDateOf(q), locale);
                       const dated = Boolean(jobDate || visitDate);
                       const showType = !dated || kind.cls !== "inperson";
                       return (
                         <div className="kb-card-meta">
                           {/* First: what the row IS changes how every other pill reads. */}
-                          {q.is_test && <span className="kb-pill kb-pill-test">Test</span>}
+                          {q.is_test && <span className="kb-pill kb-pill-test">{t.misc.test}</span>}
                           {showType && <span className={`kb-pill kb-pill-${kind.cls}`}>{kind.text}</span>}
                           {jobDate && (
                             <span className="kb-pill kb-pill-date">

@@ -4,8 +4,11 @@ import { useActionState, useState } from "react";
 
 import { CHANGE_NOTE_MAX, firstNameOf, parseDollars, sameChangeLines, type ChangeLineDraft } from "@/lib/crm/constants";
 import { RECORDED_METHODS, usd as money, type PaymentMethod } from "@/lib/crm/fees";
-import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, fill, type Locale } from "@/lib/crm/i18n";
+import { EnglishReview, type EnglishField } from "@/components/english-review";
 import { SpellTextarea } from "@/components/spell-field";
+import { toCustomerEnglish } from "@/lib/crm/translate-client";
+import type { TranslateField } from "@/lib/crm/translate-fields";
 import { sendChangeOrder, withdrawChangeOrder } from "./change-order-actions";
 import { blankRow, filledRows, OptionBuilder, rowAmount, type OptionRow } from "./option-builder";
 import type { ChangeState } from "./types";
@@ -121,7 +124,7 @@ export function ChangeOrder({
       {state.sent === false && (
         <p className="co-err">
           {fill(t.changeOrder.textFailed, { to: state.smsTo ?? "" })}
-          {state.smsError ? ` ${state.smsError}` : ""}
+          {state.smsError ? ` ${tr(locale, state.smsError)}` : ""}
         </p>
       )}
       {state.smsHeldUntil && <p className="co-hint">{fill(t.changeOrder.textHeld, { when: state.smsHeldUntil })}</p>}
@@ -167,6 +170,54 @@ export function ChangeOrder({
   const lowerRefused = !canApplyAgreed && diffCents < 0;
   const composed =
     valid && note.trim().length >= 3 && (diffCents !== 0 || linesChanged) && !depositProblem && !lowerRefused;
+
+  // Spanish mode: the note and lines are written in Spanish and go to review in English, editable there.
+  // Only that English is sent, so the customer's page and text stay English.
+  const spanish = locale === "es";
+  const [english, setEnglish] = useState<Record<string, string> | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
+  const sources: { field: EnglishField; kind: TranslateField; text: string }[] = [
+    { field: { key: "note", label: t.english.note }, kind: "Change order note" as const, text: note.trim() },
+    ...lineDrafts.flatMap((l, i) => [
+      {
+        field: { key: `l:${i}:t`, label: fill(t.english.line, { n: i + 1 }), short: true },
+        kind: "Line item title" as const,
+        text: l.title,
+      },
+      {
+        field: { key: `l:${i}:d`, label: fill(t.english.lineDesc, { n: i + 1 }) },
+        kind: "Line item description" as const,
+        text: l.description ?? "",
+      },
+    ]),
+  ].filter((x) => x.text.trim() !== "");
+  const en = english ?? {};
+  const outNote = english ? (en.note ?? note.trim()) : note;
+  const outLines: ChangeLineDraft[] = english
+    ? lineDrafts.map((l, i) => ({
+        ...l,
+        title: en[`l:${i}:t`] ?? l.title,
+        description: en[`l:${i}:d`] ?? l.description,
+      }))
+    : lineDrafts;
+
+  async function toReview() {
+    if (!spanish) {
+      setStep("review");
+      return;
+    }
+    setTranslating(true);
+    setTranslateError(null);
+    const res = await toCustomerEnglish(sources.map((x) => ({ field: x.kind, text: x.text })));
+    setTranslating(false);
+    if (!res.ok) {
+      setTranslateError(res.error);
+      return;
+    }
+    setEnglish(Object.fromEntries(sources.map((x, i) => [x.field.key, res.texts[i]])));
+    setStep("review");
+  }
 
   // Paid in full with the work unfinished: the symptom this step exists for.
   // Can be legitimate (paid up front), so it warns; the tick gates sending.
@@ -286,7 +337,7 @@ export function ChangeOrder({
           </button>
         </form>
         {delivery}
-        {pullState.error && <p className="co-err">{pullState.error}</p>}
+        {pullState.error && <p className="co-err">{tr(locale, pullState.error)}</p>}
       </section>
     );
   }
@@ -296,8 +347,8 @@ export function ChangeOrder({
   if (last === "pull" && pullState.ok) {
     return (
       <section className={card}>
-        <p className="co-ok">{pullState.message}</p>
-        {pullState.warning && <p className="co-err">{pullState.warning}</p>}
+        <p className="co-ok">{tr(locale, pullState.message)}</p>
+        {pullState.warning && <p className="co-err">{tr(locale, pullState.warning)}</p>}
         <button
           type="button"
           className="co-open"
@@ -316,8 +367,8 @@ export function ChangeOrder({
   if (last === "send" && state.ok) {
     return (
       <section className={card}>
-        <p className="co-ok">{state.message}</p>
-        {state.warning && <p className="co-err">{state.warning}</p>}
+        <p className="co-ok">{tr(locale, state.message)}</p>
+        {state.warning && <p className="co-err">{tr(locale, state.warning)}</p>}
         {delivery}
       </section>
     );
@@ -341,11 +392,21 @@ export function ChangeOrder({
       <section className={card}>
         <h2 className="co-title">{fill(t.changeOrder.reviewTitle, { name: first })}</h2>
 
+        {english && (
+          <EnglishReview
+            fields={sources.map((x) => x.field)}
+            values={english}
+            onChange={(key, value) => setEnglish((e) => ({ ...(e ?? {}), [key]: value }))}
+            customerFirstName={first}
+            locale={locale}
+          />
+        )}
+
         {/* In the order their page shows them: a preview, not a summary. */}
         <div className="co-preview">
-          <p className="co-note-back">{note.trim()}</p>
+          <p className="co-note-back">{outNote.trim()}</p>
           {bookedFor && <p className="co-held">{fill(t.changeOrder.reviewDateHeld, { when: bookedFor })}</p>}
-          {hasLines && lineList(lineDrafts)}
+          {hasLines && lineList(outLines)}
           {dropsLines && <p className="co-hint">{t.changeOrder.linesGone}</p>}
           {sums}
         </div>
@@ -397,14 +458,14 @@ export function ChangeOrder({
           className="co-form"
           action={(fd) => {
             fd.set("id", id);
-            fd.set("note", note);
+            fd.set("note", outNote);
           // With lines the server recomputes the total and ignores this.
             fd.set("amount", hasLines ? (nextCents / 100).toFixed(2) : amount);
             if (canBreakDown) {
               fd.set(
                 "lines_json",
                 JSON.stringify(
-                  lineDrafts.map((l) => ({ title: l.title, description: l.description ?? "", amount: l.amount, required: true })),
+                  outLines.map((l) => ({ title: l.title, description: l.description ?? "", amount: l.amount, required: true })),
                 ),
               );
             }
@@ -493,6 +554,8 @@ export function ChangeOrder({
                 setStep("compose");
               // A tick belongs to the figures it was made against.
                 setChecked(false);
+              // And the English to the wording it was made from.
+                setEnglish(null);
               }}
               disabled={busy}
             >
@@ -501,7 +564,7 @@ export function ChangeOrder({
           </div>
         </form>
 
-        {state.error && <p className="co-err">{state.error}</p>}
+        {state.error && <p className="co-err">{tr(locale, state.error)}</p>}
       </section>
     );
   }
@@ -620,8 +683,8 @@ export function ChangeOrder({
 
         <div className="co-acts">
           {/* Nothing is sent here; the review shows it as the customer will read it. */}
-          <button type="button" className="co-go" disabled={!composed} onClick={() => setStep("review")}>
-            {t.changeOrder.review}
+          <button type="button" className="co-go" disabled={!composed || translating} onClick={toReview}>
+            {translating ? t.english.translating : t.changeOrder.review}
           </button>
           <button type="button" className="co-cancel" onClick={() => setStep("closed")}>
             {t.changeOrder.cancel}
@@ -629,7 +692,8 @@ export function ChangeOrder({
         </div>
       </div>
 
-      {state.error && <p className="co-err">{state.error}</p>}
+      {state.error && <p className="co-err">{tr(locale, state.error)}</p>}
+      {translateError && <p className="co-err">{tr(locale, translateError)}</p>}
     </section>
   );
 }

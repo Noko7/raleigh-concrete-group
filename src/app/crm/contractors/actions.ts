@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
+import { isLocale } from "@/lib/crm/i18n";
 import { SITE_ORIGIN } from "@/lib/crm/env";
 import { quoteServiceOptions } from "@/lib/site-data";
 import { sendSmsResult, toE164 } from "@/lib/crm/notify";
@@ -299,6 +300,23 @@ export async function setContractorActive(formData: FormData): Promise<void> {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ active }),
+  });
+  revalidatePath("/crm/contractors");
+}
+
+// Spanish mode: their CRM screens read in Spanish. Customer pages and texts stay English.
+export async function setContractorLocale(formData: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return;
+
+  const id = String(formData.get("id") ?? "");
+  const locale = String(formData.get("locale") ?? "");
+  if (!id || !isLocale(locale)) return;
+
+  await pgAdmin(`staff?id=eq.${id}&role=eq.contractor`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ locale }),
   });
   revalidatePath("/crm/contractors");
 }

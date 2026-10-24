@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, tr, type Locale } from "@/lib/crm/i18n";
 import { sendHeldTextNow } from "./send-actions";
 import type { ScheduleState } from "./types";
 
@@ -40,7 +40,7 @@ export function SendHeldNow({
         {pending ? t.sending : t.send}
       </button>
       <span className="crm-muted crm-sm">{quiet ? t.quietWarning : t.hint}</span>
-      {state.error && <span className="msg-now-err">{state.error}</span>}
+      {state.error && <span className="msg-now-err">{tr(locale, state.error)}</span>}
     </form>
   );
 }

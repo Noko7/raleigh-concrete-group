@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { dict, type Locale } from "@/lib/crm/i18n";
+import { dict, LOCALES, LOCALE_LABELS, type Locale } from "@/lib/crm/i18n";
 
 // Editable: the owner may only have the number they were given. Redeeming the link already creates the
 // account, so choosing the alert number adds no attack surface.
@@ -31,7 +31,9 @@ export function JoinForm({
   defaultName: string;
   phone: string;
 }) {
-  const locale: Locale = "en";
+  // Chosen before the account exists, then saved as their CRM language - so a
+  // Spanish-speaking contractor never sees an English screen, not even this one.
+  const [locale, setLocale] = useState<Locale>("en");
   const t = dict(locale);
   const [fullName, setFullName] = useState(defaultName);
   const [alertPhone, setAlertPhone] = useState(prettyPhone(phone));
@@ -87,6 +89,17 @@ export function JoinForm({
 
   return (
     <form className="join-form" onSubmit={onSubmit}>
+      <label className="join-field">
+        <span>{t.join.language}</span>
+        <select value={locale} onChange={(e) => setLocale(e.target.value as Locale)}>
+          {LOCALES.map((l) => (
+            <option key={l} value={l}>
+              {LOCALE_LABELS[l]}
+            </option>
+          ))}
+        </select>
+      </label>
+
       <label className="join-field">
         <span>{t.join.fullName}</span>
         <input value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" required />
