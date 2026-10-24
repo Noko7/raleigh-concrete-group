@@ -614,6 +614,13 @@ export function QuoteActions({
         </button>
       </div>
 
+      {/* Approving books nothing (they pick days, the crew confirm), so the
+          reassurance sits against the button. */}
+      <p className="cq-reassure">
+        Approving doesn&apos;t book a date. You&apos;ll pick a few days that suit you, and we&apos;ll text you back to
+        confirm one.
+      </p>
+
       {/* Phone only, and only while the real button is out of sight. */}
       {!ctaOnScreen && (
         <div className="cq-sticky">

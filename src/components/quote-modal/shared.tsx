@@ -23,9 +23,12 @@ export function prettyDay(s: string): string {
 
 export const isValidPhone = isValidUsPhone;
 
-export function StepHead({ title, sub }: { title: string; sub?: string }) {
+export function StepHead({ n, of, title, sub }: { n: number; of: number; title: string; sub?: string }) {
   return (
     <div className="qm-step-head">
+      <p className="qm-step-count">
+        Step {n} of {of}
+      </p>
       <h2 className="qm-title">{title}</h2>
       {sub && <p className="qm-sub">{sub}</p>}
     </div>

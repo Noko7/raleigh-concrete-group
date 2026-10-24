@@ -952,7 +952,16 @@ button.marquee-item:hover { border-color: rgba(194, 104, 42, 0.6); }
   margin-bottom: 0.65rem;
 }
 
+/* "Step 2 of 3", then the question. The count is plain text rather than a
+   numbered badge: it answers "how much longer is this", which is the thing a
+   hesitant customer actually wants to know. */
 .qm-step-head { margin-bottom: 1.1rem; }
+.qm-step-count {
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--amber-dark);
+}
 .qm-step-head .qm-sub { margin-bottom: 0; }
 
 .qm-title {
@@ -1964,6 +1973,12 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cq-btn-accept:hover { background: var(--amber-dark); }
 .cq-btn-accept:disabled { opacity: 0.55; cursor: not-allowed; }
 .cq-btn-decline { background: #fff; border: 2px solid #2b1a12; color: #2b1a12; cursor: pointer; }
+/* The sentence that answers "what am I agreeing to", against the button it is
+   about. Quiet: it removes a worry, it isn't a selling line. */
+.cq-reassure {
+  margin: -0.4rem 0 1.1rem; font-size: 0.82rem; line-height: 1.45; text-align: center;
+  color: rgba(43, 26, 18, 0.65);
+}
 /* Desktop keeps the one real button: the whole card is about 520px wide and
    the decision is never far from the price. */
 .cq-sticky { display: none; }

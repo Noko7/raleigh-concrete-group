@@ -20,6 +20,7 @@ function isValidEmail(email: string): boolean {
 }
 
 export function ContactStep({
+  totalSteps,
   data,
   set,
   addressVerified,
@@ -28,6 +29,7 @@ export function ContactStep({
   honeypot,
   setHoneypot,
 }: {
+  totalSteps: number;
   data: FormState;
   set: (patch: Partial<FormState>) => void;
   addressVerified: boolean;
@@ -38,7 +40,7 @@ export function ContactStep({
 }) {
   return (
     <div className="qm-body">
-      <StepHead title="Your details" />
+      <StepHead n={1} of={totalSteps} title="Your details" />
       <label className="qm-label" htmlFor="qm-name">Your name</label>
       <input data-clarity-mask="true"
         id="qm-name"

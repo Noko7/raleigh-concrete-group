@@ -6,6 +6,7 @@ import { IconCamera, IconCheck, IconClose } from "./icons";
 import { StepHead, type FormState, type Mode } from "./shared";
 
 export function ServiceStep({
+  totalSteps,
   mode,
   data,
   set,
@@ -16,6 +17,7 @@ export function ServiceStep({
   hasDetails,
   errorMsg,
 }: {
+  totalSteps: number;
   mode: Mode | null;
   data: FormState;
   set: (patch: Partial<FormState>) => void;
@@ -28,7 +30,7 @@ export function ServiceStep({
 }) {
   return (
     <div className="qm-body">
-      <StepHead title="What are we pouring?" />
+      <StepHead n={2} of={totalSteps} title="What are we pouring?" />
       {/* Tiles, not a <select>: every choice visible, one tap. */}
       <div className="qm-tiles" role="radiogroup" aria-label="What do you need?">
         {quoteServiceOptions.map((option) => {

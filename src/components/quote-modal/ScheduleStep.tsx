@@ -7,6 +7,7 @@ import { IconCheck } from "./icons";
 import { prettyDay, StepHead, type FormState, type Mode, type Status } from "./shared";
 
 export function ScheduleStep({
+  totalSteps,
   mode,
   minDate,
   data,
@@ -25,6 +26,7 @@ export function ScheduleStep({
   errorMsg,
   smsHref,
 }: {
+  totalSteps: number;
   mode: Mode | null;
   minDate: string;
   data: FormState;
@@ -50,6 +52,8 @@ export function ScheduleStep({
         the worst outcome.
       */}
       <StepHead
+        n={3}
+        of={totalSteps}
         title={mode === "online" ? "If we need a look" : "When should we come?"}
         sub={
           mode === "online"
