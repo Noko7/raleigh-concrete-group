@@ -38,6 +38,10 @@ export function PhoneLinesForm({
         customers&apos; replies come straight to them. New-lead receipts, unassigned jobs and alerts to you use
         the business number.
       </p>
+      <p className="crm-muted crm-sm">
+        Optional for each contractor. Anyone left on &quot;Business number&quot; keeps working exactly as now. Jobs
+        already in progress switch to the contractor&apos;s line from their next text; nothing to move over.
+      </p>
 
       {loadError ? (
         <p className="crm-auth-error">{loadError}</p>
@@ -59,7 +63,7 @@ export function PhoneLinesForm({
             <label key={c.id} className="crm-field">
               <span>{c.name}</span>
               <select className="crm-input" name={`line_${c.id}`} defaultValue={lines[c.id] ?? ""}>
-                <option value="">Business number</option>
+                <option value="">Business number (no line of their own)</option>
                 {numbers.map((n) => (
                   <option key={n.number} value={n.number}>
                     {n.label}
