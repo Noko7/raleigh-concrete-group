@@ -3681,6 +3681,7 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .pay-choice:disabled { opacity: 0.6; cursor: not-allowed; }
 .pay-choice-amount { font-family: var(--font-headline), sans-serif; font-size: 1.7rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .pay-choice-note { font-size: 0.82rem; color: rgba(43, 26, 18, 0.7); }
+.pay-choice-other { justify-content: center; }
 .pay-choice-other .pay-choice-amount { font-size: 1.15rem; }
 .pay-custom { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(43, 26, 18, 0.6); }
 .pay-custom-field { display: flex; align-items: center; gap: 0.3rem; background: #fff; border: 2px solid rgba(43, 26, 18, 0.2); border-radius: 0.6rem; padding: 0.5rem 0.75rem; font-family: var(--font-headline), sans-serif; font-size: 1.5rem; color: #2b1a12; }
