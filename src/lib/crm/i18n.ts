@@ -219,6 +219,9 @@ const en = {
     alertHintOwner: "Owners get a text for every new lead and every job update.",
     alertHintCrew: "You'll get a text when a job is assigned to you.",
     alertBlank: "Leave blank to turn texts off.",
+    lineTitle: "Your customer line",
+    lineYours: "Texts to customers on your jobs go out from {number}. Their replies come to you in the Quo app.",
+    lineNone: "Texts to your customers go out from the business number. Ask the office if you'd like your own.",
   },
   calendar: {
     title: "Calendar",

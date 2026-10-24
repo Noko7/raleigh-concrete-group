@@ -26,7 +26,8 @@ export async function checkClockDrift(): Promise<ClockCheck> {
     try {
       const before = now().getTime();
       // Any response with a Date header will do, including a 403.
-      const res = await fetch(host, { method: "HEAD", cache: "no-store" });
+      // Capped: an unreachable host otherwise hangs until the platform gives up, and Settings waits on it.
+      const res = await fetch(host, { method: "HEAD", cache: "no-store", signal: AbortSignal.timeout(2500) });
       const after = now().getTime();
       const header = res.headers.get("date");
       if (!header) {
