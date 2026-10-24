@@ -246,6 +246,14 @@ export const SERVER_ES: Record<string, string> = {
   "Pick at least one day, otherwise nobody can book you.": "Elige al menos un día; si no, nadie te puede reservar.",
   "Could not save your hours. Please try again.": "No se pudo guardar tu horario. Inténtalo de nuevo.",
 
+  // Translating a Spanish-mode writer's quote
+  "Translation isn't available right now. Write it in English, or try again in a few minutes.":
+    "La traducción no está disponible ahora. Escríbelo en inglés, o inténtalo de nuevo en unos minutos.",
+  "Translation isn't set up yet. Ask the office, or write it in English for now.":
+    "La traducción todavía no está configurada. Pregúntale a la oficina, o escríbelo en inglés por ahora.",
+  "That's too much text to translate at once. Shorten it, or split it up.":
+    "Es demasiado texto para traducir de una vez. Acórtalo o divídelo.",
+
   // Generic
   "Something went wrong. Please try again.": "Algo salió mal. Inténtalo de nuevo.",
   "Send failed": "No se pudo enviar",

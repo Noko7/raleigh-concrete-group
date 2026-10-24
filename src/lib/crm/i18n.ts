@@ -922,7 +922,7 @@ const en = {
     priceDerived: "Total, from the price breakdown below",
     priceAria: "Price in dollars",
     included: "What's included",
-    includedNote: "The customer reads this word for word.",
+    includedNote: "Write it in Spanish. Before it goes out, it is translated into English for you to check.",
     doneCount: "{done} of {total} done",
     notApplicable: "Not applicable",
     labelScope: "Scope",
@@ -942,6 +942,19 @@ const en = {
     previewHide: "Hide preview",
     previewNote: "This is how it shows on {name}'s phone.",
     headlineDerived: "Headline price: the option you'd recommend plus extras",
+  },
+  english: {
+    translate: "Translate and review",
+    translating: "Translating…",
+    title: "What {name} gets, in English",
+    lead: "This is what goes out. Check it reads right, and fix anything before you send it.",
+    back: "Back to editing",
+    line: "Line {n}",
+    option: "Option {n}",
+    lineDesc: "Line {n} description",
+    optionDesc: "Option {n} description",
+    summary: "What's included",
+    note: "What's changing",
   },
 };
 

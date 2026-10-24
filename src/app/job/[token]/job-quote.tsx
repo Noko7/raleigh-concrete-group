@@ -32,7 +32,10 @@ import {
   type StoredPackage,
 } from "@/app/crm/quotes/[id]/package-builder";
 import type { SaveState } from "@/app/crm/quotes/[id]/types";
+import { EnglishReview, type EnglishField } from "@/components/english-review";
 import { SpellTextarea } from "@/components/spell-field";
+import { markEnglish, toCustomerEnglish } from "@/lib/crm/translate-client";
+import type { TranslateField } from "@/lib/crm/translate-fields";
 import {
   blankSections,
   CustomerPreview,
@@ -107,6 +110,24 @@ export function JobQuote({
   const setSection = (field: QuoteSectionField, value: string) =>
     setSections((s) => ({ ...s, [field]: value }));
 
+  // Spanish mode: the writer works in Spanish, and Send becomes "translate and review". Their wording is
+  // shown back in English, editable, and only that English is sent; the customer never sees Spanish.
+  const spanish = locale === "es";
+  const [english, setEnglish] = useState<Record<string, string> | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
+  // What's already on the quote is the customer's English: reviewing it again sends nothing.
+  useEffect(() => {
+    if (!spanish) return;
+    markEnglish([
+      summary,
+      ...QUOTE_SECTION_FIELDS.map((f) => initialSections?.[f]),
+      ...options.flatMap((o) => [o.title, o.description]),
+      ...packages.flatMap((p) => [p.title, p.description]),
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spanish, optionsSig, packagesSig]);
+
   // Line items own the price when present, so the total always matches the lines.
   const itemised = rows.length > 0;
   // No single price: the row carries the lead option plus everything else, as in the CRM.
@@ -146,8 +167,86 @@ export function JobQuote({
   useEffect(() => {
     if (state.ok || state.sent) router.refresh();
     // A successful send folds the form; a refusal keeps everything typed.
-    if (state.sent && !state.error) setOpen(false);
+    if (state.sent && !state.error) {
+      setOpen(false);
+      setEnglish(null);
+    }
   }, [state, router]);
+
+  // Every field the customer reads, in page order; only the filled ones are translated.
+  const sectionLabel: Record<QuoteSectionField, string> = {
+    quote_scope: t.quoteForm.labelScope,
+    quote_permits: t.quoteForm.labelPermits,
+    quote_prep: t.quoteForm.labelPrep,
+    quote_pour: t.quoteForm.labelPour,
+    quote_cleanup: t.quoteForm.labelCleanup,
+  };
+  const sectionKind: Record<QuoteSectionField, TranslateField> = {
+    quote_scope: "Quote section: Scope",
+    quote_permits: "Quote section: Permits",
+    quote_prep: "Quote section: Demolition and prep",
+    quote_pour: "Quote section: Pour and finish",
+    quote_cleanup: "Quote section: Clean up",
+  };
+  const sources: { field: EnglishField; kind: TranslateField; text: string }[] = [
+    ...QUOTE_SECTION_FIELDS.map((f) => ({
+      field: { key: `s:${f}`, label: sectionLabel[f] },
+      kind: sectionKind[f],
+      text: sections[f],
+    })),
+    ...(hasLegacySummary
+      ? [{ field: { key: "what", label: t.english.summary }, kind: "Quote summary" as const, text: what }]
+      : []),
+    ...rows.flatMap((r, i) => [
+      {
+        field: { key: `r:${i}:t`, label: fill(t.english.line, { n: i + 1 }), short: true },
+        kind: "Line item title" as const,
+        text: r.title,
+      },
+      {
+        field: { key: `r:${i}:d`, label: fill(t.english.lineDesc, { n: i + 1 }) },
+        kind: "Line item description" as const,
+        text: r.description,
+      },
+    ]),
+    ...pkgRows.flatMap((r, i) => [
+      {
+        field: { key: `p:${i}:t`, label: fill(t.english.option, { n: i + 1 }), short: true },
+        kind: "Option title" as const,
+        text: r.title,
+      },
+      {
+        field: { key: `p:${i}:d`, label: fill(t.english.optionDesc, { n: i + 1 }) },
+        kind: "Option description" as const,
+        text: r.description,
+      },
+    ]),
+  ].filter((x) => x.text.trim() !== "");
+
+  async function reviewInEnglish() {
+    setTranslating(true);
+    setTranslateError(null);
+    const res = await toCustomerEnglish(sources.map((x) => ({ field: x.kind, text: x.text })));
+    setTranslating(false);
+    if (!res.ok) {
+      setTranslateError(res.error);
+      return;
+    }
+    setEnglish(Object.fromEntries(sources.map((x, i) => [x.field.key, res.texts[i]])));
+  }
+
+  // What Send submits: the reviewed English when there is one, else what was typed.
+  const en = english ?? {};
+  const outSections = english
+    ? (Object.fromEntries(QUOTE_SECTION_FIELDS.map((f) => [f, en[`s:${f}`] ?? sections[f]])) as Sections)
+    : sections;
+  const outWhat = english ? (en.what ?? what) : what;
+  const outRows = english
+    ? rows.map((r, i) => ({ ...r, title: en[`r:${i}:t`] ?? r.title, description: en[`r:${i}:d`] ?? r.description }))
+    : rows;
+  const outPkgRows = english
+    ? pkgRows.map((r, i) => ({ ...r, title: en[`p:${i}:t`] ?? r.title, description: en[`p:${i}:d`] ?? r.description }))
+    : pkgRows;
 
   // Rendered in all three states because a send folds the form away. Three outcomes: a 9pm quote's text is
   // held until 8am, which is neither sent nor failed.
@@ -223,70 +322,92 @@ export function JobQuote({
         */}
         <input type="hidden" name="intent" value="send" />
         {/* JSON: a variable number of rows can't ride on named form fields. */}
-        <input type="hidden" name="options_json" value={rowsToJson(rows)} />
-        <input type="hidden" name="packages_json" value={packagesToJson(pkgRows)} />
+        <input type="hidden" name="options_json" value={rowsToJson(outRows)} />
+        <input type="hidden" name="packages_json" value={packagesToJson(outPkgRows)} />
 
-        {/*
-          Shared with the owner's editor and the customer page (components/quote-form-parts), so the crew fill in
-          the page the customer gets.
-        */}
-        <PriceCard
-          value={derived ? String(derivedTotal) : price}
-          onChange={setPrice}
-          derived={derived}
-          derivedLabel={choice ? t.quoteForm.headlineDerived : undefined}
-          locale={locale}
-        />
-        <SectionsEditor sections={sections} onChange={setSection} locale={locale} />
+        {english ? (
+          <>
+            {/* The fields' English replaces the editors, so what's reviewed is what's posted. */}
+            <input type="hidden" name="quote_amount" value={derived ? String(derivedTotal) : price} />
+            {QUOTE_SECTION_FIELDS.map((f) => (
+              <input key={f} type="hidden" name={f} value={outSections[f]} />
+            ))}
+            {hasLegacySummary && <input type="hidden" name="quote_summary" value={outWhat} />}
+            <EnglishReview
+              fields={sources.map((x) => x.field)}
+              values={english}
+              onChange={(key, value) => setEnglish((e) => ({ ...(e ?? {}), [key]: value }))}
+              customerFirstName={customerFirstName}
+              locale={locale}
+            />
+          </>
+        ) : (
+          <>
+            {/*
+              Shared with the owner's editor and the customer page (components/quote-form-parts), so the crew fill in
+              the page the customer gets.
+            */}
+            <PriceCard
+              value={derived ? String(derivedTotal) : price}
+              onChange={setPrice}
+              derived={derived}
+              derivedLabel={choice ? t.quoteForm.headlineDerived : undefined}
+              locale={locale}
+            />
+            <SectionsEditor sections={sections} onChange={setSection} locale={locale} />
 
-        {/*
-          Always open: "what am I paying for" wins jobs. Adding a line makes the price card their sum; on a quote
-          already sent, the gap to that price shows while typing.
-        */}
-        <OptionBuilder
-          rows={rows}
-          onChange={setRows}
-          labels={t.quoteOptions}
-          mode="breakdown"
-          target={alreadySent ? amount : null}
-          choiceActive={choice}
-        />
+            {/*
+              Always open: "what am I paying for" wins jobs. Adding a line makes the price card their sum; on a quote
+              already sent, the gap to that price shows while typing.
+            */}
+            <OptionBuilder
+              rows={rows}
+              onChange={setRows}
+              labels={t.quoteOptions}
+              mode="breakdown"
+              target={alreadySent ? amount : null}
+              choiceActive={choice}
+            />
 
-        {/* Everything beyond a straight breakdown, folded; opens itself if the quote already uses any of it. */}
-        <MoreWaysToPrice
-          labels={t.quoteOptions}
-          startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
-        >
-          <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} mode="extras" />
-          {/* Extras meant to be pick-one add up to every price at once; offered here, where the mistake is made. */}
-          <PickOneSuggestion
-            rows={rows}
-            hasChoice={filledPackages(pkgRows).length > 0}
-            locale={locale}
-            onConvert={() => {
-              setPkgRows(packagesFromOptionRows(rows));
-              setRows([]);
-            }}
-          />
-          <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={t.quotePackages} />
-        </MoreWaysToPrice>
+            {/* Everything beyond a straight breakdown, folded; opens itself if the quote already uses any of it. */}
+            <MoreWaysToPrice
+              labels={t.quoteOptions}
+              startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
+            >
+              <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} mode="extras" />
+              {/* Extras meant to be pick-one add up to every price at once; offered here, where the mistake is made. */}
+              <PickOneSuggestion
+                rows={rows}
+                hasChoice={filledPackages(pkgRows).length > 0}
+                locale={locale}
+                onConvert={() => {
+                  setPkgRows(packagesFromOptionRows(rows));
+                  setRows([]);
+                }}
+              />
+              <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={t.quotePackages} />
+            </MoreWaysToPrice>
 
-        {/* Only for quotes written before the sections existed. */}
-        {hasLegacySummary && (
-          <label className="jq-field">
-            <span>{t.contractorJob.quoteSummary}</span>
-            <SpellTextarea name="quote_summary" rows={3} value={what} onChange={(e) => setWhat(e.target.value)} />
-          </label>
+            {/* Only for quotes written before the sections existed. */}
+            {hasLegacySummary && (
+              <label className="jq-field">
+                <span>{t.contractorJob.quoteSummary}</span>
+                <SpellTextarea name="quote_summary" rows={3} value={what} onChange={(e) => setWhat(e.target.value)} />
+              </label>
+            )}
+          </>
         )}
 
         <CustomerPreview
+          key={english ? "en" : "edit"}
           firstName={customerFirstName}
           price={priceOk ? priceNum : null}
           derived={derived}
-          sections={sections}
-          {...previewOf(rows)}
+          sections={outSections}
+          {...previewOf(outRows)}
           choice={choice}
           locale={locale}
+          startOpen={Boolean(english)}
         />
 
         <p className="js-hint">
@@ -305,17 +426,31 @@ export function JobQuote({
           )
         )}
 
-        <button type="submit" className="js-confirm jq-send" disabled={!ready || pending}>
-          {pending
-            ? t.contractorJob.quoteSending
-            : awaitingReply
-              ? t.contractorJob.quoteFixSend
-              : t.contractorJob.quoteSend}
-        </button>
-        <button type="button" className="jq-cancel" onClick={() => setOpen(false)} disabled={pending}>
-          {t.common.cancel}
-        </button>
+        {spanish && !english ? (
+          <button type="button" className="js-confirm jq-send" disabled={!ready || translating} onClick={reviewInEnglish}>
+            {translating ? t.english.translating : t.english.translate}
+          </button>
+        ) : (
+          <button type="submit" className="js-confirm jq-send" disabled={!ready || pending}>
+            {pending
+              ? t.contractorJob.quoteSending
+              : awaitingReply
+                ? t.contractorJob.quoteFixSend
+                : t.contractorJob.quoteSend}
+          </button>
+        )}
+        {english ? (
+          <button type="button" className="jq-cancel" onClick={() => setEnglish(null)} disabled={pending}>
+            {t.english.back}
+          </button>
+        ) : (
+          <button type="button" className="jq-cancel" onClick={() => setOpen(false)} disabled={pending || translating}>
+            {t.common.cancel}
+          </button>
+        )}
       </form>
+
+      {translateError && <p className="js-err">{tr(locale, translateError)}</p>}
 
       {/* A refused duplicate isn't an error, so it reads as a note. */}
       {state.error && !pending && <p className={state.alreadySent ? "js-hint" : "js-err"}>{tr(locale, state.error)}</p>}
