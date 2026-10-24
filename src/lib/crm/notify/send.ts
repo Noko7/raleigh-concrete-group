@@ -2,6 +2,7 @@
 // Re-exported from ../notify.ts, whose header documents the provider settings.
 import { clockLabel, hourLabel, inQuietHours, nextSendableAt, now, QUIET_FROM_HOUR, QUIET_UNTIL_HOUR } from "../clock";
 import { noEmDash } from "../constants";
+import { getPhoneLines, sendingLine } from "../phone-lines";
 import {
   claimMessage,
   finishMessage,
@@ -64,10 +65,14 @@ export function toE164(raw: string): string | null {
   return null;
 }
 
-async function sendQuo(to: string, message: string): Promise<SendResult> {
+async function sendQuo(to: string, message: string, line: string | null = null): Promise<SendResult> {
   const key = process.env.QUO_API_KEY || "";
-  const from = toE164(process.env.QUO_FROM || "") || (process.env.QUO_FROM || "").trim();
-  const userId = process.env.QUO_USER_ID || "";
+  const envFrom = toE164(process.env.QUO_FROM || "") || (process.env.QUO_FROM || "").trim();
+  // A line from Settings (a contractor's, or the business line) wins over QUO_FROM.
+  const from = line || envFrom;
+  // QUO_USER_ID belongs to the QUO_FROM line. On any other line, leaving it out sends as that line's owner,
+  // where a user without access to the line would be refused.
+  const userId = from === envFrom ? process.env.QUO_USER_ID || "" : "";
   if (!key) return { ok: false, provider: "quo", unsent: true, detail: "QUO_API_KEY is not set" };
   if (!from) return { ok: false, provider: "quo", unsent: true, detail: "QUO_FROM is not set" };
   // Quo can't text a number from itself and returns an opaque 500, so say why here.
@@ -143,9 +148,25 @@ async function record(log: SmsLog | undefined, r: SendResult, to: string, body: 
 }
 
 // The provider call with no quiet-hours gate. Only sendSmsResult (daytime) and
-// the queue flush may call it.
-async function deliver(to: string, message: string): Promise<SendResult> {
-  if (SMS_PROVIDER === "quo" || SMS_PROVIDER === "openphone") return sendQuo(to, message);
+// the queue flush may call it. `log` picks the Quo line (phone-lines.ts) at the moment of sending, so a held
+// text goes out from whoever owns the job by then.
+async function deliver(
+  to: string,
+  message: string,
+  log?: { quoteId?: string | null; kind?: string; role?: string },
+): Promise<SendResult> {
+  if (SMS_PROVIDER === "quo" || SMS_PROVIDER === "openphone") {
+    const line = await sendingLine(log);
+    const r = await sendQuo(to, message, line);
+    // Quo refusing a contractor's line (not set up to text yet, say) mustn't cost the customer the text:
+    // send it from the business line. A 5xx may have gone through, so that one isn't retried.
+    const business = line ? ((await getPhoneLines().catch(() => null))?.business ?? null) : null;
+    if (!r.ok && line && line !== business && r.status && r.status >= 400 && r.status < 500) {
+      console.error("[sms] contractor line refused, sent from the business line", { line, status: r.status, detail: r.detail });
+      return sendQuo(to, message, business);
+    }
+    return r;
+  }
   if (SMS_PROVIDER === "custom") return sendCustom(to, message);
   return sendTwilio(to, message);
 }
@@ -255,7 +276,7 @@ export async function sendSmsResult(
   await flushInBackground();
 
   try {
-    const r = await deliver(to, message);
+    const r = await deliver(to, message, log);
     if (!r.ok) {
       console.error("[sms] send failed", {
         provider: r.provider,
@@ -366,7 +387,7 @@ export async function flushHeldMessages(limit = 25, budgetMs = 8000): Promise<Fl
     }
     if (!(await claimMessage(m.id, now().toISOString()))) continue;
 
-    const r = await deliver(m.to_phone, m.body).catch(
+    const r = await deliver(m.to_phone, m.body, { quoteId: m.quote_id, kind: m.kind, role: m.role }).catch(
       (e) => ({ ok: false, provider: SMS_PROVIDER, detail: String(e) }) as SendResult,
     );
     await finishMessage(
@@ -417,7 +438,7 @@ export async function sendHeldMessageNow(m: QuoteMessage): Promise<SendResult> {
     };
   }
 
-  const r = await deliver(m.to_phone, m.body).catch(
+  const r = await deliver(m.to_phone, m.body, { quoteId: m.quote_id, kind: m.kind, role: m.role }).catch(
     (e) => ({ ok: false, provider: SMS_PROVIDER, detail: String(e) }) as SendResult,
   );
   // Same bookkeeping as the drain, including requeueing on a provider refusal.

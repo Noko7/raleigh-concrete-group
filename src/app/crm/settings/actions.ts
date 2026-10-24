@@ -7,7 +7,8 @@ import { isLocale } from "@/lib/crm/i18n";
 import { BUSINESS_TZ, now } from "@/lib/crm/clock";
 import { readWorkHours } from "@/lib/crm/constants";
 import { ownerRecipients, sendSmsResult, toE164 } from "@/lib/crm/notify";
-import { setPrimaryContractorId, updateOwnProfile } from "@/lib/crm/queries";
+import { listContractors, setPrimaryContractorId, updateOwnProfile } from "@/lib/crm/queries";
+import { getPhoneLines, listQuoNumbers, savePhoneLines } from "@/lib/crm/phone-lines";
 import { rateLimit } from "@/lib/rate-limit";
 import type { SaveState, TestSmsState } from "./types";
 
@@ -140,6 +141,45 @@ export async function savePrimaryContractor(_prev: SaveState, formData: FormData
   const ok = await setPrimaryContractorId(id);
   if (!ok) return { ok: false, error: "Could not save. Please try again." };
 
+  revalidatePath("/crm/settings");
+  return { ok: true, saved: true };
+}
+
+// Owner-only: which Quo line each contractor's customers hear from, and the business line. Only numbers in
+// the Quo workspace are accepted, so texts can't be pointed at a line Quo won't send from.
+export async function savePhoneLinesAction(_prev: SaveState, formData: FormData): Promise<SaveState> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
+
+  const quo = await listQuoNumbers();
+  if (!quo.ok) return { ok: false, error: `${quo.error} Nothing was changed.` };
+  const known = new Set(quo.numbers.map((n) => n.number));
+
+  const business = String(formData.get("business") ?? "").trim() || null;
+  if (business && !known.has(business)) return { ok: false, error: "That business number isn't in your Quo workspace." };
+
+  const contractors: Record<string, string> = {};
+  const [staff, saved] = await Promise.all([listContractors(session), getPhoneLines()]);
+  for (const c of staff) {
+    // Only active contractors are on the form; an inactive one keeps their line for when they're back.
+    if (!formData.has(`line_${c.id}`)) {
+      if (saved.contractors[c.id]) contractors[c.id] = saved.contractors[c.id];
+      continue;
+    }
+    const v = String(formData.get(`line_${c.id}`) ?? "").trim();
+    if (!v) continue;
+    if (!known.has(v)) return { ok: false, error: `The number for ${c.full_name || c.email} isn't in your Quo workspace.` };
+    contractors[c.id] = v;
+  }
+  // One line per contractor: two sharing one would read each other's customers.
+  const used = Object.values(contractors);
+  if (new Set(used).size !== used.length) return { ok: false, error: "Two contractors can't share one number." };
+  if (business && used.includes(business)) {
+    return { ok: false, error: "A contractor's number can't also be the business number." };
+  }
+
+  const ok = await savePhoneLines({ business, contractors });
+  if (!ok) return { ok: false, error: "Could not save the phone lines. Please try again." };
   revalidatePath("/crm/settings");
   return { ok: true, saved: true };
 }

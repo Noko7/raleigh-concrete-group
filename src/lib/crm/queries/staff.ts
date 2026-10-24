@@ -80,24 +80,43 @@ export async function getStaffPhoneById(id: string): Promise<string | null> {
 
 // ── Owner settings (app_integrations, provider='settings') ──────────────────
 // Holds the primary contractor new quotes fall back to.
-export async function getPrimaryContractorId(): Promise<string | null> {
+// One "settings" row in app_integrations holds the owner's app-wide choices as JSON (primary contractor,
+// phone lines). Writes merge into it, so saving one setting never wipes another.
+export async function readAppSettings(): Promise<Record<string, unknown>> {
   const res = await pgAdmin("app_integrations?provider=eq.settings&select=data&limit=1");
-  if (!res.ok) return null;
-  const rows = (await res.json()) as { data: { primary_contractor_id?: string } }[];
-  return rows[0]?.data?.primary_contractor_id || null;
+  if (!res.ok) throw new Error(`Could not read app settings (HTTP ${res.status}).`);
+  const rows = (await res.json()) as { data: Record<string, unknown> | null }[];
+  return rows[0]?.data ?? {};
 }
 
-export async function setPrimaryContractorId(id: string | null): Promise<boolean> {
+export async function writeAppSettings(patch: Record<string, unknown>): Promise<boolean> {
+  let current: Record<string, unknown>;
+  try {
+    current = await readAppSettings();
+  } catch {
+    // Writing blind would replace every other setting with just this one.
+    return false;
+  }
   const res = await pgAdmin("app_integrations", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify({
       provider: "settings",
-      data: { primary_contractor_id: id },
+      data: { ...current, ...patch },
       updated_at: new Date().toISOString(),
     }),
   });
   return res.ok;
+}
+
+export async function getPrimaryContractorId(): Promise<string | null> {
+  const data = await readAppSettings().catch(() => ({}) as Record<string, unknown>);
+  const id = data.primary_contractor_id;
+  return typeof id === "string" && id ? id : null;
+}
+
+export async function setPrimaryContractorId(id: string | null): Promise<boolean> {
+  return writeAppSettings({ primary_contractor_id: id });
 }
 
 // ── Routing a lead to the right contractor ──────────────────────────────────

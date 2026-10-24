@@ -199,6 +199,9 @@ export const es: Dict = {
     alertHintOwner: "Los dueños reciben un mensaje por cada prospecto nuevo y cada cambio en un trabajo.",
     alertHintCrew: "Te llega un mensaje cuando te asignan un trabajo.",
     alertBlank: "Déjalo vacío para no recibir mensajes.",
+    lineTitle: "Tu línea para clientes",
+    lineYours: "Los mensajes a los clientes de tus trabajos salen del {number}. Sus respuestas te llegan en la app de Quo.",
+    lineNone: "Los mensajes a tus clientes salen del número de la empresa. Pídele a la oficina si quieres tu propio número.",
   },
   calendar: {
     title: "Calendario",
