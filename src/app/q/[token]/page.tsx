@@ -373,7 +373,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
                 their answers below. One price on the page, never two. */}
             {!itemised && !offersChoice && (
               <div className="cq-price">
-                <span className="cq-price-label">Your price, all in</span>
+                <span className="cq-price-label">Your price</span>
                 <span className="cq-price-value">{amount}</span>
                 <span className="cq-price-sub">Free quote · no obligation until you approve</span>
                 {/* Under the price, which the deadline is about. Only once sent. */}

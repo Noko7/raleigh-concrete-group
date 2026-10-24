@@ -75,7 +75,7 @@ export async function quotePdfResponse({
 
   const hasChoices = offersChoice || storedOptions.some((o) => !o.required);
   const total = dollars(quote.quote_amount) ?? "$0";
-  const totalLabel = accepted ? "Your total" : hasChoices ? "Total with everything" : "Your price, all in";
+  const totalLabel = accepted ? "Your total" : hasChoices ? "Total with everything" : "Your price";
   const totalNote = accepted
     ? quote.discount_accepted
       ? `Includes your $${DECLINE_CREDIT} credit.`

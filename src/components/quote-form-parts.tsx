@@ -212,7 +212,7 @@ export function CustomerPreview({
           {/* A broken-down quote has no price card on the customer page (its total sits under the lines). */}
           {!breakdown && (
             <div className="cq-price">
-              <span className="cq-price-label">{derived ? "Your total" : "Your price, all in"}</span>
+              <span className="cq-price-label">{derived ? "Your total" : "Your price"}</span>
               {/* No total until the customer picks, same as the customer page. */}
               <span className="cq-price-value">{!derived && price != null && price > 0 ? dollars(price) : "-"}</span>
               <span className="cq-price-sub">
