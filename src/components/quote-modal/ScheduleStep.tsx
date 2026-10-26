@@ -45,6 +45,8 @@ export function ScheduleStep({
   errorMsg: string;
   smsHref: string;
 }) {
+  // The date input's `min` doesn't stop every phone, so a day inside the lead time is caught here.
+  const tooSoon = /^\d{4}-\d{2}-\d{2}$/.test(data.visitDate) && data.visitDate < minDate;
   return (
     <div className="qm-body">
       {/*
@@ -77,10 +79,12 @@ export function ScheduleStep({
       />
       <span
         className={`qm-ac-status qm-slot${
-          dateChecking ? "" : dateFull ? " qm-ac-full" : data.visitDate ? " qm-ac-ok" : ""
+          tooSoon ? " qm-ac-full" : dateChecking ? "" : dateFull ? " qm-ac-full" : data.visitDate ? " qm-ac-ok" : ""
         }`}
       >
-        {mode === "online" ? (
+        {tooSoon ? (
+          `The earliest we can come out is ${prettyDay(minDate)}. Please pick that day or later.`
+        ) : mode === "online" ? (
           data.visitDate ? (
             <>
               <IconCheck className="qm-ac-check" /> We&apos;ll aim for {prettyDay(data.visitDate)} if a visit

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { ymdInDays } from "@/lib/crm/clock";
+import { VISIT_LEAD_DAYS } from "@/lib/crm/constants";
 import { MAX_JOBS_PER_DAY, countJobsOn, resolveAssignee, visitAvailability } from "@/lib/crm/queries";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
@@ -27,6 +29,11 @@ export async function GET(request: Request) {
     const used = await countJobsOn(date);
     const remaining = Math.max(0, MAX_JOBS_PER_DAY - used);
     return NextResponse.json({ ok: true, available: remaining > 0, remaining, capacity: MAX_JOBS_PER_DAY });
+  }
+
+  // Inside the lead time /api/quote refuses the slot, so it must never be offered as open.
+  if (date < ymdInDays(VISIT_LEAD_DAYS)) {
+    return NextResponse.json({ ok: true, available: false, tooSoon: true, slots: [], taken: [], wholeDay: false, works: true });
   }
 
   const service = (searchParams.get("service") || "").slice(0, 120);

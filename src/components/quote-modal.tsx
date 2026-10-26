@@ -235,6 +235,12 @@ function Modal({ onClose }: { onClose: () => void }) {
     setDayOff(false);
     setTakenTimes([]);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    // The input's `min` is only a hint (iOS Safari lets any day through), so a day inside the lead time
+    // is refused here; the server would drop it and the customer would think they were booked.
+    if (date < minDate) {
+      track({ event: "error", step: "schedule", mode: mode ?? undefined, detail: "too_soon" });
+      return;
+    }
     setDateChecking(true);
     try {
       const res = await fetch(
@@ -438,7 +444,8 @@ function Modal({ onClose }: { onClose: () => void }) {
     }
     if (current === "service") return data.service !== "" && (!onlineNeedsMore || (hasPhoto && hasDetails));
     if (current === "schedule") {
-      const picked = /^\d{4}-\d{2}-\d{2}$/.test(data.visitDate) && data.visitTime !== "";
+      const picked =
+        /^\d{4}-\d{2}-\d{2}$/.test(data.visitDate) && data.visitDate >= minDate && data.visitTime !== "";
       // Only in-person takes a slot from someone's day; an online fallback day being busy is no reason to stop.
       if (mode === "online") return picked && !dateChecking;
       return picked && !dateFull && !dayOff && !dateChecking;

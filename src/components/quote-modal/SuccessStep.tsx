@@ -26,7 +26,8 @@ export function SuccessStep({
   <div className="qm-check">
     <IconCheck />
   </div>
-  <h2 className="qm-title">You&apos;re all set!</h2>
+  {/* "All set" over an unbooked visit reads as a booking, so it only heads a request that is complete. */}
+  <h2 className="qm-title">{mode === "inperson" && !visitBooked ? "We got your request" : "You're all set!"}</h2>
   <p className="qm-sub">
     {mode === "inperson" && !visitBooked
       ? "We got your request. We'll call or text you shortly to set a time for your visit."
