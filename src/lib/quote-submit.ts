@@ -6,10 +6,19 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 
 /**
  * What /api/quote returns when, and only when, the lead is in the database.
- * `visit_booked` is false for an in-person request saved without a time (skipped, or the slot went);
- * the lead is still saved and the success screen says we'll call.
+ * An in-person request is always booked: the customer's pick, or the next opening when theirs can't be used,
+ * returned as `visit_date`/`visit_time`. `visit_booked` is false only when nothing could be booked (calendar
+ * unreadable, a month solid); the lead is still saved and the success screen says we'll call.
  */
-export type ConfirmedSave = { ok: true; saved: true; lead_id: string; duplicate?: boolean; visit_booked?: boolean };
+export type ConfirmedSave = {
+  ok: true;
+  saved: true;
+  lead_id: string;
+  duplicate?: boolean;
+  visit_booked?: boolean;
+  visit_date?: string;
+  visit_time?: string;
+};
 
 export function isConfirmedSave(status: number, body: unknown): body is ConfirmedSave {
   if (status !== 200 && status !== 201) return false;

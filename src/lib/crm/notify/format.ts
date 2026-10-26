@@ -51,6 +51,8 @@ export type QuoteInfo = {
   preferred_times?: (string | null)[] | null;
   visit_date?: string | null;
   visit_time?: string | null;
+  // The quote form booked the next opening because the customer's own pick was taken or too soon.
+  visit_moved?: boolean;
   public_token?: string;
   job_token?: string;
   // What the customer said yes/no to on an itemised quote. Only on texts sent

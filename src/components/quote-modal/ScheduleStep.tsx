@@ -129,22 +129,23 @@ export function ScheduleStep({
         })}
       </div>
 
-      {/* Send without a time and we call: a missing time costs a phone call, a missing lead costs the job. */}
-      <button
-        type="button"
-        className="qm-text-btn qm-skip"
-        disabled={busy}
-        onClick={() => {
-          track({ event: "done", step: "schedule", mode, ms: stepMs(), detail: "skipped_time" });
-          void submit({ skipVisit: true });
-        }}
-      >
-        {mode === "online"
-          ? "Skip this and send my request"
-          : dateFull || dayOff
-            ? "No day works? Send it and we'll call you to set a time"
-            : "None of these times work? Send it and we'll call you"}
-      </button>
+      {/*
+        Online can skip: it's priced from photos and the date is only a fallback. In person can't: a request
+        sent without a time waited on somebody phoning the customer, and that call didn't always happen.
+      */}
+      {mode === "online" && (
+        <button
+          type="button"
+          className="qm-text-btn qm-skip"
+          disabled={busy}
+          onClick={() => {
+            track({ event: "done", step: "schedule", mode, ms: stepMs(), detail: "skipped_time" });
+            void submit({ skipVisit: true });
+          }}
+        >
+          Skip this and send my request
+        </button>
+      )}
 
       {/* A rejected date returns as idle, and the reason must come with it. */}
       {(status === "error" || errorMsg) && (

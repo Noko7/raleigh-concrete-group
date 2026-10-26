@@ -109,6 +109,19 @@ export function slotsFor(w: WorkHours): string[] {
   return out;
 }
 
+/**
+ * The open slot nearest `nearTime` (earlier wins a tie), or the first open one when no time was asked for.
+ * Null when every slot is taken.
+ */
+export function nearestOpenSlot(slots: string[], taken: string[], nearTime?: string | null): string | null {
+  const open = slots.filter((s) => !taken.includes(s));
+  if (!open.length) return null;
+  const near = minutesOfTime(nearTime);
+  if (near === null) return open[0];
+  const distance = (s: string) => Math.abs((minutesOfTime(s) ?? 0) - near);
+  return open.reduce((best, s) => (distance(s) < distance(best) ? s : best));
+}
+
 /** Shown before a date (and so a contractor) is picked. */
 export const DEFAULT_VISIT_SLOTS = slotsFor(DEFAULT_WORK_HOURS);
 

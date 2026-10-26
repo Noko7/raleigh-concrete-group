@@ -7,6 +7,7 @@ import { alertOwner, notifyCustomerReceived, notifyNewQuote } from "@/lib/crm/no
 import {
   findVisitConflict,
   getStaffContactById,
+  nextOpenVisit,
   resolveAssignee,
   visitAvailability,
 } from "@/lib/crm/queries";
@@ -266,22 +267,28 @@ async function handle(request: Request) {
   // person with a phone number.
   const quoteType = QUOTE_TYPES.has(quoteTypeRaw) ? quoteTypeRaw : "";
 
-  // The visit is optional for both types. A chosen slot is kept if it's a real
-  // day inside the lead time and a real slot; otherwise it becomes a note.
+  // A chosen slot is kept if it's a real day past the lead time and a real
+  // slot. Online: otherwise a note. In person: otherwise the next opening is
+  // booked below, because an in-person request never leaves unbooked.
   let visitDate = "";
   let visitTime = "";
+  const visitFloor = ymdInDays(VISIT_LEAD_DAYS);
+  // Why the customer's own pick wasn't used, for the note on the lead.
+  let refused = "";
   const askedVisit = Boolean(visitDateRaw || visitTimeRaw);
   if (askedVisit) {
-    const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(visitDateRaw) && visitDateRaw >= ymdInDays(VISIT_LEAD_DAYS);
+    const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(visitDateRaw) && visitDateRaw >= visitFloor;
     const timeOk = TIME_RE.test(visitTimeRaw);
     if (dateOk && timeOk) {
       visitDate = visitDateRaw;
       visitTime = visitTimeRaw;
+    } else if (quoteType === "inperson") {
+      refused = `Asked for ${whenLabel(visitDateRaw, visitTimeRaw)}, which is ${dateOk ? "not a real time" : `inside the ${VISIT_LEAD_DAYS}-day lead time`}`;
     } else {
       notes.push(`Asked for ${whenLabel(visitDateRaw, visitTimeRaw)}, which isn't a bookable time - call to set one`);
     }
   } else if (quoteType === "inperson") {
-    notes.push("No visit time picked - call to set one");
+    refused = "No visit time picked";
   }
 
   // file_urls: only paths we created in our own bucket.
@@ -343,38 +350,56 @@ async function handle(request: Request) {
     });
   }
 
-  // Don't put the crew in two places: check the assignee's window and the hour
-  // around existing visits. A failing slot doesn't bounce the customer (that
-  // drove people away); the request is saved without it, noted, and they're
-  // told we'll call. The form greys out taken times, so this is a rare race.
+  // Every in-person request leaves here with a visit on the assignee's
+  // calendar: nobody has to log in or phone anyone to set one. Their pick is
+  // checked against the assignee's window and the hour around existing visits;
+  // if it can't be used (a race with another booking, a day off, a tampered
+  // form) the nearest opening is booked instead and the customer is told so.
   // The reason stays hidden: this endpoint is public, and "already with Jane
   // Smith at 10am" would leak a customer's name and schedule.
-  let visitBooked = quoteType === "inperson" && Boolean(visitDate);
-  if (visitBooked && !trapped) {
-    const asked = whenLabel(visitDate, visitTime);
+  let visitBooked = false;
+  let visitMoved = false;
+  if (quoteType === "inperson" && !trapped) {
+    const asked = visitDate ? whenLabel(visitDate, visitTime) : "";
     try {
-      const { slots, works, wholeDay } = await visitAvailability(assignee, visitDate);
-      let why = "";
-      if (!works) why = "not a working day";
-      else if (wholeDay) why = "a job is booked that day";
-      else if (!slots.includes(visitTime)) why = "outside working hours";
-      else {
-        const clash = await findVisitConflict(assignee, visitDate, visitTime);
-        if (clash) why = clash.kind === "job" ? "a job is booked that day" : "that time was taken";
+      if (visitDate) {
+        const { slots, works, wholeDay } = await visitAvailability(assignee, visitDate);
+        if (!works) refused = `Asked for ${asked}, but that's not a working day`;
+        else if (wholeDay) refused = `Asked for ${asked}, but a job is booked that day`;
+        else if (!slots.includes(visitTime)) refused = `Asked for ${asked}, which is outside working hours`;
+        else {
+          const clash = await findVisitConflict(assignee, visitDate, visitTime);
+          if (clash) refused = `Asked for ${asked}, but ${clash.kind === "job" ? "a job is booked that day" : "that time was taken"}`;
+        }
       }
-      if (why) {
-        notes.push(`Asked for ${asked}, but ${why} - call to set a time`);
-        visitBooked = false;
+      if (!visitDate || refused) {
+        const from = visitDateRaw >= visitFloor && /^\d{4}-\d{2}-\d{2}$/.test(visitDateRaw) ? visitDateRaw : visitFloor;
+        const next = await nextOpenVisit(assignee, from, visitTimeRaw);
+        if (next) {
+          visitDate = next.date;
+          visitTime = next.time;
+          visitMoved = true;
+          notes.push(`${refused} - booked the next opening, ${whenLabel(next.date, next.time)}`);
+        } else {
+          notes.push(`${refused}, and nothing is open for a month - call to set a time`);
+          visitDate = "";
+          visitTime = "";
+        }
       }
     } catch (e) {
-      console.error("[quote] availability check failed - saving without the slot", e);
-      notes.push(`Asked for ${asked}; the calendar couldn't be checked - confirm the time`);
-      visitBooked = false;
+      // The calendar can't be read. A pick that passed the lead time is still
+      // booked (a possible clash is a fix for the office; an unbooked customer
+      // is a missed appointment). With no usable pick there's nothing to book.
+      console.error("[quote] availability check failed", e);
+      if (visitDate && !refused) {
+        notes.push(`Booked ${asked} without checking the calendar (it couldn't be read) - check for a clash`);
+      } else {
+        notes.push(`${refused}; the calendar couldn't be read to book another - call to set a time`);
+        visitDate = "";
+        visitTime = "";
+      }
     }
-    if (!visitBooked) {
-      visitDate = "";
-      visitTime = "";
-    }
+    visitBooked = Boolean(visitDate);
   }
 
   // visit_date's meaning depends on quote_type: a booked appointment for
@@ -514,6 +539,7 @@ async function handle(request: Request) {
         quote_type: (row.quote_type as string | null) ?? undefined,
         visit_date: validDate,
         visit_time: visitTime || null,
+        visit_moved: visitMoved,
         public_token: inserted.ok ? inserted.publicToken : undefined,
         job_token: inserted.ok ? inserted.jobToken : undefined,
       };
@@ -527,5 +553,15 @@ async function handle(request: Request) {
 
   await markDraftSent(submissionId, leadId);
 
-  return NextResponse.json({ ok: true, saved: true, lead_id: leadId, visit_booked: visitBooked && !trapped }, { status: 201 });
+  return NextResponse.json(
+    {
+      ok: true,
+      saved: true,
+      lead_id: leadId,
+      visit_booked: visitBooked && !trapped,
+      // What was actually booked, which is not their pick when it was moved.
+      ...(visitBooked && !trapped ? { visit_date: visitDate, visit_time: visitTime } : {}),
+    },
+    { status: 201 },
+  );
 }

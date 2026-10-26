@@ -69,11 +69,15 @@ export async function notifyCustomerReceived(q: QuoteInfo): Promise<void> {
       : q.quote_type === "inperson"
       ? text([
           `Hi ${firstName(q.name)},`,
-          `this is ${OWNER_NAME} with ${BUSINESS}. You're set for your free in-person quote:`,
+          q.visit_moved
+            ? `this is ${OWNER_NAME} with ${BUSINESS}. The time you picked wasn't open, so we've booked you the next one for your free in-person quote:`
+            : `this is ${OWNER_NAME} with ${BUSINESS}. You're set for your free in-person quote:`,
           "",
           `${prettyDay(q.visit_date)}${q.visit_time ? ` at ${q.visit_time}` : ""}`,
           "",
-          "We look forward to meeting you. Reply or call if anything changes.",
+          q.visit_moved
+            ? "If that doesn't work, just reply with a better time."
+            : "We look forward to meeting you. Reply or call if anything changes.",
           "",
           OPT_OUT_LINE,
         ])

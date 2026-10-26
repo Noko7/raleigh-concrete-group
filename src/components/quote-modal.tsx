@@ -197,6 +197,7 @@ function Modal({ onClose }: { onClose: () => void }) {
   const [leadRef, setLeadRef] = useState("");
   // So the success screen is honest: was a visit actually booked, how many photos didn't make it.
   const [visitBooked, setVisitBooked] = useState(true);
+  const [visitMoved, setVisitMoved] = useState(false);
   const [filesFailed, setFilesFailed] = useState(0);
   const [uploadNote, setUploadNote] = useState("");
   // Sent on every attempt (lib/quote-submit.ts); a unique index makes a retry find the saved lead.
@@ -611,6 +612,8 @@ function Modal({ onClose }: { onClose: () => void }) {
         lead_id?: unknown;
         error?: string;
         fields?: string[];
+        visit_date?: unknown;
+        visit_time?: unknown;
       } | null;
 
       if (isConfirmedSave(res.status, json)) {
@@ -619,6 +622,13 @@ function Modal({ onClose }: { onClose: () => void }) {
         cancelLeftAlert();
         clearSaved();
         setVisitBooked(json.visit_booked !== false);
+        // The server may have booked the next opening instead of their pick; show what's really booked.
+        if (typeof json.visit_date === "string" && typeof json.visit_time === "string") {
+          const bookedDate = json.visit_date;
+          const bookedTime = json.visit_time;
+          setVisitMoved(bookedDate !== data.visitDate || bookedTime !== data.visitTime);
+          setData((d) => ({ ...d, visitDate: bookedDate, visitTime: bookedTime }));
+        }
         setFilesFailed(failedCount);
         setLeadRef(leadReference(json.lead_id));
         track({ event: "submit", step: "schedule", mode, ms: Date.now() - openedAt.current });
@@ -685,6 +695,7 @@ function Modal({ onClose }: { onClose: () => void }) {
           <SuccessStep
             mode={mode}
             visitBooked={visitBooked}
+            visitMoved={visitMoved}
             data={data}
             filesFailed={filesFailed}
             smsHref={smsHref}

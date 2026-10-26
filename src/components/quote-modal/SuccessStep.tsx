@@ -7,6 +7,7 @@ import { prettyDay, type FormState, type Mode } from "./shared";
 export function SuccessStep({
   mode,
   visitBooked,
+  visitMoved,
   data,
   filesFailed,
   smsHref,
@@ -15,6 +16,7 @@ export function SuccessStep({
 }: {
   mode: Mode | null;
   visitBooked: boolean;
+  visitMoved: boolean;
   data: FormState;
   filesFailed: number;
   smsHref: string;
@@ -35,7 +37,8 @@ export function SuccessStep({
   </p>
   {mode === "inperson" && visitBooked && data.visitDate && (
     <p className="qm-sub">
-      Your visit: <strong>{prettyDay(data.visitDate)} at {data.visitTime}</strong>
+      {visitMoved ? "The time you picked was just taken, so we booked the next one: " : "Your visit: "}
+      <strong>{prettyDay(data.visitDate)} at {data.visitTime}</strong>
     </p>
   )}
   {/* Photos never fail a request; missing ones get a way to follow on. */}

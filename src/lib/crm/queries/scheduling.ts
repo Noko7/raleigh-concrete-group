@@ -4,6 +4,7 @@ import {
   TIME_RE,
   VISIT_GAP_MINUTES,
   minutesOfTime,
+  nearestOpenSlot,
   readWorkHours,
   slotsFor,
   visitDateOf,
@@ -171,6 +172,29 @@ export async function visitAvailability(
 
   const taken = slots.filter((s) => busy.some((c) => tooClose(c.time, s)));
   return { slots, taken, wholeDay: false, works: true };
+}
+
+// How far ahead the public form will look for an opening before giving up on the calendar.
+const NEXT_OPEN_DAYS = 30;
+
+// The first open visit slot on or after `fromDate`, nearest to `nearTime` on the first day that has one.
+// The public form books this when the customer's own pick can't be used, so an in-person request always
+// leaves with an appointment and nobody has to phone them to set one. Null only if a month is solid.
+export async function nextOpenVisit(
+  staffId: string | null | undefined,
+  fromDate: string,
+  nearTime?: string | null,
+): Promise<{ date: string; time: string } | null> {
+  if (!ISO_DATE.test(fromDate)) return null;
+  const start = new Date(`${fromDate}T12:00:00Z`);
+  for (let i = 0; i < NEXT_OPEN_DAYS; i++) {
+    const date = new Date(start.getTime() + i * 86_400_000).toISOString().slice(0, 10);
+    const { slots, taken, wholeDay, works } = await visitAvailability(staffId, date);
+    if (!works || wholeDay) continue;
+    const time = nearestOpenSlot(slots, taken, nearTime);
+    if (time) return { date, time };
+  }
+  return null;
 }
 
 // Confirm (or move) the work day. Runs as the user, so RLS lets the assigned
