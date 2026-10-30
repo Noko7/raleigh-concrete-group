@@ -12,6 +12,7 @@ import {
 } from "@/lib/crm/fees";
 import { firstNameOf } from "@/lib/crm/constants";
 import { jobLedger, payeeState, reconcileCheckout } from "@/lib/crm/payments";
+import { receiptForNewPayment } from "@/lib/crm/receipts";
 import { getQuoteByToken } from "@/lib/crm/queries";
 import { ContactButtons } from "@/components/contact-buttons";
 import { businessName } from "@/lib/site-data";
@@ -51,6 +52,10 @@ export default async function PayPage({
   // ask Stripe directly rather than show a paid job as unpaid. Also a safety
   // net if the webhook is misconfigured.
   const justPaid = done ? await reconcileCheckout(done) : null;
+  // The webhook issues the receipt too; whichever gets there first sends the copies, the other finds it issued.
+  if (justPaid?.status === "paid" && justPaid.quote_id === quote.id) {
+    await receiptForNewPayment({ paymentId: justPaid.id, customerCopy: true, ownerAlreadyTold: false });
+  }
 
   const firstName = firstNameOf(quote.name, quote.name);
   const accepted = quote.customer_response === "accepted" && quote.status !== "lost";

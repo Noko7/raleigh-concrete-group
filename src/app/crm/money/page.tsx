@@ -45,6 +45,9 @@ export default async function MoneyPage({
       <div className="crm-page-head">
         <div>
           <h1>Money</h1>
+          <p className="crm-sm">
+            <Link href={`${base}/money/receipts`}>Receipts: every customer payment, numbered, with a CSV for taxes →</Link>
+          </p>
           {/* Only shown when something is being left out. */}
           {board.testCount > 0 && (
             <p className="crm-muted crm-sm money-tests">

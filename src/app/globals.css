@@ -4436,3 +4436,91 @@ textarea.qm-input { min-height: 0; resize: vertical; }
   .cv-frame-phone { width: 100%; box-shadow: none; border-radius: 0.5rem; }
 }
 .qe-view { align-self: flex-start; margin-top: 0.25rem; }
+
+/* A payment receipt (/r/<token>): the customer page's card, laid out like paper. */
+.rc-head { align-items: flex-start; }
+.rc-id { display: flex; flex-direction: column; align-items: flex-end; }
+.rc-kind { font-family: var(--font-headline), sans-serif; font-size: 1.6rem; line-height: 1; letter-spacing: 0.02em; }
+.rc-no { font-size: 0.9rem; font-weight: 800; color: #6b5a4f; font-variant-numeric: tabular-nums; }
+.rc-void {
+  display: flex; gap: 0.75rem; align-items: baseline; margin: 0 0 1.1rem; padding: 0.75rem 0.9rem;
+  border: 2px solid #b91c1c; border-radius: 0.6rem; color: #991b1b; font-size: 0.92rem; line-height: 1.4;
+}
+.rc-void strong { font-size: 1.1rem; letter-spacing: 0.08em; }
+.rc-void a { color: inherit; font-weight: 800; }
+.rc-test { margin: 0 0 1rem; font-size: 0.85rem; font-weight: 800; color: #6b5a4f; }
+.rc-label { display: block; font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #6b5a4f; }
+.rc-label-gap { margin-top: 0.6rem; }
+.rc-amount { display: flex; flex-direction: column; gap: 0.2rem; padding-bottom: 1.1rem; border-bottom: 1px solid rgba(43, 26, 18, 0.15); }
+.rc-big { font-family: var(--font-headline), sans-serif; font-size: 3rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.rc-sub { font-size: 0.92rem; color: #4b3b31; }
+.rc-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; padding: 1.1rem 0; border-bottom: 1px solid rgba(43, 26, 18, 0.15); }
+.rc-parties > div { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.95rem; overflow-wrap: anywhere; }
+.rc-ledger, .rc-facts { margin: 0; padding: 0.9rem 0; border-bottom: 1px solid rgba(43, 26, 18, 0.15); }
+.rc-ledger > div, .rc-facts > div { display: flex; justify-content: space-between; gap: 1rem; padding: 0.25rem 0; font-size: 0.95rem; }
+.rc-ledger dd, .rc-facts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.rc-balance { font-weight: 800; }
+.rc-facts { font-size: 0.88rem; color: #4b3b31; }
+.rc-facts a { color: inherit; font-weight: 800; }
+.rc-note { margin: 1rem 0 0; font-size: 0.85rem; line-height: 1.5; color: #4b3b31; }
+.rc-acts { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.25rem; }
+.rc-print { background: transparent; border: 2px solid #2b1a12; color: #2b1a12; cursor: pointer; font: inherit; font-weight: 800; }
+.rc-foot { margin: 1rem 0 0; font-size: 0.82rem; color: #6b5a4f; }
+.rc-foot a { color: inherit; }
+@media (max-width: 520px) {
+  .rc-parties { grid-template-columns: 1fr; }
+  .rc-big { font-size: 2.5rem; }
+}
+@media print {
+  .cq-wrap:has(> .rc) { background: #fff; padding: 0; }
+  .rc { max-width: none; box-shadow: none; background: #fff; }
+  .rc-acts { display: none; }
+}
+
+/* "Text the customer a receipt" on the payment forms. */
+.receipt-box { display: flex; flex-direction: column; gap: 0.2rem; }
+.receipt-box label { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.92rem; cursor: pointer; }
+.receipt-box input[type="checkbox"] { width: 1.15rem; height: 1.15rem; accent-color: var(--amber); }
+.receipt-box-hint { margin: 0; font-size: 0.8rem; opacity: 0.75; }
+
+/* Receipts on a job page: the owner's (dark card) and the crew's (light). */
+.jr-lead { margin: 0.2rem 0 0.75rem; font-size: 0.88rem; opacity: 0.8; }
+.jr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.jr-row {
+  display: grid; grid-template-columns: auto auto 1fr auto; align-items: baseline; gap: 0.2rem 0.75rem;
+  padding: 0.55rem 0.7rem; border-radius: 0.55rem; background: rgba(255, 255, 255, 0.05);
+}
+.jr-light .jr-row { background: #faf8f4; }
+.jr-no { font-weight: 800; font-variant-numeric: tabular-nums; color: #f0a36b; }
+.jr-light .jr-no { color: var(--amber-dark); }
+.jr-amt { font-weight: 800; font-variant-numeric: tabular-nums; }
+.jr-meta { grid-column: 1 / -1; font-size: 0.82rem; opacity: 0.8; }
+.jr-pdf { grid-row: 1; grid-column: 4; font-size: 0.82rem; font-weight: 800; color: inherit; }
+.jr-void .jr-amt { text-decoration: line-through; opacity: 0.6; }
+.jr-tag-void { color: #f87171; }
+.jr-light .jr-tag-void { color: #b91c1c; }
+.jr-missing { margin-top: 1rem; }
+.jr-missing h3 { margin: 0; font-size: 0.95rem; }
+.jr-missing .jr-row { grid-template-columns: auto 1fr auto; }
+.jr-missing .jr-meta { grid-column: auto; }
+.jr-ok { margin: 0.5rem 0 0; color: #4ade80; font-weight: 700; font-size: 0.88rem; }
+.jr-err { margin: 0.5rem 0 0; color: #f87171; font-weight: 700; font-size: 0.88rem; }
+
+/* Money -> Receipts. */
+.rl-years { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 1rem; }
+.rl-year { padding: 0.35rem 0.8rem; border-radius: 999px; border: 1px solid var(--crm-border); color: var(--crm-text); text-decoration: none; font-weight: 800; font-size: 0.88rem; }
+.rl-year-on { background: var(--crm-accent); border-color: var(--crm-accent); color: #fff; }
+.rl-totals { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.25rem; }
+.rl-totals > div { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.75rem 1rem; border-radius: 0.7rem; background: var(--crm-surface); border: 1px solid var(--crm-border); min-width: 9rem; }
+.rl-totals span { font-size: 0.8rem; color: var(--crm-muted); font-weight: 700; }
+.rl-totals strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.rl-table-wrap { overflow-x: auto; }
+.rl-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.rl-table th, .rl-table td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--crm-border); white-space: nowrap; }
+.rl-table td:nth-child(4) { white-space: normal; min-width: 12rem; }
+.rl-table th { font-size: 0.78rem; color: var(--crm-muted); font-weight: 800; }
+.rl-table a { color: #f0a36b; font-weight: 700; }
+.rl-num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.rl-void td { opacity: 0.55; }
+.rl-void .rl-num { text-decoration: line-through; }
+.rl-tag { margin-left: 0.4rem; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: var(--crm-muted); }

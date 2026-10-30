@@ -18,7 +18,9 @@ import {
   voidRecordedPaymentAdmin,
 } from "@/lib/crm/payments";
 import { refundPayment } from "@/lib/crm/stripe";
-import { takeManualPayment } from "./manual-payment";
+import { customerReceiptChoice, takeManualPayment } from "./manual-payment";
+import { receiptNumberLabel } from "@/lib/crm/receipt-format";
+import { ensureReceipt, reissueAfterCorrection, voidReceiptForPayment } from "@/lib/crm/receipts";
 import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 
 export type PaymentState = { ok: boolean; error?: string; message?: string };
@@ -123,17 +125,23 @@ export async function recordManualPayment(_prev: PaymentState, formData: FormDat
   if (amountCents === null) return { ok: false, error: "Enter how much they paid." };
 
   const note = String(formData.get("note") ?? "").trim().slice(0, 500);
-  const taken = await takeManualPayment(session, quote, { method, amountCents, note });
+  const customerCopy = customerReceiptChoice(formData);
+  const taken = await takeManualPayment(session, quote, { method, amountCents, note, customerCopy });
   if (!taken.ok) return { ok: false, error: taken.error ?? "Could not save that payment." };
   const dueCents = taken.dueCents ?? 0;
 
   refreshMoneyViews(id);
+  // Say what happened to the receipt: it is the record, and the customer may be standing there.
+  const receipt =
+    taken.receiptNumber != null
+      ? ` Receipt ${receiptNumberLabel(taken.receiptNumber)} issued${customerCopy ? ` and texted to ${firstNameOf(quote.name, "the customer")}` : ""}.`
+      : " The receipt didn't issue; the office can issue it from the job page.";
   return {
     ok: true,
     message:
-      dueCents > 0
+      (dueCents > 0
         ? `${usd(amountCents)} recorded. ${usd(dueCents)} still to collect.`
-        : `${usd(amountCents)} recorded. This job is paid in full.`,
+        : `${usd(amountCents)} recorded. This job is paid in full.`) + receipt,
   };
 }
 
@@ -254,6 +262,15 @@ export async function correctRecordedPayment(_prev: PaymentState, formData: Form
   const saved = await correctRecordedPaymentAdmin(row, { amountCents, method, note: note || null });
   if (!saved.ok) return { ok: false, error: saved.error ?? "Could not save that correction." };
 
+  // The old receipt states figures that are no longer true: void it and issue one for the corrected payment.
+  const methodName = (m: string) => m.charAt(0).toUpperCase() + m.slice(1);
+  const receipt = await reissueAfterCorrection({
+    paymentId: row.id,
+    reason: `Payment corrected from ${usd(row.amount_cents)} ${methodName(row.method)} to ${usd(amountCents)} ${methodName(method)}`,
+    actor: session,
+    customerCopy: customerReceiptChoice(formData),
+  });
+
   // Both figures, so the log shows whether the books moved $5 or $4,000.
   await addEvent(session, id, "payment_corrected", {
     payment_id: row.id,
@@ -282,15 +299,19 @@ export async function correctRecordedPayment(_prev: PaymentState, formData: Form
     who: session.staff.full_name || "the office",
     dueCents: after.ledger.dueCents,
     feeOwedCents: after.ledger.feeDueNowCents,
+    receipt: receipt ? { number: receiptNumberLabel(receipt.receipt_number), token: receipt.token } : null,
   }).catch(() => {});
 
   refreshMoneyViews(id);
+  const receiptNote = receipt
+    ? ` New receipt ${receiptNumberLabel(receipt.receipt_number)} issued${receipt.replaces_receipt_id ? "; the old one is marked void" : ""}.`
+    : " The new receipt didn't issue; issue it from the job page.";
   return {
     ok: true,
     message:
-      after.ledger.dueCents > 0
+      (after.ledger.dueCents > 0
         ? `Corrected to ${usd(amountCents)}. ${usd(after.ledger.dueCents)} still to collect.`
-        : `Corrected to ${usd(amountCents)}. This job is paid in full.`,
+        : `Corrected to ${usd(amountCents)}. This job is paid in full.`) + receiptNote,
   };
 }
 
@@ -322,6 +343,9 @@ export async function voidRecordedPayment(_prev: PaymentState, formData: FormDat
   const done = await voidRecordedPaymentAdmin(row, reason);
   if (!done.ok) return { ok: false, error: done.error ?? "Could not void that payment." };
 
+  // Its receipt stays on file, stamped VOID with the reason; nothing replaces it.
+  await voidReceiptForPayment(row.id, `Payment voided: ${reason}`, session.staff.id).catch(() => null);
+
   await addEvent(session, id, "payment_voided", {
     payment_id: row.id,
     amount_cents: row.amount_cents,
@@ -351,6 +375,36 @@ export async function voidRecordedPayment(_prev: PaymentState, formData: FormDat
   return {
     ok: true,
     message: `${usd(row.amount_cents)} taken off the books. ${usd(after.ledger.dueCents)} still to collect.`,
+  };
+}
+
+// ── A payment with no receipt ───────────────────────────────────────────────
+
+/**
+ * Issue the receipt for a paid payment that has none: one recorded before receipts existed, or whose receipt
+ * didn't issue at the time. Owner only. Texts nobody: it is for the books, and the moment has passed.
+ */
+export async function issueReceiptForPayment(_prev: PaymentState, formData: FormData): Promise<PaymentState> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
+
+  const id = String(formData.get("id") ?? "");
+  const paymentId = String(formData.get("payment_id") ?? "");
+  const quote = id ? await getQuote(session, id) : null;
+  if (!quote) return { ok: false, error: "You don't have access to this job." };
+  const row = paymentId ? await paymentById(paymentId) : null;
+  if (!row || row.quote_id !== id) return { ok: false, error: "That payment isn't on this job." };
+  if (row.status !== "paid") return { ok: false, error: "Only a payment that counted gets a receipt." };
+
+  const { receipt, created } = await ensureReceipt({ paymentId: row.id, customerCopy: false });
+  if (!receipt) return { ok: false, error: "The receipt didn't issue. Please try again." };
+
+  refreshMoneyViews(id);
+  return {
+    ok: true,
+    message: created
+      ? `Receipt ${receiptNumberLabel(receipt.receipt_number)} issued.`
+      : `That payment already has receipt ${receiptNumberLabel(receipt.receipt_number)}.`,
   };
 }
 

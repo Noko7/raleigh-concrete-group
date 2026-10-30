@@ -24,7 +24,11 @@
 --     storage buckets, noted at the end.
 --
 -- Extensions: plpgsql, pgcrypto, uuid-ossp, pg_stat_statements, pg_net
--- (schema extensions), supabase_vault. No views, no custom types, no comments.
+-- (schema extensions), supabase_vault.
+--
+-- Updated by hand for migration 20261030210000 (payment receipts: two tables,
+-- two staff columns, guard_payment_receipt(), issue_payment_receipt(), the
+-- policy, trigger and grants), checked against the catalog after it was applied. No views, no custom types, no comments.
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1. Tables (columns, defaults, constraints)
@@ -120,6 +124,65 @@ create table public.login_attempts (
   user_agent text,
   constraint login_attempts_pkey PRIMARY KEY (id),
   constraint login_attempts_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE SET NULL
+);
+
+create table public.payment_receipt_counter (
+  id boolean default true not null,
+  last_number integer default 0 not null,
+  constraint payment_receipt_counter_pkey PRIMARY KEY (id),
+  constraint payment_receipt_counter_one_row CHECK (id),
+  constraint payment_receipt_counter_chk CHECK (last_number >= 0)
+);
+create table public.payment_receipts (
+  id uuid default gen_random_uuid() not null,
+  receipt_number integer not null,
+  token text default replace((gen_random_uuid())::text, '-'::text, ''::text) not null,
+  payment_id uuid not null,
+  quote_id uuid not null,
+  is_test boolean default false not null,
+  issued_at timestamp with time zone default now() not null,
+  paid_at timestamp with time zone not null,
+  amount_cents integer not null,
+  method text not null,
+  payment_note text,
+  customer_name text not null,
+  customer_phone text,
+  customer_email text,
+  job_service text,
+  job_address text,
+  paid_to_staff_id uuid,
+  paid_to_name text not null,
+  paid_to_business_name text,
+  paid_to_business_address text,
+  paid_to_phone text,
+  recorded_by uuid,
+  recorded_by_name text,
+  job_total_cents integer,
+  paid_to_date_cents integer,
+  balance_cents integer,
+  replaces_receipt_id uuid,
+  replaced_by_receipt_id uuid,
+  voided_at timestamp with time zone,
+  void_reason text,
+  voided_by uuid,
+  customer_copy_requested boolean not null,
+  customer_copy_sent_at timestamp with time zone,
+  constraint payment_receipts_pkey PRIMARY KEY (id),
+  constraint payment_receipts_number_key UNIQUE (receipt_number),
+  constraint payment_receipts_token_key UNIQUE (token),
+  constraint payment_receipts_replaces_fkey FOREIGN KEY (replaces_receipt_id) REFERENCES payment_receipts(id),
+  constraint payment_receipts_replaced_by_fkey FOREIGN KEY (replaced_by_receipt_id) REFERENCES payment_receipts(id),
+  constraint payment_receipts_chk CHECK (
+    receipt_number > 0
+    and token ~ '^[0-9a-f]{32}$'
+    and amount_cents > 0 and amount_cents <= 100000000
+    and method = ANY (ARRAY['card'::text, 'cash'::text, 'venmo'::text, 'zelle'::text, 'check'::text, 'other'::text])
+    and char_length(customer_name) between 1 and 200
+    and char_length(paid_to_name) between 1 and 200
+    and (payment_note is null or char_length(payment_note) <= 500)
+    and (void_reason is null or char_length(void_reason) between 3 and 300)
+    and ((voided_at is null) = (void_reason is null))
+  )
 );
 
 create table public.quote_drafts (
@@ -353,10 +416,13 @@ create table public.staff (
   stripe_details_submitted boolean default false not null,
   stripe_checked_at timestamp with time zone,
   is_test boolean default false not null,
+  business_name text,
+  business_address text,
   constraint staff_pkey PRIMARY KEY (id),
   constraint staff_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE,
   constraint staff_locale_chk CHECK ((locale = ANY (ARRAY['en'::text, 'es'::text]))),
   constraint staff_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'contractor'::text]))),
+  constraint staff_business_chk CHECK ((((business_name IS NULL) OR (char_length(business_name) <= 120)) AND ((business_address IS NULL) OR (char_length(business_address) <= 300)))),
   constraint staff_work_hours_chk CHECK ((((work_start_hour >= 5) AND (work_start_hour <= 21)) AND ((work_end_hour >= 5) AND (work_end_hour <= 21)) AND (work_end_hour >= work_start_hour)))
 );
 
@@ -374,6 +440,10 @@ CREATE INDEX fs_staff_idx ON public.fee_settlements USING btree (staff_id, creat
 CREATE INDEX la_created_idx ON public.login_attempts USING btree (created_at DESC);
 CREATE INDEX la_email_idx ON public.login_attempts USING btree (email);
 CREATE INDEX la_ip_idx ON public.login_attempts USING btree (ip);
+CREATE INDEX payment_receipts_issued_idx ON public.payment_receipts USING btree (issued_at);
+CREATE UNIQUE INDEX payment_receipts_live_payment_idx ON public.payment_receipts USING btree (payment_id) WHERE (voided_at IS NULL);
+CREATE INDEX payment_receipts_paid_to_idx ON public.payment_receipts USING btree (paid_to_staff_id, issued_at);
+CREATE INDEX payment_receipts_quote_idx ON public.payment_receipts USING btree (quote_id, issued_at);
 CREATE INDEX quote_drafts_updated_at_idx ON public.quote_drafts USING btree (updated_at DESC);
 CREATE INDEX qe_quote_idx ON public.quote_events USING btree (quote_id);
 CREATE INDEX qm_due_idx ON public.quote_messages USING btree (send_after) WHERE ((send_after IS NOT NULL) AND (sent_at IS NULL) AND (cancelled_at IS NULL));
@@ -408,6 +478,8 @@ alter table public.contractor_invites enable row level security;
 alter table public.fee_settlements enable row level security;
 alter table public.job_staff_views enable row level security;
 alter table public.login_attempts enable row level security;
+alter table public.payment_receipt_counter enable row level security;
+alter table public.payment_receipts enable row level security;
 alter table public.quote_drafts enable row level security;
 alter table public.quote_events enable row level security;
 alter table public.quote_messages enable row level security;
@@ -446,6 +518,11 @@ create policy "owner reads crew views" on public.job_staff_views as permissive f
 
 create policy "owner reads login attempts" on public.login_attempts as permissive for select to authenticated
   using (is_owner());
+
+create policy "staff read receipts" on public.payment_receipts as permissive for select to authenticated
+  using ((is_owner() OR (paid_to_staff_id = auth.uid()) OR (EXISTS ( SELECT 1
+   FROM quote_requests q
+  WHERE ((q.id = payment_receipts.quote_id) AND (q.assigned_to = auth.uid()))))));
 
 create policy "staff insert events" on public.quote_events as permissive for insert to authenticated
   with check ((is_owner() OR (EXISTS ( SELECT 1
@@ -666,6 +743,48 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.guard_payment_receipt()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'receipts are permanent and cannot be deleted' using errcode = '42501';
+  end if;
+
+  if row(new.id, new.receipt_number, new.token, new.payment_id, new.quote_id, new.is_test, new.issued_at,
+         new.paid_at, new.amount_cents, new.method, new.payment_note, new.customer_name, new.customer_phone,
+         new.customer_email, new.job_service, new.job_address, new.paid_to_staff_id, new.paid_to_name,
+         new.paid_to_business_name, new.paid_to_business_address, new.paid_to_phone, new.recorded_by,
+         new.recorded_by_name, new.job_total_cents, new.paid_to_date_cents, new.balance_cents,
+         new.replaces_receipt_id, new.customer_copy_requested)
+     is distinct from
+     row(old.id, old.receipt_number, old.token, old.payment_id, old.quote_id, old.is_test, old.issued_at,
+         old.paid_at, old.amount_cents, old.method, old.payment_note, old.customer_name, old.customer_phone,
+         old.customer_email, old.job_service, old.job_address, old.paid_to_staff_id, old.paid_to_name,
+         old.paid_to_business_name, old.paid_to_business_address, old.paid_to_phone, old.recorded_by,
+         old.recorded_by_name, old.job_total_cents, old.paid_to_date_cents, old.balance_cents,
+         old.replaces_receipt_id, old.customer_copy_requested) then
+    raise exception 'a receipt cannot be changed once issued; void it and issue a new one' using errcode = '42501';
+  end if;
+
+  if old.voided_at is not null
+     and row(new.voided_at, new.void_reason, new.voided_by) is distinct from row(old.voided_at, old.void_reason, old.voided_by) then
+    raise exception 'this receipt is already void' using errcode = '42501';
+  end if;
+  if old.replaced_by_receipt_id is not null and new.replaced_by_receipt_id is distinct from old.replaced_by_receipt_id then
+    raise exception 'this receipt has already been replaced' using errcode = '42501';
+  end if;
+  if old.customer_copy_sent_at is not null and new.customer_copy_sent_at is distinct from old.customer_copy_sent_at then
+    raise exception 'the customer copy time is already recorded' using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.guard_quote_line_prices()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -834,6 +953,42 @@ $function$
 ;
 
 -- Stored with CRLF line endings.
+CREATE OR REPLACE FUNCTION public.issue_payment_receipt(r jsonb)
+ RETURNS payment_receipts
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  n integer;
+  out_row public.payment_receipts;
+begin
+  update public.payment_receipt_counter set last_number = last_number + 1 where id returning last_number into n;
+
+  insert into public.payment_receipts (
+    receipt_number, payment_id, quote_id, is_test, paid_at, amount_cents, method, payment_note,
+    customer_name, customer_phone, customer_email, job_service, job_address,
+    paid_to_staff_id, paid_to_name, paid_to_business_name, paid_to_business_address, paid_to_phone,
+    recorded_by, recorded_by_name, job_total_cents, paid_to_date_cents, balance_cents,
+    replaces_receipt_id, customer_copy_requested
+  ) values (
+    n, (r->>'payment_id')::uuid, (r->>'quote_id')::uuid, coalesce((r->>'is_test')::boolean, false),
+    (r->>'paid_at')::timestamptz, (r->>'amount_cents')::integer, r->>'method', nullif(r->>'payment_note', ''),
+    r->>'customer_name', nullif(r->>'customer_phone', ''), nullif(r->>'customer_email', ''),
+    nullif(r->>'job_service', ''), nullif(r->>'job_address', ''),
+    (r->>'paid_to_staff_id')::uuid, r->>'paid_to_name', nullif(r->>'paid_to_business_name', ''),
+    nullif(r->>'paid_to_business_address', ''), nullif(r->>'paid_to_phone', ''),
+    (r->>'recorded_by')::uuid, nullif(r->>'recorded_by_name', ''),
+    (r->>'job_total_cents')::integer, (r->>'paid_to_date_cents')::integer, (r->>'balance_cents')::integer,
+    (r->>'replaces_receipt_id')::uuid, coalesce((r->>'customer_copy_requested')::boolean, false)
+  )
+  returning * into out_row;
+
+  return out_row;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.touch_agreements_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -865,6 +1020,7 @@ $function$
 
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 CREATE TRIGGER agreements_touch_updated_at BEFORE UPDATE ON public.agreements FOR EACH ROW EXECUTE FUNCTION touch_agreements_updated_at();
+CREATE TRIGGER payment_receipts_guard BEFORE DELETE OR UPDATE ON public.payment_receipts FOR EACH ROW EXECUTE FUNCTION guard_payment_receipt();
 CREATE TRIGGER qo_guard_line_prices BEFORE INSERT OR DELETE OR UPDATE ON public.quote_options FOR EACH ROW EXECUTE FUNCTION guard_quote_line_prices();
 CREATE TRIGGER qo_touch_updated_at BEFORE UPDATE ON public.quote_options FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 CREATE TRIGGER qp_guard_line_prices BEFORE INSERT OR DELETE OR UPDATE ON public.quote_packages FOR EACH ROW EXECUTE FUNCTION guard_quote_line_prices();
@@ -930,6 +1086,11 @@ grant truncate, references, trigger, maintain on public.quote_packages to anon; 
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.quote_packages to authenticated;
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.quote_packages to service_role;
 
+-- payment_receipt_counter: no access but postgres (issue_payment_receipt() reads it as its owner).
+-- payment_receipts: read-only for authenticated (RLS), read and void for service_role; inserted only by
+-- issue_payment_receipt(), never deleted (guard_payment_receipt()).
+grant select on public.payment_receipts to authenticated;
+grant select, update on public.payment_receipts to service_role;
 -- quote_payments: no UPDATE or DELETE for authenticated (append-only ledger).
 grant truncate, references, trigger, maintain on public.quote_payments to anon;                      -- (default)
 grant select, insert, truncate, references, trigger, maintain on public.quote_payments to authenticated;
@@ -961,11 +1122,14 @@ grant execute on function public.bump_job_staff_view(uuid, uuid, boolean) to ser
 revoke all on function public.bump_job_staff_view(uuid, uuid) from public;
 grant execute on function public.bump_job_staff_view(uuid, uuid) to service_role;
 revoke all on function public.guard_payment_not_over_total() from public;                   -- postgres only
+revoke all on function public.guard_payment_receipt() from public;                         -- postgres only
 revoke all on function public.guard_quote_line_prices() from public;                        -- postgres only
 revoke all on function public.guard_quote_money_columns() from public;                      -- postgres only
 revoke all on function public.handle_new_user() from public;                                -- postgres only
 revoke all on function public.is_owner() from public;
 grant execute on function public.is_owner() to authenticated, service_role;
+revoke all on function public.issue_payment_receipt(jsonb) from public;
+grant execute on function public.issue_payment_receipt(jsonb) to service_role;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 8. Outside public, for context

@@ -14,12 +14,16 @@ export function EditContact({
   email,
   phone,
   serviceTypes,
+  businessName,
+  businessAddress,
 }: {
   id: string;
   name: string;
   email: string;
   phone: string | null;
   serviceTypes: string[];
+  businessName: string | null;
+  businessAddress: string | null;
 }) {
   const [state, formAction, pending] = useActionState<ContactState, FormData>(updateContractorContact, { ok: false });
   const [open, setOpen] = useState(false);
@@ -58,6 +62,31 @@ export function EditContact({
           placeholder="(919) 555-1234"
         />
       </label>
+      {/* Printed on every receipt for a payment their customers make to them. */}
+      <label className="crm-field">
+        <span>Business name (on receipts)</span>
+        <input
+          name="business_name"
+          className="crm-input"
+          defaultValue={businessName ?? ""}
+          maxLength={120}
+          placeholder="e.g. Smith Concrete LLC"
+        />
+      </label>
+      <label className="crm-field">
+        <span>Business address (on receipts)</span>
+        <input
+          name="business_address"
+          className="crm-input"
+          defaultValue={businessAddress ?? ""}
+          maxLength={300}
+          placeholder="Street, city, state ZIP"
+        />
+      </label>
+      <p className="crm-muted crm-sm">
+        Customers pay the contractor, so their receipts name this business as paid. Blank uses their name. A change
+        only affects receipts issued after it.
+      </p>
       {/*
         Nothing ticked = no restriction: a lead is never dropped for want of a rule, it falls through to the
         primary contractor.

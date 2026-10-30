@@ -20,7 +20,8 @@ import { jobLedger, resyncJobPaidState } from "@/lib/crm/payments";
 import { changeOrderRefusal } from "@/lib/crm/permissions";
 import type { QuoteOptionDraft } from "@/lib/crm/constants";
 import type { ChangeState } from "./types";
-import { takeManualPayment } from "./manual-payment";
+import { customerReceiptChoice, takeManualPayment } from "./manual-payment";
+import { receiptNumberLabel } from "@/lib/crm/receipt-format";
 
 // A change on an agreed (often booked, part-paid) job, e.g. the patio two feet
 // wider. The quote editor is for unaccepted prices; a change order moves the
@@ -160,14 +161,21 @@ export async function sendChangeOrder(_prev: ChangeState, formData: FormData): P
     let message = `Job updated to ${newTotal}. ${firstName} was not texted.`;
     let warning: string | undefined;
     if (paidNow && applied.quote) {
+      const customerCopy = customerReceiptChoice(formData);
       const taken = await takeManualPayment(session, applied.quote, {
         ...paidNow,
         note: `For the change: ${quote.change_note ?? ""}`.slice(0, 500),
+        customerCopy,
       });
       if (taken.ok) {
+        // The only text they get is the receipt, and only if the box was ticked.
         message = `Job updated to ${newTotal} and ${usd(paidNow.amountCents)} recorded. ${
           (taken.dueCents ?? 0) > 0 ? `${usd(taken.dueCents ?? 0)} still to collect.` : "Paid in full."
-        } ${firstName} was not texted.`;
+        } ${
+          taken.receiptNumber != null && customerCopy
+            ? `${firstName} was texted receipt ${receiptNumberLabel(taken.receiptNumber)}, nothing else.`
+            : `${firstName} was not texted.`
+        }`;
       } else {
         warning = `The price is updated, but the ${usd(paidNow.amountCents)} payment didn't save: ${taken.error ?? "try again"}. Record it on the payments card.`;
       }

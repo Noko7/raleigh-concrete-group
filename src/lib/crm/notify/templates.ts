@@ -14,6 +14,10 @@ import {
   dayAndTime,
 } from "./format";
 
+// A payment receipt (/r/<token>): the customer's copy, and the crew's and owner's.
+export function receiptLink(token: string): string {
+  return `${SITE_ORIGIN}/r/${token}`;
+}
 export function jobLink(token: string): string {
   return `${SITE_ORIGIN}/job/${token}`;
 }

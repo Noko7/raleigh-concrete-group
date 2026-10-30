@@ -128,6 +128,10 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
   switch (e.type) {
     case "status_changed":
       return `Status: ${statusLabel(m.from)} → ${statusLabel(m.to)}`;
+    case "receipt_issued":
+      return `Receipt #${String(m.number ?? "").padStart(6, "0")} issued for ${centsUsd(m.amount_cents)}${m.replaces ? " (replaces a voided one)" : ""}`;
+    case "receipt_voided":
+      return `Receipt #${String(m.number ?? "").padStart(6, "0")} voided${m.reason ? `: ${String(m.reason)}` : ""}`;
     case "assigned":
       return m.to ? `Assigned to ${names.get(String(m.to)) ?? "a contractor"}` : "Unassigned";
     case "amount_changed":

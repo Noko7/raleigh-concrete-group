@@ -943,6 +943,22 @@ and so are `status` and `paid_at` (the crew move their own cards, and a job
 marked paid with no payment behind it already shows up on the cash board's
 "check these rows").
 
+## Receipts
+
+Every customer payment gets a numbered receipt the moment it counts, kept for good, for the contractor's and the owner's books (and taxes). The customer pays the **contractor**, so a receipt names the contractor as the one paid and says Raleigh Concrete Group only arranged the job.
+
+**When one is issued.** A recorded cash, check, Zelle, Venmo or other payment (job page, crew page, or "they already paid" on a phone-agreed change order): when it saves. A card payment: when Stripe confirms it (the webhook or the customer's return page, whichever is first; the other finds it issued). Pending checkouts and voided rows never get one.
+
+**Who gets a copy.** The contractor who was paid, by text with a link (not when that person is an owner). The owner: the "payment recorded" text carries the link; card payments send a separate receipt text. The customer: only when **Text the customer a receipt** is ticked (it is by default, on every form that records a payment; card payments always send it). The customer's text never has the amount in it, only the link, like every other customer text, and quiet hours hold it until 8am.
+
+**What's on it**, frozen when it's issued: amount, method, when it was paid and issued (Eastern, zone named), the customer, the job's service and address, who was paid (the contractor's **Business name** and **Business address** from Contractors → Edit details, else their name; with nobody assigned, whoever recorded it), who recorded it, and the job total, paid to date and balance right after it. Later edits to the job, the customer or the contractor never change a receipt already given. The staff's internal payment note is not printed; it is in the export.
+
+**Never edited, never deleted.** A corrected payment voids its receipt (stamped VOID with the date and why) and issues a new one that says what it replaces; a voided payment voids its receipt and nothing replaces it. The database enforces this for every role (`guard_payment_receipt()`), and numbers come from `issue_payment_receipt()` only: 1, 2, 3... with no gaps, one live receipt per payment.
+
+**Where they are.** `/r/<token>` is the receipt (the token is the key, like a quote link), with Print and Download PDF. Each job page lists its receipts; the owner's also lists paid payments with no receipt (recorded before receipts existed, or one that failed to issue) with an **Issue receipt** button that texts nobody. **Money → Receipts** lists a year's receipts (owner: all; contractor: theirs) with totals, and **Download CSV** for an accountant: every receipt in number order, voids included and marked, practice leads left out unless shown.
+
+Payments recorded before receipts started have none unless issued by hand. Refunds of card payments do not change or void the receipt.
+
 ## Database (Supabase)
 
 The database's state is written down in the repo, not remembered:

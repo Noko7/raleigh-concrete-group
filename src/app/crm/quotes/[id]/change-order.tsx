@@ -12,6 +12,7 @@ import type { TranslateField } from "@/lib/crm/translate-fields";
 import { sendChangeOrder, withdrawChangeOrder } from "./change-order-actions";
 import { blankRow, filledRows, OptionBuilder, rowAmount, type OptionRow } from "./option-builder";
 import type { ChangeState } from "./types";
+import { ReceiptBox } from "@/components/receipt-box";
 
 // A change order: a small quote on an agreed job (e.g. the patio two feet wider
 // a week before the pour). The note goes to the customer verbatim; the figure is
@@ -535,6 +536,7 @@ export function ChangeOrder({
                   ))}
                 </select>
               </label>
+              <ReceiptBox label={t.payments.receiptBox} className="receipt-box co-receipt" />
             </div>
           )}
           {agreed && asking && <p className="co-hint">{t.changeOrder.agreedDepositDropped}</p>}
