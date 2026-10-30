@@ -17,6 +17,13 @@ const SECURITY_HEADERS = [
 // leak them to third parties via the Referer header.
 const NO_REFERRER = { key: "Referrer-Policy", value: "no-referrer" };
 
+// Who may frame the customer's quote page: the site, and the CRM when it runs on its crm.* subdomain.
+const SITE_HOST = new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://raleighconcrete.net").host;
+const QUOTE_FRAMING = [
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "Content-Security-Policy", value: `frame-ancestors 'self' https://crm.${SITE_HOST}` },
+];
+
 // ── Retired city+service URLs ────────────────────────────────────────────────
 // Every city+service pair with no hand-written copy in
 // src/lib/site-data.ts's `cityServiceLocalContent` gets a permanent (301)
@@ -100,7 +107,9 @@ const nextConfig: NextConfig = {
         headers: [NOINDEX, { key: "Content-Security-Policy", value: "frame-ancestors 'none'" }],
       },
       { source: "/api/:path*", headers: [NOINDEX] },
-      { source: "/q/:path*", headers: [NOINDEX, NO_REFERRER] },
+      // The job page previews the customer's quote in a frame (?preview=1), so this one page may be framed,
+      // by the site itself and the CRM subdomain only. Listed after the baseline, so it overrides DENY.
+      { source: "/q/:path*", headers: [NOINDEX, NO_REFERRER, ...QUOTE_FRAMING] },
       { source: "/job/:path*", headers: [NOINDEX, NO_REFERRER] },
       { source: "/confirm/:path*", headers: [NOINDEX, NO_REFERRER] },
     ];

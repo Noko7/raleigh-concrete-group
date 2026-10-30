@@ -12,6 +12,7 @@ import { ChangeReview } from "./change-review";
 import { QuoteActions } from "./quote-actions";
 import { ContactButtons } from "@/components/contact-buttons";
 import { QuoteSections } from "@/components/quote-sections";
+import { PreviewGuard } from "./preview-guard";
 import { ViewBeacon } from "./view-beacon";
 
 export const dynamic = "force-dynamic";
@@ -34,8 +35,17 @@ function CheckMark() {
   );
 }
 
-export default async function CustomerQuotePage({ params }: { params: Promise<{ token: string }> }) {
+export default async function CustomerQuotePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ preview?: string }>;
+}) {
   const { token } = await params;
+  // The office's preview from the job page: not counted as the customer opening it, and inert.
+  const preview = (await searchParams).preview === "1";
+  const beacon = preview ? <PreviewGuard /> : <ViewBeacon token={token} />;
   const quote = await getQuoteByToken("public_token", token);
   if (!quote) notFound();
 
@@ -85,6 +95,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   if (isQuoteExpired(quote)) {
     return (
       <main className="cq-wrap">
+        {preview && <PreviewGuard />}
         <div className="cq-confirm">
           <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="cq-logo" priority />
           <h1 className="cq-confirm-title">Hi {firstName}, this quote has expired.</h1>
@@ -136,7 +147,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
       : null;
     return (
       <main className="cq-wrap">
-        <ViewBeacon token={token} />
+        {beacon}
         {pendingChange && (
           <ChangeReview
             token={token}
@@ -275,7 +286,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   if (responded === "declined") {
     return (
       <main className="cq-wrap">
-        <ViewBeacon token={token} />
+        {beacon}
         <div className="cq-confirm">
           <h1 className="cq-confirm-title">Quote declined</h1>
           <p className="cq-confirm-note">
@@ -321,7 +332,7 @@ export default async function CustomerQuotePage({ params }: { params: Promise<{ 
   );
   return (
     <main className="cq-wrap">
-      <ViewBeacon token={token} />
+      {beacon}
       <div className="cq-card">
         <header className="cq-head">
           <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="cq-logo" priority />
