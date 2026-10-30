@@ -705,6 +705,12 @@ const en = {
     quoteWho: "This texts {name} a link to their price.",
     quoteSend: "Send quote to customer",
     quoteSending: "Sending…",
+    // Only before the first send: once they hold the quote, a save would change it without telling them.
+    quoteSave: "Save and finish later",
+    quoteSaving: "Saving…",
+    quoteSaved: "Saved. {name} hasn't been sent anything. Open it here again to finish and send it.",
+    quoteResume: "Finish the quote",
+    quoteDraftLead: "You started this one. Pick up where you left off, then send it.",
     quoteOk: "Quote texted to the customer.",
     // Held by quiet hours: neither a failure nor a delivery, so it has its own wording.
     quoteQueued: "Saved. Their text is scheduled for {when} - we don't text customers between 7pm and 8am.",
