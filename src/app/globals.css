@@ -4234,6 +4234,20 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .crm-paper .qo-more-title { color: var(--crm-text); }
 .crm-paper .qo-more-hint, .crm-paper .qo-more > summary::before { color: var(--crm-muted); }
 
+/* The crew's quote form, already inside a bordered card: sections are headings
+   split by hairlines and each line a tinted block, not boxes inside boxes. */
+.jq-card .qo-box, .jq-card .qc-box, .jq-card .qc-box-empty { border: 0; border-radius: 0; padding: 0; margin: 0; background: none; }
+.jq-card .qo-box legend, .jq-card .qc-box legend { float: left; width: 100%; padding: 0; margin-bottom: 0.2rem; font-size: 1rem; color: #2b1a12; }
+.jq-card .qo-box legend + *, .jq-card .qc-box legend + * { clear: both; }
+.jq-card .qo-row, .jq-card .qc-card { border: 0; border-left: 3px solid #d1d5db; border-radius: 0.5rem; background: #faf8f4; padding: 0.75rem 0.8rem 0.3rem; margin: 0.6rem 0; }
+.jq-card .qo-row-required, .jq-card .qc-card-rec { border-left-color: var(--amber); }
+.jq-card .qo-more { border: 0; border-top: 1px solid #e5e7eb; border-radius: 0; margin: 0; }
+.jq-card .qo-more > summary { position: relative; padding: 0.9rem 2rem 0.9rem 0; }
+.jq-card .qo-more > summary::before { position: absolute; right: 0.2rem; top: 0.85rem; font-size: 1.2rem; }
+.jq-card .qo-more-body { padding: 0 0 0.4rem; }
+.jq-card .qo-more-body > * + * { margin-top: 1.4rem; padding-top: 1.2rem; border-top: 1px dashed #e5e7eb; }
+.jq-card .qo-more-body .qo-box, .jq-card .qo-more-body .qc-box { margin-bottom: 0; }
+
 /* The customer's breakdown: a list of prices, not a set of choices. No card
    per line and no amber "selected" state, because nothing here is selected -
    it is what the job costs. A hairline between lines, none around them. */
