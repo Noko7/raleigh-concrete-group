@@ -7,7 +7,7 @@ import { STATUSES, STATUS_LABELS, type Status } from "@/lib/crm/constants";
 import { syncQuoteToCalendar } from "@/lib/crm/gcal";
 import { alertOwner, notifyAssignment, notifyComplete } from "@/lib/crm/notify";
 import { jobPatchRefusal } from "@/lib/crm/permissions";
-import { addEvent, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
+import { addEvent, cancelQueuedFor, getQuote, getStaffById, updateQuote } from "@/lib/crm/queries";
 import type { Quote } from "@/lib/crm/types";
 
 export type MoveResult = { ok: boolean; error?: string };
@@ -37,6 +37,14 @@ export async function moveQuote(id: string, status: string): Promise<MoveResult>
   if (!updated) return { ok: false, error: "Could not move this quote." };
 
   await addEvent(session, id, "status_changed", { from: current.status, to: status });
+
+  // Lost tells the customer nothing, and nothing already queued for them goes out after it either.
+  if (status === "lost") {
+    await cancelQueuedFor(id, new Date().toISOString(), {
+      role: "customer",
+      detail: "Cancelled: the job was moved to Lost.",
+    });
+  }
 
   // Marking a job Completed thanks the customer and asks for a review.
   if (status === "completed" && current.status !== "completed") {

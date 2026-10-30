@@ -1,5 +1,5 @@
 // Plain-English activity log, shared by the job page and Security dashboard.
-import { clockLabel } from "./clock";
+import { BUSINESS_TZ, clockLabel } from "./clock";
 import { dollars, STATUS_LABELS } from "./constants";
 import { usd } from "./fees";
 import { fill, type Dict } from "./i18n";
@@ -10,6 +10,14 @@ const statusLabel = (v: unknown) => STATUS_LABELS[String(v) as keyof typeof STAT
 
 // Log money is in CENTS. Named for its unit because quote_revised below has a local helper in DOLLARS.
 const centsUsd = (v: unknown) => (v == null ? "$0.00" : usd(Number(v) || 0));
+
+// A day in Raleigh, e.g. "Nov 29, 2026".
+const expiryDay = (v: unknown) => {
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime())
+    ? "a later date"
+    : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: BUSINESS_TZ });
+};
 
 // Raleigh time, e.g. "tomorrow at 8:00 AM".
 const heldWhen = (v: unknown) => {
@@ -127,11 +135,16 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
   const m = (e.meta ?? {}) as Record<string, unknown>;
   switch (e.type) {
     case "status_changed":
+      // Moved by the database's 5-minute sweep, not a person.
+      if (m.reason === "expired") return `Quote expired with no answer. Status: ${statusLabel(m.from)} → ${statusLabel(m.to)}`;
       return `Status: ${statusLabel(m.from)} → ${statusLabel(m.to)}`;
     case "receipt_issued":
       return `Receipt #${String(m.number ?? "").padStart(6, "0")} issued for ${centsUsd(m.amount_cents)}${m.replaces ? " (replaces a voided one)" : ""}`;
     case "receipt_voided":
       return `Receipt #${String(m.number ?? "").padStart(6, "0")} voided${m.reason ? `: ${String(m.reason)}` : ""}`;
+    // Quotes went from 10 to 30 days; the unanswered ones were moved to match (migration 20261030221241).
+    case "expiry_extended":
+      return `Quote now good through ${expiryDay(m.to)} (quotes are good for ${String(m.ttl_days ?? 30)} days)`;
     case "assigned":
       return m.to ? `Assigned to ${names.get(String(m.to)) ?? "a contractor"}` : "Unassigned";
     case "amount_changed":

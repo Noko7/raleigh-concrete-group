@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/crm/auth";
-import { firstNameOf, boughtLines, changeStartLines, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
+import { firstNameOf, boughtLines, changeStartLines, QUOTE_TTL_DAYS, requestedVisitOf, visitDateOf } from "@/lib/crm/constants";
 import { BUSINESS_TZ, todayYmd } from "@/lib/crm/clock";
 import { depositDueNowCents, toCents } from "@/lib/crm/fees";
 import { SITE_ORIGIN } from "@/lib/crm/env";
@@ -16,6 +16,7 @@ import { listCrewViews } from "@/lib/crm/crew-views";
 import { usd } from "@/lib/crm/fees";
 import {
   getQuote,
+  isQuoteExpired,
   listAgreementsForQuote,
   listContractors,
   listEvents,
@@ -188,7 +189,16 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const dueCents = money?.ledger.dueCents ?? 0;
   const next: { tone: "go" | "wait" | "done" | "lost"; title: string; body: string; href?: string; cta?: string } =
     quote.status === "lost"
-      ? { tone: "lost", title: "Marked lost", body: "Change the status under Job if it comes back." }
+      ? isQuoteExpired(quote)
+        ? {
+            // Moved by the expiry sweep (or lost by hand after it ran out): sending again is the way back.
+            tone: "lost",
+            title: "Quote expired",
+            body: `${firstName} didn't answer within ${QUOTE_TTL_DAYS} days of the last send, so it moved to Lost. Send it again to give them a fresh ${QUOTE_TTL_DAYS} days.`,
+            href: "#quote",
+            cta: "Send it again",
+          }
+        : { tone: "lost", title: "Marked lost", body: "Change the status under Job if it comes back." }
       : quote.status === "paid"
         ? { tone: "done", title: "All done", body: "The work is finished and the job is paid in full." }
         : quote.status === "completed"

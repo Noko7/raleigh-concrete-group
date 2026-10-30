@@ -1,5 +1,5 @@
 -- Raleigh Concrete Group - a numbered, permanent receipt for every customer payment
--- Undo: undo/20261030210000_payment_receipts.undo.sql. Check: verify/20261030210000_payment_receipts.verify.sql.
+-- Undo: undo/20261030221338_payment_receipts.undo.sql. Check: verify/20261030221338_payment_receipts.verify.sql.
 --
 -- The customer pays the CONTRACTOR (cash, check, Zelle, Venmo, or card on the contractor's own Stripe account);
 -- the contractor pays the office its fee separately. A receipt records the first of those: who paid, how much,

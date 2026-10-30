@@ -1,4 +1,4 @@
--- Check 20261030210000_payment_receipts on the real database.
+-- Check 20261030221338_payment_receipts on the real database.
 --
 -- Run AFTER the migration, as the SQL editor's own role (postgres), the whole file at once. It opens its own
 -- transaction and ends in ROLLBACK, so nothing it does is kept: the receipts it issues, their numbers and the

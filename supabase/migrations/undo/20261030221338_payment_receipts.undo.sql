@@ -1,4 +1,4 @@
--- Undo 20261030210000_payment_receipts.
+-- Undo 20261030221338_payment_receipts.
 --
 -- Receipts are tax records. This refuses to run once any receipt has been issued: dropping the table would
 -- destroy them. Export them first (Money -> Receipts -> Download CSV, or select * from
