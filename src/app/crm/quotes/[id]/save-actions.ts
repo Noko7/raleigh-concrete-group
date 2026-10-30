@@ -29,6 +29,7 @@ import {
   type SendResult,
 } from "@/lib/crm/notify";
 import {
+  cancelQueuedFor,
   addEvent,
   conflictMessage,
   findJobConflict,
@@ -358,6 +359,13 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
     // After the row, and only for rows not just rewritten (fresh rows carry no answers).
     if (reopening) await clearQuoteResponses(id);
+    // Lost tells the customer nothing, and nothing already queued for them goes out after it either.
+    if (patch.status === "lost" && current.status !== "lost") {
+      await cancelQueuedFor(id, new Date().toISOString(), {
+        role: "customer",
+        detail: "Cancelled: the job was moved to Lost.",
+      });
+    }
 
     for (const e of events) await addEvent(session, id, e.type, e.meta);
 

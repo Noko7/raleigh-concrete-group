@@ -269,19 +269,21 @@ export async function cancelMessage(id: string, quoteId: string, nowIso: string)
 }
 
 /**
- * Cancel every queued text for a job, or only those of one `kind`. Retracting a
- * quote must also stop a text held overnight about it; withdrawing a change
- * stops its own. Returns how many were stopped.
+ * Cancel every queued text for a job, or only those of one `kind` or `role`.
+ * Retracting a quote must also stop a text held overnight about it; withdrawing
+ * a change stops its own; a job moved to Lost stops the customer's. Returns how
+ * many were stopped.
  */
 export async function cancelQueuedFor(
   quoteId: string,
   nowIso: string,
-  opts: { kind?: string; detail?: string } = {},
+  opts: { kind?: string; role?: "customer" | "owner" | "crew"; detail?: string } = {},
 ): Promise<number> {
   try {
     const res = await pgAdmin(
       `quote_messages?quote_id=eq.${encodeURIComponent(quoteId)}` +
         (opts.kind ? `&kind=eq.${encodeURIComponent(opts.kind)}` : "") +
+        (opts.role ? `&role=eq.${opts.role}` : "") +
         `&sent_at=is.null&cancelled_at=is.null&send_after=not.is.null`,
       {
         method: "PATCH",

@@ -637,6 +637,8 @@ AS $function$
 declare
   moved integer;
 begin
+  -- One statement: move, log, and stop any customer text still queued for the job (a quiet-hours hold), so
+  -- moving to Lost never reaches the customer. Every part runs even though only the count is read.
   with expired as (
     update public.quote_requests q
        set status = 'lost'
@@ -645,12 +647,24 @@ begin
        and q.quote_expires_at is not null
        and q.quote_expires_at <= now()
     returning q.id, q.quote_expires_at
+  ), logged as (
+    insert into public.quote_events (quote_id, type, meta)
+    select id, 'status_changed',
+           jsonb_build_object('from', 'quoted', 'to', 'lost', 'reason', 'expired', 'expired_at', quote_expires_at)
+      from expired
+    returning quote_id
+  ), stopped as (
+    update public.quote_messages m
+       set cancelled_at = now(),
+           detail = 'Cancelled: the quote expired and the job moved to Lost.'
+     where m.quote_id in (select id from expired)
+       and m.role = 'customer'
+       and m.sent_at is null
+       and m.cancelled_at is null
+       and m.send_after is not null
+    returning m.id
   )
-  insert into public.quote_events (quote_id, type, meta)
-  select id, 'status_changed',
-         jsonb_build_object('from', 'quoted', 'to', 'lost', 'reason', 'expired', 'expired_at', quote_expires_at)
-    from expired;
-  get diagnostics moved = row_count;
+  select count(*) into moved from expired;
   return moved;
 end;
 $function$

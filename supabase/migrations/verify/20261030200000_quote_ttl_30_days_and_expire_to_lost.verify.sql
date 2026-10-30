@@ -46,6 +46,10 @@ begin
     insert into _r values ('sweep moves an expired unanswered Quoted job', 'SKIP (none to test on)');
   else
     update public.quote_requests set quote_expires_at = now() - interval '1 minute' where id = q_open;
+    -- A customer text held for quiet hours, and a crew one, both queued for this job.
+    insert into public.quote_messages (quote_id, kind, role, to_phone, body, send_after)
+    values (q_open, 'verify_customer', 'customer', '+15550000000', 'verify', now() + interval '8 hours'),
+           (q_open, 'verify_crew', 'crew', '+15550000001', 'verify', now() + interval '8 hours');
     perform public.expire_unanswered_quotes();
     select status into s from public.quote_requests where id = q_open;
     select count(*) into n from public.quote_events
@@ -53,6 +57,10 @@ begin
        and created_at = now();
     insert into _r values ('sweep moves an expired unanswered Quoted job',
                            case when s = 'lost' and n = 1 then 'PASS' else 'FAIL (' || s || ', ' || n || ' events)' end);
+    insert into _r
+    select 'the customer is not texted: their queued text is cancelled, the crew''s is not',
+           case when bool_and((kind = 'verify_customer') = (cancelled_at is not null)) then 'PASS' else 'FAIL' end
+      from public.quote_messages where quote_id = q_open and kind in ('verify_customer', 'verify_crew');
   end if;
 
   if q_answered is null then
