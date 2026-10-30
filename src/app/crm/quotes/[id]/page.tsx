@@ -33,6 +33,7 @@ import { ChangeOrder } from "./change-order";
 import { CompleteCard } from "./complete-card";
 import { MessageLog } from "./message-log";
 import { JobSettings } from "./job-settings";
+import { CustomerView } from "./customer-view";
 import { QuoteEditor } from "./quote-editor";
 import { QuoteSends } from "./quote-sends";
 import { CancelAppointment } from "./cancel-appointment";
@@ -161,6 +162,9 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
   const jobLink = `${SITE_ORIGIN}/job/${quote.job_token}`;
+  // Their page in preview mode (not counted as them opening it; buttons inert). Relative, so it is framed
+  // from the same origin, and a Vercel preview frames its own deployment rather than production.
+  const previewLink = `/q/${quote.public_token}?preview=1`;
   const mapsLink = quote.address
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(quote.address)}`
     : null;
@@ -257,7 +261,9 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
           {mapsLink && (
             <a href={mapsLink} target="_blank" rel="noreferrer" className="crm-btn crm-btn-ghost">Map</a>
           )}
-          <a href={customerLink} target="_blank" rel="noreferrer" className="crm-btn crm-btn-ghost">Their quote page</a>
+          {/* Opening the real link from here would count as them viewing it, and its buttons work. */}
+          <CustomerView url={previewLink} customerName={quote.name} label="Their quote page" />
+          <a href={jobLink} target="_blank" rel="noreferrer" className="crm-btn crm-btn-ghost">Crew job page</a>
           {/* Any priced quote, whatever its stage: the staff copy has no expiry. */}
           {quote.quote_amount != null && (
             <a href={`/crm/api/quote-pdf?id=${quote.id}`} className="crm-btn crm-btn-ghost">Download PDF</a>
@@ -458,6 +464,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             }))}
             customerName={quote.name}
             service={quote.service}
+            previewUrl={previewLink}
             awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
             initial={{
               quote_amount: quote.quote_amount,
@@ -703,8 +710,8 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               <summary>{t.links.title}</summary>
               <div className="jb-fold-body">
                 <p className="crm-muted crm-sm">{t.links.hint}</p>
-                <CopyField label={t.links.customerLink} value={customerLink} />
-                <CopyField label={t.links.jobLink} value={jobLink} />
+                <CopyField label={t.links.customerLink} value={customerLink} openHref={previewLink} />
+                <CopyField label={t.links.jobLink} value={jobLink} openHref={jobLink} />
                 <div className="crm-editor-foot">
                   <form action={rotateTokens}>
                     <input type="hidden" name="id" value={quote.id} />

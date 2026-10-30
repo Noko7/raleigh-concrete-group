@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { dict } from "@/lib/crm/i18n";
@@ -11,7 +11,6 @@ import {
   keepFlatPrice,
   MoreWaysToPrice,
   OptionBuilder,
-  previewOf,
   rowsFromOptions,
   rowsMatch,
   rowsToJson,
@@ -34,10 +33,10 @@ import {
   type StoredPackage,
 } from "./package-builder";
 import type { SaveState } from "./types";
+import { CustomerView } from "./customer-view";
 import { SpellTextarea } from "@/components/spell-field";
 import {
   blankSections as blanksOf,
-  CustomerPreview,
   emptySections,
   PickOneSuggestion,
   PriceCard,
@@ -57,6 +56,8 @@ type Props = {
   customerName: string;
   // The job's service, to name the line the one price becomes.
   service: string | null;
+  // The customer's own page in preview mode, for "See exactly what they see".
+  previewUrl: string;
   // Texted, no answer yet. The owner can still resend ("I never got it"), as a
   // deliberate second send.
   awaitingReply: boolean;
@@ -70,7 +71,7 @@ type Props = {
   } & Partial<Record<QuoteSectionField, string | null>>;
 };
 
-export function QuoteEditor({ id, options, packages, customerName, service, awaitingReply, initial }: Props) {
+export function QuoteEditor({ id, options, packages, customerName, service, previewUrl, awaitingReply, initial }: Props) {
   const router = useRouter();
   const owner = dict("en");
   const optionLabels = owner.quoteOptions;
@@ -88,6 +89,9 @@ export function QuoteEditor({ id, options, packages, customerName, service, awai
   const [rows, setRows] = useState<OptionRow[]>(() => rowsFromOptions(options));
   const [pkgRows, setPkgRows] = useState<PackageRow[]>(() => rowsFromPackages(packages));
   const [confirming, setConfirming] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  // Reloads the customer preview once a save has landed.
+  const [previewVersion, setPreviewVersion] = useState(0);
   const [localErr, setLocalErr] = useState("");
 
   // Stored line items in builder shape, rebuilt only when server data changes
@@ -147,7 +151,10 @@ export function QuoteEditor({ id, options, packages, customerName, service, awai
   // After a save/send, refresh so badge, log and page reflect it immediately.
   useEffect(() => {
     if (state.sent) setConfirming(false);
-    if (state.ok || state.sent) router.refresh();
+    if (state.ok || state.sent) {
+      router.refresh();
+      setPreviewVersion((v) => v + 1);
+    }
   }, [state, router]);
 
   // With line items the price is their sum and the box only reports it (two
@@ -194,6 +201,27 @@ export function QuoteEditor({ id, options, packages, customerName, service, awai
     QUOTE_SECTION_FIELDS.some((f) => sections[f].trim() !== (initial[f] ?? "").trim());
   const correcting = awaitingReply && quoteEdited;
 
+  // From the preview: save what's typed (never send), so the page shows it. Intent set here, not read off
+  // the form, whose hidden field says "send" while the confirm panel is open.
+  function saveForPreview() {
+    if (!formRef.current) return;
+    const fd = new FormData(formRef.current);
+    fd.set("intent", "save");
+    startTransition(() => formAction(fd));
+  }
+  const customerView = (
+    <CustomerView
+      url={previewUrl}
+      customerName={customerName}
+      label={`See exactly what ${firstNameOf(customerName, customerName)} sees`}
+      className="crm-btn crm-btn-ghost qe-view"
+      stale={quoteEdited && !locked}
+      onSave={locked ? undefined : saveForPreview}
+      saving={pending}
+      version={previewVersion}
+    />
+  );
+
   function openConfirm() {
     if (!choice && pkgs.length > 0) {
       setLocalErr(
@@ -219,7 +247,7 @@ export function QuoteEditor({ id, options, packages, customerName, service, awai
   }
 
   return (
-    <form action={formAction} className="crm-card crm-editor crm-paper" id="quote">
+    <form ref={formRef} action={formAction} className="crm-card crm-editor crm-paper" id="quote">
       <input type="hidden" name="id" value={id} />
       {/* Intent rides on a hidden field, not the submit button's name/value: if
           the submitter didn't reach the server the action silently fell back to
@@ -304,16 +332,7 @@ export function QuoteEditor({ id, options, packages, customerName, service, awai
         </label>
       )}
 
-      {!confirming && (
-        <CustomerPreview
-          firstName={firstNameOf(customerName, customerName)}
-          price={amountValid ? amountNum : null}
-          derived={derived}
-          sections={sections}
-          {...previewOf(rows)}
-          choice={choice}
-        />
-      )}
+      {!confirming && customerView}
 
       {confirming ? (
         <div className="crm-confirm">
@@ -360,20 +379,9 @@ export function QuoteEditor({ id, options, packages, customerName, service, awai
                 ))}
             </ul>
           )}
-          {/* Exactly what they'll read, drawn by the component their page uses. */}
-          {blankSections.length === 0 ? (
-            <CustomerPreview
-              firstName={firstNameOf(customerName, customerName)}
-              price={amountValid ? amountNum : null}
-              derived={derived}
-              sections={sections}
-              {...previewOf(rows)}
-              choice={choice}
-              startOpen
-            />
-          ) : (
-            <div className="crm-confirm-summary">{summary}</div>
-          )}
+          {/* Their real page, in a modal. A legacy quote still shows the summary it goes out on. */}
+          {blankSections.length > 0 && <div className="crm-confirm-summary">{summary}</div>}
+          {customerView}
           <div className="crm-editor-foot">
             <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setConfirming(false)} disabled={pending}>
               Cancel
