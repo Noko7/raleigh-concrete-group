@@ -457,6 +457,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               customer_response: p.customer_response,
             }))}
             customerName={quote.name}
+            service={quote.service}
             awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
             initial={{
               quote_amount: quote.quote_amount,

@@ -8,6 +8,8 @@ import { dollars, QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm
 import { dict, tr, fill, intlLocale, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/save-actions";
 import {
+  jobTitleGuess,
+  keepFlatPrice,
   MoreWaysToPrice,
   OptionBuilder,
   previewOf,
@@ -22,6 +24,7 @@ import {
   PackageBuilder,
   packagesFromOptionRows,
   filledPackages,
+  keepFlatPricePackage,
   leadPackageAmount,
   offersChoice,
   packageAmountOf,
@@ -60,6 +63,7 @@ export function JobQuote({
   awaitingReply,
   sentAt,
   customerFirstName,
+  service,
 }: {
   id: string;
   locale: Locale;
@@ -74,6 +78,8 @@ export function JobQuote({
   awaitingReply: boolean;
   sentAt: string | null;
   customerFirstName: string;
+  // The job's service, to name the line the one price becomes.
+  service: string | null;
 }) {
   const t = dict(locale);
   const router = useRouter();
@@ -135,6 +141,11 @@ export function JobQuote({
   const derived = itemised || choice;
   const derivedTotal = Math.round(((choice ? leadPackageAmount(pkgRows) : 0) + rowsTotal(rows)) * 100) / 100;
   const priceNum = derived ? derivedTotal : Number(price);
+  // A one-price quote keeps that price when its first line or option goes on.
+  const flatPrice = derived ? "" : price;
+  const changeRows = (next: OptionRow[]) => setRows(keepFlatPrice(rows, next, flatPrice, jobTitleGuess(service)));
+  const changePkgRows = (next: PackageRow[]) =>
+    setPkgRows(keepFlatPricePackage(pkgRows, next, flatPrice, jobTitleGuess(service)));
   // Every option priced and more than one; the server refuses otherwise.
   const packagesReady =
     filledPackages(pkgRows).length === 0 ||
@@ -362,7 +373,7 @@ export function JobQuote({
             */}
             <OptionBuilder
               rows={rows}
-              onChange={setRows}
+              onChange={changeRows}
               labels={t.quoteOptions}
               mode="breakdown"
               target={alreadySent ? amount : null}
@@ -374,7 +385,7 @@ export function JobQuote({
               labels={t.quoteOptions}
               startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
             >
-              <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} mode="extras" />
+              <OptionBuilder rows={rows} onChange={changeRows} labels={t.quoteOptions} mode="extras" />
               {/* Extras meant to be pick-one add up to every price at once; offered here, where the mistake is made. */}
               <PickOneSuggestion
                 rows={rows}
@@ -385,7 +396,7 @@ export function JobQuote({
                   setRows([]);
                 }}
               />
-              <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={t.quotePackages} />
+              <PackageBuilder rows={pkgRows} onChange={changePkgRows} labels={t.quotePackages} />
             </MoreWaysToPrice>
 
             {/* Only for quotes written before the sections existed. */}

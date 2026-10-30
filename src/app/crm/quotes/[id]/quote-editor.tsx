@@ -7,6 +7,8 @@ import { dict } from "@/lib/crm/i18n";
 import { firstNameOf, dollars, packageLetter, QUOTE_SECTION_FIELDS, QUOTE_SECTION_LABELS, QUOTE_TTL_DAYS, type QuoteSectionField } from "@/lib/crm/constants";
 import { saveQuote } from "./save-actions";
 import {
+  jobTitleGuess,
+  keepFlatPrice,
   MoreWaysToPrice,
   OptionBuilder,
   previewOf,
@@ -21,6 +23,7 @@ import {
   PackageBuilder,
   packagesFromOptionRows,
   filledPackages,
+  keepFlatPricePackage,
   leadPackageAmount,
   offersChoice,
   packagesMatch,
@@ -52,6 +55,8 @@ type Props = {
   // Alternative ways of doing the job; usually empty.
   packages: StoredPackage[];
   customerName: string;
+  // The job's service, to name the line the one price becomes.
+  service: string | null;
   // Texted, no answer yet. The owner can still resend ("I never got it"), as a
   // deliberate second send.
   awaitingReply: boolean;
@@ -65,7 +70,7 @@ type Props = {
   } & Partial<Record<QuoteSectionField, string | null>>;
 };
 
-export function QuoteEditor({ id, options, packages, customerName, awaitingReply, initial }: Props) {
+export function QuoteEditor({ id, options, packages, customerName, service, awaitingReply, initial }: Props) {
   const router = useRouter();
   const owner = dict("en");
   const optionLabels = owner.quoteOptions;
@@ -160,6 +165,11 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
   const derived = itemised || choice;
   const derivedTotal = Math.round(((choice ? leadPackageAmount(pkgRows) : 0) + itemTotal) * 100) / 100;
   const amountNum = derived ? derivedTotal : Number(amount);
+  // A one-price quote keeps that price when its first line or option goes on.
+  const flatPrice = derived ? "" : amount;
+  const changeRows = (next: OptionRow[]) => setRows(keepFlatPrice(rows, next, flatPrice, jobTitleGuess(service)));
+  const changePkgRows = (next: PackageRow[]) =>
+    setPkgRows(keepFlatPricePackage(pkgRows, next, flatPrice, jobTitleGuess(service)));
   const amountValid = derived ? derivedTotal > 0 : amount.trim() !== "" && Number.isFinite(amountNum) && amountNum > 0;
   const previewPrice = amountValid ? (dollars(amountNum) ?? "N/A") : "N/A";
   // Every option needs a price: a $0 card reads as unfinished. The server refuses it too.
@@ -260,7 +270,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
               array behind both, so total and save see one list. */}
           <OptionBuilder
             rows={rows}
-            onChange={setRows}
+            onChange={changeRows}
             labels={optionLabels}
             mode="breakdown"
             target={awaitingReply ? Number(initial.quote_amount ?? 0) || null : null}
@@ -270,7 +280,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
             labels={optionLabels}
             startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
           >
-            <OptionBuilder rows={rows} onChange={setRows} labels={optionLabels} mode="extras" />
+            <OptionBuilder rows={rows} onChange={changeRows} labels={optionLabels} mode="extras" />
             {/* Extras meant as pick-ONE add up to every price at once; suggested
                 here, where the mistake is made. */}
             <PickOneSuggestion
@@ -281,7 +291,7 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
                 setRows([]);
               }}
             />
-            <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={packageLabels} />
+            <PackageBuilder rows={pkgRows} onChange={changePkgRows} labels={packageLabels} />
           </MoreWaysToPrice>
         </>
       )}
@@ -350,7 +360,8 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
                 ))}
             </ul>
           )}
-          {/* Exactly what they'll read, drawn by the component their page uses. */}
+          {/* Exactly what they'll read, drawn by the component their page uses.
+              Folded: opened, it reads as the customer's page taking over this one. */}
           {blankSections.length === 0 ? (
             <CustomerPreview
               firstName={firstNameOf(customerName, customerName)}
@@ -359,7 +370,6 @@ export function QuoteEditor({ id, options, packages, customerName, awaitingReply
               sections={sections}
               {...previewOf(rows)}
               choice={choice}
-              startOpen
             />
           ) : (
             <div className="crm-confirm-summary">{summary}</div>

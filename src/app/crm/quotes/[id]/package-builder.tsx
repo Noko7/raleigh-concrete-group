@@ -64,6 +64,15 @@ export function packagesFromOptionRows(rows: { title: string; description: strin
     .map((r) => ({ ...blankPackage(), title: r.title, description: r.description, amount: r.amount }));
 }
 
+// As keepFlatPrice: the first card of a one-price quote starts as that price,
+// or offering a second way to do the job would wipe out the first.
+export function keepFlatPricePackage(prev: PackageRow[], next: PackageRow[], price: string, title: string): PackageRow[] {
+  if (prev.length > 0 || next.length === 0) return next;
+  const n = Number(price);
+  if (!Number.isFinite(n) || n <= 0 || next[0].title.trim() !== "" || next[0].amount.trim() !== "") return next;
+  return [{ ...next[0], title, amount: String(n) }, ...next.slice(1)];
+}
+
 export const packageAmountOf = (r: PackageRow): number => {
   const n = Number(r.amount);
   return Number.isFinite(n) ? n : 0;
