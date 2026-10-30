@@ -55,6 +55,24 @@ export const rowAmount = (r: OptionRow): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+// A name for the job as first quoted, from its service ("Concrete Patios" ->
+// "Concrete Patio"). Only a starting point: the row stays editable.
+export const jobTitleGuess = (service: string | null | undefined): string =>
+  (service ?? "").trim().replace(/s$/i, "") || "The job as quoted";
+
+/**
+ * The first line added to a one-price quote. The price card turns into the sum
+ * of the lines, so the price already typed (the patio) would silently drop out
+ * and the new line (the sidewalk) become the whole total. It goes in as the
+ * first line instead, so the new one is added to it.
+ */
+export function keepFlatPrice(prev: OptionRow[], next: OptionRow[], price: string, title: string): OptionRow[] {
+  if (prev.length > 0 || next.length === 0) return next;
+  const n = Number(price);
+  if (!Number.isFinite(n) || n <= 0) return next;
+  return [{ ...blankRow(true), title, amount: String(n) }, ...next];
+}
+
 // Blank rows are dropped rather than refused.
 export const filledRows = (rows: OptionRow[]) => rows.filter((r) => r.title.trim() !== "");
 

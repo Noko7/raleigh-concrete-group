@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { BUSINESS_TZ } from "@/lib/crm/clock";
@@ -8,6 +8,8 @@ import { dollars, QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm
 import { dict, tr, fill, intlLocale, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/save-actions";
 import {
+  jobTitleGuess,
+  keepFlatPrice,
   MoreWaysToPrice,
   OptionBuilder,
   previewOf,
@@ -22,6 +24,7 @@ import {
   PackageBuilder,
   packagesFromOptionRows,
   filledPackages,
+  keepFlatPricePackage,
   leadPackageAmount,
   offersChoice,
   packageAmountOf,
@@ -60,6 +63,7 @@ export function JobQuote({
   awaitingReply,
   sentAt,
   customerFirstName,
+  service,
 }: {
   id: string;
   locale: Locale;
@@ -74,12 +78,17 @@ export function JobQuote({
   awaitingReply: boolean;
   sentAt: string | null;
   customerFirstName: string;
+  // The job's service, to name the line the one price becomes.
+  service: string | null;
 }) {
   const t = dict(locale);
   const router = useRouter();
   const [state, formAction, pending] = useActionState<SaveState, FormData>(saveQuote, { ok: false });
 
   const [open, setOpen] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  // Which button was pressed, for the pending label and the result line.
+  const [lastIntent, setLastIntent] = useState<"send" | "save">("send");
   const [price, setPrice] = useState(amount != null ? String(amount) : "");
   const [what, setWhat] = useState(summary ?? "");
   const [sections, setSections] = useState<Sections>(() => ({
@@ -116,9 +125,10 @@ export function JobQuote({
   const [english, setEnglish] = useState<Record<string, string> | null>(null);
   const [translating, setTranslating] = useState(false);
   const [translateError, setTranslateError] = useState<string | null>(null);
-  // What's already on the quote is the customer's English: reviewing it again sends nothing.
+  // What's already on a sent quote is the customer's English: reviewing it again sends nothing. Not before
+  // that: an unsent quote may hold the crew's own saved draft, in Spanish.
   useEffect(() => {
-    if (!spanish) return;
+    if (!spanish || !alreadySent) return;
     markEnglish([
       summary,
       ...QUOTE_SECTION_FIELDS.map((f) => initialSections?.[f]),
@@ -126,7 +136,7 @@ export function JobQuote({
       ...packages.flatMap((p) => [p.title, p.description]),
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spanish, optionsSig, packagesSig]);
+  }, [spanish, alreadySent, optionsSig, packagesSig]);
 
   // Line items own the price when present, so the total always matches the lines.
   const itemised = rows.length > 0;
@@ -135,6 +145,11 @@ export function JobQuote({
   const derived = itemised || choice;
   const derivedTotal = Math.round(((choice ? leadPackageAmount(pkgRows) : 0) + rowsTotal(rows)) * 100) / 100;
   const priceNum = derived ? derivedTotal : Number(price);
+  // A one-price quote keeps that price when its first line or option goes on.
+  const flatPrice = derived ? "" : price;
+  const changeRows = (next: OptionRow[]) => setRows(keepFlatPrice(rows, next, flatPrice, jobTitleGuess(service)));
+  const changePkgRows = (next: PackageRow[]) =>
+    setPkgRows(keepFlatPricePackage(pkgRows, next, flatPrice, jobTitleGuess(service)));
   // Every option priced and more than one; the server refuses otherwise.
   const packagesReady =
     filledPackages(pkgRows).length === 0 ||
@@ -248,6 +263,28 @@ export function JobQuote({
     ? pkgRows.map((r, i) => ({ ...r, title: en[`p:${i}:t`] ?? r.title, description: en[`p:${i}:d`] ?? r.description }))
     : pkgRows;
 
+  // Save and finish later: the same form, posted as a draft. Not once sent, when a save would change the
+  // quote the customer holds without telling them.
+  const canSave = !alreadySent;
+  function saveDraft() {
+    if (!formRef.current) return;
+    const fd = new FormData(formRef.current);
+    fd.set("intent", "save");
+    setLastIntent("save");
+    startTransition(() => formAction(fd));
+  }
+  // Started but not sent: the closed card offers to finish it rather than start over.
+  const hasDraft =
+    canSave &&
+    (amount != null ||
+      options.length > 0 ||
+      packages.length > 0 ||
+      QUOTE_SECTION_FIELDS.some((f) => (initialSections?.[f] ?? "").trim() !== ""));
+  const saved =
+    lastIntent === "save" && state.ok && !state.sent && !state.error && !pending ? (
+      <p className="js-ok">{fill(t.contractorJob.quoteSaved, { name: customerFirstName })}</p>
+    ) : null;
+
   // Rendered in all three states because a send folds the form away. Three outcomes: a 9pm quote's text is
   // held until 8am, which is neither sent nor failed.
   const result =
@@ -297,10 +334,16 @@ export function JobQuote({
         <p className="js-lead">
           {alreadySent
             ? `${t.contractorJob.quoteSentAlready}${amount != null ? ` ${dollars(amount)}` : ""}`
-            : t.contractorJob.quoteLead}
+            : hasDraft
+              ? t.contractorJob.quoteDraftLead
+              : t.contractorJob.quoteLead}
         </p>
         <button type="button" className="js-confirm" onClick={() => setOpen(true)}>
-          {alreadySent ? t.contractorJob.quoteResend : t.contractorJob.quoteOpen}
+          {alreadySent
+            ? t.contractorJob.quoteResend
+            : hasDraft
+              ? t.contractorJob.quoteResume
+              : t.contractorJob.quoteOpen}
         </button>
         {result}
       </section>
@@ -314,7 +357,7 @@ export function JobQuote({
         {awaitingReply ? fill(t.contractorJob.quoteFixLead, { name: customerFirstName }) : t.contractorJob.quoteLead}
       </p>
 
-      <form action={formAction} className="jq-form">
+      <form ref={formRef} action={formAction} onSubmit={() => setLastIntent("send")} className="jq-form">
         <input type="hidden" name="id" value={id} />
         {/*
           Intent rides on a hidden field, not the submit button, so it can't fall through to "save" and report
@@ -362,7 +405,7 @@ export function JobQuote({
             */}
             <OptionBuilder
               rows={rows}
-              onChange={setRows}
+              onChange={changeRows}
               labels={t.quoteOptions}
               mode="breakdown"
               target={alreadySent ? amount : null}
@@ -374,7 +417,7 @@ export function JobQuote({
               labels={t.quoteOptions}
               startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
             >
-              <OptionBuilder rows={rows} onChange={setRows} labels={t.quoteOptions} mode="extras" />
+              <OptionBuilder rows={rows} onChange={changeRows} labels={t.quoteOptions} mode="extras" />
               {/* Extras meant to be pick-one add up to every price at once; offered here, where the mistake is made. */}
               <PickOneSuggestion
                 rows={rows}
@@ -385,7 +428,7 @@ export function JobQuote({
                   setRows([]);
                 }}
               />
-              <PackageBuilder rows={pkgRows} onChange={setPkgRows} labels={t.quotePackages} />
+              <PackageBuilder rows={pkgRows} onChange={changePkgRows} labels={t.quotePackages} />
             </MoreWaysToPrice>
 
             {/* Only for quotes written before the sections existed. */}
@@ -432,13 +475,20 @@ export function JobQuote({
           </button>
         ) : (
           <button type="submit" className="js-confirm jq-send" disabled={!ready || pending}>
-            {pending
+            {pending && lastIntent === "send"
               ? t.contractorJob.quoteSending
               : awaitingReply
                 ? t.contractorJob.quoteFixSend
                 : t.contractorJob.quoteSend}
           </button>
         )}
+        {/* No readiness check: half-written is the point. Typed as-is, Spanish included; it's translated at Send. */}
+        {canSave && !english && (
+          <button type="button" className="jq-save" onClick={saveDraft} disabled={pending || translating}>
+            {pending && lastIntent === "save" ? t.contractorJob.quoteSaving : t.contractorJob.quoteSave}
+          </button>
+        )}
+        {saved}
         {english ? (
           <button type="button" className="jq-cancel" onClick={() => setEnglish(null)} disabled={pending}>
             {t.english.back}

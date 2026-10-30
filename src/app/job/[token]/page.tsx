@@ -556,6 +556,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
             sentAt={quote.quote_sent_at}
             customerFirstName={firstNameOf(quote.name, quote.name)}
+            service={quote.service}
           />
         )}
 
