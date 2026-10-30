@@ -11,6 +11,7 @@ import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText, quoteSends } from "@/lib/crm/events";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { correctableReason, jobLedger, payeeState } from "@/lib/crm/payments";
+import { listReceiptsForJob, receiptRowsFor } from "@/lib/crm/receipts";
 import { listCrewViews } from "@/lib/crm/crew-views";
 import { usd } from "@/lib/crm/fees";
 import {
@@ -36,6 +37,7 @@ import { MessageLog } from "./message-log";
 import { JobSettings } from "./job-settings";
 import { CustomerView } from "./customer-view";
 import { QuoteEditor } from "./quote-editor";
+import { JobReceipts } from "./job-receipts";
 import { QuoteSends } from "./quote-sends";
 import { CancelAppointment } from "./cancel-appointment";
 import { QuotePayments } from "./quote-payments";
@@ -142,10 +144,20 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
     quote.quote_amount != null;
 
   // Money only once a price is agreed. Both reads in parallel.
-  const [money, payee] = await Promise.all([
+  const [money, payee, receipts] = await Promise.all([
     showSchedule ? jobLedger(quote) : Promise.resolve(null),
     showSchedule ? payeeState(quote) : Promise.resolve(null),
+    // Every receipt, whatever the job's state now: a receipt outlives a job moving to Lost.
+    listReceiptsForJob(session, quote.id),
   ]);
+  // Paid payments with no live receipt: before receipts started, or one that failed to issue. Owner only.
+  const liveReceiptFor = new Set(receipts.filter((r) => !r.voided_at).map((r) => r.payment_id));
+  const missingReceipts =
+    isOwner && money
+      ? money.rows
+          .filter((r) => r.status === "paid" && !liveReceiptFor.has(r.id))
+          .map((r) => ({ paymentId: r.id, amount_cents: r.amount_cents, method: r.method, paid_at: r.paid_at ?? r.created_at }))
+      : [];
   const cardReady = money ? (payee?.ok ?? false) : false;
 
   // Change orders: on both pages, since office and crew both take these calls.
@@ -449,6 +461,17 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   note: r.note,
                   fee_cents: r.fee_cents,
                 }))}
+              />
+            </div>
+          )}
+
+          {(receipts.length > 0 || missingReceipts.length > 0) && (
+            <div className="jb-o-step" id="receipts">
+              <JobReceipts
+                quoteId={quote.id}
+                locale={locale}
+                receipts={receiptRowsFor(receipts)}
+                missing={missingReceipts}
               />
             </div>
           )}

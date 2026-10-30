@@ -36,7 +36,7 @@ export type FunnelEvent = {
 
 // Routes whose second segment is a secret token; it is cut out before sending. Keep in step with
 // vercel-insights.tsx.
-const TOKEN_ROUTES = new Set(["q", "job", "confirm", "join", "pay"]);
+const TOKEN_ROUTES = new Set(["q", "job", "confirm", "join", "pay", "r"]);
 
 export function scrubPath(pathname: string): string {
   const parts = pathname.split("?")[0].split("#")[0].split("/");

@@ -1,4 +1,4 @@
--- Check 20261030200000_quote_ttl_30_days_and_expire_to_lost on the real database.
+-- Check 20261030221241_quote_ttl_30_days_and_expire_to_lost on the real database.
 --
 -- Run AFTER the migration, as the SQL editor's own role (postgres), the whole file at once. It opens its own
 -- transaction and ends in ROLLBACK, so nothing it does is kept. It never inserts a quote_requests row (the

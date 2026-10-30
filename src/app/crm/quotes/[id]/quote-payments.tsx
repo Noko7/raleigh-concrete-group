@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 
 import { RECORDED_METHODS, fromCents, usd, type PaymentMethod } from "@/lib/crm/fees";
 import { dict, fill, type Locale } from "@/lib/crm/i18n";
+import { ReceiptBox } from "@/components/receipt-box";
 import {
   correctRecordedPayment,
   recordManualPayment,
@@ -249,6 +250,7 @@ export function QuotePayments({
             <span>{t.noteLabel}</span>
             <input className="crm-input" name="note" type="text" maxLength={500} disabled={saving} />
           </label>
+          <ReceiptBox label={t.receiptBox} hint={t.receiptHint} disabled={saving} />
           <button type="submit" className="crm-btn crm-btn-primary" disabled={saving}>
             {saving ? t.recording : t.record}
           </button>
@@ -367,6 +369,8 @@ export function QuotePayments({
                           disabled={fixing}
                         />
                       </label>
+                      {/* A correction voids this payment's receipt and issues a new one. */}
+                      <ReceiptBox label={t.receiptBox} disabled={fixing} />
                       <div className="qp-fix-acts">
                         <button type="submit" className="crm-btn crm-btn-primary" disabled={fixing}>
                           {fixing ? t.fixSaving : t.fixSave}

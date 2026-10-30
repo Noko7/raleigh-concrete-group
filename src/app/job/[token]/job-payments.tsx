@@ -5,6 +5,7 @@ import { useActionState, useState } from "react";
 import { recordManualPayment, sendPayLink, type PaymentState } from "@/app/crm/quotes/[id]/payment-actions";
 import { RECORDED_METHODS, fromCents, usd, type PaymentMethod } from "@/lib/crm/fees";
 import { dict, fill, intlLocale, type Locale } from "@/lib/crm/i18n";
+import { ReceiptBox } from "@/components/receipt-box";
 
 const initial: PaymentState = { ok: false };
 
@@ -215,6 +216,8 @@ export function JobPayments({
                     disabled={saving}
                   />
                 </label>
+
+                <ReceiptBox label={t.receiptBox} hint={t.receiptHint} disabled={saving} />
 
                 <button type="submit" className="js-confirm" disabled={saving}>
                   {saving ? t.recording : t.record}

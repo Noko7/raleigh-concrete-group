@@ -9,6 +9,9 @@ export type Staff = {
   email: string | null;
   full_name: string | null;
   phone: string | null;
+  // Who a payment receipt names as paid (filled in by the owner). Blank = their name.
+  business_name?: string | null;
+  business_address?: string | null;
   role: Role;
   active: boolean;
   must_reset_password: boolean;

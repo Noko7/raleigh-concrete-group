@@ -1,4 +1,4 @@
--- Undo 20261030200000_quote_ttl_30_days_and_expire_to_lost. Also set QUOTE_TTL_DAYS back to 10 in
+-- Undo 20261030221241_quote_ttl_30_days_and_expire_to_lost. Also set QUOTE_TTL_DAYS back to 10 in
 -- src/lib/crm/constants.ts, or quotes sent afterwards keep getting 30 days.
 --
 --   * Stops and removes the 5-minute sweep. pg_cron stays installed (harmless; drop it by hand if wanted).

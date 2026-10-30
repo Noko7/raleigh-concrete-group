@@ -9,9 +9,10 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 //   /join/<token>     one-shot contractor invite
 //   /job/<token>      the crew's job page
 //   /pay/<token>      the customer's payment page
+//   /r/<token>        a payment receipt
 // A token in the dashboard is a working link. Query strings are dropped too (?search= holds names and
 // phones; /crm/login?next= carries a token). Only the route is reported.
-const TOKEN_ROUTES = new Set(["q", "job", "confirm", "join", "pay"]);
+const TOKEN_ROUTES = new Set(["q", "job", "confirm", "join", "pay", "r"]);
 
 // Add any route that takes a secret in its path. Unparseable URLs return null and the datapoint is dropped.
 export function scrubUrl(raw: string): string | null {

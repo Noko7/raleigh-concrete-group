@@ -114,6 +114,8 @@ export async function middleware(request: NextRequest) {
     const keepPrivate =
       pathname.startsWith("/q/") ||
       pathname.startsWith("/pay/") ||
+      // A payment receipt: the link texted to the customer, crew and owner.
+      pathname.startsWith("/r/") ||
       // Contractor onboarding: public (no login yet) but a capability link.
       pathname.startsWith("/join/") ||
       pathname.startsWith("/confirm") ||

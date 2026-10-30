@@ -138,7 +138,11 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       // Moved by the database's 5-minute sweep, not a person.
       if (m.reason === "expired") return `Quote expired with no answer. Status: ${statusLabel(m.from)} → ${statusLabel(m.to)}`;
       return `Status: ${statusLabel(m.from)} → ${statusLabel(m.to)}`;
-    // Quotes went from 10 to 30 days; the unanswered ones were moved to match (migration 20261030200000).
+    case "receipt_issued":
+      return `Receipt #${String(m.number ?? "").padStart(6, "0")} issued for ${centsUsd(m.amount_cents)}${m.replaces ? " (replaces a voided one)" : ""}`;
+    case "receipt_voided":
+      return `Receipt #${String(m.number ?? "").padStart(6, "0")} voided${m.reason ? `: ${String(m.reason)}` : ""}`;
+    // Quotes went from 10 to 30 days; the unanswered ones were moved to match (migration 20261030221241).
     case "expiry_extended":
       return `Quote now good through ${expiryDay(m.to)} (quotes are good for ${String(m.ttl_days ?? 30)} days)`;
     case "assigned":

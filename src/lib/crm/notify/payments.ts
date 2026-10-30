@@ -5,7 +5,7 @@
 import { usd as money } from "../fees";
 import { type SendResult, samePhone, sendSmsResult, sendSms, alertOwner } from "./send";
 import { REVIEW_URL, BUSINESS, block, text, type QuoteInfo, firstName } from "./format";
-import { jobLink, payLink } from "./templates";
+import { jobLink, payLink, receiptLink } from "./templates";
 
 // ── 11. Job complete + paid: thank the customer and ask for a review ────────
 export async function notifyComplete(q: QuoteInfo): Promise<void> {
@@ -55,8 +55,10 @@ export async function notifyCashRecorded(input: {
   who: string;
   dueCents: number;
   feeOwedCents: number;
+  /** The receipt just issued for it: this text is the owner's copy. */
+  receipt?: { number: string; token: string } | null;
 }): Promise<void> {
-  const { q, amountCents, method, who, dueCents, feeOwedCents } = input;
+  const { q, amountCents, method, who, dueCents, feeOwedCents, receipt } = input;
   await alertOwner(
     text([
       `PAYMENT RECORDED - ${method.toUpperCase()}`,
@@ -68,10 +70,73 @@ export async function notifyCashRecorded(input: {
       // Card payments pay the office automatically; cash doesn't, so the fee is
       // now a debt the owner should hear about now, not at month end.
       ...block("They now owe you:", feeOwedCents > 0 ? money(feeOwedCents) : "Nothing on this job"),
+      ...(receipt ? block(`Receipt ${receipt.number}:`, receiptLink(receipt.token)) : []),
       q.job_token ? jobLink(q.job_token) : null,
     ]),
     null,
     { quoteId: q.id, kind: "cash_recorded" },
+  );
+}
+
+// ── Receipts ────────────────────────────────────────────────────────────────
+// Every customer payment gets a numbered receipt. Copies: the contractor who was paid, the owner, and the
+// customer when the box was ticked. The customer's copy never carries the amount (no figures in customer
+// texts); the receipt behind the link has it.
+export type ReceiptText = {
+  number: string;
+  token: string;
+  quoteId: string;
+  amountCents: number;
+  method: string;
+  customerName: string;
+  payee: string;
+  job: string | null;
+};
+
+/** The contractor's copy. Never sent to an owner, whose copy is the owner text. */
+export async function notifyReceiptToContractor(r: ReceiptText, phone: string): Promise<void> {
+  await sendSms(
+    phone,
+    text([
+      `RECEIPT ${r.number}`,
+      "",
+      `${r.customerName} paid you ${money(r.amountCents)} (${r.method}).`,
+      "",
+      ...block("Job:", r.job),
+      receiptLink(r.token),
+    ]),
+    { quoteId: r.quoteId, kind: "receipt_crew", role: "crew" },
+  ).catch(() => {});
+}
+
+/** The owner's copy, where no payment text already carried it (card payments). */
+export async function notifyReceiptToOwner(r: ReceiptText): Promise<void> {
+  await alertOwner(
+    text([
+      `RECEIPT ${r.number}`,
+      "",
+      `${r.customerName} paid ${r.payee} ${money(r.amountCents)} (${r.method}).`,
+      "",
+      receiptLink(r.token),
+    ]),
+    null,
+    { quoteId: r.quoteId, kind: "receipt_owner" },
+  );
+}
+
+/** The customer's copy. Quiet hours hold it until 8am like any customer text. */
+export async function notifyReceiptToCustomer(r: ReceiptText, customerPhone: string): Promise<SendResult> {
+  return sendSmsResult(
+    customerPhone,
+    text([
+      `Hi ${firstName(r.customerName)},`,
+      `here's your receipt for your payment to ${r.payee}.`,
+      "",
+      receiptLink(r.token),
+      "",
+      BUSINESS,
+    ]),
+    { quoteId: r.quoteId, kind: "receipt_customer", role: "customer" },
   );
 }
 
@@ -89,6 +154,8 @@ export async function notifyPaymentCorrected(input: {
   who: string;
   dueCents: number;
   feeOwedCents: number;
+  /** The receipt issued for the corrected payment (the old one is void): this text is everyone's copy. */
+  receipt?: { number: string; token: string } | null;
 }): Promise<void> {
   const { q, fromCents, toCents, method, who } = input;
   const what =
@@ -107,6 +174,7 @@ export async function notifyPaymentCorrected(input: {
     ...block("You owe the office:", money(input.feeOwedCents)),
     `Corrected by ${who}.`,
     "",
+    ...(input.receipt ? block(`New receipt ${input.receipt.number} (the old one is void):`, receiptLink(input.receipt.token)) : []),
     q.job_token ? jobLink(q.job_token) : null,
   ]);
 

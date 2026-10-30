@@ -57,6 +57,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/q/[token]/pdf": ["./public/images/logo_horizontal.png"],
     "/crm/api/quote-pdf": ["./public/images/logo_horizontal.png"],
+    "/r/[token]/pdf": ["./public/images/logo_horizontal.png"],
   },
   async redirects() {
     return [
@@ -110,6 +111,7 @@ const nextConfig: NextConfig = {
       // by the site itself only. Listed after the baseline, so it overrides DENY.
       { source: "/q/:path*", headers: [NOINDEX, NO_REFERRER, ...QUOTE_FRAMING] },
       { source: "/job/:path*", headers: [NOINDEX, NO_REFERRER] },
+      { source: "/r/:path*", headers: [NOINDEX, NO_REFERRER] },
       { source: "/confirm/:path*", headers: [NOINDEX, NO_REFERRER] },
     ];
   },

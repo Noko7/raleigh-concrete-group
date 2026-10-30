@@ -7,6 +7,7 @@ import {
   settleJobIfPaid,
   staffByStripeAccount,
 } from "@/lib/crm/payments";
+import { receiptForNewPayment } from "@/lib/crm/receipts";
 import { verifyWebhook, type StripeEvent } from "@/lib/crm/stripe";
 import { pgAdmin } from "@/lib/crm/rest";
 
@@ -89,6 +90,10 @@ async function onCheckoutCompleted(event: StripeEvent) {
   });
 
   await settleJobIfPaid(quoteId);
+
+  // Card payments get a receipt like any other; the customer's copy always goes (no box to untick online),
+  // and no payment text has told the owner yet. The return page may have issued it first: then nothing is sent.
+  if (payment?.id) await receiptForNewPayment({ paymentId: payment.id, customerCopy: true, ownerAlreadyTold: false });
 }
 
 async function onChargeRefunded(event: StripeEvent) {

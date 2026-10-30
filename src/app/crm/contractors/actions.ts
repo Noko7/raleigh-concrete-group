@@ -181,11 +181,17 @@ export async function updateContractorContact(
     .map((s) => String(s))
     .filter((s) => quoteServiceOptions.includes(s));
 
+  // What their customers' receipts name as paid. Receipts already issued keep what they were issued with.
+  const businessName = String(formData.get("business_name") ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  const businessAddress = String(formData.get("business_address") ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+
   const ok = await updateStaff(session, id, {
     full_name: fullName || null,
     phone,
     email,
     service_types: serviceTypes.length ? serviceTypes : null,
+    business_name: businessName || null,
+    business_address: businessAddress || null,
   });
   if (!ok) return { ok: false, error: "Could not save. Please try again." };
 

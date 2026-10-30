@@ -35,6 +35,9 @@ export const MESSAGE_LABELS: Record<string, string> = {
   complete: "Job complete thank-you",
   payment_request: "Payment instructions",
   payment_corrected: "Recorded payment corrected",
+  receipt_customer: "Receipt - customer copy",
+  receipt_crew: "Receipt - contractor copy",
+  receipt_owner: "Receipt - owner copy",
   assignment: "Assigned to crew",
 };
 

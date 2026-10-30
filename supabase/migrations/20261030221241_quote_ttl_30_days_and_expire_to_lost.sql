@@ -1,6 +1,6 @@
 -- Raleigh Concrete Group - quotes are good for 30 days, and an unanswered one moves to Lost when it runs out
--- Undo: undo/20261030200000_quote_ttl_30_days_and_expire_to_lost.undo.sql.
--- Check: verify/20261030200000_quote_ttl_30_days_and_expire_to_lost.verify.sql.
+-- Undo: undo/20261030221241_quote_ttl_30_days_and_expire_to_lost.undo.sql.
+-- Check: verify/20261030221241_quote_ttl_30_days_and_expire_to_lost.verify.sql.
 --
 -- Goes with QUOTE_TTL_DAYS = 30 in src/lib/crm/constants.ts (was 10), which stamps quotes sent from now on.
 --

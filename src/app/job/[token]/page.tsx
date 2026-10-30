@@ -12,6 +12,8 @@ import { dict, intlLocale, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
+import { listReceiptsForJob, receiptRowsFor } from "@/lib/crm/receipts";
+import { JobReceipts } from "@/app/crm/quotes/[id]/job-receipts";
 import { getQuoteByToken, listEvents, listMessages, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { AcceptOffline } from "@/app/crm/quotes/[id]/accept-offline";
@@ -101,12 +103,13 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // delay on a phone. Line items use the service role because this page already
   // gates on token + assignment; events use the session (quote_events' policy
   // scopes contractors). Money only once the customer has agreed a number.
-  const [options, packages, money, payee, events] = await Promise.all([
+  const [options, packages, money, payee, events, receipts] = await Promise.all([
     listQuoteOptionsAdmin(quote.id),
     listQuotePackagesAdmin(quote.id),
     accepted ? jobLedger(quote) : Promise.resolve(null),
     accepted ? payeeState(quote) : Promise.resolve(null),
     listEvents(session, quote.id),
+    listReceiptsForJob(session, quote.id),
   ]);
   const cardReady = payee?.ok ?? false;
   const chosen = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response !== "declined") : [];
@@ -399,6 +402,9 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               fee_cents: r.fee_cents,
             }))}
           />
+        )}
+        {receipts.length > 0 && (
+          <JobReceipts quoteId={quote.id} locale={locale} receipts={receiptRowsFor(receipts)} tone="light" />
         )}
 
         {/* What they bought, above customer details: on an options quote it

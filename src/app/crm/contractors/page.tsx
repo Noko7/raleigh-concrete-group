@@ -230,6 +230,8 @@ export default async function ContractorsPage() {
                         email={c.email ?? ""}
                         phone={c.phone}
                         serviceTypes={c.service_types ?? []}
+                        businessName={c.business_name ?? null}
+                        businessAddress={c.business_address ?? null}
                       />
                       <ResetPassword id={c.id} name={c.full_name || c.email || "this contractor"} />
                       <DeleteContractor id={c.id} name={c.full_name || c.email || "Contractor"} />
