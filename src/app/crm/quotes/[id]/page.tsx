@@ -162,9 +162,9 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
 
   const customerLink = `${SITE_ORIGIN}/q/${quote.public_token}`;
   const jobLink = `${SITE_ORIGIN}/job/${quote.job_token}`;
-  // Their page in preview mode (not counted as them opening it; buttons inert). Same-origin unless the CRM
-  // is on its crm.* subdomain, so a Vercel preview frames its own deployment, not production.
-  const previewLink = `${base === "" ? SITE_ORIGIN : ""}/q/${quote.public_token}?preview=1`;
+  // Their page in preview mode (not counted as them opening it; buttons inert). Relative, so it is framed
+  // from the same origin, and a Vercel preview frames its own deployment rather than production.
+  const previewLink = `/q/${quote.public_token}?preview=1`;
   const mapsLink = quote.address
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(quote.address)}`
     : null;
