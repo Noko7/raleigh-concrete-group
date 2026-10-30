@@ -837,7 +837,8 @@ export function QuoteModalRoot() {
     function onClick(e: MouseEvent) {
       const target = e.target as HTMLElement | null;
       const trigger = target?.closest?.('a[href="#quote"], a[href$="#quote"], [data-open-quote]');
-      if (trigger) {
+      // On the staff pages a #quote link jumps to the job's own quote editor, not the customer's form.
+      if (trigger && !trigger.closest(".crm-shell, .job-wrap")) {
         e.preventDefault();
         setOpen(true);
       }
