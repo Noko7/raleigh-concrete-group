@@ -360,8 +360,7 @@ export function QuoteEditor({ id, options, packages, customerName, service, awai
                 ))}
             </ul>
           )}
-          {/* Exactly what they'll read, drawn by the component their page uses.
-              Folded: opened, it reads as the customer's page taking over this one. */}
+          {/* Exactly what they'll read, drawn by the component their page uses. */}
           {blankSections.length === 0 ? (
             <CustomerPreview
               firstName={firstNameOf(customerName, customerName)}
@@ -370,6 +369,7 @@ export function QuoteEditor({ id, options, packages, customerName, service, awai
               sections={sections}
               {...previewOf(rows)}
               choice={choice}
+              startOpen
             />
           ) : (
             <div className="crm-confirm-summary">{summary}</div>
