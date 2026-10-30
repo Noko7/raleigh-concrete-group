@@ -24,7 +24,11 @@
 --     storage buckets, noted at the end.
 --
 -- Extensions: plpgsql, pgcrypto, uuid-ossp, pg_stat_statements, pg_net
--- (schema extensions), supabase_vault. No views, no custom types, no comments.
+-- (schema extensions), supabase_vault, pg_cron (since 20261030200000).
+--
+-- Updated by hand for migration 20261030200000 (expire_unanswered_quotes() and
+-- its grants, and the pg_cron job in section 8), checked against
+-- pg_get_functiondef and proacl after it was applied. No views, no custom types, no comments.
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1. Tables (columns, defaults, constraints)
@@ -623,6 +627,49 @@ CREATE OR REPLACE FUNCTION public.bump_job_staff_view(p_quote uuid, p_staff uuid
 AS $function$insert into public.job_staff_views (quote_id, staff_id, view_count, closed_view_count, last_closed_view_at) values (p_quote, p_staff, 1, case when p_closed then 1 else 0 end, case when p_closed then now() end) on conflict (quote_id, staff_id) do update set view_count = job_staff_views.view_count + 1, last_viewed_at = now(), closed_view_count = job_staff_views.closed_view_count + case when p_closed then 1 else 0 end, last_closed_view_at = case when p_closed then now() else job_staff_views.last_closed_view_at end$function$
 ;
 
+-- Runs every 5 minutes on pg_cron (job expire-unanswered-quotes; see section 8).
+CREATE OR REPLACE FUNCTION public.expire_unanswered_quotes()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  moved integer;
+begin
+  -- One statement: move, log, and stop any customer text still queued for the job (a quiet-hours hold), so
+  -- moving to Lost never reaches the customer. Every part runs even though only the count is read.
+  with expired as (
+    update public.quote_requests q
+       set status = 'lost'
+     where q.status = 'quoted'
+       and q.customer_response is null
+       and q.quote_expires_at is not null
+       and q.quote_expires_at <= now()
+    returning q.id, q.quote_expires_at
+  ), logged as (
+    insert into public.quote_events (quote_id, type, meta)
+    select id, 'status_changed',
+           jsonb_build_object('from', 'quoted', 'to', 'lost', 'reason', 'expired', 'expired_at', quote_expires_at)
+      from expired
+    returning quote_id
+  ), stopped as (
+    update public.quote_messages m
+       set cancelled_at = now(),
+           detail = 'Cancelled: the quote expired and the job moved to Lost.'
+     where m.quote_id in (select id from expired)
+       and m.role = 'customer'
+       and m.sent_at is null
+       and m.cancelled_at is null
+       and m.send_after is not null
+    returning m.id
+  )
+  select count(*) into moved from expired;
+  return moved;
+end;
+$function$
+;
+
 -- Stored with CRLF line endings.
 CREATE OR REPLACE FUNCTION public.guard_payment_not_over_total()
  RETURNS trigger
@@ -960,6 +1007,8 @@ revoke all on function public.bump_job_staff_view(uuid, uuid, boolean) from publ
 grant execute on function public.bump_job_staff_view(uuid, uuid, boolean) to service_role;
 revoke all on function public.bump_job_staff_view(uuid, uuid) from public;
 grant execute on function public.bump_job_staff_view(uuid, uuid) to service_role;
+revoke all on function public.expire_unanswered_quotes() from public;
+grant execute on function public.expire_unanswered_quotes() to service_role;
 revoke all on function public.guard_payment_not_over_total() from public;                   -- postgres only
 revoke all on function public.guard_quote_line_prices() from public;                        -- postgres only
 revoke all on function public.guard_quote_money_columns() from public;                      -- postgres only
@@ -970,6 +1019,8 @@ grant execute on function public.is_owner() to authenticated, service_role;
 -- ════════════════════════════════════════════════════════════════════════════
 -- 8. Outside public, for context
 -- ════════════════════════════════════════════════════════════════════════════
+-- cron.job (pg_cron): expire-unanswered-quotes, '*/5 * * * *',
+--   'select public.expire_unanswered_quotes()'.
 -- storage.buckets (private, no storage.objects policies; uploads use signed URLs):
 --   quote-uploads  file_size_limit 52428800  image/jpeg, image/png, image/webp,
 --                  image/heic, image/heif, image/heic-sequence, image/heif-sequence,

@@ -24,9 +24,9 @@
 --     in production, URL is a secret) is not created. Add it under Database ->
 --     Webhooks if you need it.
 --   * No migration history: supabase_migrations.schema_migrations stays empty.
---     If you later use `supabase db push`, mark the two existing migrations as
+--     If you later use `supabase db push`, mark the existing migrations as
 --     applied first, since this file already contains them:
---       supabase migration repair --status applied 20261017221826 20261017222017
+--       supabase migration repair --status applied 20261017221826 20261017222017 20261030200000
 --
 -- When the schema changes, update this file along with supabase/schema.sql.
 
@@ -491,6 +491,48 @@ CREATE OR REPLACE FUNCTION public.bump_job_staff_view(p_quote uuid, p_staff uuid
  LANGUAGE sql
  SET search_path TO 'public'
 AS $function$select public.bump_job_staff_view(p_quote, p_staff, false)$function$
+;
+
+CREATE OR REPLACE FUNCTION public.expire_unanswered_quotes()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  moved integer;
+begin
+  -- One statement: move, log, and stop any customer text still queued for the job (a quiet-hours hold), so
+  -- moving to Lost never reaches the customer. Every part runs even though only the count is read.
+  with expired as (
+    update public.quote_requests q
+       set status = 'lost'
+     where q.status = 'quoted'
+       and q.customer_response is null
+       and q.quote_expires_at is not null
+       and q.quote_expires_at <= now()
+    returning q.id, q.quote_expires_at
+  ), logged as (
+    insert into public.quote_events (quote_id, type, meta)
+    select id, 'status_changed',
+           jsonb_build_object('from', 'quoted', 'to', 'lost', 'reason', 'expired', 'expired_at', quote_expires_at)
+      from expired
+    returning quote_id
+  ), stopped as (
+    update public.quote_messages m
+       set cancelled_at = now(),
+           detail = 'Cancelled: the quote expired and the job moved to Lost.'
+     where m.quote_id in (select id from expired)
+       and m.role = 'customer'
+       and m.sent_at is null
+       and m.cancelled_at is null
+       and m.send_after is not null
+    returning m.id
+  )
+  select count(*) into moved from expired;
+  return moved;
+end;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION public.guard_payment_not_over_total()
@@ -965,6 +1007,8 @@ revoke all on function public.bump_job_staff_view(uuid, uuid, boolean) from publ
 grant execute on function public.bump_job_staff_view(uuid, uuid, boolean) to service_role;
 revoke all on function public.bump_job_staff_view(uuid, uuid) from public;
 grant execute on function public.bump_job_staff_view(uuid, uuid) to service_role;
+revoke all on function public.expire_unanswered_quotes() from public;
+grant execute on function public.expire_unanswered_quotes() to service_role;
 revoke all on function public.guard_payment_not_over_total() from public;                   -- postgres only
 revoke all on function public.guard_quote_line_prices() from public;                        -- postgres only
 revoke all on function public.guard_quote_money_columns() from public;                      -- postgres only
@@ -991,6 +1035,10 @@ on conflict (id) do update set
   public = excluded.public,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
+
+-- Unanswered quotes move to Lost when they expire, checked every 5 minutes.
+create extension if not exists pg_cron;
+select cron.schedule('expire-unanswered-quotes', '*/5 * * * *', 'select public.expire_unanswered_quotes()');
 
 commit;
 

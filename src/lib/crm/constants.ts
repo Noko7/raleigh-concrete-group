@@ -173,8 +173,10 @@ export const QUOTE_SECTION_HINTS: Record<QuoteSectionField, string> = {
   quote_cleanup: "How the site is left, and when.",
 };
 
-// Long enough to think it over; short enough that the price isn't held while material costs move.
-export const QUOTE_TTL_DAYS = 10;
+// Long enough to think it over and collect other quotes; short enough that the price isn't held while
+// material costs move. An unanswered quote moves to Lost when it runs out (expire_unanswered_quotes(), every
+// 5 minutes); resending revives it with a fresh QUOTE_TTL_DAYS.
+export const QUOTE_TTL_DAYS = 30;
 
 /**
  * Quote amounts are in DOLLARS. Ledger figures are cents and use `usd()` in ./fees; mixing them is a 100x
