@@ -122,7 +122,8 @@ export function SectionsEditor({
               <SpellTextarea
                 id={id}
                 name={field}
-                rows={2}
+                rows={field === "estimated_duration" ? 1 : 2}
+                maxLength={field === "estimated_duration" ? 200 : 2000}
                 value={sections[field]}
                 onChange={(e) => onChange(field, e.target.value)}
                 placeholder={hints[field]}

@@ -12,7 +12,7 @@ import type { TranslateItem } from "./translate-fields.ts";
 
 const MODEL = "claude-haiku-5-5";
 
-// What a single review may send. A full quote (five sections, a dozen lines) is ~2,000 characters.
+// What a single review may send. A full quote (six sections, a dozen lines) is ~2,000 characters.
 export const TRANSLATE_MAX_TEXTS = 80;
 export const TRANSLATE_MAX_CHARS = 12_000;
 

@@ -215,7 +215,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // Legacy summary, superseded by the five sections; kept so old quotes stay editable.
+  // Legacy summary, superseded by the quote sections; kept so old quotes stay editable.
   if (formData.has("quote_summary")) {
     const v = noEmDash(String(formData.get("quote_summary") ?? "").trim()).slice(0, 4000);
     patch.quote_summary = v || null;
