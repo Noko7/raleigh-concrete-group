@@ -81,7 +81,7 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
   const where = [quote.address, quote.city].filter(Boolean).join(", ");
 
   return (
-    <main className="crm-page crm-page-wide">
+    <main className="crm-page crm-page-wide crm-page-full">
       <div className="crm-breadcrumb">
         <Link href={`${base}/documents`}>← Documents</Link>
       </div>

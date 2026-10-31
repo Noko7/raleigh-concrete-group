@@ -98,6 +98,8 @@ export type Quote = {
   quote_prep: string | null;
   quote_pour: string | null;
   quote_cleanup: string | null;
+  // "1-2 days", or "Not applicable". Null on quotes written before it existed.
+  estimated_duration: string | null;
   // QUOTE_TTL_DAYS from the last send. Null on quotes predating expiry, which stay valid.
   quote_expires_at: string | null;
   // Staff photos (internal shots, required before/after pair). Customer uploads stay in file_urls.

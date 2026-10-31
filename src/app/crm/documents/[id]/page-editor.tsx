@@ -78,7 +78,7 @@ export function PageEditor({
           {row("Job address", v.job_address)}
           {row("Email", v.customer_email)}
           {row("Contractor", v.contractor_name)}
-          {row("Contractor license #", v.contractor_license)}
+          {v.contractor_license.trim() && row("Contractor license #", v.contractor_license)}
           {row("Contractor phone", v.contractor_phone)}
         </tbody>
       </table>

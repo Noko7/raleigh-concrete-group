@@ -512,6 +512,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               quote_prep: quote.quote_prep,
               quote_pour: quote.quote_pour,
               quote_cleanup: quote.quote_cleanup,
+              estimated_duration: quote.estimated_duration,
             }}
           />
 

@@ -346,7 +346,7 @@ export function sendProblems(body: AgreementBody): Problem[] {
   need("customer_phone", "Customer phone");
   need("job_address", "Job address");
   need("contractor_name", "Contractor");
-  need("contractor_license", "Contractor license #");
+  // No license # is fine: some contractors don't hold or need one for the work. The agreement then leaves it out.
   need("contractor_phone", "Contractor phone");
   if (!(v.total_cents > 0)) out.push({ field: "total_cents", message: "The job has no price yet." });
   if (v.deposit_cents < 0 || v.deposit_cents > v.total_cents) out.push({ field: "deposit_cents", message: "The deposit is more than the total." });
@@ -582,14 +582,16 @@ export function renderAgreementHtml(body: AgreementBody): string {
   }
   parts.push(
     `<p class="ag-booked"><em>Booked by ${esc(OFFICE.name)}</em><br>${esc(OFFICE.phone)} · ${esc(OFFICE.email)} · ${esc(OFFICE.website)}</p>`,
-    `<p class="ag-booked"><em>${esc(OFFICE.name)} books the job. The licensed contractor named below performs and warrants the work, and is paid directly.</em></p>`,
+    `<p class="ag-booked"><em>${esc(OFFICE.name)} books the job. The ${v.contractor_license.trim() ? "licensed " : ""}contractor named below performs and warrants the work, and is paid directly.</em></p>`,
     `<table class="ag-parties"><tbody>` +
       `<tr><th>Date</th><td colspan="3">${esc(longDate(v.date))}</td></tr>` +
       `<tr><th>Customer</th><td>${blank(v.customer_name)}</td><th>Phone</th><td>${blank(v.customer_phone)}</td></tr>` +
       `<tr><th>Job address</th><td colspan="3">${blank(v.job_address)}</td></tr>` +
       `<tr><th>Email</th><td colspan="3">${blank(v.customer_email)}</td></tr>` +
       `<tr><th>Contractor (performs &amp; warrants the work)</th><td colspan="3">${blank(v.contractor_name)}</td></tr>` +
-      `<tr><th>Contractor license #</th><td>${blank(v.contractor_license)}</td><th>Contractor phone</th><td>${blank(v.contractor_phone)}</td></tr>` +
+      (v.contractor_license.trim()
+        ? `<tr><th>Contractor license #</th><td>${esc(v.contractor_license)}</td><th>Contractor phone</th><td>${blank(v.contractor_phone)}</td></tr>`
+        : `<tr><th>Contractor phone</th><td colspan="3">${blank(v.contractor_phone)}</td></tr>`) +
       `</tbody></table>`,
     `<h2>Work to Be Done</h2>`,
   );

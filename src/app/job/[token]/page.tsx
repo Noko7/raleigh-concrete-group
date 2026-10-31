@@ -565,6 +565,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
               quote_prep: quote.quote_prep,
               quote_pour: quote.quote_pour,
               quote_cleanup: quote.quote_cleanup,
+              estimated_duration: quote.estimated_duration,
             }}
             alreadySent={Boolean(quote.quote_sent_at)}
             // Sent and unanswered: the card says to wait rather than offer a resend.

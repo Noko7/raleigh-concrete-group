@@ -222,7 +222,7 @@ export function AgreementEditor({
               ["customer_email", "Customer email"],
               ["job_address", "Job address"],
               ["contractor_name", "Contractor (performs & warrants the work)"],
-              ["contractor_license", "Contractor license #"],
+              ["contractor_license", "Contractor license # (if they have one)"],
               ["contractor_phone", "Contractor phone"],
             ] as const
           ).map(([k, label]) => (

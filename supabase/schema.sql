@@ -40,6 +40,8 @@
 -- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
 -- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
 -- refusing saves while out for signature), checked against production after it was applied.
+-- Updated by hand for migration 20261031174615 (quote_requests.estimated_duration and its length check),
+-- checked against production after it was applied.
 -- Updated by hand for migration 20261031172234 (document_templates and document_template_versions,
 -- their trigger functions, policies and grants, and the two seeded templates), checked against production
 -- after it was applied (both templates at version 1, RLS on, read-only for signed-in users).
@@ -458,6 +460,7 @@ create table public.quote_requests (
   quote_prep text,
   quote_pour text,
   quote_cleanup text,
+  estimated_duration text,
   quote_expires_at timestamp with time zone,
   internal_urls text[],
   before_urls text[],
@@ -483,6 +486,7 @@ create table public.quote_requests (
   constraint qr_chk CHECK ((((char_length(name) >= 1) AND (char_length(name) <= 120)) AND ((char_length(phone) >= 7) AND (char_length(phone) <= 32)) AND ((email IS NULL) OR ((char_length(email) <= 200) AND (email ~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'::text))) AND ((service IS NULL) OR (char_length(service) <= 120)) AND ((address IS NULL) OR (char_length(address) <= 300)) AND ((city IS NULL) OR (char_length(city) <= 120)) AND ((details IS NULL) OR (char_length(details) <= 2000)) AND ((preferred_time IS NULL) OR (char_length(preferred_time) <= 120)) AND ((quote_type IS NULL) OR (quote_type = ANY (ARRAY['online'::text, 'inperson'::text, 'plans'::text]))) AND ((file_urls IS NULL) OR (jsonb_typeof(file_urls) = 'array'::text)))),
   constraint qr_customer_response_chk CHECK (((customer_response IS NULL) OR (customer_response = ANY (ARRAY['accepted'::text, 'declined'::text])))),
   constraint qr_sections_chk CHECK ((((quote_scope IS NULL) OR (char_length(quote_scope) <= 2000)) AND ((quote_permits IS NULL) OR (char_length(quote_permits) <= 2000)) AND ((quote_prep IS NULL) OR (char_length(quote_prep) <= 2000)) AND ((quote_pour IS NULL) OR (char_length(quote_pour) <= 2000)) AND ((quote_cleanup IS NULL) OR (char_length(quote_cleanup) <= 2000)))),
+  constraint qr_estimated_duration_chk CHECK (((estimated_duration IS NULL) OR (char_length(estimated_duration) <= 200))),
   constraint qr_status_chk CHECK ((status = ANY (ARRAY['new'::text, 'quoted'::text, 'approved'::text, 'scheduled'::text, 'completed'::text, 'paid'::text, 'lost'::text]))),
   constraint quote_requests_change_amount_sane CHECK (((change_amount IS NULL) OR ((change_amount >= (0)::numeric) AND (change_amount <= (99999999)::numeric)))),
   constraint quote_requests_change_complete CHECK ((((change_requested_at IS NULL) AND (change_amount IS NULL) AND (change_note IS NULL)) OR ((change_requested_at IS NOT NULL) AND (change_amount IS NOT NULL) AND (change_note IS NOT NULL)))),

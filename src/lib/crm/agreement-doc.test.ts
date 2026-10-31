@@ -113,7 +113,7 @@ test("send checks: a draft with holes can't go out", () => {
   const bad = draftAgreement(input({ contractor: null, totalCents: 0, quote: { ...input().quote, quote_permits: "" } }));
   const fields = sendProblems(bad).map((p) => p.field);
   assert.ok(fields.includes("contractor_name"));
-  assert.ok(fields.includes("contractor_license"));
+  assert.ok(!fields.includes("contractor_license"), "a license # is optional");
   assert.ok(fields.includes("total_cents"));
   assert.ok(fields.includes("work.permits"));
 });
@@ -359,4 +359,17 @@ test("templates: the version diff says when the template changed", () => {
   const b = draftAgreement(input({ template: repairSnap, taxMode: undefined, optionalClauses: undefined }));
   const t = diffVersions(a, b).find((c) => c.kind === "value" && c.key === "template");
   assert.ok(t && t.kind === "value" && t.after === "Repair Agreement (v2)");
+});
+
+test("no license #: the agreement leaves the line out instead of printing a blank", () => {
+  const without = draftAgreement(input({ contractor: { ...input().contractor!, license_number: null } }));
+  assert.equal(without.values.contractor_license, "");
+  assert.deepEqual(sendProblems(without), []);
+  const html = renderAgreementHtml(without);
+  assert.ok(!html.includes("Contractor license #"));
+  assert.ok(html.includes("The contractor named below"));
+  assert.match(html, /<tr><th>Contractor phone<\/th><td colspan="3">/);
+  const withLicense = renderAgreementHtml(draftAgreement(input()));
+  assert.ok(withLicense.includes("Contractor license #"));
+  assert.ok(withLicense.includes("The licensed contractor named below"));
 });
