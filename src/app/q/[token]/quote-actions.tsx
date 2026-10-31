@@ -4,7 +4,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ymdInDays } from "@/lib/crm/clock";
-import { DECLINE_CREDIT, DEFAULT_VISIT_SLOTS, dollarsOrZero as usd, LEAD_TIME_DAYS, MAX_PREFERRED_DATES, packageLetter, quoteTotal } from "@/lib/crm/constants";
+import {
+  DECLINE_CREDIT,
+  DEFAULT_VISIT_SLOTS,
+  ECONSENT_DISCLOSURE_PATH,
+  ECONSENT_DISCLOSURE_TITLE,
+  ECONSENT_TEXT,
+  ECONSENT_VERSION,
+  dollarsOrZero as usd,
+  LEAD_TIME_DAYS,
+  MAX_PREFERRED_DATES,
+  packageLetter,
+  quoteTotal,
+} from "@/lib/crm/constants";
 import { SectionText } from "@/components/section-text";
 import { DEFAULT_DEPOSIT_PERCENT, depositCents, usd as money } from "@/lib/crm/fees";
 
@@ -75,6 +87,8 @@ export function QuoteActions({
   // hours per day; each row can still be changed.
   const [time, setTime] = useState(slots[1] ?? slots[0] ?? "9:00 AM");
   const [error, setError] = useState("");
+  // Consent to electronic records: every Approve button waits on it, and the server refuses an approval without it.
+  const [econsent, setEconsent] = useState(false);
   const [checking, setChecking] = useState(false);
   const [taken, setTaken] = useState<string[]>([]);
   // Yes/no per optional item. Nothing pre-answered: untouched isn't a decision.
@@ -243,6 +257,8 @@ export function QuoteActions({
           options: action === "accept" && itemised ? answersWithRequired(options, answers) : undefined,
           // The server checks it belongs to THIS quote before pricing.
           package: action === "accept" && choice ? (picked ?? undefined) : undefined,
+          // The words they agreed to travel with the tick, so the record shows exactly what was on screen.
+          econsent: action === "accept" ? { agreed: econsent, version: ECONSENT_VERSION } : undefined,
         }),
       });
       const json = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; error?: string };
@@ -440,6 +456,23 @@ export function QuoteActions({
         {checking && <p className="cq-fine">Checking that day&hellip;</p>}
         {error && <p className="cq-err">{error}</p>}
 
+        <label className="cq-consent">
+          <input
+            type="checkbox"
+            checked={econsent}
+            onChange={(e) => setEconsent(e.target.checked)}
+            disabled={busy}
+          />
+          {/* The stored words (ECONSENT_TEXT), with the disclosure's title made a link: what is shown is what is kept. */}
+          <span>
+            {ECONSENT_TEXT.split(ECONSENT_DISCLOSURE_TITLE)[0]}
+            <a href={ECONSENT_DISCLOSURE_PATH} target="_blank" rel="noreferrer">
+              {ECONSENT_DISCLOSURE_TITLE}
+            </a>
+            {ECONSENT_TEXT.split(ECONSENT_DISCLOSURE_TITLE)[1]}
+          </span>
+        </label>
+
         {/* Asked here only: the moment they've decided. Later by text it's a
             chase; earlier it's a toll booth. Both answers approve, so neither
             is styled as a refusal; paying the crew in cash is fine. */}
@@ -451,7 +484,7 @@ export function QuoteActions({
             <button
               type="button"
               className="cq-btn cq-btn-accept"
-              disabled={picks.length === 0 || busy}
+              disabled={picks.length === 0 || !econsent || busy}
               onClick={() => submit("accept", "card")}
             >
               {busy ? "Sending…" : `Approve & pay ${money(depositCents(Math.round((discount ? discounted : total) * 100)))} deposit`}
@@ -459,7 +492,7 @@ export function QuoteActions({
             <button
               type="button"
               className="cq-btn cq-pay-alt"
-              disabled={picks.length === 0 || busy}
+              disabled={picks.length === 0 || !econsent || busy}
               onClick={() => submit("accept", "direct")}
             >
               Approve now, pay the crew directly
@@ -470,7 +503,7 @@ export function QuoteActions({
           <button
             type="button"
             className="cq-btn cq-btn-accept"
-            disabled={picks.length === 0 || busy}
+            disabled={picks.length === 0 || !econsent || busy}
             onClick={() => submit("accept", "direct")}
           >
             {busy ? "Sending…" : "Approve quote"}
