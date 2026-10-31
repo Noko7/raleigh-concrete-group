@@ -1,6 +1,6 @@
 -- Raleigh Concrete Group - agreement templates the owner creates, clones, archives and versions
 -- Undo: undo/PENDING_document_templates.undo.sql. Check: verify/PENDING_document_templates.verify.sql.
--- Needs PENDING_agreement_versions first (uses the same patterns; independent tables).
+-- Comes after 20261031130207_agreement_versions (same patterns; independent tables).
 --
 -- A template is the clause text an agreement is drafted from: the standard work agreement, the repair agreement,
 -- or any variant the owner makes (a stamped-concrete job, a commercial job). Templates live in the Documents hub.
