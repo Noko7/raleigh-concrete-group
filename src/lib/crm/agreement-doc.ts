@@ -12,7 +12,7 @@ export const AGREEMENT_TEMPLATE_VERSION = "2026-10-31.1";
 export const OFFICE = {
   name: "Raleigh Concrete Group",
   phone: "(919) 873-3919",
-  email: "noah@raleighconcrete.net",
+  email: "info@raleighconcrete.net",
   website: "www.raleighconcrete.net",
 } as const;
 
