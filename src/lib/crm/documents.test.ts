@@ -64,3 +64,19 @@ test("the job page line", () => {
   assert.equal(docsLine({ agreement: null, receipts: 1 }), "1 receipt");
   assert.equal(docsLine({ agreement: "sent", receipts: 0 }), "Agreement awaiting signature");
 });
+
+test("who may write a job's agreement: the owner, or the contractor on the job", async () => {
+  const { canEditJobAgreement } = await import("./documents.ts");
+  const s = (id: string, role: string) => ({ staff: { id, role } }) as never;
+  assert.equal(canEditJobAgreement(s("o", "owner"), { assigned_to: null }), true);
+  assert.equal(canEditJobAgreement(s("c1", "contractor"), { assigned_to: "c1" }), true);
+  assert.equal(canEditJobAgreement(s("c2", "contractor"), { assigned_to: "c1" }), false);
+  assert.equal(canEditJobAgreement(s("c2", "contractor"), { assigned_to: null }), false);
+});
+
+test("the agreement the editor works on: newest written in the CRM, never an uploaded file", async () => {
+  const { editableAgreement } = await import("./documents.ts");
+  const a = (id: string, created_at: string, current_version_id: string | null, kind = "customer") => ({ id, created_at, current_version_id, kind }) as never;
+  assert.equal(editableAgreement([a("file", "2026-10-30", null)]), null);
+  assert.equal(editableAgreement([a("v1", "2026-10-01", "x"), a("v2", "2026-10-20", "y"), a("file", "2026-10-30", null)])?.["id" as never], "v2");
+});

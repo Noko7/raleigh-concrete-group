@@ -12,6 +12,9 @@ export type Staff = {
   // Who a payment receipt names as paid (filled in by the owner). Blank = their name.
   business_name?: string | null;
   business_address?: string | null;
+  // Printed on customer agreements: the license line and "How you pay".
+  license_number?: string | null;
+  payment_methods?: string[] | null;
   role: Role;
   active: boolean;
   must_reset_password: boolean;
@@ -95,6 +98,8 @@ export type Quote = {
   quote_prep: string | null;
   quote_pour: string | null;
   quote_cleanup: string | null;
+  // The agreement's last work line. Optional on old rows until the migration is applied.
+  estimated_duration?: string | null;
   // QUOTE_TTL_DAYS from the last send. Null on quotes predating expiry, which stay valid.
   quote_expires_at: string | null;
   // Staff photos (internal shots, required before/after pair). Customer uploads stay in file_urls.
@@ -244,6 +249,23 @@ export type Agreement = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** The latest saved version of an agreement written in the CRM; null for an uploaded file. */
+  current_version_id?: string | null;
+};
+
+/** One saved version of an agreement. Never changed after it is saved (database-enforced). */
+export type AgreementVersion = {
+  id: string;
+  agreement_id: string;
+  version_no: number;
+  template_version: string;
+  body: unknown;
+  html: string;
+  html_sha256: string;
+  note: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
 };
 
 export type LoginAttempt = {

@@ -10,6 +10,8 @@ import {
   diffVersions,
   diffWords,
   draftAgreement,
+  draftInputFromJob,
+  refreshFromJob,
   editedBlocks,
   parseBody,
   renderAgreementHtml,
@@ -157,4 +159,42 @@ test("parse: a saved body round-trips; anything malformed is refused", () => {
   assert.equal(parseBody({ ...d, blocks: [...d.blocks, d.blocks[0]] }), null, "duplicate block id");
   assert.equal(parseBody({ ...d, blocks: [{ ...d.blocks[0], id: "x.<b>" }] }), null);
   assert.equal(parseBody(null), null);
+});
+
+test("from a job: package then accepted options under Scope; change-order deposit wins; repair turns on its clause", () => {
+  const base = input();
+  const di = draftInputFromJob({
+    today: "2026-10-31",
+    quote: { ...base.quote, service: "Concrete repair", change_deposit_cents: 300000 },
+    options: [
+      { title: "Sealer", description: null, required: false, customer_response: "accepted" },
+      { title: "Steps", description: "3 risers", required: false, customer_response: "declined" },
+      { title: "Base", description: "4 in gravel", required: true, customer_response: null },
+    ],
+    packages: [{ title: "Premium", description: "Stamped", customer_response: "accepted" }],
+    contractor: base.contractor,
+    totalCents: 850000,
+  });
+  assert.deepEqual(di.boughtLines, ["Premium: Stamped", "Sealer", "Base: 4 in gravel"]);
+  assert.equal(di.depositCents, 300000);
+  assert.deepEqual(di.optionalClauses, ["clause.repair"]);
+  const half = draftInputFromJob({ today: "2026-10-31", quote: { ...base.quote, service: "Patio" }, options: [], packages: [], contractor: null, totalCents: 100001 });
+  assert.equal(half.depositCents, 50001);
+  assert.deepEqual(half.optionalClauses, []);
+});
+
+test("refresh from the job: new money and untouched sections come in; edits and editor choices stay", () => {
+  const old = draftAgreement(input());
+  const edited = {
+    ...old,
+    values: { ...old.values, tax_mode: "includes_tax" as const },
+    blocks: old.blocks.map((b) => (b.id === "work.pour" ? { ...b, text: "5 in. slab" } : b)),
+  };
+  const fresh = draftAgreement(input({ totalCents: 900000, quote: { ...input().quote, quote_cleanup: "Haul and sweep.", quote_pour: "4 in. 4000 PSI" } }));
+  const r = refreshFromJob(edited, fresh);
+  assert.equal(r.values.total_cents, 900000);
+  assert.equal(r.values.tax_mode, "includes_tax");
+  assert.equal(r.blocks.find((b) => b.id === "work.cleanup")!.text, "Haul and sweep.");
+  assert.equal(r.blocks.find((b) => b.id === "work.pour")!.text, "5 in. slab");
+  assert.ok(editedBlocks(r).includes("work.pour"));
 });

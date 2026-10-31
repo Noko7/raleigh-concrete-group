@@ -485,9 +485,10 @@ export const DOC_CSS = [
   "h3{font-size:11pt;margin:8pt 0 2pt}",
   "p{margin:0 0 5pt}",
   "ul{margin:0 0 6pt 16pt;padding:0}li{margin:0 0 4pt}",
-  "table{border-collapse:collapse;width:100%;margin:4pt 0 8pt}",
-  "th,td{border:1px solid #bbb;padding:4pt 6pt;text-align:left;vertical-align:top}",
-  "th{background:#f3f3f3;width:28%;font-weight:bold}",
+  "table{border-collapse:collapse;width:100%;margin:4pt 0 8pt;table-layout:fixed}",
+  "th,td{border:1px solid #bbb;padding:4pt 6pt;text-align:left;vertical-align:top;overflow-wrap:anywhere}",
+  "th{background:#f3f3f3;font-weight:bold}",
+  ".ag-parties th{width:19%}.ag-price th{width:40%}",
   ".ag-booked{text-align:center;font-size:9.5pt}",
   ".ag-amended{text-align:center}",
   ".ag-note{font-size:9.5pt}",
@@ -575,4 +576,67 @@ export function diffVersions(a: AgreementBody, b: AgreementBody): Change[] {
 /** Blocks whose text no longer matches what they started from (the quote section or the template clause). */
 export function editedBlocks(body: AgreementBody): string[] {
   return body.blocks.filter((b) => b.base !== null && b.text.trim() !== b.base.trim()).map((b) => b.id);
+}
+
+// ── From a job ──────────────────────────────────────────────────────────────
+
+export type JobForDraft = DraftInput["quote"] & { service: string | null; change_deposit_cents?: number | null };
+export type LineForDraft = { title: string; description: string | null; required?: boolean; customer_response: string | null };
+
+/**
+ * What a new draft is built from: the job as approved, the lines the customer took (the package they picked first,
+ * then required and accepted options), the contractor, and the job's money. The deposit is the change-order target
+ * when one is set, else half. Repair jobs start with Repair Limitations on.
+ */
+export function draftInputFromJob(input: {
+  today: string;
+  quote: JobForDraft;
+  options: LineForDraft[];
+  packages: LineForDraft[];
+  contractor: DraftInput["contractor"];
+  totalCents: number;
+  replacesSignedOn?: string | null;
+}): DraftInput {
+  const pkg = input.packages.find((p) => p.customer_response === "accepted");
+  const opts = input.options.filter((o) => o.required || o.customer_response === "accepted");
+  const line = (l: LineForDraft) => [l.title, l.description].map((x) => (x ?? "").trim()).filter(Boolean).join(": ");
+  const lines = [...(pkg ? [line(pkg)] : []), ...opts.map(line)].filter(Boolean);
+  const total = Math.max(0, Math.round(input.totalCents));
+  const target = input.quote.change_deposit_cents;
+  const deposit = target != null && target > 0 ? Math.min(Math.round(target), total) : Math.round(total / 2);
+  return {
+    today: input.today,
+    quote: input.quote,
+    boughtLines: lines,
+    contractor: input.contractor,
+    totalCents: total,
+    depositCents: deposit,
+    taxMode: "plus_tax",
+    optionalClauses: /repair/i.test(input.quote.service ?? "") ? ["clause.repair"] : [],
+    replacesSignedOn: input.replacesSignedOn ?? null,
+  };
+}
+
+/**
+ * Bring a draft up to date with the job (a change order, a new contractor, a fixed phone number) without losing
+ * anyone's edits: values that come from the job are replaced; a work section nobody edited takes the job's new
+ * text, and an edited one keeps its text but now shows as differing from the quote. The date is today's.
+ */
+export function refreshFromJob(body: AgreementBody, fresh: AgreementBody): AgreementBody {
+  const keep = body.values;
+  const values: AgreementValues = {
+    ...fresh.values,
+    // Choices made in the editor, not facts about the job.
+    tax_mode: keep.tax_mode,
+    payment_methods: keep.payment_methods,
+    replaces_signed_on: keep.replaces_signed_on,
+  };
+  const freshBy = new Map(fresh.blocks.map((b) => [b.id, b]));
+  const blocks = body.blocks.map((b) => {
+    const f = freshBy.get(b.id);
+    if (b.kind !== "work" || !f) return b;
+    const untouched = b.base !== null && b.text.trim() === b.base.trim();
+    return untouched ? { ...b, text: f.text, base: f.base } : { ...b, base: f.base };
+  });
+  return { ...body, values, blocks };
 }
