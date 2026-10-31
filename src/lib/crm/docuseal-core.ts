@@ -2,9 +2,11 @@
 // that sends an agreement version for signing, reading the response and webhooks, and deciding what each webhook
 // does to an agreement's status. Tested in docuseal-core.test.ts.
 //
-// Signing order: the Contractor signs first (order 0), then the Customer (order 1). DocuSeal does not stop a
-// customer opening their link early on a one-off HTML submission, so the customer's page only shows the signing
-// form once the agreement is contractor_signed (see /sign/[token]).
+// Signing order: the Contractor signs first (order 0), then the Customer (order 1). The request passes
+// order "preserved" with DocuSeal's emails on, so DocuSeal emails only the contractor at first and emails the
+// customer automatically once the contractor has signed. DocuSeal does not stop a customer opening their link
+// early on a one-off HTML submission, so the customer's page on this site also only shows the signing form once
+// the agreement is contractor_signed (see /sign/[token]).
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export type SignerRole = "Contractor" | "Customer";
@@ -81,20 +83,20 @@ const email = (e: string | null) => (e && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e.tr
 
 /**
  * The POST /submissions/html body. The stored HTML of the version is sent as is (never re-rendered), so the
- * signed PDF is exactly the saved version; its fingerprint rides along in each signer's metadata. DocuSeal sends
- * no emails or texts itself: the site texts the links.
+ * signed PDF is exactly the saved version; its fingerprint rides along in each signer's metadata. DocuSeal emails
+ * the signers in order (the customer only after the contractor signs); the site also texts the links.
  */
 export function buildSubmissionRequest(s: SendInput): Record<string, unknown> {
   const meta = { agreement_id: s.agreementId, version_id: s.version.id, version_no: s.version.version_no, html_sha256: s.version.html_sha256 };
   return {
     name: s.title.slice(0, 200),
-    send_email: false,
+    send_email: true,
     order: "preserved",
     expire_at: s.expireAt,
     documents: [{ name: `${s.title} (v${s.version.version_no})`.slice(0, 200), html: s.version.html, size: "Letter" }],
     submitters: [
-      { role: "Contractor", order: 0, name: s.contractor.name, email: email(s.contractor.email), phone: e164(s.contractor.phone), external_id: `${s.agreementId}:contractor`, metadata: meta, send_email: false },
-      { role: "Customer", order: 1, name: s.customer.name, email: email(s.customer.email), phone: e164(s.customer.phone), external_id: `${s.agreementId}:customer`, metadata: meta, send_email: false },
+      { role: "Contractor", order: 0, name: s.contractor.name, email: email(s.contractor.email), phone: e164(s.contractor.phone), external_id: `${s.agreementId}:contractor`, metadata: meta },
+      { role: "Customer", order: 1, name: s.customer.name, email: email(s.customer.email), phone: e164(s.customer.phone), external_id: `${s.agreementId}:customer`, metadata: meta },
     ],
   };
 }

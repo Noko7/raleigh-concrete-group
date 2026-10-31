@@ -979,7 +979,8 @@ agreements bucket (DocuSeal's links expire in about 40 minutes; a missed copy is
 to the job's documents page), the owner is texted once, and the customer can download their copy from the same
 link. Declined or expired: the owner is texted once and it can be edited and sent again. **Cancel signing**
 archives the DocuSeal submission and makes it editable (old links then say they're no longer active). DocuSeal
-sends no emails or texts of its own. The signing links live in `agreement_signing`, which only the server reads:
+also emails the signers in order (`order: "preserved"`): only the contractor at first, then the customer
+automatically once the contractor has signed; a signer with no email on file just gets the text. The signing links live in `agreement_signing`, which only the server reads:
 the contractor who was sent it sees only their own link, and only the owner sees the customer's (to resend it).
 A missed webhook is caught up from DocuSeal the next time the job's documents page or the customer's link is
 opened.
