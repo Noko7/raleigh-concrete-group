@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/crm/auth";
 import type { AgreementBody } from "@/lib/crm/agreement-doc";
 import {
+  archiveAndRestart,
   canEditJobAgreement,
   draftFromJob,
   getVersion,
@@ -30,11 +31,24 @@ async function jobFor(quoteId: string) {
   return { session, quote };
 }
 
-export async function startAgreementAction(quoteId: string): Promise<{ ok: boolean; error?: string }> {
+const templateIdOrNull = (x: unknown) => (typeof x === "string" && /^[0-9a-fA-F-]{36}$/.test(x) ? x : null);
+
+export async function startAgreementAction(quoteId: string, templateId: string | null = null): Promise<{ ok: boolean; error?: string }> {
   const ctx = await jobFor(quoteId);
   if (!ctx) return { ok: false, error: "This job isn't available." };
-  const r = await startAgreement(ctx.session, ctx.quote);
+  const r = await startAgreement(ctx.session, ctx.quote, templateIdOrNull(templateId));
   if (r.ok) refresh(quoteId);
+  return r.ok ? { ok: true } : { ok: false, error: r.error };
+}
+
+/** Set this agreement aside (kept under "Earlier agreements") and draft a new one from a template. */
+export async function archiveAndRestartAction(quoteId: string, agreementId: string, templateId: string | null): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await jobFor(quoteId);
+  if (!ctx) return { ok: false, error: "This job isn't available." };
+  const ag = await getAgreement(ctx.session, agreementId);
+  if (!ag || ag.quote_id !== quoteId || ag.kind !== "customer" || !ag.current_version_id) return { ok: false, error: "This agreement isn't on this job." };
+  const r = await archiveAndRestart(ctx.session, ctx.quote, ag, templateIdOrNull(templateId));
+  refresh(quoteId);
   return r.ok ? { ok: true } : { ok: false, error: r.error };
 }
 

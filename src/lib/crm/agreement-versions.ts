@@ -13,7 +13,9 @@ import {
   parseBody,
   renderAgreementHtml,
   type AgreementBody,
+  type TemplateSnapshot,
 } from "./agreement-doc";
+import { authoritativeSnapshot, resolveTemplateFor } from "./templates";
 import { canEditJobAgreement } from "./documents";
 import { jobLedger } from "./payments";
 import { pgAdmin, pgUser } from "./rest";
@@ -57,10 +59,11 @@ async function jobMoney(quote: Quote): Promise<{ total: number; deposit: number 
 }
 
 /**
- * A fresh draft from the job as it stands now. Used for a new agreement and for "Refresh from the job". Throws if
- * any part of the job can't be read, rather than drafting an agreement with a missing contractor or missing lines.
+ * A fresh draft from the job as it stands now, from `template` (which decides the clauses and tax wording; the
+ * built-in standard when left out). Used for a new agreement and for "Refresh from the job". Throws if any part of
+ * the job can't be read, rather than drafting an agreement with a missing contractor or missing lines.
  */
-export async function draftFromJob(quote: Quote): Promise<AgreementBody> {
+export async function draftFromJob(quote: Quote, template?: TemplateSnapshot): Promise<AgreementBody> {
   const [options, packages, contractor, money] = await Promise.all([
     pgAdmin(`quote_options?quote_id=eq.${quote.id}&select=*&order=sort_order.asc,created_at.asc`).then((r) => rowsOrThrow<QuoteOption>(r, "options")),
     pgAdmin(`quote_packages?quote_id=eq.${quote.id}&select=*`).then((r) => rowsOrThrow<QuotePackage>(r, "packages")),
@@ -71,8 +74,8 @@ export async function draftFromJob(quote: Quote): Promise<AgreementBody> {
       : Promise.resolve(null),
     jobMoney(quote),
   ]);
-  return draftAgreement(
-    draftInputFromJob({
+  return draftAgreement({
+    ...draftInputFromJob({
       today: todayYmd(),
       quote: { ...quote, estimated_duration: null },
       options,
@@ -88,7 +91,8 @@ export async function draftFromJob(quote: Quote): Promise<AgreementBody> {
         : null,
       totalCents: money.total,
     }),
-  );
+    template,
+  });
 }
 
 async function insertVersion(agreementId: string, body: AgreementBody, note: string | null, who: Session["staff"]) {
@@ -132,8 +136,13 @@ export async function saveVersion(input: {
   if ((agreement.current_version_id ?? null) !== (input.baseVersionId ?? null)) {
     return { ok: false, error: "Someone saved a newer version while you were editing. Reload the page to see it; your changes here aren't saved." };
   }
-  const parsed = parseBody(input.raw);
-  if (!parsed) return { ok: false, error: "This draft couldn't be read. Reload the page and try again." };
+  const claimed = parseBody(input.raw);
+  if (!claimed) return { ok: false, error: "This draft couldn't be read. Reload the page and try again." };
+  // The template copy is the stored one, never the browser's: the body is read again against it, so required
+  // clauses, titles and clause types are the template's.
+  const template = await authoritativeSnapshot(claimed.template).catch(() => null);
+  const parsed = template ? parseBody({ ...(input.raw as object), template }) : null;
+  if (!parsed) return { ok: false, error: "This draft doesn't match its template. Reload the page and try again." };
   const money = await jobMoney(quote);
   const body: AgreementBody = { ...parsed, values: { ...parsed.values, total_cents: money.total, deposit_cents: money.deposit } };
   const res = await insertVersion(agreement.id, body, input.note.trim().slice(0, 300) || null, session.staff);
@@ -151,7 +160,11 @@ export async function saveVersion(input: {
  * has one that is still being worked on, that one is used: a double tap never makes two. The agreements table is
  * owner-write under RLS, so the row is made with the service role after the caller's right to edit is checked.
  */
-export async function startAgreement(session: Session, quote: Quote): Promise<{ ok: true; agreementId: string } | { ok: false; error: string }> {
+export async function startAgreement(
+  session: Session,
+  quote: Quote,
+  templateId: string | null = null,
+): Promise<{ ok: true; agreementId: string } | { ok: false; error: string }> {
   if (!canEditJobAgreement(session, quote)) return { ok: false, error: "Only the owner or the job's contractor can write its agreement." };
   if (quote.change_requested_at) return { ok: false, error: "A change order is waiting on the customer. Write the agreement after they answer it." };
   const open = await pgAdmin(
@@ -161,7 +174,9 @@ export async function startAgreement(session: Session, quote: Quote): Promise<{ 
   if (existing) return { ok: true, agreementId: existing.id };
   let body: AgreementBody;
   try {
-    body = await draftFromJob(quote);
+    const template = await resolveTemplateFor(templateId, quote.service);
+    if ("error" in template) return { ok: false, error: template.error };
+    body = await draftFromJob(quote, template);
   } catch (e) {
     console.error((e as Error).message);
     return { ok: false, error: "Couldn't read the whole job to draft from. Try again." };
@@ -173,11 +188,35 @@ export async function startAgreement(session: Session, quote: Quote): Promise<{ 
   });
   const [ag] = ins.ok ? ((await ins.json()) as { id: string }[]) : [];
   if (!ag) return { ok: false, error: "Couldn't start the agreement. Try again." };
-  const v = await insertVersion(ag.id, body, "Drafted from the job", session.staff);
+  const v = await insertVersion(ag.id, body, `Drafted from the job (${body.template.name}${body.template.version_no ? ` v${body.template.version_no}` : ""})`, session.staff);
   if (!v.ok) {
     console.error("[agreements] first version failed", ag.id, v.status);
     await pgAdmin(`agreements?id=eq.${ag.id}`, { method: "DELETE" });
     return { ok: false, error: "Couldn't start the agreement. Try again." };
   }
   return { ok: true, agreementId: ag.id };
+}
+
+/**
+ * Set an agreement aside and start a fresh one from a template: the old one is marked void (kept, with its whole
+ * history, under "Earlier agreements") and a new one is drafted from the job. Only for an agreement that isn't out
+ * for signature or signed: pending (a draft), declined or expired.
+ */
+export async function archiveAndRestart(
+  session: Session,
+  quote: Quote,
+  agreement: Agreement,
+  templateId: string | null,
+): Promise<{ ok: true; agreementId: string } | { ok: false; error: string }> {
+  if (!canEditJobAgreement(session, quote)) return { ok: false, error: "Only the owner or the job's contractor can do this." };
+  if (!["pending", "declined", "expired"].includes(agreement.status)) {
+    return { ok: false, error: "Only a draft, or one that was declined or expired, can be set aside. Cancel the signing first." };
+  }
+  const res = await pgAdmin(`agreements?id=eq.${agreement.id}&status=in.(pending,declined,expired)&select=id`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ status: "void", notes: `Set aside on ${todayYmd()} to start over from a template.` }),
+  });
+  if (!res.ok || ((await res.json()) as unknown[]).length !== 1) return { ok: false, error: "It changed meanwhile. Reload and try again." };
+  return startAgreement(session, quote, templateId);
 }

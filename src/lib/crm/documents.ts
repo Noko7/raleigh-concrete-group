@@ -99,11 +99,11 @@ export function canEditJobAgreement(session: Session, quote: Pick<Quote, "assign
   return session.staff.role === "owner" || (quote.assigned_to != null && quote.assigned_to === session.staff.id);
 }
 
-/** The agreement the editor works on: the newest one on the job that was written in the CRM. */
+/** The agreement the editor works on: the newest one on the job written in the CRM and not set aside (void). */
 export function editableAgreement(agreements: Agreement[]): Agreement | null {
   return (
     [...agreements]
-      .filter((a) => a.kind === "customer" && a.current_version_id)
+      .filter((a) => a.kind === "customer" && a.current_version_id && a.status !== "void")
       .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0] ?? null
   );
 }

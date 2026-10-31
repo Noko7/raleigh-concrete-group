@@ -11,13 +11,16 @@ import { listReceiptsForHub } from "@/lib/crm/receipts";
 import { AddAgreement } from "./add-agreement";
 import { AgreementList, AgreementStatusBadge } from "./agreement-list";
 import { ReceiptsView } from "./receipts-view";
+import { TemplateList } from "./templates/template-list";
+import { listTemplateVersionNos, listTemplates } from "@/lib/crm/templates";
 
 export const dynamic = "force-dynamic";
 
 // Every document in one place: customer agreements and receipts grouped by job, the books' receipts by year,
 // and contractor onboarding agreements. RLS scopes all of it, so a contractor sees their own jobs and their own
-// agreement, and the owner sees everything. Job pages link here instead of listing documents themselves.
-type View = "jobs" | "receipts" | "contractors";
+// agreement, and the owner sees everything. Job pages link here instead of listing documents themselves. The owner
+// also manages agreement templates here.
+type View = "jobs" | "receipts" | "contractors" | "templates";
 
 function day(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: BUSINESS_TZ });
@@ -33,13 +36,15 @@ export default async function DocumentsPage({
   const sp = await searchParams;
   const isOwner = session.staff.role === "owner";
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
-  const view: View = sp.view === "receipts" || sp.view === "contractors" ? sp.view : "jobs";
+  const view: View =
+    sp.view === "receipts" || sp.view === "contractors" || (sp.view === "templates" && isOwner) ? sp.view : "jobs";
   const includeTests = sp.tests === "1";
 
   const tabs: { key: View; label: string }[] = [
     { key: "jobs", label: "By job" },
     { key: "receipts", label: "Receipts" },
     { key: "contractors", label: isOwner ? "Contractor agreements" : "My agreement" },
+    ...(isOwner ? [{ key: "templates" as const, label: "Templates" }] : []),
   ];
 
   return (
@@ -67,6 +72,7 @@ export default async function DocumentsPage({
       {view === "receipts" && <ReceiptsView session={session} base={base} yearParam={sp.year} tests={sp.tests} />}
       {view === "jobs" && <JobsView base={base} includeTests={includeTests} session={session} />}
       {view === "contractors" && <ContractorsView isOwner={isOwner} locale={locale} session={session} />}
+      {view === "templates" && <TemplatesView base={base} session={session} />}
     </main>
   );
 }
@@ -201,5 +207,24 @@ async function ContractorsView({
         </div>
       )}
     </>
+  );
+}
+
+async function TemplatesView({ session, base }: { session: Awaited<ReturnType<typeof requireSession>>; base: string }) {
+  const templates = await listTemplates(session);
+  const nos = await listTemplateVersionNos(templates.map((t) => t.current_version_id));
+  const names = new Map(templates.map((t) => [t.id, t.name]));
+  return (
+    <TemplateList
+      base={base}
+      rows={templates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        versionNo: t.current_version_id ? (nos.get(t.current_version_id) ?? null) : null,
+        updatedAt: t.updated_at,
+        clonedFrom: t.cloned_from_id ? (names.get(t.cloned_from_id) ?? null) : null,
+      }))}
+    />
   );
 }

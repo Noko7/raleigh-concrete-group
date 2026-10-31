@@ -13,7 +13,9 @@ import type { AgreementBody } from "@/lib/crm/agreement-doc";
 import { AddAgreement } from "../add-agreement";
 import { AgreementList } from "../agreement-list";
 import { AgreementEditor } from "./agreement-editor";
-import { StartAgreement } from "./start-agreement";
+import { EarlierAgreements } from "./earlier-agreements";
+import { RestartAgreement, StartAgreement } from "./start-agreement";
+import { templateChoices } from "@/lib/crm/templates";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +41,15 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
   const canEdit = canEditJobAgreement(session, quote);
   const current = editableAgreement(agreements);
   const others = agreements.filter((a) => a.id !== current?.id && !a.current_version_id);
-  const [versions, currentVersion] = current?.current_version_id
-    ? await Promise.all([listVersions(session, current.id), getVersion(session, current.current_version_id)])
-    : [[], null];
+  // Agreements written in the CRM and set aside to start over: read-only, with their history.
+  const earlier = agreements.filter((a) => a.id !== current?.id && a.current_version_id);
+  const [versions, currentVersion, earlierVersions, picker] = await Promise.all([
+    current?.current_version_id ? listVersions(session, current.id) : Promise.resolve([]),
+    current?.current_version_id ? getVersion(session, current.current_version_id) : Promise.resolve(null),
+    Promise.all(earlier.map((a) => listVersions(session, a.id))),
+    canEdit ? templateChoices(quote.service) : Promise.resolve({ choices: [], defaultId: null }),
+  ]);
+  const canRestart = Boolean(canEdit && current && ["pending", "declined", "expired"].includes(current.status));
   const liveReceiptFor = new Set(receipts.filter((r) => !r.voided_at).map((r) => r.payment_id));
   const missing = money
     ? money.rows
@@ -78,9 +86,21 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
       ) : (
         <section className="crm-card" aria-label="Customer agreement">
           <h2 className="crm-card-title">Customer agreement</h2>
-          {canEdit ? <StartAgreement quoteId={quote.id} /> : <p className="crm-muted crm-sm">No agreement written yet.</p>}
+          {canEdit ? (
+            <StartAgreement quoteId={quote.id} choices={picker.choices} defaultId={picker.defaultId} />
+          ) : (
+            <p className="crm-muted crm-sm">No agreement written yet.</p>
+          )}
         </section>
       )}
+      {canRestart && current && (
+        <div className="ae-restart-row">
+          <RestartAgreement quoteId={quote.id} agreementId={current.id} choices={picker.choices} defaultId={picker.defaultId} />
+        </div>
+      )}
+      <EarlierAgreements
+        items={earlier.map((a, i) => ({ id: a.id, title: a.title, status: a.status, created_at: a.created_at, versions: earlierVersions[i] ?? [] }))}
+      />
 
       {(others.length > 0 || isOwner) && (
         <section className="crm-card" aria-label="Agreement files">

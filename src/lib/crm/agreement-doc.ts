@@ -3,9 +3,12 @@
 // by the same function from the same saved version, and the wording, the draft and the diff between versions are
 // tested (agreement-doc.test.ts).
 //
-// Template text lives here, versioned by AGREEMENT_TEMPLATE_VERSION: changing a clause is a code change, reviewed
-// like any other, and every saved agreement version records which template it started from. A sent version is
-// never re-rendered from a newer template: its HTML is frozen when it is saved (agreement-versions.ts).
+// Clause text comes from a template (document_templates, edited by the owner in the Documents hub; see
+// templates.ts). An agreement carries a snapshot of the template version it was drafted from, so its optional
+// clauses, required clauses, titles and "standard wording" never change when the template is edited later, and a
+// sent version is never re-rendered: its HTML is frozen when it is saved (agreement-versions.ts).
+// BUILTIN_STANDARD is the Drive master as code: the default when no template is chosen, and the seed of the
+// "Standard Work Agreement" template. AGREEMENT_TEMPLATE_VERSION versions the document format itself.
 
 import { DEFAULT_DEPOSIT_PERCENT } from "./fees.ts";
 
@@ -57,8 +60,27 @@ export type AgreementBlock = {
   base: string | null;
 };
 
+/** One clause of a template. `text_includes_tax`, when set, replaces `text` while the tax wording is "includes". */
+export type TemplateClause = {
+  id: string;
+  kind: "clause" | "initials";
+  title: string;
+  text: string;
+  text_includes_tax: string | null;
+  optional: boolean;
+  /** For an optional clause: switched on in a new draft. */
+  on_by_default: boolean;
+};
+
+/** What a template version holds (document_template_versions.body). */
+export type TemplateBody = { tax_mode: TaxMode; clauses: TemplateClause[] };
+
+/** The template an agreement was drafted from, as it was then. id null = the built-in standard (no saved template). */
+export type TemplateSnapshot = TemplateBody & { id: string | null; version_no: number | null; name: string };
+
 export type AgreementBody = {
   template_version: string;
+  template: TemplateSnapshot;
   values: AgreementValues;
   blocks: AgreementBlock[];
 };
@@ -91,7 +113,7 @@ const TAX_WORDS: Record<TaxMode, string> = {
 
 type ClauseDef = { id: string; kind: "clause" | "initials"; title: string; text: string; optional: boolean };
 
-export const CLAUSES: ClauseDef[] = [
+const STANDARD_CLAUSES: ClauseDef[] = [
   {
     id: "clause.basics",
     kind: "clause",
@@ -163,11 +185,28 @@ export const CLAUSES: ClauseDef[] = [
   },
 ];
 
-const CLAUSE_BY_ID = new Map(CLAUSES.map((c) => [c.id, c]));
-export const OPTIONAL_CLAUSE_IDS = CLAUSES.filter((c) => c.optional).map((c) => c.id);
-const REQUIRED_CLAUSE_IDS = CLAUSES.filter((c) => !c.optional).map((c) => c.id);
-/** Where every template block sits; custom blocks go just before Authorization. */
-const ORDER = [...WORK_SECTIONS.map((w) => w.id), ...CLAUSES.map((c) => c.id)];
+const AUTH_INCLUDES_TAX =
+  "I authorize the Contractor to perform the work described above for the total price shown, which includes all taxes and fees. I have read and understand the terms above.";
+const AMENDED_SENTENCE =
+  " This amended agreement replaces the version signed earlier and is our complete agreement. Any change must be in writing and signed by both parties.";
+
+/** The Drive master with the Alexavier amendment's clauses as options: the default, and the Standard template's seed. */
+export const BUILTIN_STANDARD: TemplateSnapshot = {
+  id: null,
+  version_no: null,
+  name: "Standard Work Agreement",
+  tax_mode: "plus_tax",
+  clauses: STANDARD_CLAUSES.map((c) => ({
+    ...c,
+    text_includes_tax: c.id === "clause.authorization" ? AUTH_INCLUDES_TAX : null,
+    on_by_default: false,
+  })),
+};
+
+const clauseIn = (t: TemplateBody, id: string) => t.clauses.find((c) => c.id === id) ?? null;
+export const optionalClauseIds = (t: TemplateBody) => t.clauses.filter((c) => c.optional).map((c) => c.id);
+const requiredClauseIds = (t: TemplateBody) => t.clauses.filter((c) => !c.optional).map((c) => c.id);
+const WORK_IDS = WORK_SECTIONS.map((w) => w.id);
 
 // ── Drafting from a job ─────────────────────────────────────────────────────
 
@@ -197,9 +236,12 @@ export type DraftInput = {
   } | null;
   totalCents: number;
   depositCents: number;
-  taxMode: TaxMode;
-  /** Repair jobs start with Repair Limitations switched on. */
-  optionalClauses: string[];
+  /** The template to draft from; the built-in standard when left out. */
+  template?: TemplateSnapshot;
+  /** Defaults to the template's. */
+  taxMode?: TaxMode;
+  /** Optional clauses to switch on; defaults to the template's "on by default" ones. */
+  optionalClauses?: string[];
   replacesSignedOn: string | null;
 };
 
@@ -212,6 +254,7 @@ export function prettyPhone(raw: string | null | undefined): string {
 }
 
 export function draftAgreement(input: DraftInput): AgreementBody {
+  const template = input.template ?? BUILTIN_STANDARD;
   const q = input.quote;
   const c = input.contractor;
   const methods = (c?.payment_methods ?? [...PAYMENT_METHODS]).filter((m): m is PayMethod =>
@@ -228,7 +271,7 @@ export function draftAgreement(input: DraftInput): AgreementBody {
     contractor_phone: prettyPhone(c?.phone),
     total_cents: Math.round(input.totalCents),
     deposit_cents: Math.round(input.depositCents),
-    tax_mode: input.taxMode,
+    tax_mode: input.taxMode ?? template.tax_mode,
     payment_methods: methods.length ? methods : [...PAYMENT_METHODS],
     replaces_signed_on: input.replacesSignedOn,
   };
@@ -241,50 +284,49 @@ export function draftAgreement(input: DraftInput): AgreementBody {
     }
     return { id: w.id, kind: "work" as const, title: w.title, text, origin: "quote" as const, base: text };
   });
-  for (const cl of CLAUSES) {
-    if (cl.optional && !input.optionalClauses.includes(cl.id)) continue;
-    blocks.push(clauseBlock(cl.id, values));
+  const on = input.optionalClauses ?? template.clauses.filter((c) => c.optional && c.on_by_default).map((c) => c.id);
+  for (const cl of template.clauses) {
+    if (cl.optional && !on.includes(cl.id)) continue;
+    blocks.push(clauseBlock(template, cl.id, values));
   }
-  return { template_version: AGREEMENT_TEMPLATE_VERSION, values, blocks };
+  return { template_version: AGREEMENT_TEMPLATE_VERSION, template, values, blocks };
 }
 
-/** A template clause as a block, with the amended-agreement wording where it applies. */
-export function clauseBlock(id: string, values: Pick<AgreementValues, "replaces_signed_on" | "tax_mode">): AgreementBlock {
-  const cl = CLAUSE_BY_ID.get(id);
+/**
+ * A template clause as a block: its "includes tax" wording when the agreement says so, and the amended-agreement
+ * sentence on Authorization when it replaces a signed one.
+ */
+export function clauseBlock(template: TemplateBody, id: string, values: Pick<AgreementValues, "replaces_signed_on" | "tax_mode">): AgreementBlock {
+  const cl = clauseIn(template, id);
   if (!cl) throw new Error(`Unknown clause ${id}`);
-  let text = cl.text;
-  if (id === "clause.authorization" && (values.replaces_signed_on || values.tax_mode === "includes_tax")) {
-    text =
-      values.tax_mode === "includes_tax"
-        ? "I authorize the Contractor to perform the work described above for the total price shown, which includes all taxes and fees. I have read and understand the terms above."
-        : text;
-    if (values.replaces_signed_on) {
-      text += " This amended agreement replaces the version signed earlier and is our complete agreement. Any change must be in writing and signed by both parties.";
-    }
-  }
+  let text = values.tax_mode === "includes_tax" && cl.text_includes_tax ? cl.text_includes_tax : cl.text;
+  if (id === "clause.authorization" && values.replaces_signed_on) text += AMENDED_SENTENCE;
   return { id, kind: cl.kind, title: cl.title, text, origin: "template", base: text };
 }
 
 /** Switch an optional clause on or off, keeping template order. Required clauses can't be removed. */
 export function toggleClause(body: AgreementBody, id: string, on: boolean): AgreementBody {
-  if (!OPTIONAL_CLAUSE_IDS.includes(id)) return body;
+  if (!optionalClauseIds(body.template).includes(id)) return body;
   const has = body.blocks.some((b) => b.id === id);
   if (on === has) return body;
-  const blocks = on ? [...body.blocks, clauseBlock(id, body.values)] : body.blocks.filter((b) => b.id !== id);
-  return { ...body, blocks: sortBlocks(blocks) };
+  const blocks = on ? [...body.blocks, clauseBlock(body.template, id, body.values)] : body.blocks.filter((b) => b.id !== id);
+  return { ...body, blocks: sortBlocks(blocks, body.template) };
 }
 
 export function addCustomBlock(body: AgreementBody, title: string, text: string): AgreementBody {
   const n = Math.max(0, ...body.blocks.filter((b) => b.kind === "custom").map((b) => Number(b.id.split(".")[1]) || 0)) + 1;
   const block: AgreementBlock = { id: `custom.${n}`, kind: "custom", title: tidy(title) || "Additional terms", text: tidy(text), origin: "custom", base: null };
-  return { ...body, blocks: sortBlocks([...body.blocks, block]) };
+  return { ...body, blocks: sortBlocks([...body.blocks, block], body.template) };
 }
 
-function sortBlocks(blocks: AgreementBlock[]): AgreementBlock[] {
+/** Work sections, then the template's clauses in its order; custom sections just before Authorization (or last). */
+function sortBlocks(blocks: AgreementBlock[], template: TemplateBody): AgreementBlock[] {
+  const order = [...WORK_IDS, ...template.clauses.map((c) => c.id)];
+  const auth = order.indexOf("clause.authorization");
   const rank = (b: AgreementBlock) => {
-    if (b.kind === "custom") return ORDER.indexOf("clause.authorization") - 0.5 + Number(b.id.split(".")[1]) / 1e6;
-    const i = ORDER.indexOf(b.id);
-    return i < 0 ? ORDER.length : i;
+    if (b.kind === "custom") return (auth < 0 ? order.length : auth) - 0.5 + Number(b.id.split(".")[1]) / 1e6;
+    const i = order.indexOf(b.id);
+    return i < 0 ? order.length : i;
   };
   return [...blocks].sort((a, b) => rank(a) - rank(b));
 }
@@ -311,8 +353,8 @@ export function sendProblems(body: AgreementBody): Problem[] {
   for (const b of body.blocks) {
     if (b.kind !== "custom" && !b.text.trim()) out.push({ field: b.id, message: `${b.title} is empty. Write the work, or "N/A".` });
   }
-  for (const id of REQUIRED_CLAUSE_IDS) {
-    if (!body.blocks.some((b) => b.id === id)) out.push({ field: id, message: `${CLAUSE_BY_ID.get(id)?.title} is required.` });
+  for (const id of requiredClauseIds(body.template)) {
+    if (!body.blocks.some((b) => b.id === id)) out.push({ field: id, message: `${clauseIn(body.template, id)?.title} is required.` });
   }
   return out;
 }
@@ -326,12 +368,66 @@ const ymdOk = (x: unknown): x is string => {
 const textOk = (x: unknown, max: number): x is string => typeof x === "string" && x.length <= max;
 const MAX_CENTS = 99_999_999_99;
 
-/** The kind a block id may have: work.* is work, custom.* is custom, clause.* is a template clause (initials only on Repair). */
-function kindFor(id: string): BlockKind | null {
+/** The kind a block id may have: work.* is work, custom.* is custom, clause.* is the template's clause of that id. */
+function kindFor(id: string, template: TemplateBody): BlockKind | null {
   if (/^work\.(scope|permits|prep|pour|cleanup|duration)$/.test(id)) return "work";
   if (/^custom\.[1-9]\d{0,2}$/.test(id)) return "custom";
-  const cl = CLAUSE_BY_ID.get(id);
+  const cl = clauseIn(template, id);
   return cl ? cl.kind : null;
+}
+
+export const CLAUSE_ID_RE = /^clause\.[a-z0-9_]{1,40}$/;
+
+/**
+ * Re-checks a template's clauses: ids clause.<slug> and unique, kinds and lengths, at most 30 clauses, and an
+ * Authorization clause that is always required (it carries the agreement-replaces sentence and sits above the
+ * signatures). Returns the rebuilt body, or why it can't be used.
+ */
+export function parseTemplateBody(raw: unknown): { ok: true; body: TemplateBody } | { ok: false; error: string } {
+  if (!raw || typeof raw !== "object") return { ok: false, error: "The template couldn't be read." };
+  const r = raw as Record<string, unknown>;
+  if (r.tax_mode !== "plus_tax" && r.tax_mode !== "includes_tax") return { ok: false, error: "Pick the tax wording." };
+  if (!Array.isArray(r.clauses) || r.clauses.length < 1 || r.clauses.length > 30) return { ok: false, error: "A template has 1 to 30 sections." };
+  const ids = new Set<string>();
+  const clauses: TemplateClause[] = [];
+  for (const c of r.clauses as Record<string, unknown>[]) {
+    if (!c || typeof c !== "object" || typeof c.id !== "string" || !CLAUSE_ID_RE.test(c.id) || ids.has(c.id)) return { ok: false, error: "A section's id is invalid or repeated." };
+    if (c.kind !== "clause" && c.kind !== "initials") return { ok: false, error: "A section's type is invalid." };
+    if (!textOk(c.title, 120) || !c.title.trim()) return { ok: false, error: "Every section needs a title (up to 120 characters)." };
+    if (!textOk(c.text, 8000) || !c.text.trim()) return { ok: false, error: `"${c.title}" has no text.` };
+    if (!(c.text_includes_tax === null || c.text_includes_tax === undefined || textOk(c.text_includes_tax, 8000))) {
+      return { ok: false, error: `"${c.title}": the "includes tax" wording is too long.` };
+    }
+    if (typeof c.optional !== "boolean" || typeof c.on_by_default !== "boolean") return { ok: false, error: "A section's switches are invalid." };
+    ids.add(c.id);
+    const alt = typeof c.text_includes_tax === "string" && c.text_includes_tax.trim() ? c.text_includes_tax.replace(/\r\n?/g, "\n").trim() : null;
+    clauses.push({
+      id: c.id,
+      kind: c.kind,
+      title: c.title.trim(),
+      text: c.text.replace(/\r\n?/g, "\n").trim(),
+      text_includes_tax: alt,
+      optional: c.optional,
+      on_by_default: c.optional && c.on_by_default,
+    });
+  }
+  const auth = clauses.find((c) => c.id === "clause.authorization");
+  if (!auth) return { ok: false, error: "A template needs an Authorization section." };
+  if (auth.optional || auth.kind !== "clause") return { ok: false, error: "Authorization must be a required, ordinary section." };
+  return { ok: true, body: { tax_mode: r.tax_mode, clauses } };
+}
+
+/** A template snapshot inside a saved agreement. Missing (drafted before templates existed) = the built-in. */
+export function parseSnapshot(raw: unknown): TemplateSnapshot | null {
+  if (raw === undefined) return BUILTIN_STANDARD;
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const body = parseTemplateBody(r);
+  if (!body.ok) return null;
+  const id = r.id === null ? null : typeof r.id === "string" && /^[0-9a-fA-F-]{36}$/.test(r.id) ? r.id : undefined;
+  const no = r.version_no === null ? null : Number.isInteger(r.version_no) && (r.version_no as number) >= 1 ? (r.version_no as number) : undefined;
+  if (id === undefined || no === undefined || (id === null) !== (no === null) || !textOk(r.name, 120)) return null;
+  return { ...body.body, id, version_no: no, name: (r.name as string).trim() || "Template" };
 }
 
 /**
@@ -345,7 +441,9 @@ export function parseBody(raw: unknown): AgreementBody | null {
   const b = raw as Record<string, unknown>;
   const v = b.values as Record<string, unknown> | undefined;
   if (typeof b.template_version !== "string" || !/^\d{4}-\d{2}-\d{2}\.\d{1,3}$/.test(b.template_version)) return null;
-  if (!v || typeof v !== "object" || !Array.isArray(b.blocks) || b.blocks.length > 40) return null;
+  if (!v || typeof v !== "object" || !Array.isArray(b.blocks) || b.blocks.length > 60) return null;
+  const template = parseSnapshot(b.template);
+  if (!template) return null;
   const total = v.total_cents;
   const deposit = v.deposit_cents;
   const methods = v.payment_methods;
@@ -386,24 +484,25 @@ export function parseBody(raw: unknown): AgreementBody | null {
   const blocks: AgreementBlock[] = [];
   for (const k of b.blocks as Record<string, unknown>[]) {
     if (!k || typeof k !== "object" || typeof k.id !== "string" || ids.has(k.id)) return null;
-    const kind = kindFor(k.id);
+    const kind = kindFor(k.id, template);
     const origin = kind === "work" ? "quote" : kind === "custom" ? "custom" : "template";
     if (!kind || k.kind !== kind || k.origin !== origin) return null;
     if (!textOk(k.title, 120) || !textOk(k.text, 8000) || !(k.base === null || textOk(k.base, 8000))) return null;
     // Template blocks keep their template titles; only custom sections are named by the editor.
-    const title = kind === "custom" ? (k.title.trim() || "Additional terms") : kind === "work" ? WORK_SECTIONS.find((w) => w.id === k.id)!.title : CLAUSE_BY_ID.get(k.id)!.title;
+    const title = kind === "custom" ? (k.title.trim() || "Additional terms") : kind === "work" ? WORK_SECTIONS.find((w) => w.id === k.id)!.title : clauseIn(template, k.id)!.title;
     ids.add(k.id);
     blocks.push({ id: k.id, kind, title, text: k.text.replace(/\r\n?/g, "\n"), origin, base: kind === "custom" ? null : (k.base as string | null) });
   }
-  return { template_version: b.template_version, values, blocks: sortBlocks(blocks) };
+  return { template_version: b.template_version, template, values, blocks: sortBlocks(blocks, template) };
 }
 
-/** Change the tax wording; the Authorization clause follows it unless someone has rewritten it. */
+/** Change the tax wording; clauses with tax-specific wording (Authorization) follow it unless someone rewrote them. */
 export function setTaxMode(body: AgreementBody, mode: TaxMode): AgreementBody {
   const values = { ...body.values, tax_mode: mode };
   const blocks = body.blocks.map((b) => {
-    if (b.id !== "clause.authorization" || (b.base !== null && b.text.trim() !== b.base.trim())) return b;
-    return clauseBlock(b.id, values);
+    const cl = b.kind === "clause" || b.kind === "initials" ? clauseIn(body.template, b.id) : null;
+    if (!cl || !cl.text_includes_tax || (b.base !== null && b.text.trim() !== b.base.trim())) return b;
+    return clauseBlock(body.template, b.id, values);
   });
   return { ...body, values, blocks };
 }
@@ -597,6 +696,8 @@ export function diffWords(a: string, b: string): WordOp[] {
 /** Everything that differs between two versions, in document order. Empty means identical. */
 export function diffVersions(a: AgreementBody, b: AgreementBody): Change[] {
   const out: Change[] = [];
+  const tpl = (x: AgreementBody) => (x.template.version_no ? `${x.template.name} (v${x.template.version_no})` : x.template.name);
+  if (tpl(a) !== tpl(b)) out.push({ kind: "value", key: "template", label: "Template", before: tpl(a), after: tpl(b) });
   for (const [key, label, show] of VALUE_LABELS) {
     const before = show(a.values);
     const after = show(b.values);
@@ -632,7 +733,7 @@ export type LineForDraft = { title: string; description: string | null; required
  * What a new draft is built from: the job as approved, the lines the customer took (the package they picked first,
  * then required and accepted options), the contractor, and the job's money. The deposit is the job's deposit
  * target (what must be paid in total before work starts) when one is set, else the standard deposit (half).
- * Repair jobs start with Repair Limitations on.
+ * Which clauses are on, and the tax wording, come from the template chosen (repair jobs default to Repair).
  */
 export function draftInputFromJob(input: {
   today: string;
@@ -656,8 +757,7 @@ export function draftInputFromJob(input: {
     contractor: input.contractor,
     totalCents: total,
     depositCents: deposit,
-    taxMode: "plus_tax",
-    optionalClauses: /repair/i.test(input.quote.service ?? "") ? ["clause.repair"] : [],
+    // Tax wording and optional clauses come from the template chosen (Repair jobs default to the Repair template).
     replacesSignedOn: input.replacesSignedOn ?? null,
   };
 }
