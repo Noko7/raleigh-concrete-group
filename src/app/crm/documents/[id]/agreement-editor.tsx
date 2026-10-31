@@ -3,6 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
 
 import {
+  METHOD_NAMES,
   PAYMENT_METHODS,
   addCustomBlock,
   clauseBlock,
@@ -18,7 +19,6 @@ import {
   type AgreementBody,
   type AgreementValues,
   type Change,
-  type PayMethod,
 } from "@/lib/crm/agreement-doc";
 import type { VersionSummary } from "@/lib/crm/agreement-versions";
 import { useRouter } from "next/navigation";
@@ -31,7 +31,6 @@ import { draftFromJobAction, getVersionAction, saveVersionAction, sendForSigning
 // history below is the whole back-and-forth. An old version can be viewed, compared with any other, or restored
 // (which saves it again as the newest version).
 
-const METHOD_NAMES: Record<PayMethod, string> = { zelle: "Zelle", venmo: "Venmo", check: "Check", cash: "Cash", card: "Card" };
 
 // Signature, initials and date fields are DocuSeal tags; in the preview they are drawn as labelled boxes.
 const PREVIEW_CSS =

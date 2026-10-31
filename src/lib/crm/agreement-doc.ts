@@ -23,6 +23,8 @@ export const OFFICE = {
 
 export const PAYMENT_METHODS = ["zelle", "venmo", "check", "cash", "card"] as const;
 export type PayMethod = (typeof PAYMENT_METHODS)[number];
+/** When nobody has chosen (no contractor, or none set): the original four. Card is offered only when ticked. */
+export const DEFAULT_PAYMENT_METHODS: PayMethod[] = ["zelle", "venmo", "check", "cash"];
 export const METHOD_NAMES: Record<PayMethod, string> = { zelle: "Zelle", venmo: "Venmo", check: "Check", cash: "Cash", card: "Card" };
 
 export type TaxMode = "plus_tax" | "includes_tax";
@@ -257,7 +259,7 @@ export function draftAgreement(input: DraftInput): AgreementBody {
   const template = input.template ?? BUILTIN_STANDARD;
   const q = input.quote;
   const c = input.contractor;
-  const methods = (c?.payment_methods ?? [...PAYMENT_METHODS]).filter((m): m is PayMethod =>
+  const methods = (c?.payment_methods ?? DEFAULT_PAYMENT_METHODS).filter((m): m is PayMethod =>
     (PAYMENT_METHODS as readonly string[]).includes(m),
   );
   const values: AgreementValues = {
@@ -272,7 +274,7 @@ export function draftAgreement(input: DraftInput): AgreementBody {
     total_cents: Math.round(input.totalCents),
     deposit_cents: Math.round(input.depositCents),
     tax_mode: input.taxMode ?? template.tax_mode,
-    payment_methods: methods.length ? methods : [...PAYMENT_METHODS],
+    payment_methods: methods.length ? methods : [...DEFAULT_PAYMENT_METHODS],
     replaces_signed_on: input.replacesSignedOn,
   };
 
@@ -611,7 +613,7 @@ export function renderAgreementHtml(body: AgreementBody): string {
       v.payment_methods
         .map(
           (m) =>
-            `<span class="ag-pay-opt"><checkbox-field name="Pays by ${METHOD_NAMES[m]}" role="Customer" style="${PAY_BOX_STYLE}"></checkbox-field> ${esc(METHOD_NAMES[m])}</span>`,
+            `<span class="ag-pay-opt"><checkbox-field name="Pays by ${METHOD_NAMES[m]}" role="Customer" required="false" style="${PAY_BOX_STYLE}"></checkbox-field> ${esc(METHOD_NAMES[m])}</span>`,
         )
         .join(" ") +
       `</p>`,

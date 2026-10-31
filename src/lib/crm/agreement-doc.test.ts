@@ -129,7 +129,9 @@ test("render: money, balance, signature fields for both roles, initials per repa
   assert.match(html, /<checkbox-field name="Pays by Zelle" role="Customer"[^>]*><\/checkbox-field> Zelle/);
   assert.match(html, /<checkbox-field name="Pays by Check" role="Customer"[^>]*><\/checkbox-field> Check/);
   assert.ok(!html.includes('name="Pays by Venmo"'), "only the contractor's methods");
-  assert.ok(!/<checkbox-field[^>]*required/.test(html));
+  // DocuSeal makes a field required unless told otherwise: every payment box must say required="false".
+  const boxes = html.match(/<checkbox-field[^>]*>/g) ?? [];
+  assert.ok(boxes.length >= 2 && boxes.every((b) => b.includes('required="false"')));
 });
 
 test("render: anything typed is text, never markup or a field", () => {
@@ -385,4 +387,9 @@ test("card is a payment method: kept through parseBody and offered on the agreem
   assert.match(renderAgreementHtml(d), /name="Pays by Card" role="Customer"/);
   const all = { ...d, values: { ...d.values, payment_methods: ["zelle", "venmo", "check", "cash", "card"] } };
   assert.ok(parseBody(JSON.parse(JSON.stringify(all))), "all five are allowed");
+});
+
+test("no contractor methods: the draft offers the original four, not card", () => {
+  const d = draftAgreement(input({ contractor: { ...input().contractor!, payment_methods: null } }));
+  assert.deepEqual(d.values.payment_methods, ["zelle", "venmo", "check", "cash"]);
 });
