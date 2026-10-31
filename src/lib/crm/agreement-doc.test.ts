@@ -1,0 +1,160 @@
+// The customer agreement: what a draft says, what can't be sent, how it renders for DocuSeal, and how two versions
+// differ. A wrong figure or a missing clause here goes out for a legal signature, so it is pinned down.
+//
+//   npm test
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  addCustomBlock,
+  diffVersions,
+  diffWords,
+  draftAgreement,
+  editedBlocks,
+  parseBody,
+  renderAgreementHtml,
+  sendProblems,
+  textToHtml,
+  toggleClause,
+  type DraftInput,
+} from "./agreement-doc.ts";
+
+const input = (over: Partial<DraftInput> = {}): DraftInput => ({
+  today: "2026-10-31",
+  quote: {
+    name: "Josh  Joyner",
+    phone: "+19195550100",
+    email: "josh@example.com",
+    address: "5604 Merion Station Drive",
+    city: "Apex",
+    quote_scope: "New 12x20 patio, broom finish.",
+    quote_permits: "N/A",
+    quote_prep: "Remove grass, 4 in. gravel base.",
+    quote_pour: "4 in. 3500 PSI with fiber.",
+    quote_cleanup: "Haul all debris.",
+    estimated_duration: "2 days",
+  },
+  boughtLines: ["Patio, 240 sq ft", "Sealer"],
+  contractor: { full_name: "Mike Smith", business_name: "Smith Concrete LLC", license_number: "L-123", phone: "9195550199", payment_methods: ["zelle", "check"] },
+  totalCents: 850000,
+  depositCents: 425000,
+  taxMode: "plus_tax",
+  optionalClauses: [],
+  replacesSignedOn: null,
+  ...over,
+});
+
+test("draft: values come from the job and the contractor", () => {
+  const d = draftAgreement(input());
+  assert.equal(d.values.customer_name, "Josh  Joyner".trim());
+  assert.equal(d.values.customer_phone, "(919) 555-0100");
+  assert.equal(d.values.job_address, "5604 Merion Station Drive, Apex");
+  assert.equal(d.values.contractor_name, "Smith Concrete LLC");
+  assert.equal(d.values.contractor_phone, "(919) 555-0199");
+  assert.deepEqual(d.values.payment_methods, ["zelle", "check"]);
+  assert.equal(d.values.total_cents, 850000);
+});
+
+test("draft: the six work sections in order, the lines bought printed under Scope", () => {
+  const d = draftAgreement(input());
+  assert.deepEqual(
+    d.blocks.filter((b) => b.kind === "work").map((b) => b.id),
+    ["work.scope", "work.permits", "work.prep", "work.pour", "work.cleanup", "work.duration"],
+  );
+  assert.equal(d.blocks[0].text, "New 12x20 patio, broom finish.\n\n- Patio, 240 sq ft\n- Sealer");
+  assert.equal(d.blocks[5].text, "2 days");
+});
+
+test("draft: required clauses always, optional ones only when switched on", () => {
+  const plain = draftAgreement(input()).blocks.map((b) => b.id);
+  assert.ok(plain.includes("clause.warranty") && plain.includes("clause.authorization"));
+  assert.ok(!plain.includes("clause.repair"));
+  const repair = draftAgreement(input({ optionalClauses: ["clause.repair", "clause.insurance"] })).blocks.map((b) => b.id);
+  assert.ok(repair.indexOf("clause.repair") < repair.indexOf("clause.warranty"), "template order kept");
+  assert.ok(repair.includes("clause.insurance"));
+});
+
+test("draft: an amended agreement says what it replaces", () => {
+  const d = draftAgreement(input({ replacesSignedOn: "2026-10-20", taxMode: "includes_tax" }));
+  const html = renderAgreementHtml(d);
+  assert.ok(html.includes("AMENDED AGREEMENT: replaces the version signed on October 20, 2026"));
+  assert.ok(html.includes("(includes all sales tax and fees)"));
+  assert.ok(d.blocks.find((b) => b.id === "clause.authorization")!.text.includes("replaces the version signed earlier"));
+});
+
+test("toggle: optional clauses on and off in place; required ones can't be removed", () => {
+  const d = draftAgreement(input());
+  const on = toggleClause(d, "clause.liability", true);
+  const ids = on.blocks.map((b) => b.id);
+  assert.ok(ids.indexOf("clause.liability") < ids.indexOf("clause.cancel"));
+  assert.deepEqual(toggleClause(on, "clause.liability", false).blocks.map((b) => b.id), d.blocks.map((b) => b.id));
+  assert.equal(toggleClause(d, "clause.warranty", false), d);
+});
+
+test("custom sections sit just before Authorization, numbered", () => {
+  const d = addCustomBlock(addCustomBlock(draftAgreement(input()), "Access", "Gate code 1234"), "", "Dog in yard");
+  const ids = d.blocks.map((b) => b.id);
+  assert.deepEqual(ids.slice(-3), ["custom.1", "custom.2", "clause.authorization"]);
+  assert.equal(d.blocks.find((b) => b.id === "custom.2")!.title, "Additional terms");
+});
+
+test("send checks: a draft with holes can't go out", () => {
+  const ok = draftAgreement(input());
+  assert.deepEqual(sendProblems(ok), []);
+  const bad = draftAgreement(input({ contractor: null, totalCents: 0, quote: { ...input().quote, quote_permits: "" } }));
+  const fields = sendProblems(bad).map((p) => p.field);
+  assert.ok(fields.includes("contractor_name"));
+  assert.ok(fields.includes("contractor_license"));
+  assert.ok(fields.includes("total_cents"));
+  assert.ok(fields.includes("work.permits"));
+});
+
+test("render: money, balance, signature fields for both roles, initials per repair item", () => {
+  const html = renderAgreementHtml(draftAgreement(input({ optionalClauses: ["clause.repair"] })));
+  assert.ok(html.includes("$8,500.00 (plus tax &amp; any permit fees)"));
+  assert.ok(html.includes("<th>Balance due at completion</th><td>$4,250.00</td>"));
+  assert.equal((html.match(/<signature-field /g) ?? []).length, 2);
+  assert.ok(html.includes('role="Contractor"') && html.includes('role="Customer"'));
+  assert.equal((html.match(/<initials-field /g) ?? []).length, 4);
+  assert.ok(html.includes("How you pay:</strong> Zelle, Check"));
+});
+
+test("render: anything typed is text, never markup or a field", () => {
+  const evil = draftAgreement(input({ quote: { ...input().quote, quote_scope: '<signature-field role="Customer"></signature-field><script>x</script> **bold**' } }));
+  const html = renderAgreementHtml(evil);
+  assert.equal((html.match(/<signature-field /g) ?? []).length, 2, "no extra signature field");
+  assert.ok(!html.includes("<script>"));
+  assert.ok(html.includes("&lt;script&gt;"));
+  assert.ok(html.includes("<strong>bold</strong>"));
+});
+
+test("text: paragraphs and bullets", () => {
+  assert.equal(textToHtml("One\n\nTwo\n- a\n- b\nThree"), "<p>One</p><p>Two</p><ul><li>a</li><li>b</li></ul><p>Three</p>");
+});
+
+test("diff: words, values and blocks between two versions", () => {
+  assert.deepEqual(diffWords("pour 4 in slab", "pour 5 in slab"), [
+    { op: "same", text: "pour " },
+    { op: "del", text: "4" },
+    { op: "add", text: "5" },
+    { op: "same", text: " in slab" },
+  ]);
+  const a = draftAgreement(input());
+  const b = toggleClause({ ...a, values: { ...a.values, tax_mode: "includes_tax" as const }, blocks: a.blocks.map((x) => (x.id === "work.duration" ? { ...x, text: "3 days" } : x)) }, "clause.insurance", true);
+  const changes = diffVersions(a, b);
+  assert.deepEqual(
+    changes.map((c) => (c.kind === "value" ? `value:${c.key}` : `${c.change}:${c.id}`)),
+    ["value:tax_mode", "edited:work.duration", "added:clause.insurance"],
+  );
+  assert.deepEqual(diffVersions(a, a), []);
+  assert.deepEqual(editedBlocks(b), ["work.duration"]);
+});
+
+test("parse: a saved body round-trips; anything malformed is refused", () => {
+  const d = draftAgreement(input());
+  assert.deepEqual(parseBody(JSON.parse(JSON.stringify(d))), d);
+  assert.equal(parseBody({ ...d, values: { ...d.values, total_cents: 1.5 } }), null);
+  assert.equal(parseBody({ ...d, blocks: [...d.blocks, d.blocks[0]] }), null, "duplicate block id");
+  assert.equal(parseBody({ ...d, blocks: [{ ...d.blocks[0], id: "x.<b>" }] }), null);
+  assert.equal(parseBody(null), null);
+});
