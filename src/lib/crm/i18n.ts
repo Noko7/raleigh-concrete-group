@@ -20,7 +20,7 @@ const en = {
     pipeline: "Pipeline",
     calendar: "Calendar",
     customers: "Customers",
-    agreements: "Agreements",
+    documents: "Documents",
     contractors: "Contractors",
     money: "Money",
     archived: "Archived",

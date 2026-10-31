@@ -1,8 +1,10 @@
+import Link from "next/link";
+
 import { requireOwner } from "@/lib/crm/auth";
 import { BUSINESS_TZ } from "@/lib/crm/clock";
+import { crmBase } from "@/lib/crm/nav";
 import { listAllAgreements, listInvites, listStaff } from "@/lib/crm/queries";
-import { AddAgreement } from "../agreements/add-agreement";
-import { AgreementList, AgreementStatusBadge } from "../agreements/agreement-list";
+import { AgreementStatusBadge } from "../documents/agreement-list";
 import { AddContractor } from "./add-contractor";
 import { DeleteContractor } from "./delete-contractor";
 import { EditContact } from "./edit-contact";
@@ -22,6 +24,7 @@ function prettyPhone(raw: string | null): string {
 
 export default async function ContractorsPage() {
   const session = await requireOwner();
+  const base = await crmBase();
   const [staff, rawInvites, allAgreements] = await Promise.all([
     listStaff(session),
     listInvites(session),
@@ -245,30 +248,10 @@ export default async function ContractorsPage() {
       </div>
 
       {contractors.length > 0 && (
-        <div className="crm-card">
-          <h2 className="crm-card-title">Onboarding agreements</h2>
-          <p className="crm-muted crm-sm">
-            One signed agreement per crew member. Send it from DocuSeal, then record it here so you can see at a glance
-            who is covered. Contractors can view their own agreement in the CRM but can&apos;t change its status.
-          </p>
-          <div className="ag-groups">
-            {contractors.map((c) => (
-              <div key={c.id} className="ag-group">
-                <div className="ag-group-head">
-                  <strong>{c.full_name || c.email || "Contractor"}</strong>
-                </div>
-                <AgreementList agreements={byStaff.get(c.id) ?? []} isOwner />
-                <div className="ag-add">
-                  <AddAgreement
-                    kind="contractor"
-                    targetId={c.id}
-                    defaultTitle={`Contractor agreement for ${c.full_name || c.email || "Contractor"}`}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <p className="crm-muted crm-sm">
+          Onboarding agreements are kept in{" "}
+          <Link href={`${base}/documents?view=contractors`}>Documents → Contractor agreements</Link>.
+        </p>
       )}
     </main>
   );

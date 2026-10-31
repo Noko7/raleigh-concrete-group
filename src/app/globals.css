@@ -4529,3 +4529,26 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cq-consent { display: flex; gap: 0.6rem; align-items: flex-start; margin: 1rem 0 0.25rem; text-align: left; font-size: 0.85rem; line-height: 1.45; color: rgba(43, 26, 18, 0.85); cursor: pointer; }
 .cq-consent input { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; margin-top: 0.1rem; accent-color: #2b1a12; }
 .cq-consent a { color: inherit; font-weight: 700; text-decoration: underline; }
+/* Documents hub: tabs, the job list, and the one line a job page shows in place of its document sections. */
+.dh-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 1.1rem; }
+.dh-sub { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; }
+.dh-sub p { margin: 0; flex: 1 1 18rem; }
+.dh-jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.dh-job {
+  display: grid; grid-template-columns: 1fr; gap: 0.3rem; padding: 0.8rem 1rem; border-radius: 0.7rem;
+  background: var(--crm-surface); border: 1px solid var(--crm-border); color: var(--crm-text); text-decoration: none;
+}
+.dh-job:hover, .dh-job:focus-visible { border-color: var(--crm-accent); }
+.dh-job-name { font-weight: 800; }
+.dh-job-meta { font-size: 0.85rem; color: var(--crm-muted); }
+.dh-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.dh-chip { background: rgba(255, 255, 255, 0.06); }
+.dh-chip-none { opacity: 0.65; }
+.dh-when { margin-left: auto; font-size: 0.8rem; color: var(--crm-muted); }
+.dl { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: inherit; width: 100%; }
+.dl-label { font-weight: 900; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.7; }
+.dl-line { flex: 1; font-weight: 700; }
+.dl-warn { color: #f0a36b; }
+.dl-light { color: #1f2937; }
+.dl-light .dl-warn { color: var(--amber-dark); }
+.dl-go { font-weight: 900; }
