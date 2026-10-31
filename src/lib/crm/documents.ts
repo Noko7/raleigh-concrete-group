@@ -1,6 +1,6 @@
 // What the Documents hub shows: every agreement and receipt, grouped by job. Pure, so the grouping and the
 // one-line summary a job page shows are tested (documents.test.ts) without a database.
-import type { AgreementStatus } from "./types";
+import type { Agreement, AgreementStatus, Quote, Session } from "./types";
 
 export type DocAgreement = {
   id: string;
@@ -91,3 +91,20 @@ export function docsLine(d: Pick<JobDocs, "agreement" | "receipts"> | null): str
   const line = parts.join(" · ");
   return line.charAt(0).toUpperCase() + line.slice(1);
 }
+
+// ── Agreements written in the CRM ──────────────────────────────────────────
+
+/** Who may write a job's agreement: the owner, or the contractor assigned to it. */
+export function canEditJobAgreement(session: Session, quote: Pick<Quote, "assigned_to">): boolean {
+  return session.staff.role === "owner" || (quote.assigned_to != null && quote.assigned_to === session.staff.id);
+}
+
+/** The agreement the editor works on: the newest one on the job that was written in the CRM. */
+export function editableAgreement(agreements: Agreement[]): Agreement | null {
+  return (
+    [...agreements]
+      .filter((a) => a.kind === "customer" && a.current_version_id)
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0] ?? null
+  );
+}
+

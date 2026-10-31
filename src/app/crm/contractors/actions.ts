@@ -185,6 +185,10 @@ export async function updateContractorContact(
   const businessName = String(formData.get("business_name") ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
   const businessAddress = String(formData.get("business_address") ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
 
+  // Printed on agreements drafted after this. At least one way to pay; an empty set keeps all four.
+  const licenseNumber = String(formData.get("license_number") ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+  const methods = ["zelle", "venmo", "check", "cash"].filter((m) => formData.getAll("payment_methods").map(String).includes(m));
+
   const ok = await updateStaff(session, id, {
     full_name: fullName || null,
     phone,
@@ -192,6 +196,8 @@ export async function updateContractorContact(
     service_types: serviceTypes.length ? serviceTypes : null,
     business_name: businessName || null,
     business_address: businessAddress || null,
+    license_number: licenseNumber || null,
+    payment_methods: methods.length ? methods : ["zelle", "venmo", "check", "cash"],
   });
   if (!ok) return { ok: false, error: "Could not save. Please try again." };
 

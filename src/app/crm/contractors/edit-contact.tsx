@@ -16,6 +16,8 @@ export function EditContact({
   serviceTypes,
   businessName,
   businessAddress,
+  licenseNumber,
+  paymentMethods,
 }: {
   id: string;
   name: string;
@@ -24,6 +26,8 @@ export function EditContact({
   serviceTypes: string[];
   businessName: string | null;
   businessAddress: string | null;
+  licenseNumber: string | null;
+  paymentMethods: string[] | null;
 }) {
   const [state, formAction, pending] = useActionState<ContactState, FormData>(updateContractorContact, { ok: false });
   const [open, setOpen] = useState(false);
@@ -87,6 +91,29 @@ export function EditContact({
         Customers pay the contractor, so their receipts name this business as paid. Blank uses their name. A change
         only affects receipts issued after it.
       </p>
+      {/* Printed on customer agreements: the license line and "How you pay". */}
+      <label className="crm-field">
+        <span>Contractor license # (on agreements)</span>
+        <input name="license_number" className="crm-input" defaultValue={licenseNumber ?? ""} maxLength={60} placeholder="e.g. NC 12345" />
+      </label>
+      <fieldset className="crm-sections">
+        <legend>How their customers can pay (on agreements)</legend>
+        <div className="svc-grid">
+          {(
+            [
+              ["zelle", "Zelle"],
+              ["venmo", "Venmo"],
+              ["check", "Check"],
+              ["cash", "Cash"],
+            ] as const
+          ).map(([m, label]) => (
+            <label key={m} className="svc-check">
+              <input type="checkbox" name="payment_methods" value={m} defaultChecked={(paymentMethods ?? ["zelle", "venmo", "check", "cash"]).includes(m)} />
+              {label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
       {/*
         Nothing ticked = no restriction: a lead is never dropped for want of a rule, it falls through to the
         primary contractor.

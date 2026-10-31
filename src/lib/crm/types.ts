@@ -12,6 +12,9 @@ export type Staff = {
   // Who a payment receipt names as paid (filled in by the owner). Blank = their name.
   business_name?: string | null;
   business_address?: string | null;
+  // Printed on customer agreements: the license line and "How you pay".
+  license_number?: string | null;
+  payment_methods?: string[] | null;
   role: Role;
   active: boolean;
   must_reset_password: boolean;
@@ -244,6 +247,23 @@ export type Agreement = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** The latest saved version of an agreement written in the CRM; null for an uploaded file. */
+  current_version_id?: string | null;
+};
+
+/** One saved version of an agreement. Never changed after it is saved (database-enforced). */
+export type AgreementVersion = {
+  id: string;
+  agreement_id: string;
+  version_no: number;
+  template_version: string;
+  body: unknown;
+  html: string;
+  html_sha256: string;
+  note: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
 };
 
 export type LoginAttempt = {

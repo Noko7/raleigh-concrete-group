@@ -8,8 +8,12 @@ import { jobLedger } from "@/lib/crm/payments";
 import { getQuote, listAgreementsForQuote } from "@/lib/crm/queries";
 import { listReceiptsForJob, receiptRowsFor } from "@/lib/crm/receipts";
 import { JobReceipts } from "@/app/crm/quotes/[id]/job-receipts";
+import { CLOSED_FOR_EDITS, canEditJobAgreement, editableAgreement, getVersion, listVersions } from "@/lib/crm/agreement-versions";
+import type { AgreementBody } from "@/lib/crm/agreement-doc";
 import { AddAgreement } from "../add-agreement";
 import { AgreementList } from "../agreement-list";
+import { AgreementEditor } from "./agreement-editor";
+import { StartAgreement } from "./start-agreement";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +35,13 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
     // Only to find paid payments with no receipt, which only the owner can fix.
     isOwner && quote.quote_amount != null ? jobLedger(quote) : Promise.resolve(null),
   ]);
+  // The agreement written in the CRM (versioned) leads; files uploaded by hand are listed apart.
+  const canEdit = canEditJobAgreement(session, quote);
+  const current = editableAgreement(agreements);
+  const others = agreements.filter((a) => a.id !== current?.id && !a.current_version_id);
+  const [versions, currentVersion] = current?.current_version_id
+    ? await Promise.all([listVersions(session, current.id), getVersion(session, current.current_version_id)])
+    : [[], null];
   const liveReceiptFor = new Set(receipts.filter((r) => !r.voided_at).map((r) => r.payment_id));
   const missing = money
     ? money.rows
@@ -42,7 +53,7 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
   const where = [quote.address, quote.city].filter(Boolean).join(", ");
 
   return (
-    <main className="crm-page">
+    <main className="crm-page crm-page-wide">
       <div className="crm-breadcrumb">
         <Link href={`${base}/documents`}>← Documents</Link>
       </div>
@@ -55,20 +66,34 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      <section className="crm-card" aria-label="Customer agreement">
-        <h2 className="crm-card-title">Customer agreement</h2>
-        <p className="crm-muted crm-sm">
-          {quote.email
-            ? `Signing happens in DocuSeal, which emails ${quote.email}.`
-            : "This customer has no email on file, so DocuSeal can't email them. Share the signing link another way."}
-        </p>
-        <AgreementList agreements={agreements} isOwner={isOwner} locale={locale} />
-        {isOwner && (
-          <div className="ag-add">
-            <AddAgreement kind="customer" targetId={quote.id} defaultTitle={`Customer agreement for ${quote.name}`} />
-          </div>
-        )}
-      </section>
+      {current && currentVersion ? (
+        <AgreementEditor
+          quoteId={quote.id}
+          agreementId={current.id}
+          initial={currentVersion.body as AgreementBody}
+          versions={versions}
+          canEdit={canEdit}
+          closed={CLOSED_FOR_EDITS.includes(current.status)}
+        />
+      ) : (
+        <section className="crm-card" aria-label="Customer agreement">
+          <h2 className="crm-card-title">Customer agreement</h2>
+          {canEdit ? <StartAgreement quoteId={quote.id} /> : <p className="crm-muted crm-sm">No agreement written yet.</p>}
+        </section>
+      )}
+
+      {(others.length > 0 || isOwner) && (
+        <section className="crm-card" aria-label="Agreement files">
+          <h2 className="crm-card-title">Signed on paper or elsewhere</h2>
+          <p className="crm-muted crm-sm">Agreements kept as a file, with their status set by hand.</p>
+          <AgreementList agreements={others} isOwner={isOwner} locale={locale} />
+          {isOwner && (
+            <div className="ag-add">
+              <AddAgreement kind="customer" targetId={quote.id} defaultTitle={`Customer agreement for ${quote.name}`} />
+            </div>
+          )}
+        </section>
+      )}
 
       <JobReceipts quoteId={quote.id} locale={locale} receipts={receiptRowsFor(receipts)} missing={missing} />
     </main>
