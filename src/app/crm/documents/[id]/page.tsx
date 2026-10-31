@@ -9,7 +9,7 @@ import { getQuote, listAgreementsForQuote } from "@/lib/crm/queries";
 import { listReceiptsForJob, receiptRowsFor } from "@/lib/crm/receipts";
 import { JobReceipts } from "@/app/crm/quotes/[id]/job-receipts";
 import { CLOSED_FOR_EDITS, canEditJobAgreement, editableAgreement, getVersion, listVersions } from "@/lib/crm/agreement-versions";
-import type { AgreementBody } from "@/lib/crm/agreement-doc";
+import { parseBody } from "@/lib/crm/agreement-doc";
 import { AddAgreement } from "../add-agreement";
 import { AgreementList } from "../agreement-list";
 import { AgreementEditor } from "./agreement-editor";
@@ -49,7 +49,9 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
     Promise.all(earlier.map((a) => listVersions(session, a.id))),
     canEdit ? templateChoices(quote.service) : Promise.resolve({ choices: [], defaultId: null }),
   ]);
-  const canRestart = Boolean(canEdit && current && ["pending", "declined", "expired"].includes(current.status));
+  // Read through parseBody: a version saved before templates existed gets the built-in template.
+  const currentBody = currentVersion ? parseBody(currentVersion.body) : null;
+  const canRestart =Boolean(canEdit && current && ["pending", "declined", "expired"].includes(current.status));
   const liveReceiptFor = new Set(receipts.filter((r) => !r.voided_at).map((r) => r.payment_id));
   const missing = money
     ? money.rows
@@ -74,11 +76,11 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {current && currentVersion ? (
+      {current && currentBody ? (
         <AgreementEditor
           quoteId={quote.id}
           agreementId={current.id}
-          initial={currentVersion.body as AgreementBody}
+          initial={currentBody}
           versions={versions}
           canEdit={canEdit}
           closed={CLOSED_FOR_EDITS.includes(current.status)}

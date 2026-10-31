@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
-import type { AgreementBody } from "@/lib/crm/agreement-doc";
+import { parseBody, type AgreementBody } from "@/lib/crm/agreement-doc";
 import {
   archiveAndRestart,
   canEditJobAgreement,
@@ -89,5 +89,8 @@ export async function getVersionAction(
   if (!session) return { ok: false, error: "Sign in again." };
   const v = await getVersion(session, versionId);
   if (!v) return { ok: false, error: "That version isn't available." };
-  return { ok: true, body: v.body as AgreementBody, html: v.html, version_no: v.version_no };
+  // Read through parseBody so a version saved before templates existed comes back with the built-in template.
+  const body = parseBody(v.body);
+  if (!body) return { ok: false, error: "That version couldn't be read." };
+  return { ok: true, body, html: v.html, version_no: v.version_no };
 }
