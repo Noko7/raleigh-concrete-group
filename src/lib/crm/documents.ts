@@ -31,7 +31,7 @@ export type JobDocs = {
   lastActivity: string;
 };
 
-const RANK: Record<AgreementStatus, number> = { signed: 5, sent: 4, pending: 3, declined: 2, void: 1 };
+const RANK: Record<AgreementStatus, number> = { signed: 7, contractor_signed: 6, sent: 5, pending: 4, declined: 3, expired: 2, void: 1 };
 
 export function agreementHeadline(statuses: AgreementStatus[]): AgreementStatus | null {
   let best: AgreementStatus | null = null;
@@ -77,6 +77,8 @@ export function groupByJob(agreements: DocAgreement[], receipts: DocReceipt[]): 
 const AGREEMENT_WORDS: Record<AgreementStatus, string> = {
   pending: "agreement not sent",
   sent: "agreement awaiting signature",
+  contractor_signed: "agreement awaiting the customer",
+  expired: "agreement expired",
   signed: "agreement signed",
   declined: "agreement declined",
   void: "agreement void",

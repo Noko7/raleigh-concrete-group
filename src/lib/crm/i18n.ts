@@ -332,6 +332,8 @@ const en = {
     noneRecorded: "No agreements recorded yet.",
     statusPending: "Not sent",
     statusSent: "Awaiting signature",
+    statusContractorSigned: "Contractor signed",
+    statusExpired: "Expired",
     statusSigned: "Signed",
     statusDeclined: "Declined",
     statusVoid: "Void",
