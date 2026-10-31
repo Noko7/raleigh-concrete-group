@@ -26,7 +26,7 @@
 --   * No migration history: supabase_migrations.schema_migrations stays empty.
 --     If you later use `supabase db push`, mark the existing migrations as
 --     applied first, since this file already contains them:
---       supabase migration repair --status applied 20261017221826 20261017222017 20261030221241 20261030221338 20261031130207
+--       supabase migration repair --status applied 20261017221826 20261017222017 20261030221241 20261030221338 20261031130207 20261031130427
 --
 -- When the schema changes, update this file along with supabase/schema.sql.
 

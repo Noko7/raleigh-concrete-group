@@ -1,5 +1,5 @@
 -- Raleigh Concrete Group - customer agreements signed through DocuSeal, contractor first, then the customer
--- Undo: undo/PENDING_agreement_signing.undo.sql. Check: verify/PENDING_agreement_signing.verify.sql.
+-- Undo: undo/20261031130427_agreement_signing.undo.sql. Check: verify/20261031130427_agreement_signing.verify.sql.
 -- Needs 20261031130207_agreement_versions (applied) first.
 --
 -- A saved agreement version is sent to DocuSeal as one submission. The contractor signs inside the CRM, then the

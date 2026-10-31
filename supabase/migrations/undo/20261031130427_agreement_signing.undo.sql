@@ -1,4 +1,4 @@
--- Undo PENDING_agreement_signing.
+-- Undo 20261031130427_agreement_signing.
 --
 -- Refuses once any agreement has been sent through DocuSeal: the signing record (who signed what, when, and the
 -- stored signed PDF) would be lost. Export public.agreements and public.document_events first, then, only if you

@@ -37,9 +37,9 @@
 -- staff.license_number/payment_methods), checked against production after it was
 -- applied (columns, RLS, grants, triggers, policy).
 --
--- Updated by hand for the agreement_signing migration (PENDING until applied: the signing
--- columns and statuses on agreements, agreement_signing, document_events, and
--- number_agreement_version() refusing saves while out for signature). Re-check after applying.
+-- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
+-- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
+-- refusing saves while out for signature), checked against production after it was applied.
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1. Tables (columns, defaults, constraints)
