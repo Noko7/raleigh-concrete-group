@@ -30,6 +30,8 @@ export type PaymentState = { ok: boolean; error?: string; message?: string };
 function refreshMoneyViews(id: string) {
   revalidatePath(`/crm/quotes/${id}`);
   revalidatePath("/crm/money");
+  revalidatePath(`/crm/documents/${id}`);
+  revalidatePath("/crm/documents");
   revalidatePath("/crm");
   revalidatePath("/job/[token]", "page");
 }

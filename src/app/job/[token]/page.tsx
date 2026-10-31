@@ -12,9 +12,10 @@ import { dict, intlLocale, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
-import { listReceiptsForJob, receiptRowsFor } from "@/lib/crm/receipts";
-import { JobReceipts } from "@/app/crm/quotes/[id]/job-receipts";
-import { getQuoteByToken, listEvents, listMessages, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
+import { agreementHeadline, docsLine } from "@/lib/crm/documents";
+import { listReceiptsForJob } from "@/lib/crm/receipts";
+import { JobDocsLine } from "@/app/crm/quotes/[id]/job-docs-line";
+import { getQuoteByToken, listAgreementsForQuote, listEvents, listMessages, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { businessName } from "@/lib/site-data";
 import { AcceptOffline } from "@/app/crm/quotes/[id]/accept-offline";
 import { ChangeOrder } from "@/app/crm/quotes/[id]/change-order";
@@ -103,13 +104,14 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   // delay on a phone. Line items use the service role because this page already
   // gates on token + assignment; events use the session (quote_events' policy
   // scopes contractors). Money only once the customer has agreed a number.
-  const [options, packages, money, payee, events, receipts] = await Promise.all([
+  const [options, packages, money, payee, events, receipts, agreements] = await Promise.all([
     listQuoteOptionsAdmin(quote.id),
     listQuotePackagesAdmin(quote.id),
     accepted ? jobLedger(quote) : Promise.resolve(null),
     accepted ? payeeState(quote) : Promise.resolve(null),
     listEvents(session, quote.id),
     listReceiptsForJob(session, quote.id),
+    listAgreementsForQuote(session, quote.id),
   ]);
   const cardReady = payee?.ok ?? false;
   const chosen = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response !== "declined") : [];
@@ -403,8 +405,15 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             }))}
           />
         )}
-        {receipts.length > 0 && (
-          <JobReceipts quoteId={quote.id} locale={locale} receipts={receiptRowsFor(receipts)} tone="light" />
+        {(receipts.length > 0 || agreements.length > 0) && (
+          <JobDocsLine
+            href={`${base}/documents/${quote.id}`}
+            line={docsLine({
+              agreement: agreementHeadline(agreements.map((a) => a.status)),
+              receipts: receipts.filter((r) => !r.voided_at).length,
+            })}
+            tone="light"
+          />
         )}
 
         {/* What they bought, above customer details: on an options quote it

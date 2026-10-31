@@ -28,9 +28,12 @@ function safeUrl(raw: string): string | null {
 
 // An agreement can belong to a contractor, a job, or the overview.
 function revalidateFor(quoteId?: string | null) {
-  revalidatePath("/crm/agreements");
+  revalidatePath("/crm/documents");
   revalidatePath("/crm/contractors");
-  if (quoteId) revalidatePath(`/crm/quotes/${quoteId}`);
+  if (quoteId) {
+    revalidatePath(`/crm/quotes/${quoteId}`);
+    revalidatePath(`/crm/documents/${quoteId}`);
+  }
 }
 
 export async function createAgreement(_prev: AgreementState, formData: FormData): Promise<AgreementState> {

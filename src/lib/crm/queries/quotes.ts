@@ -209,3 +209,25 @@ export async function getQuoteNames(session: Session, ids: string[]): Promise<Ma
   const rows = (await res.json()) as { id: string; name: string }[];
   return new Map(rows.map((r) => [r.id, r.name]));
 }
+
+export type JobHead = Pick<Quote, "id" | "name" | "service" | "address" | "city" | "assigned_to" | "status"> & {
+  is_test?: boolean;
+  archived_at: string | null;
+};
+
+// The few columns the Documents hub lists a job by, archived jobs included: their paperwork is still kept.
+// Batched so a long id list stays under URL limits.
+export async function getJobHeads(session: Session, ids: string[]): Promise<Map<string, JobHead>> {
+  const unique = [...new Set(ids.filter((id) => /^[0-9a-fA-F-]{36}$/.test(id)))];
+  const out = new Map<string, JobHead>();
+  for (let i = 0; i < unique.length; i += 150) {
+    const res = await pgUser(
+      `quote_requests?id=in.(${unique.slice(i, i + 150).join(",")})` +
+        "&select=id,name,service,address,city,assigned_to,status,is_test,archived_at",
+      session.accessToken,
+    );
+    if (!res.ok) continue;
+    for (const r of (await res.json()) as JobHead[]) out.set(r.id, r);
+  }
+  return out;
+}

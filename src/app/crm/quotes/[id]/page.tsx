@@ -11,7 +11,8 @@ import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText, quoteSends } from "@/lib/crm/events";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { correctableReason, jobLedger, payeeState } from "@/lib/crm/payments";
-import { listReceiptsForJob, receiptRowsFor } from "@/lib/crm/receipts";
+import { agreementHeadline, docsLine } from "@/lib/crm/documents";
+import { listReceiptsForJob } from "@/lib/crm/receipts";
 import { listCrewViews } from "@/lib/crm/crew-views";
 import { usd } from "@/lib/crm/fees";
 import {
@@ -25,8 +26,6 @@ import {
   listQuotePackages,
   listStaff,
 } from "@/lib/crm/queries";
-import { AddAgreement } from "../../agreements/add-agreement";
-import { AgreementList } from "../../agreements/agreement-list";
 import { CopyField } from "../../copy-field";
 import { PhotoGrid } from "../../photo-grid";
 import { PhotoUpload } from "../../photo-upload";
@@ -37,7 +36,7 @@ import { MessageLog } from "./message-log";
 import { JobSettings } from "./job-settings";
 import { CustomerView } from "./customer-view";
 import { QuoteEditor } from "./quote-editor";
-import { JobReceipts } from "./job-receipts";
+import { JobDocsLine } from "./job-docs-line";
 import { QuoteSends } from "./quote-sends";
 import { CancelAppointment } from "./cancel-appointment";
 import { QuotePayments } from "./quote-payments";
@@ -465,16 +464,20 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             </div>
           )}
 
-          {(receipts.length > 0 || missingReceipts.length > 0) && (
-            <div className="jb-o-step" id="receipts">
-              <JobReceipts
-                quoteId={quote.id}
-                locale={locale}
-                receipts={receiptRowsFor(receipts)}
-                missing={missingReceipts}
-              />
-            </div>
-          )}
+          <div className="jb-o-step" id="documents">
+            <JobDocsLine
+              href={`${base}/documents/${quote.id}`}
+              line={docsLine({
+                agreement: agreementHeadline(agreements.map((a) => a.status)),
+                receipts: receipts.filter((r) => !r.voided_at).length,
+              })}
+              warning={
+                missingReceipts.length > 0
+                  ? `${missingReceipts.length} ${missingReceipts.length === 1 ? "payment needs" : "payments need"} a receipt`
+                  : null
+              }
+            />
+          </div>
 
           <QuoteEditor
             id={quote.id}
@@ -705,25 +708,6 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
               </div>
             </details>
 
-            <details className="jb-fold">
-              <summary>
-                Customer agreement <span className="jb-count">{agreements.length}</span>
-              </summary>
-              <div className="jb-fold-body">
-                <p className="crm-muted crm-sm">
-                  Send the agreement from DocuSeal, then track it here.{" "}
-                  {quote.email
-                    ? `DocuSeal will email ${quote.email}.`
-                    : "This customer has no email on file, so DocuSeal can't email them. Share the signing link another way."}
-                </p>
-                <AgreementList agreements={agreements} isOwner={isOwner} locale={locale} />
-                {isOwner && (
-                  <div className="ag-add">
-                    <AddAgreement kind="customer" targetId={quote.id} defaultTitle={`Customer agreement for ${quote.name}`} />
-                  </div>
-                )}
-              </div>
-            </details>
 
             {(quote.scheduled_date || visitDate) && quote.status !== "completed" && quote.status !== "paid" && (
               <details className="jb-fold">
