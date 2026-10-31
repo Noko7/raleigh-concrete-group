@@ -56,7 +56,8 @@ export type PublicPackage = {
 
 function pretty(s: string): string {
   const d = new Date(`${s}T00:00:00`);
-  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  // Short enough to sit on one line beside the time picker on a phone ("Tue, Nov 10").
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 const DEPOSIT_LABEL = `${DEFAULT_DEPOSIT_PERCENT}%`;
 
@@ -431,10 +432,18 @@ export function QuoteActions({
         {picks.length < MAX_PREFERRED_DATES && (
           <div className="cq-pick-add">
             <label className="cq-pick-field">
-              <span>Day</span>
+              <span>{picks.length > 0 ? "Add another day" : "Day"}</span>
+              <span className="cq-date-wrap">
+              {/* iPhone Safari shows an empty date box as blank: this says what to tap. */}
+              {!draft && (
+                <span className="cq-date-ph" aria-hidden="true">
+                  Pick a day
+                </span>
+              )}
               <input
                 type="date"
-                className="cq-date"
+                className={draft ? "cq-date" : "cq-date cq-date-empty"}
+                aria-label="Pick a day"
                 min={minDate}
                 value={draft}
                 onChange={(e) => {
@@ -443,6 +452,7 @@ export function QuoteActions({
                 }}
                 disabled={busy}
               />
+              </span>
             </label>
             <label className="cq-pick-field">
               <span>Start time</span>
@@ -463,6 +473,31 @@ export function QuoteActions({
         )}
         {checking && <p className="cq-fine">Checking that day&hellip;</p>}
         {error && <p className="cq-err">{error}</p>}
+
+        {askPay && (
+          <fieldset className="cq-paywith">
+            <legend>How will you pay the contractor?</legend>
+            <p className="cq-fine">Pick any that work for you. You pay the contractor directly.</p>
+            <div className="cq-paywith-opts">
+              {payMethods.map((m) => (
+                <label key={m} className={payPicks.includes(m) ? "cq-paywith-opt cq-paywith-on" : "cq-paywith-opt"}>
+                  <input
+                    type="checkbox"
+                    checked={payPicks.includes(m)}
+                    disabled={busy}
+                    onChange={(e) =>
+                      setPayPicks((cur) => {
+                        const next = e.target.checked ? [...cur, m] : cur.filter((x) => x !== m);
+                        return PAYMENT_METHODS.filter((x) => next.includes(x));
+                      })
+                    }
+                  />
+                  {METHOD_NAMES[m]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
 
         <label className="cq-consent">
           <input
@@ -509,30 +544,7 @@ export function QuoteActions({
           </div>
         ) : (
           <>
-            {askPay && (
-              <fieldset className="cq-paywith">
-                <legend>How will you pay the contractor?</legend>
-                <p className="cq-fine">Pick any that work for you. You pay the contractor directly.</p>
-                <div className="cq-paywith-opts">
-                  {payMethods.map((m) => (
-                    <label key={m} className={payPicks.includes(m) ? "cq-paywith-opt cq-paywith-on" : "cq-paywith-opt"}>
-                      <input
-                        type="checkbox"
-                        checked={payPicks.includes(m)}
-                        disabled={busy}
-                        onChange={(e) =>
-                          setPayPicks((cur) => {
-                            const next = e.target.checked ? [...cur, m] : cur.filter((x) => x !== m);
-                            return PAYMENT_METHODS.filter((x) => next.includes(x));
-                          })
-                        }
-                      />
-                      {METHOD_NAMES[m]}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            )}
+
             <button
               type="button"
               className="cq-btn cq-btn-accept"
