@@ -5,7 +5,7 @@
 //            in the CRM; a contractor who sent it signs right there.
 //            DocuSeal also emails the signers in order (order "preserved"): the contractor at once, the customer
 //            once the contractor has signed. A submission DocuSeal created but this site never recorded (a send
-//            that timed out) is withdrawn when its first signature arrives, so it can't go on to the customer.
+//            that timed out) is withdrawn when its first signature arrives, so the customer's link to it is dead.
 //   webhook  the contractor signs -> `contractor_signed`, and the customer is texted their link (/sign/<token>,
 //            quiet hours apply). The customer signs -> `signed`: the signed PDF and audit log are copied into
 //            the private agreements bucket at once (DocuSeal's links expire), and the owner is texted once.
@@ -248,15 +248,23 @@ export async function handleDocusealEvent(e: DocusealEvent, payload: unknown): P
 
 /**
  * A signature on a submission this site sent but never recorded (the send timed out after DocuSeal had already
- * created it and emailed the contractor). DocuSeal would email the customer next, for a signature the site would
- * never see, so it is withdrawn. A submission whose links were saved is a send still finishing: left alone.
+ * created it and emailed the contractor). It is withdrawn, so the customer's link (which DocuSeal may already have
+ * emailed them) says it's no longer active and nothing can be signed that the site would never see. A submission
+ * whose links were saved is a send still finishing, and is left alone. If DocuSeal can't withdraw it, this throws,
+ * so the event stays unprocessed and DocuSeal's retry tries again.
  */
 async function untracked(e: DocusealEvent): Promise<string> {
   if (e.type !== "form.completed" || !e.sentForAgreement) return "no matching agreement";
   const known = await pgAdmin(`agreement_signing?submission_id=eq.${e.submissionId}&select=agreement_id&limit=1`);
   if (!known.ok) throw new Error(`[signing] couldn't read agreement_signing (${known.status})`);
   if (((await known.json()) as unknown[]).length) return "no matching agreement (send still finishing)";
-  await withdraw(e.submissionId, `untracked submission for agreement ${e.sentForAgreement}`);
+  // Only a submission for one of this site's agreements is touched.
+  const ours = await pgAdmin(`agreements?id=eq.${e.sentForAgreement}&select=id&limit=1`);
+  if (!ours.ok) throw new Error(`[signing] couldn't read the agreement (${ours.status})`);
+  if (!((await ours.json()) as unknown[]).length) return "no matching agreement";
+  const r = await archiveSubmission(e.submissionId);
+  if (!r.ok && r.status !== 404) throw new Error(`[signing] couldn't withdraw untracked submission ${e.submissionId} (${r.status})`);
+  console.error("[signing] withdrew an untracked DocuSeal submission", e.submissionId, "for agreement", e.sentForAgreement);
   return "untracked submission withdrawn";
 }
 
