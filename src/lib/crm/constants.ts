@@ -154,7 +154,7 @@ export function to24Hour(t: string, fallback = "09:00"): string {
   return `${String(h).padStart(2, "0")}:${m[2]}`;
 }
 
-// Every quote answers these five, in this order (the customer page and both editors). Skipped permits or
+// Every quote answers these six, in this order (the customer page and both editors). Skipped permits or
 // cleanup is where disputes start, so the shape is fixed.
 export const QUOTE_SECTION_FIELDS = [
   "quote_scope",
@@ -162,6 +162,7 @@ export const QUOTE_SECTION_FIELDS = [
   "quote_prep",
   "quote_pour",
   "quote_cleanup",
+  "estimated_duration",
 ] as const;
 export type QuoteSectionField = (typeof QUOTE_SECTION_FIELDS)[number];
 
@@ -171,6 +172,7 @@ export const QUOTE_SECTION_LABELS: Record<QuoteSectionField, string> = {
   quote_prep: "Demolition and prep",
   quote_pour: "Pour and finish",
   quote_cleanup: "Clean up",
+  estimated_duration: "Estimated duration",
 };
 
 // Placeholder text. Short: read on a phone on a job site.
@@ -180,6 +182,7 @@ export const QUOTE_SECTION_HINTS: Record<QuoteSectionField, string> = {
   quote_prep: "What comes out, what gets hauled away, how the base is built.",
   quote_pour: "Depth, reinforcement, concrete mix, and the finish.",
   quote_cleanup: "How the site is left, and when.",
+  estimated_duration: "How long the work takes on site, e.g. 1-2 days.",
 };
 
 // Long enough to think it over and collect other quotes; short enough that the price isn't held while

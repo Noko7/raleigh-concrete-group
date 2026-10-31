@@ -195,6 +195,7 @@ export function JobQuote({
     quote_prep: t.quoteForm.labelPrep,
     quote_pour: t.quoteForm.labelPour,
     quote_cleanup: t.quoteForm.labelCleanup,
+    estimated_duration: t.quoteForm.labelDuration,
   };
   const sectionKind: Record<QuoteSectionField, TranslateField> = {
     quote_scope: "Quote section: Scope",
@@ -202,6 +203,7 @@ export function JobQuote({
     quote_prep: "Quote section: Demolition and prep",
     quote_pour: "Quote section: Pour and finish",
     quote_cleanup: "Quote section: Clean up",
+    estimated_duration: "Quote section: Estimated duration",
   };
   const sources: { field: EnglishField; kind: TranslateField; text: string }[] = [
     ...QUOTE_SECTION_FIELDS.map((f) => ({

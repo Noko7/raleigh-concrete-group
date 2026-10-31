@@ -105,6 +105,7 @@ export function EditContact({
               ["venmo", "Venmo"],
               ["check", "Check"],
               ["cash", "Cash"],
+              ["card", "Card"],
             ] as const
           ).map(([m, label]) => (
             <label key={m} className="svc-check">

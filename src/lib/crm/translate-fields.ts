@@ -6,6 +6,7 @@ export const TRANSLATE_FIELDS = [
   "Quote section: Demolition and prep",
   "Quote section: Pour and finish",
   "Quote section: Clean up",
+  "Quote section: Estimated duration",
   "Quote summary",
   "Line item title",
   "Line item description",

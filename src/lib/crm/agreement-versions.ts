@@ -77,7 +77,7 @@ export async function draftFromJob(quote: Quote, template?: TemplateSnapshot): P
   return draftAgreement({
     ...draftInputFromJob({
       today: todayYmd(),
-      quote: { ...quote, estimated_duration: null },
+      quote,
       options,
       packages,
       contractor: contractor

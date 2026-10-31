@@ -63,7 +63,7 @@ export function CancelHeldText({
         <form action={submit}>
           {/* Spelled out: every line is something the owner can't get back. */}
           <p className="msg-cancel-warn">
-            The text never sends, the price and the five sections are cleared, any line items are removed, the
+            The text never sends, the price and the quote sections are cleared, any line items are removed, the
             customer&apos;s link stops working, and the job goes back to New. None of it can be undone.
           </p>
           <div className="msg-cancel-acts">

@@ -21,9 +21,11 @@ export const OFFICE = {
   website: "www.raleighconcrete.net",
 } as const;
 
-export const PAYMENT_METHODS = ["zelle", "venmo", "check", "cash"] as const;
+export const PAYMENT_METHODS = ["zelle", "venmo", "check", "cash", "card"] as const;
 export type PayMethod = (typeof PAYMENT_METHODS)[number];
-const METHOD_NAMES: Record<PayMethod, string> = { zelle: "Zelle", venmo: "Venmo", check: "Check", cash: "Cash" };
+/** When nobody has chosen (no contractor, or none set): the original four. Card is offered only when ticked. */
+export const DEFAULT_PAYMENT_METHODS: PayMethod[] = ["zelle", "venmo", "check", "cash"];
+export const METHOD_NAMES: Record<PayMethod, string> = { zelle: "Zelle", venmo: "Venmo", check: "Check", cash: "Cash", card: "Card" };
 
 export type TaxMode = "plus_tax" | "includes_tax";
 
@@ -257,7 +259,7 @@ export function draftAgreement(input: DraftInput): AgreementBody {
   const template = input.template ?? BUILTIN_STANDARD;
   const q = input.quote;
   const c = input.contractor;
-  const methods = (c?.payment_methods ?? [...PAYMENT_METHODS]).filter((m): m is PayMethod =>
+  const methods = (c?.payment_methods ?? DEFAULT_PAYMENT_METHODS).filter((m): m is PayMethod =>
     (PAYMENT_METHODS as readonly string[]).includes(m),
   );
   const values: AgreementValues = {
@@ -272,7 +274,7 @@ export function draftAgreement(input: DraftInput): AgreementBody {
     total_cents: Math.round(input.totalCents),
     deposit_cents: Math.round(input.depositCents),
     tax_mode: input.taxMode ?? template.tax_mode,
-    payment_methods: methods.length ? methods : [...PAYMENT_METHODS],
+    payment_methods: methods.length ? methods : [...DEFAULT_PAYMENT_METHODS],
     replaces_signed_on: input.replacesSignedOn,
   };
 
@@ -346,7 +348,7 @@ export function sendProblems(body: AgreementBody): Problem[] {
   need("customer_phone", "Customer phone");
   need("job_address", "Job address");
   need("contractor_name", "Contractor");
-  need("contractor_license", "Contractor license #");
+  // No license # is fine: some contractors don't hold or need one for the work. The agreement then leaves it out.
   need("contractor_phone", "Contractor phone");
   if (!(v.total_cents > 0)) out.push({ field: "total_cents", message: "The job has no price yet." });
   if (v.deposit_cents < 0 || v.deposit_cents > v.total_cents) out.push({ field: "deposit_cents", message: "The deposit is more than the total." });
@@ -459,7 +461,7 @@ export function parseBody(raw: unknown): AgreementBody | null {
     !Number.isInteger(total) || (total as number) < 0 || (total as number) > MAX_CENTS ||
     !Number.isInteger(deposit) || (deposit as number) < 0 || (deposit as number) > (total as number) ||
     (v.tax_mode !== "plus_tax" && v.tax_mode !== "includes_tax") ||
-    !Array.isArray(methods) || methods.length < 1 || methods.length > 4 ||
+    !Array.isArray(methods) || methods.length < 1 || methods.length > PAYMENT_METHODS.length ||
     !methods.every((m) => (PAYMENT_METHODS as readonly unknown[]).includes(m)) ||
     !(v.replaces_signed_on === null || ymdOk(v.replaces_signed_on))
   ) {
@@ -567,13 +569,14 @@ const DATE_STYLE = "width: 130px; height: 24px; display: inline-block;";
  * and date fields are DocuSeal field tags (roles Contractor and Customer); the preview styles them as boxes.
  * Every value is escaped: nothing typed can add markup or fields.
  */
+const PAY_BOX_STYLE = "width: 16px; height: 16px; display: inline-block; vertical-align: middle; border: 1px solid #999;";
+
 export function renderAgreementHtml(body: AgreementBody): string {
   const v = body.values;
   const blank = (s: string) => (s.trim() ? esc(s) : `<span class="ag-blank">&nbsp;</span>`);
   const work = body.blocks.filter((b) => b.kind === "work");
   const rest = body.blocks.filter((b) => b.kind !== "work");
   const balance = v.total_cents - v.deposit_cents;
-  const methods = v.payment_methods.map((m) => METHOD_NAMES[m]).join(", ");
 
   const parts: string[] = [];
   parts.push(`<h1>Customer Agreement &amp; Work Authorization</h1>`);
@@ -582,14 +585,16 @@ export function renderAgreementHtml(body: AgreementBody): string {
   }
   parts.push(
     `<p class="ag-booked"><em>Booked by ${esc(OFFICE.name)}</em><br>${esc(OFFICE.phone)} · ${esc(OFFICE.email)} · ${esc(OFFICE.website)}</p>`,
-    `<p class="ag-booked"><em>${esc(OFFICE.name)} books the job. The licensed contractor named below performs and warrants the work, and is paid directly.</em></p>`,
+    `<p class="ag-booked"><em>${esc(OFFICE.name)} books the job. The ${v.contractor_license.trim() ? "licensed " : ""}contractor named below performs and warrants the work, and is paid directly.</em></p>`,
     `<table class="ag-parties"><tbody>` +
       `<tr><th>Date</th><td colspan="3">${esc(longDate(v.date))}</td></tr>` +
       `<tr><th>Customer</th><td>${blank(v.customer_name)}</td><th>Phone</th><td>${blank(v.customer_phone)}</td></tr>` +
       `<tr><th>Job address</th><td colspan="3">${blank(v.job_address)}</td></tr>` +
       `<tr><th>Email</th><td colspan="3">${blank(v.customer_email)}</td></tr>` +
       `<tr><th>Contractor (performs &amp; warrants the work)</th><td colspan="3">${blank(v.contractor_name)}</td></tr>` +
-      `<tr><th>Contractor license #</th><td>${blank(v.contractor_license)}</td><th>Contractor phone</th><td>${blank(v.contractor_phone)}</td></tr>` +
+      (v.contractor_license.trim()
+        ? `<tr><th>Contractor license #</th><td>${esc(v.contractor_license)}</td><th>Contractor phone</th><td>${blank(v.contractor_phone)}</td></tr>`
+        : `<tr><th>Contractor phone</th><td colspan="3">${blank(v.contractor_phone)}</td></tr>`) +
       `</tbody></table>`,
     `<h2>Work to Be Done</h2>`,
   );
@@ -603,7 +608,15 @@ export function renderAgreementHtml(body: AgreementBody): string {
       `<tr><th>Deposit due to schedule</th><td>${money(v.deposit_cents)}</td></tr>` +
       `<tr><th>Balance due at completion</th><td>${money(balance)}</td></tr>` +
       `</tbody></table>`,
-    `<p><strong>How you pay:</strong> ${esc(methods)}</p>`,
+    // Each way the contractor accepts, with a box the customer ticks when signing: as many as they like, or none.
+    `<p class="ag-pay"><strong>How you'll pay</strong> (tick any that apply): ` +
+      v.payment_methods
+        .map(
+          (m) =>
+            `<span class="ag-pay-opt"><checkbox-field name="Pays by ${METHOD_NAMES[m]}" role="Customer" required="false" style="${PAY_BOX_STYLE}"></checkbox-field> ${esc(METHOD_NAMES[m])}</span>`,
+        )
+        .join(" ") +
+      `</p>`,
     `<p>${esc(PRICE_NOTE[v.tax_mode])}</p>`,
   );
 
@@ -642,6 +655,7 @@ export const DOC_CSS = [
   ".ag-note{font-size:9.5pt}",
   ".ag-blank{display:inline-block;min-width:120pt;border-bottom:1px solid #111}",
   ".ag-initials{white-space:nowrap}",
+  ".ag-pay-opt{white-space:nowrap;margin-right:12pt}",
   ".ag-sign{margin-top:16pt}.ag-sign p{margin:0 0 14pt}",
 ].join("");
 

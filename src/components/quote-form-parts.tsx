@@ -35,8 +35,8 @@ function sectionText(t: Dict, locale: Locale | undefined) {
   if (locale !== "es") return { labels: QUOTE_SECTION_LABELS, hints: QUOTE_SECTION_HINTS };
   const f = t.quoteForm;
   return {
-    labels: { quote_scope: f.labelScope, quote_permits: f.labelPermits, quote_prep: f.labelPrep, quote_pour: f.labelPour, quote_cleanup: f.labelCleanup },
-    hints: { quote_scope: f.hintScope, quote_permits: f.hintPermits, quote_prep: f.hintPrep, quote_pour: f.hintPour, quote_cleanup: f.hintCleanup },
+    labels: { quote_scope: f.labelScope, quote_permits: f.labelPermits, quote_prep: f.labelPrep, quote_pour: f.labelPour, quote_cleanup: f.labelCleanup, estimated_duration: f.labelDuration },
+    hints: { quote_scope: f.hintScope, quote_permits: f.hintPermits, quote_prep: f.hintPrep, quote_pour: f.hintPour, quote_cleanup: f.hintCleanup, estimated_duration: f.hintDuration },
   } satisfies { labels: Record<QuoteSectionField, string>; hints: Record<QuoteSectionField, string> };
 }
 
@@ -122,7 +122,8 @@ export function SectionsEditor({
               <SpellTextarea
                 id={id}
                 name={field}
-                rows={2}
+                rows={field === "estimated_duration" ? 1 : 2}
+                maxLength={field === "estimated_duration" ? 200 : 2000}
                 value={sections[field]}
                 onChange={(e) => onChange(field, e.target.value)}
                 placeholder={hints[field]}

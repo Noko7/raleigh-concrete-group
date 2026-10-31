@@ -113,7 +113,7 @@ test("send checks: a draft with holes can't go out", () => {
   const bad = draftAgreement(input({ contractor: null, totalCents: 0, quote: { ...input().quote, quote_permits: "" } }));
   const fields = sendProblems(bad).map((p) => p.field);
   assert.ok(fields.includes("contractor_name"));
-  assert.ok(fields.includes("contractor_license"));
+  assert.ok(!fields.includes("contractor_license"), "a license # is optional");
   assert.ok(fields.includes("total_cents"));
   assert.ok(fields.includes("work.permits"));
 });
@@ -125,7 +125,13 @@ test("render: money, balance, signature fields for both roles, initials per repa
   assert.equal((html.match(/<signature-field /g) ?? []).length, 2);
   assert.ok(html.includes('role="Contractor"') && html.includes('role="Customer"'));
   assert.equal((html.match(/<initials-field /g) ?? []).length, 4);
-  assert.ok(html.includes("How you pay:</strong> Zelle, Check"));
+  // One box per accepted method, for the customer, never required (they tick as many as they like).
+  assert.match(html, /<checkbox-field name="Pays by Zelle" role="Customer"[^>]*><\/checkbox-field> Zelle/);
+  assert.match(html, /<checkbox-field name="Pays by Check" role="Customer"[^>]*><\/checkbox-field> Check/);
+  assert.ok(!html.includes('name="Pays by Venmo"'), "only the contractor's methods");
+  // DocuSeal makes a field required unless told otherwise: every payment box must say required="false".
+  const boxes = html.match(/<checkbox-field[^>]*>/g) ?? [];
+  assert.ok(boxes.length >= 2 && boxes.every((b) => b.includes('required="false"')));
 });
 
 test("render: anything typed is text, never markup or a field", () => {
@@ -359,4 +365,31 @@ test("templates: the version diff says when the template changed", () => {
   const b = draftAgreement(input({ template: repairSnap, taxMode: undefined, optionalClauses: undefined }));
   const t = diffVersions(a, b).find((c) => c.kind === "value" && c.key === "template");
   assert.ok(t && t.kind === "value" && t.after === "Repair Agreement (v2)");
+});
+
+test("no license #: the agreement leaves the line out instead of printing a blank", () => {
+  const without = draftAgreement(input({ contractor: { ...input().contractor!, license_number: null } }));
+  assert.equal(without.values.contractor_license, "");
+  assert.deepEqual(sendProblems(without), []);
+  const html = renderAgreementHtml(without);
+  assert.ok(!html.includes("Contractor license #"));
+  assert.ok(html.includes("The contractor named below"));
+  assert.match(html, /<tr><th>Contractor phone<\/th><td colspan="3">/);
+  const withLicense = renderAgreementHtml(draftAgreement(input()));
+  assert.ok(withLicense.includes("Contractor license #"));
+  assert.ok(withLicense.includes("The licensed contractor named below"));
+});
+
+test("card is a payment method: kept through parseBody and offered on the agreement", () => {
+  const d = draftAgreement(input({ contractor: { ...input().contractor!, payment_methods: ["zelle", "card"] } }));
+  assert.deepEqual(d.values.payment_methods, ["zelle", "card"]);
+  assert.deepEqual(parseBody(JSON.parse(JSON.stringify(d)))!.values.payment_methods, ["zelle", "card"]);
+  assert.match(renderAgreementHtml(d), /name="Pays by Card" role="Customer"/);
+  const all = { ...d, values: { ...d.values, payment_methods: ["zelle", "venmo", "check", "cash", "card"] } };
+  assert.ok(parseBody(JSON.parse(JSON.stringify(all))), "all five are allowed");
+});
+
+test("no contractor methods: the draft offers the original four, not card", () => {
+  const d = draftAgreement(input({ contractor: { ...input().contractor!, payment_methods: null } }));
+  assert.deepEqual(d.values.payment_methods, ["zelle", "venmo", "check", "cash"]);
 });

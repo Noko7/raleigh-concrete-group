@@ -185,9 +185,9 @@ export async function updateContractorContact(
   const businessName = String(formData.get("business_name") ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
   const businessAddress = String(formData.get("business_address") ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
 
-  // Printed on agreements drafted after this. At least one way to pay; an empty set keeps all four.
+  // Printed on agreements drafted after this. At least one way to pay; an empty set keeps the usual four.
   const licenseNumber = String(formData.get("license_number") ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
-  const methods = ["zelle", "venmo", "check", "cash"].filter((m) => formData.getAll("payment_methods").map(String).includes(m));
+  const methods = ["zelle", "venmo", "check", "cash", "card"].filter((m) => formData.getAll("payment_methods").map(String).includes(m));
 
   const ok = await updateStaff(session, id, {
     full_name: fullName || null,

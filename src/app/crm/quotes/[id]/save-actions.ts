@@ -215,7 +215,7 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // Legacy summary, superseded by the five sections; kept so old quotes stay editable.
+  // Legacy summary, superseded by the quote sections; kept so old quotes stay editable.
   if (formData.has("quote_summary")) {
     const v = noEmDash(String(formData.get("quote_summary") ?? "").trim()).slice(0, 4000);
     patch.quote_summary = v || null;
@@ -225,12 +225,13 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     }
   }
 
-  // The five sections. "Not applicable" is fine, blank isn't, but that's
+  // The six sections. "Not applicable" is fine, blank isn't, but that's
   // checked at send time so drafts can be saved half-written.
   let sectionsChanged = false;
   for (const field of QUOTE_SECTION_FIELDS) {
     if (!formData.has(field)) continue;
-    const v = noEmDash(String(formData.get(field) ?? "").trim()).slice(0, 2000);
+    // The duration is a short line ("1-2 days"); the database holds it to 200 characters.
+    const v = noEmDash(String(formData.get(field) ?? "").trim()).slice(0, field === "estimated_duration" ? 200 : 2000);
     const next = v || null;
     if (next !== current[field]) sectionsChanged = true;
     patch[field] = next;
