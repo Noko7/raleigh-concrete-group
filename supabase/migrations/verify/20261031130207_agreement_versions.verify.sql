@@ -1,4 +1,4 @@
--- Check PENDING_agreement_versions on the real database.
+-- Check 20261031130207_agreement_versions on the real database.
 --
 -- Run AFTER the migration, as the SQL editor's own role (postgres), the whole file at once. It opens its own
 -- transaction and ends in ROLLBACK, so nothing it creates is kept. It makes a throwaway contractor agreement on a

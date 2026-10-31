@@ -1,5 +1,5 @@
 -- Raleigh Concrete Group - customer agreements written in the site, with every saved version kept
--- Undo: undo/PENDING_agreement_versions.undo.sql. Check: verify/PENDING_agreement_versions.verify.sql.
+-- Undo: undo/20261031130207_agreement_versions.undo.sql. Check: verify/20261031130207_agreement_versions.verify.sql.
 --
 -- An agreement (public.agreements) is now drafted from the job and edited in the CRM. Every save is a new,
 -- numbered version that is never changed or deleted afterwards, so the back-and-forth on a job is a complete
