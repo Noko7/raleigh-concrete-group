@@ -6,12 +6,14 @@ import { dict, fill, isLocale } from "@/lib/crm/i18n";
 import { ownerRecipientDetails, smsDiagnostics, toE164 } from "@/lib/crm/notify";
 import { getPhoneLines, listQuoNumbers } from "@/lib/crm/phone-lines";
 import { checkClockDrift } from "@/lib/crm/time-check";
-import { getPrimaryContractorId, listContractors, queueHealth } from "@/lib/crm/queries";
+import { getPrimaryContractorId, listContractors, onlineCardPaymentsOn, queueHealth } from "@/lib/crm/queries";
 import type { Session } from "@/lib/crm/types";
 import { ClockCard } from "./clock-card";
 import { PhoneLinesForm } from "./phone-lines-form";
 import { SettingsForm } from "./settings-form";
 import { PrimaryContractorForm } from "./primary-contractor-form";
+import { CardPaymentsForm } from "./card-payments-form";
+import { STRIPE_READY } from "@/lib/crm/stripe";
 import { TestSms } from "./test-sms";
 import { WorkHoursForm } from "./work-hours-form";
 
@@ -77,12 +79,13 @@ async function CustomerLine({ staffId, locale }: { staffId: string; locale: stri
 
 async function OwnerSettings({ session }: { session: Session }) {
   // All at once: these used to run one after another, so the page waited on their sum.
-  const [contractors, primaryId, alertTargets, queue, lines] = await Promise.all([
+  const [contractors, primaryId, alertTargets, queue, lines, cardsOn] = await Promise.all([
     listContractors(session),
     getPrimaryContractorId(),
     ownerRecipientDetails(),
     queueHealth(),
     getPhoneLines().catch(() => ({ business: null, contractors: {} })),
+    onlineCardPaymentsOn(),
   ]);
   const sms = smsDiagnostics();
   const active = contractors.filter((c) => c.active);
@@ -94,6 +97,7 @@ async function OwnerSettings({ session }: { session: Session }) {
         contractors={contractors.map((c) => ({ id: c.id, label: c.full_name || c.email || "Contractor" }))}
         current={primaryId}
       />
+      <CardPaymentsForm on={cardsOn} stripeReady={STRIPE_READY} />
       {/* Quo and the clock check are outside services: each card waits only for its own. */}
       <Suspense fallback={<p className="crm-muted crm-sm">Loading your Quo numbers…</p>}>
         <PhoneLines

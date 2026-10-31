@@ -119,6 +119,20 @@ export async function setPrimaryContractorId(id: string | null): Promise<boolean
   return writeAppSettings({ primary_contractor_id: id });
 }
 
+/**
+ * Online card payments through Stripe, switched by the owner in Settings. OFF unless the owner turned it on, and
+ * off if the setting can't be read: a card button that fails is worse than none. While off, customers pay the
+ * contractor directly (the agreement's "How you'll pay" boxes); refunds of earlier card payments still work.
+ */
+export async function onlineCardPaymentsOn(): Promise<boolean> {
+  const data = await readAppSettings().catch(() => ({}) as Record<string, unknown>);
+  return data.online_card_payments === true;
+}
+
+export async function setOnlineCardPayments(on: boolean): Promise<boolean> {
+  return writeAppSettings({ online_card_payments: on });
+}
+
 // ── Routing a lead to the right contractor ──────────────────────────────────
 // A lead goes to the first active contractor whose service_types include its
 // service, else the primary contractor. `service` is free text (the CRM form

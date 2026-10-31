@@ -32,7 +32,7 @@ import { JobReschedule } from "./job-reschedule";
 import { JobSchedule } from "./job-schedule";
 import { JobVisit } from "./job-visit";
 import { methodList, PAYMENT_METHODS } from "@/lib/crm/pay-methods";
-import { ONLINE_CARD_PAYMENTS } from "@/lib/crm/stripe";
+import { onlineCardPaymentsOn } from "@/lib/crm/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -386,7 +386,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             id={quote.id}
             locale={locale}
             cardReady={cardReady}
-            onlineCard={ONLINE_CARD_PAYMENTS}
+            onlineCard={await onlineCardPaymentsOn()}
             totalCents={money.ledger.totalCents}
             paidCents={money.ledger.paidCents}
             dueCents={money.ledger.dueCents}
