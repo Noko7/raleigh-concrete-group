@@ -47,7 +47,13 @@ async function call<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, 
 export const createHtmlSubmission = (body: Record<string, unknown>) => call<unknown>("POST", "/submissions/html", body);
 export const archiveSubmission = (id: number) => call<unknown>("DELETE", `/submissions/${id}`);
 export const getSubmission = (id: number) =>
-  call<{ status?: string; audit_log_url?: string | null; combined_document_url?: string | null; documents?: { url?: string }[] }>(
+  call<{
+    status?: string;
+    audit_log_url?: string | null;
+    combined_document_url?: string | null;
+    documents?: { url?: string }[];
+    submitters?: { role?: string; completed_at?: string | null }[];
+  }>(
     "GET",
     `/submissions/${id}`,
   );

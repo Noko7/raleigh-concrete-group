@@ -9,15 +9,23 @@ create temp table _r (check_name text, result text);
 grant all on _r to public;
 
 do $$
-declare ag uuid; st uuid; v1 uuid; r text;
+declare ag uuid; ag2 uuid; st uuid; v1 uuid; other uuid; r text;
 begin
   select id into st from public.staff order by created_at limit 1;
   insert into public.agreements (kind, staff_id, title) values ('contractor', st, 'Verify signing') returning id into ag;
+  insert into public.agreements (kind, staff_id, title) values ('contractor', st, 'Verify other') returning id into ag2;
   insert into public.agreement_versions (agreement_id, version_no, template_version, body, html, html_sha256)
     values (ag, 1, 't', '{}'::jsonb, '<p>v1</p>', repeat('0', 64)) returning id into v1;
+  insert into public.agreement_versions (agreement_id, version_no, template_version, body, html, html_sha256)
+    values (ag2, 1, 't', '{}'::jsonb, '<p>x</p>', repeat('0', 64)) returning id into other;
 
-  update public.agreements set status = 'sent', sent_version_id = v1, docuseal_submission_id = 987654321,
-    sign_token = replace(gen_random_uuid()::text, '-', ''), signers = '[]'::jsonb where id = ag;
+  begin update public.agreements set sent_version_id = other where id = ag; r := 'ANOTHER AGREEMENT''S VERSION ACCEPTED (bad)';
+  exception when foreign_key_violation then r := 'refused'; end;
+  insert into _r values ('the version sent belongs to this agreement', r);
+
+  update public.agreements set status = 'sent', sent_version_id = v1, docuseal_submission_id = 987654321 where id = ag;
+  insert into public.agreement_signing (agreement_id, submission_id, sign_token, signers)
+    values (ag, 987654321, replace(gen_random_uuid()::text, '-', ''), '[]'::jsonb);
   begin
     insert into public.agreement_versions (agreement_id, version_no, template_version, body, html, html_sha256)
       values (ag, 1, 't', '{}'::jsonb, '<p>v2</p>', repeat('0', 64));
@@ -26,29 +34,30 @@ begin
   insert into _r values ('no new version while out for signature', r);
 
   update public.agreements set status = 'contractor_signed' where id = ag;
-  insert into _r values ('contractor_signed is a status', 'ok');
-
   update public.agreements set status = 'declined' where id = ag;
   insert into public.agreement_versions (agreement_id, version_no, template_version, body, html, html_sha256)
     values (ag, 1, 't', '{}'::jsonb, '<p>v2</p>', repeat('0', 64));
   insert into _r values ('editable again after a decline', 'ok');
 
-  begin update public.agreements set sign_token = 'nope' where id = ag; r := 'BAD TOKEN ALLOWED (bad)';
+  begin insert into public.agreement_signing (agreement_id, submission_id, sign_token, signers) values (ag2, 1, 'nope', '[]'::jsonb); r := 'BAD TOKEN ALLOWED (bad)';
   exception when check_violation then r := 'refused'; end;
   insert into _r values ('sign token must be 32 hex', r);
 
-  insert into public.document_events (agreement_id, submission_id, event_type, event_at, payload)
-    values (ag, 987654321, 'form.completed', '2026-10-31T12:00:00Z', '{}'::jsonb);
+  insert into public.document_events (agreement_id, submission_id, event_type, signer_role, event_at, payload)
+    values (ag, 987654321, 'form.completed', 'Contractor', '2026-10-31T12:00:00Z', '{}'::jsonb);
+  insert into public.document_events (agreement_id, submission_id, event_type, signer_role, event_at, payload)
+    values (ag, 987654321, 'form.completed', 'Customer', '2026-10-31T12:00:00Z', '{}'::jsonb);
   begin
-    insert into public.document_events (agreement_id, submission_id, event_type, event_at, payload)
-      values (ag, 987654321, 'form.completed', '2026-10-31T12:00:00Z', '{}'::jsonb);
+    insert into public.document_events (agreement_id, submission_id, event_type, signer_role, event_at, payload)
+      values (ag, 987654321, 'form.completed', 'Contractor', '2026-10-31T12:00:00Z', '{}'::jsonb);
     r := 'DUPLICATE EVENT STORED (bad)';
   exception when unique_violation then r := 'refused'; end;
-  insert into _r values ('a retried webhook is stored once', r);
+  insert into _r values ('one row per event and signer', r);
 
-  insert into _r values ('no API access to document_events',
-    case when has_table_privilege('authenticated', 'public.document_events', 'SELECT')
-           or has_table_privilege('anon', 'public.document_events', 'SELECT') then 'GRANTED (bad)' else 'ok' end);
+  insert into _r values ('signing links and events are server-only',
+    case when has_table_privilege('authenticated', 'public.agreement_signing', 'SELECT')
+           or has_table_privilege('anon', 'public.agreement_signing', 'SELECT')
+           or has_table_privilege('authenticated', 'public.document_events', 'SELECT') then 'GRANTED (bad)' else 'ok' end);
 end $$;
 
 select * from _r;

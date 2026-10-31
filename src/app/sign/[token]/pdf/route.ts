@@ -1,4 +1,5 @@
 import { AGREEMENT_BUCKET, SERVICE_KEY, SUPABASE_URL } from "@/lib/crm/env";
+import { signingByToken } from "@/lib/crm/agreement-signing";
 import { pgAdmin } from "@/lib/crm/rest";
 
 export const dynamic = "force-dynamic";
@@ -7,8 +8,9 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const no = (status: number) => new Response("Not found", { status, headers: { "Cache-Control": "no-store" } });
-  if (!/^[0-9a-f]{32}$/.test(token)) return no(404);
-  const res = await pgAdmin(`agreements?sign_token=eq.${token}&status=eq.signed&select=signed_pdf_path&limit=1`);
+  const links = await signingByToken(token);
+  if (!links) return no(404);
+  const res = await pgAdmin(`agreements?id=eq.${links.agreement_id}&docuseal_submission_id=eq.${links.submission_id}&status=eq.signed&select=signed_pdf_path&limit=1`);
   const row = res.ok ? (((await res.json()) as { signed_pdf_path: string | null }[])[0] ?? null) : null;
   const prefix = `${AGREEMENT_BUCKET}/`;
   const obj = row?.signed_pdf_path?.startsWith(prefix) ? row.signed_pdf_path.slice(prefix.length) : null;

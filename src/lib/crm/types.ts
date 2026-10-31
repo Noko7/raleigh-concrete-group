@@ -252,14 +252,12 @@ export type Agreement = {
   // DocuSeal signing (after the signing migration). See src/lib/crm/agreement-signing.ts.
   sent_version_id?: string | null;
   docuseal_submission_id?: number | null;
-  signers?: unknown;
   contractor_signed_at?: string | null;
   completed_at?: string | null;
   expires_at?: string | null;
   decline_reason?: string | null;
   signed_pdf_path?: string | null;
   audit_log_path?: string | null;
-  sign_token?: string | null;
 };
 
 /** One saved version of an agreement. Never changed after it is saved (database-enforced). */

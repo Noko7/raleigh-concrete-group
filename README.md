@@ -978,13 +978,18 @@ not their turn yet. When the customer signs, the signed PDF and DocuSeal's audit
 agreements bucket (DocuSeal's links expire in about 40 minutes; a missed copy is fetched again on the next visit
 to the job's documents page), the owner is texted once, and the customer can download their copy from the same
 link. Declined or expired: the owner is texted once and it can be edited and sent again. **Cancel signing**
-archives the DocuSeal submission and makes it editable. DocuSeal sends no emails or texts of its own.
+archives the DocuSeal submission and makes it editable (old links then say they're no longer active). DocuSeal
+sends no emails or texts of its own. The signing links live in `agreement_signing`, which only the server reads:
+the contractor who was sent it sees only their own link, and only the owner sees the customer's (to resend it).
+A missed webhook is caught up from DocuSeal the next time the job's documents page or the customer's link is
+opened.
 
 Setup, in Vercel environment variables (never in the repo): `DOCUSEAL_API_KEY` (the test-mode key until counsel
 signs off), `DOCUSEAL_WEBHOOK_SECRET` (the `whsec_...` value) and optionally `DOCUSEAL_API_URL` (default
 `https://api.docuseal.com`). In DocuSeal, add the webhook `https://raleighconcrete.net/api/docuseal/webhook` for the
 form and submission events, and turn on "enforce signing order" as a second guard. Every webhook is verified
-(`X-Docuseal-Signature`, 5-minute window) and stored once in `document_events`, so retries change nothing.
+(`X-Docuseal-Signature`, 5-minute window), recorded in `document_events`, and marked processed only once acted
+on, so a retry after a failure is acted on again and a retry after success is not.
 
 ## Receipts
 

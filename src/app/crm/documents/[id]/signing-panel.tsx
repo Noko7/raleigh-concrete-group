@@ -17,7 +17,9 @@ export type SigningView = {
   expiresAt: string | null;
   declineReason: string | null;
   contractorEmbed: string | null;
+  /** The owner's view only. */
   customerLink: string | null;
+  customerTexted: boolean;
   hasPdf: boolean;
   hasAudit: boolean;
   agreementId: string;
@@ -66,10 +68,13 @@ export function SigningPanel({ quoteId, view, isContractor, isOwner }: { quoteId
           <DocusealForm src={view.contractorEmbed} withTitle={false} withDownloadButton={false} onComplete={() => setTimeout(() => router.refresh(), 2500)} />
         </div>
       )}
-      {view.status === "sent" && !isContractor && <p className="crm-sm">Waiting on the contractor to sign. They were texted a link to this page.</p>}
+      {view.status === "sent" && !isContractor && <p className="crm-sm">Waiting on the contractor to sign, on this page.</p>}
       {view.status === "contractor_signed" && (
         <div className="crm-sm">
-          <p>Waiting on the customer. They were texted their link.</p>
+          <p>
+            Waiting on the customer.{" "}
+            {view.customerTexted ? "They were texted their link." : "Their link couldn't be texted (no phone on the job, or the text failed): send it to them."}
+          </p>
           {view.customerLink && (
             <div className="sp-link">
               <code>{view.customerLink}</code>

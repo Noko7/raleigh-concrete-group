@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 
-import { customerStage, type AgreementSigningStatus, type Signer } from "@/lib/crm/docuseal-core";
+import { reconcileWithDocuseal, signingByToken } from "@/lib/crm/agreement-signing";
+import { customerStage, type AgreementSigningStatus } from "@/lib/crm/docuseal-core";
 import { ECONSENT_DISCLOSURE_PATH, ECONSENT_DISCLOSURE_TITLE } from "@/lib/crm/constants";
 import { pgAdmin } from "@/lib/crm/rest";
 import type { Agreement } from "@/lib/crm/types";
@@ -22,12 +23,21 @@ export const metadata: Metadata = {
 export default async function SignPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   if (!/^[0-9a-f]{32}$/.test(token)) notFound();
-  const res = await pgAdmin(`agreements?sign_token=eq.${token}&select=id,status,signers,completed_at,signed_pdf_path,quote:quote_requests(name)&limit=1`);
-  const a = res.ok ? (((await res.json()) as (Agreement & { quote: { name: string } | null })[])[0] ?? null) : null;
-  if (!a) notFound();
+  const links = await signingByToken(token);
+  // A well-formed link that no longer leads anywhere: the agreement was re-sent or cancelled.
+  if (!links) return <Closed />;
+  const res = await pgAdmin(`agreements?id=eq.${links.agreement_id}&docuseal_submission_id=eq.${links.submission_id}&select=*,quote:quote_requests(name)&limit=1`);
+  let a = res.ok ? (((await res.json()) as (Agreement & { quote: { name: string } | null })[])[0] ?? null) : null;
+  // The agreement was re-sent or cancelled since this link went out.
+  if (!a) return <Closed />;
+  // A signed copy that hasn't reached storage yet, or a missed webhook, is caught up here too.
+  if (await reconcileWithDocuseal(a)) {
+    const again = await pgAdmin(`agreements?id=eq.${a.id}&select=*,quote:quote_requests(name)&limit=1`);
+    a = again.ok ? (((await again.json()) as (Agreement & { quote: { name: string } | null })[])[0] ?? a) : a;
+  }
 
   const stage = customerStage(a.status as AgreementSigningStatus);
-  const customer = ((Array.isArray(a.signers) ? a.signers : []) as Signer[]).find((s) => s.role === "Customer");
+  const customer = links.signers.find((s) => s.role === "Customer");
   const first = (a.quote?.name ?? "").trim().split(/\s+/)[0] || "there";
 
   return (
@@ -66,13 +76,32 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
             )}
           </>
         ) : (
-          <>
-            <h1 className="sg-title">This link is no longer active</h1>
-            <p className="sg-lead">
-              The agreement was changed or withdrawn. Call or text <a href={phoneHref}>{phoneDisplay}</a> and we&apos;ll send you the current one.
-            </p>
-          </>
+          <ClosedBody />
         )}
+      </article>
+    </main>
+  );
+}
+
+function ClosedBody() {
+  return (
+    <>
+      <h1 className="sg-title">This link is no longer active</h1>
+      <p className="sg-lead">
+        The agreement was changed or withdrawn. Call or text <a href={phoneHref}>{phoneDisplay}</a> and we&apos;ll send you the current one.
+      </p>
+    </>
+  );
+}
+
+function Closed() {
+  return (
+    <main className="cq-wrap">
+      <article className="cq-card sg">
+        <header className="cq-head">
+          <Image src="/images/logo_horizontal.png" alt={businessName} width={967} height={243} className="cq-logo" priority />
+        </header>
+        <ClosedBody />
       </article>
     </main>
   );

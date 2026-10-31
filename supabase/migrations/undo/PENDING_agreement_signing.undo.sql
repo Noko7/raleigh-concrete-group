@@ -8,13 +8,14 @@ set local lock_timeout = '5s';
 
 do $$
 begin
-  if exists (select 1 from public.agreements where docuseal_submission_id is not null)
+  if exists (select 1 from public.agreements where docuseal_submission_id is not null or sent_version_id is not null)
      or exists (select 1 from public.agreements where status in ('contractor_signed', 'expired')) then
     raise exception 'agreements have been sent for signing; export them before undoing (see the comment at the top)';
   end if;
 end $$;
 
 drop table public.document_events;
+drop table public.agreement_signing;
 
 -- The numbering trigger as it was before signing existed.
 create or replace function public.number_agreement_version()
@@ -46,17 +47,15 @@ alter table public.agreements add constraint agreements_status_check CHECK (
   status = ANY (ARRAY['pending'::text, 'sent'::text, 'signed'::text, 'declined'::text, 'void'::text])
 );
 alter table public.agreements drop constraint if exists agreements_signing_chk;
-alter table public.agreements drop constraint if exists agreements_sign_token_key;
 alter table public.agreements drop constraint if exists agreements_docuseal_submission_key;
 alter table public.agreements drop constraint if exists agreements_sent_version_fkey;
+alter table public.agreement_versions drop constraint if exists agreement_versions_agreement_id_id_key;
 alter table public.agreements
-  drop column if exists sign_token,
   drop column if exists audit_log_path,
   drop column if exists signed_pdf_path,
   drop column if exists decline_reason,
   drop column if exists expires_at,
   drop column if exists completed_at,
   drop column if exists contractor_signed_at,
-  drop column if exists signers,
   drop column if exists docuseal_submission_id,
   drop column if exists sent_version_id;

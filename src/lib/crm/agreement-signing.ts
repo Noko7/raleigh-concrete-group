@@ -9,7 +9,12 @@
 //            Declined or expired -> the owner is texted once and the agreement can be edited and sent again.
 //   cancel   archives the DocuSeal submission and puts the agreement back to a draft.
 //
-// Every webhook is stored once in document_events first; a retry finds it there and does nothing.
+// What lets someone sign (each signer's DocuSeal link, the customer's token) lives in agreement_signing, which only
+// the server can read: each person is handed their own link and nobody else's.
+//
+// Webhooks: each is recorded in document_events, acted on, and only then marked processed. A retry of one that
+// failed part way is acted on again; every status change is guarded on the status it expects, so acting twice
+// moves nothing twice and texts nobody twice.
 import { randomBytes } from "node:crypto";
 
 import { buildSubmissionRequest, readSigners, SENDABLE, transitionFor, type AgreementSigningStatus, type DocusealEvent, type Signer } from "./docuseal-core";
@@ -30,20 +35,58 @@ const SIGN_DAYS = 30;
 export const signLink = (token: string) => `${SITE_ORIGIN}/sign/${token}`;
 const hubLink = (quoteId: string) => `${SITE_ORIGIN}/crm/documents/${quoteId}`;
 
-async function patchAgreement(id: string, patch: Record<string, unknown>, onlyIfStatus?: string[]): Promise<boolean> {
-  const guard = onlyIfStatus ? `&status=in.(${onlyIfStatus.join(",")})` : "";
+/** The server-only signing record of an agreement that is (or was) out for signature. */
+export type SigningSecrets = {
+  agreement_id: string;
+  submission_id: number;
+  sign_token: string;
+  contractor_staff_id: string | null;
+  signers: Signer[];
+  customer_texted_at: string | null;
+};
+
+export async function signingFor(agreementId: string): Promise<SigningSecrets | null> {
+  if (!UUID_RE.test(agreementId)) return null;
+  const res = await pgAdmin(`agreement_signing?agreement_id=eq.${agreementId}&select=*&limit=1`);
+  if (!res.ok) throw new Error(`[signing] couldn't read the signing record (${res.status})`);
+  return ((await res.json()) as SigningSecrets[])[0] ?? null;
+}
+
+export async function signingByToken(token: string): Promise<SigningSecrets | null> {
+  if (!/^[0-9a-f]{32}$/.test(token)) return null;
+  const res = await pgAdmin(`agreement_signing?sign_token=eq.${token}&select=*&limit=1`);
+  return res.ok ? (((await res.json()) as SigningSecrets[])[0] ?? null) : null;
+}
+
+/**
+ * Update an agreement only if it is still in one of `onlyIfStatus` (and still on `versionId`, when given). True
+ * when it moved; false when it had already moved on. Throws when the write itself failed, so a webhook is retried.
+ */
+async function patchAgreement(id: string, patch: Record<string, unknown>, onlyIfStatus?: string[], versionId?: string): Promise<boolean> {
+  const guard = (onlyIfStatus ? `&status=in.(${onlyIfStatus.join(",")})` : "") + (versionId ? `&current_version_id=eq.${versionId}` : "");
   const res = await pgAdmin(`agreements?id=eq.${id}${guard}&select=id`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify(patch),
   });
-  return res.ok && ((await res.json()) as unknown[]).length === 1;
+  if (!res.ok) throw new Error(`[signing] agreement update failed (${res.status})`);
+  return ((await res.json()) as unknown[]).length === 1;
+}
+
+async function patchSigning(agreementId: string, patch: Record<string, unknown>): Promise<void> {
+  const res = await pgAdmin(`agreement_signing?agreement_id=eq.${agreementId}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(patch) });
+  if (!res.ok) throw new Error(`[signing] signing record update failed (${res.status})`);
 }
 
 async function staffRow(id: string | null): Promise<Pick<Staff, "id" | "full_name" | "business_name" | "phone" | "email"> | null> {
   if (!id || !UUID_RE.test(id)) return null;
   const res = await pgAdmin(`staff?id=eq.${id}&select=id,full_name,business_name,phone,email&limit=1`);
   return res.ok ? (((await res.json()) as Staff[])[0] ?? null) : null;
+}
+
+async function withdraw(submissionId: number, why: string) {
+  const r = await archiveSubmission(submissionId);
+  if (!r.ok && r.status !== 404) console.error("[signing] COULDN'T ARCHIVE a DocuSeal submission; archive it by hand:", submissionId, why);
 }
 
 export type SendResult = { ok: true } | { ok: false; error: string };
@@ -59,7 +102,7 @@ export async function sendForSigning(session: Session, quote: Quote, agreement: 
   if (!quote.assigned_to) return { ok: false, error: "Assign a contractor to the job first: they sign before the customer." };
   if (quote.change_requested_at) return { ok: false, error: "A change order is waiting on the customer. Send after they answer it." };
 
-  const vr = await pgAdmin(`agreement_versions?id=eq.${agreement.current_version_id}&select=*&limit=1`);
+  const vr = await pgAdmin(`agreement_versions?id=eq.${agreement.current_version_id}&agreement_id=eq.${agreement.id}&select=*&limit=1`);
   const version = vr.ok ? (((await vr.json()) as AgreementVersion[])[0] ?? null) : null;
   const body = version ? parseBody(version.body) : null;
   if (!version || !body) return { ok: false, error: "Couldn't read the saved version. Reload and try again." };
@@ -88,28 +131,40 @@ export async function sendForSigning(session: Session, quote: Quote, agreement: 
     return { ok: false, error: "DocuSeal's reply was incomplete. Nothing was sent; try again." };
   }
 
+  // The links first (server-only), then the agreement, guarded on its status AND on the version that was sent,
+  // so a save that slipped in meanwhile stops this send instead of signing an older version.
   const token = randomBytes(16).toString("hex");
-  const saved = await patchAgreement(
-    agreement.id,
-    {
-      status: "sent",
-      sent_version_id: version.id,
-      docuseal_submission_id: read.submissionId,
-      signers: read.signers,
-      sent_at: new Date().toISOString(),
-      contractor_signed_at: null,
-      completed_at: null,
-      signed_at: null,
-      expires_at: expireAt,
-      decline_reason: null,
-      sign_token: token,
-    },
-    SENDABLE,
-  );
+  const links = await pgAdmin("agreement_signing?on_conflict=agreement_id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ agreement_id: agreement.id, submission_id: read.submissionId, sign_token: token, contractor_staff_id: contractor.id, signers: read.signers, customer_texted_at: null }),
+  });
+  let saved = false;
+  try {
+    saved =
+      links.ok &&
+      (await patchAgreement(
+        agreement.id,
+        {
+          status: "sent",
+          sent_version_id: version.id,
+          docuseal_submission_id: read.submissionId,
+          sent_at: new Date().toISOString(),
+          contractor_signed_at: null,
+          completed_at: null,
+          signed_at: null,
+          expires_at: expireAt,
+          decline_reason: null,
+        },
+        SENDABLE,
+        version.id,
+      ));
+  } catch (e) {
+    console.error((e as Error).message);
+  }
   if (!saved) {
-    // Someone else sent it in the meantime, or the write failed: withdraw this submission so nothing dangles.
-    await archiveSubmission(read.submissionId);
-    return { ok: false, error: "It changed while sending. Reload and check before sending again." };
+    await withdraw(read.submissionId, "send didn't complete");
+    return { ok: false, error: "It changed while sending (a new save, or someone else sent it). Reload and check before sending again." };
   }
   await addAdminEvent(quote.id, "agreement_sent", { agreement_id: agreement.id, version_no: version.version_no, by: session.staff.id });
 
@@ -132,44 +187,68 @@ export async function cancelSigning(session: Session, quote: Quote, agreement: A
     const r = await archiveSubmission(agreement.docuseal_submission_id);
     if (!r.ok && r.status !== 404) return { ok: false, error: `DocuSeal didn't cancel it: ${r.error}` };
   }
-  const ok = await patchAgreement(agreement.id, { status: "pending", sign_token: null, docuseal_submission_id: null, signers: null }, ["sent", "contractor_signed"]);
+  let ok = false;
+  try {
+    ok = await patchAgreement(agreement.id, { status: "pending", docuseal_submission_id: null }, ["sent", "contractor_signed"]);
+  } catch (e) {
+    console.error((e as Error).message);
+  }
   if (!ok) return { ok: false, error: "It changed meanwhile (maybe it was just signed). Reload." };
+  // The links die with the send: an old /sign link now says it's no longer active.
+  await pgAdmin(`agreement_signing?agreement_id=eq.${agreement.id}`, { method: "DELETE" });
   await addAdminEvent(quote.id, "agreement_cancelled", { agreement_id: agreement.id, by: session.staff.id });
   return { ok: true };
 }
 
 type AgreementForEvent = Agreement & { quote: Pick<Quote, "id" | "name" | "phone" | "assigned_to"> | null };
 
-/** Act on one verified DocuSeal webhook. Returns what happened, for the log. */
+/** Act on one verified DocuSeal webhook. Returns what happened, for the log; throws (so DocuSeal retries) on failure. */
 export async function handleDocusealEvent(e: DocusealEvent, payload: unknown): Promise<string> {
+  const key = `submission_id=eq.${e.submissionId}&event_type=eq.${encodeURIComponent(e.type)}&signer_role=eq.${e.role ?? ""}&event_at=eq.${encodeURIComponent(e.at)}`;
+  const seen = await pgAdmin(`document_events?${key}&select=id,processed_at&limit=1`);
+  if (!seen.ok) throw new Error(`[signing] couldn't read document_events (${seen.status})`);
+  const [prior] = (await seen.json()) as { id: string; processed_at: string | null }[];
+  if (prior?.processed_at) return "duplicate";
+
   const ar = await pgAdmin(`agreements?docuseal_submission_id=eq.${e.submissionId}&select=*,quote:quote_requests(id,name,phone,assigned_to)&limit=1`);
-  const agreement = ar.ok ? (((await ar.json()) as AgreementForEvent[])[0] ?? null) : null;
+  if (!ar.ok) throw new Error(`[signing] couldn't read the agreement (${ar.status})`);
+  const agreement = ((await ar.json()) as AgreementForEvent[])[0] ?? null;
 
-  // Recorded once; a retried delivery stops here.
-  const rec = await pgAdmin("document_events?on_conflict=submission_id,event_type,event_at", {
-    method: "POST",
-    headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
-    body: JSON.stringify({ agreement_id: agreement?.id ?? null, submission_id: e.submissionId, event_type: e.type, event_at: e.at, payload }),
-  });
-  if (!rec.ok) throw new Error(`document_events insert failed (${rec.status})`);
-  if (((await rec.json()) as unknown[]).length === 0) return "duplicate";
-  if (!agreement || !agreement.quote) return "no matching agreement";
+  if (!prior) {
+    const rec = await pgAdmin("document_events?on_conflict=submission_id,event_type,signer_role,event_at", {
+      method: "POST",
+      headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
+      body: JSON.stringify({ agreement_id: agreement?.id ?? null, submission_id: e.submissionId, event_type: e.type, signer_role: e.role ?? "", event_at: e.at, payload }),
+    });
+    if (!rec.ok) throw new Error(`[signing] document_events insert failed (${rec.status})`);
+  }
 
+  const outcome = agreement?.quote ? await act(agreement as AgreementForEvent & { quote: NonNullable<AgreementForEvent["quote"]> }, e) : "no matching agreement";
+  const done = await pgAdmin(`document_events?${key}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ processed_at: new Date().toISOString() }) });
+  if (!done.ok) throw new Error(`[signing] couldn't mark the event processed (${done.status})`);
+  return outcome;
+}
+
+async function act(agreement: AgreementForEvent & { quote: NonNullable<AgreementForEvent["quote"]> }, e: DocusealEvent): Promise<string> {
   const t = transitionFor(agreement.status as AgreementSigningStatus, e);
+  if (t.kind === "none") return "recorded";
   const q = agreement.quote;
-  const signers = (Array.isArray(agreement.signers) ? agreement.signers : []) as Signer[];
+  const links = await signingFor(agreement.id);
+  const signers = links?.signers ?? [];
   const mark = (role: "Contractor" | "Customer", patch: Partial<Signer>) => signers.map((s) => (s.role === role ? { ...s, ...patch } : s));
 
   if (t.kind === "contractor_signed") {
-    const ok = await patchAgreement(agreement.id, { status: "contractor_signed", contractor_signed_at: e.at, signers: mark("Contractor", { completed_at: e.at }) }, ["sent"]);
-    if (!ok) return "already moved";
+    const moved = await patchAgreement(agreement.id, { status: "contractor_signed", contractor_signed_at: e.at }, ["sent"]);
+    if (links) await patchSigning(agreement.id, { signers: mark("Contractor", { completed_at: e.at }) });
+    if (!moved) return "already moved";
     await addAdminEvent(q.id, "agreement_contractor_signed", { agreement_id: agreement.id });
-    if (q.phone && agreement.sign_token) {
-      await sendSmsResult(
+    if (q.phone && links) {
+      const sent = await sendSmsResult(
         q.phone,
-        text([`Hi ${firstName(q.name)},`, "your contractor has signed your agreement. Please read and sign it here:", "", signLink(agreement.sign_token), "", BUSINESS]),
+        text([`Hi ${firstName(q.name)},`, "your contractor has signed your agreement. Please read and sign it here:", "", signLink(links.sign_token), "", BUSINESS]),
         { quoteId: q.id, kind: "agreement_sign_customer", role: "customer" },
-      ).catch(() => {});
+      ).catch(() => null);
+      if (sent?.ok) await patchSigning(agreement.id, { customer_texted_at: new Date().toISOString() });
     }
     return "contractor signed";
   }
@@ -182,60 +261,74 @@ export async function handleDocusealEvent(e: DocusealEvent, payload: unknown): P
       pdfUrl ? storeSignedFile(pdfUrl, `${base}.pdf`, "application/pdf") : Promise.resolve(null),
       e.auditLogUrl ? storeSignedFile(e.auditLogUrl, `${base}-audit.pdf`, "application/pdf") : Promise.resolve(null),
     ]);
-    const ok = await patchAgreement(
+    const moved = await patchAgreement(
       agreement.id,
-      {
-        status: "signed",
-        signed_at: e.at,
-        completed_at: e.at,
-        signers: mark("Customer", { completed_at: e.at }),
-        ...(pdf ? { signed_pdf_path: pdf, file_path: pdf } : {}),
-        ...(audit ? { audit_log_path: audit } : {}),
-      },
+      { status: "signed", signed_at: e.at, completed_at: e.at, ...(pdf ? { signed_pdf_path: pdf, file_path: pdf } : {}), ...(audit ? { audit_log_path: audit } : {}) },
       ["sent", "contractor_signed"],
     );
-    if (!ok) return "already moved";
-    if (!pdf) console.error("[signing] signed but the PDF wasn't stored; fetch it from DocuSeal", agreement.id);
+    if (links) await patchSigning(agreement.id, { signers: mark("Customer", { completed_at: e.at }) });
+    if (!moved) return "already moved";
+    if (!pdf) console.error("[signing] signed but the PDF wasn't stored; it is fetched again on the next page view", agreement.id);
     await addAdminEvent(q.id, "agreement_signed", { agreement_id: agreement.id, stored: Boolean(pdf) });
     await alertOwner(text([`AGREEMENT SIGNED`, "", `${q.name} signed the agreement.`, "", hubLink(q.id)]), null, { quoteId: q.id, kind: "agreement_signed" });
     return "signed";
   }
 
-  if (t.kind === "declined" || t.kind === "expired") {
-    const ok = await patchAgreement(
-      agreement.id,
-      t.kind === "declined"
-        ? { status: "declined", decline_reason: t.reason, signers: t.role ? mark(t.role, { declined_at: e.at }) : signers }
-        : { status: "expired" },
-      ["sent", "contractor_signed"],
-    );
-    if (!ok) return "already moved";
-    await addAdminEvent(q.id, `agreement_${t.kind}`, { agreement_id: agreement.id, ...(t.kind === "declined" ? { by: t.role, reason: t.reason } : {}) });
-    const who = t.kind === "declined" ? (t.role === "Contractor" ? "The contractor declined" : `${q.name} declined`) : "Nobody signed in time; it expired";
-    await alertOwner(
-      text([`AGREEMENT ${t.kind.toUpperCase()}`, "", `${who} the agreement for ${q.name}.`, t.kind === "declined" && t.reason ? `Reason: ${t.reason}` : null, "It can be edited and sent again.", "", hubLink(q.id)]),
-      null,
-      { quoteId: q.id, kind: `agreement_${t.kind}` },
-    );
-    return t.kind;
-  }
-  return "recorded";
+  // Declined or expired.
+  const moved = await patchAgreement(
+    agreement.id,
+    t.kind === "declined" ? { status: "declined", decline_reason: t.reason } : { status: "expired" },
+    ["sent", "contractor_signed"],
+  );
+  if (links && t.kind === "declined" && t.role) await patchSigning(agreement.id, { signers: mark(t.role, { declined_at: e.at }) });
+  if (!moved) return "already moved";
+  await addAdminEvent(q.id, `agreement_${t.kind}`, { agreement_id: agreement.id, ...(t.kind === "declined" ? { by: t.role, reason: t.reason } : {}) });
+  const who = t.kind === "declined" ? (t.role === "Contractor" ? "The contractor declined" : `${q.name} declined`) : "Nobody signed in time; it expired:";
+  await alertOwner(
+    text([`AGREEMENT ${t.kind.toUpperCase()}`, "", `${who} the agreement for ${q.name}.`, t.kind === "declined" && t.reason ? `Reason: ${t.reason}` : null, "It can be edited and sent again.", "", hubLink(q.id)]),
+    null,
+    { quoteId: q.id, kind: `agreement_${t.kind}` },
+  );
+  return t.kind;
 }
 
 /**
- * A signed agreement whose PDF didn't make it into storage (DocuSeal's link had expired, or storage was down):
- * fetch fresh links from DocuSeal and copy the files now. Safe to call on every page view; does nothing once stored.
+ * Catch up with DocuSeal when a webhook went missing: a signed agreement whose PDF didn't reach storage, or one
+ * that DocuSeal says the contractor (or customer) has signed while we still show it waiting. Called on page views;
+ * does nothing when everything already agrees. Errors are logged, never shown.
  */
-export async function storeMissingSignedCopy(agreement: Agreement): Promise<boolean> {
-  if (agreement.status !== "signed" || agreement.signed_pdf_path || !agreement.docuseal_submission_id) return false;
-  const sub = await getSubmission(agreement.docuseal_submission_id);
-  if (!sub.ok) return false;
-  const base = `signed/${agreement.id}-${(agreement.completed_at ?? new Date().toISOString()).slice(0, 10)}`;
-  const pdfUrl = sub.data.combined_document_url ?? sub.data.documents?.[0]?.url ?? null;
-  const [pdf, audit] = await Promise.all([
-    pdfUrl ? storeSignedFile(pdfUrl, `${base}.pdf`, "application/pdf") : Promise.resolve(null),
-    sub.data.audit_log_url && !agreement.audit_log_path ? storeSignedFile(sub.data.audit_log_url, `${base}-audit.pdf`, "application/pdf") : Promise.resolve(null),
-  ]);
-  if (!pdf) return false;
-  return patchAgreement(agreement.id, { signed_pdf_path: pdf, file_path: pdf, ...(audit ? { audit_log_path: audit } : {}) }, ["signed"]);
+export async function reconcileWithDocuseal(agreement: Agreement): Promise<boolean> {
+  try {
+    if (!agreement.docuseal_submission_id) return false;
+    const needsFile = agreement.status === "signed" && !agreement.signed_pdf_path;
+    const waiting = agreement.status === "sent" || agreement.status === "contractor_signed";
+    if (!needsFile && !waiting) return false;
+    const sub = await getSubmission(agreement.docuseal_submission_id);
+    if (!sub.ok) return false;
+    if (waiting) {
+      const done = (sub.data.submitters ?? []).filter((s) => s.completed_at && (s.role === "Contractor" || s.role === "Customer"));
+      const at = (role: string) => done.find((s) => s.role === role)?.completed_at ?? null;
+      const fake = (type: string, role: "Contractor" | "Customer" | null, when: string): DocusealEvent => ({
+        type, at: new Date(when).toISOString(), submissionId: agreement.docuseal_submission_id!, role, declineReason: null,
+        auditLogUrl: sub.data.audit_log_url ?? null, combinedDocumentUrl: sub.data.combined_document_url ?? null,
+        documentUrls: (sub.data.documents ?? []).map((d) => d.url).filter((u): u is string => Boolean(u)),
+      });
+      const c = at("Contractor");
+      const k = at("Customer");
+      if (sub.data.status === "completed" && k) return (await handleDocusealEvent(fake("submission.completed", null, k), { reconciled: true })) === "signed";
+      if (agreement.status === "sent" && c) return (await handleDocusealEvent(fake("form.completed", "Contractor", c), { reconciled: true })) === "contractor signed";
+      return false;
+    }
+    const base = `signed/${agreement.id}-${(agreement.completed_at ?? new Date().toISOString()).slice(0, 10)}`;
+    const pdfUrl = sub.data.combined_document_url ?? sub.data.documents?.[0]?.url ?? null;
+    const [pdf, audit] = await Promise.all([
+      pdfUrl ? storeSignedFile(pdfUrl, `${base}.pdf`, "application/pdf") : Promise.resolve(null),
+      sub.data.audit_log_url && !agreement.audit_log_path ? storeSignedFile(sub.data.audit_log_url, `${base}-audit.pdf`, "application/pdf") : Promise.resolve(null),
+    ]);
+    if (!pdf) return false;
+    return await patchAgreement(agreement.id, { signed_pdf_path: pdf, file_path: pdf, ...(audit ? { audit_log_path: audit } : {}) }, ["signed"]);
+  } catch (e) {
+    console.error("[signing] reconcile failed", agreement.id, (e as Error).message);
+    return false;
+  }
 }

@@ -15,9 +15,9 @@ import { AddAgreement } from "../add-agreement";
 import { AgreementList } from "../agreement-list";
 import { AgreementEditor } from "./agreement-editor";
 import { SigningPanel, type SigningView } from "./signing-panel";
-import { signLink, storeMissingSignedCopy } from "@/lib/crm/agreement-signing";
+import { reconcileWithDocuseal, signingFor, signLink, type SigningSecrets } from "@/lib/crm/agreement-signing";
 import { docusealConfigured } from "@/lib/crm/docuseal";
-import { SENDABLE, type AgreementSigningStatus, type Signer } from "@/lib/crm/docuseal-core";
+import { SENDABLE, type AgreementSigningStatus } from "@/lib/crm/docuseal-core";
 import { StartAgreement } from "./start-agreement";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
 
   const isOwner = session.staff.role === "owner";
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
-  const [agreements, receipts, money] = await Promise.all([
+  const [firstRead, receipts, money] = await Promise.all([
     listAgreementsForQuote(session, id),
     listReceiptsForJob(session, id),
     // Only to find paid payments with no receipt, which only the owner can fix.
@@ -42,10 +42,15 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
   ]);
   // The agreement written in the CRM (versioned) leads; files uploaded by hand are listed apart.
   const canEdit = canEditJobAgreement(session, quote);
+  let agreements = firstRead;
+  // A missed webhook or a signed copy that didn't reach storage is caught up from DocuSeal on each visit.
+  const first = editableAgreement(agreements);
+  if (first && (await reconcileWithDocuseal(first))) agreements = await listAgreementsForQuote(session, id);
   const current = editableAgreement(agreements);
   const others = agreements.filter((a) => a.id !== current?.id && !a.current_version_id);
-  // A signed copy that didn't reach storage is fetched again on each visit until it does.
-  if (current && (await storeMissingSignedCopy(current))) current.signed_pdf_path = current.file_path = "stored";
+  // What lets people sign is server-only: the contractor who was sent it gets their own link; only the owner sees
+  // the customer's.
+  const links = current?.docuseal_submission_id ? await signingFor(current.id).catch(() => null) : null;
   const [versions, currentVersion] = current?.current_version_id
     ? await Promise.all([listVersions(session, current.id), getVersion(session, current.current_version_id)])
     : [[], null];
@@ -74,7 +79,7 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
       </div>
 
       {current && current.sent_at && current.status !== "pending" && (
-        <SigningPanel quoteId={quote.id} view={signingView(current, versions)} isContractor={session.staff.id === quote.assigned_to} isOwner={isOwner} />
+        <SigningPanel quoteId={quote.id} view={signingView(current, versions, links, { isOwner, staffId: session.staff.id })} isContractor={Boolean(links && session.staff.id === links.contractor_staff_id)} isOwner={isOwner} />
       )}
 
       {current && currentVersion ? (
@@ -112,8 +117,13 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
   );
 }
 
-function signingView(a: Agreement, versions: { id: string; version_no: number }[]): SigningView {
-  const signers = (Array.isArray(a.signers) ? a.signers : []) as Signer[];
+function signingView(
+  a: Agreement,
+  versions: { id: string; version_no: number }[],
+  links: SigningSecrets | null,
+  viewer: { isOwner: boolean; staffId: string },
+): SigningView {
+  const mine = links && viewer.staffId === links.contractor_staff_id;
   return {
     status: a.status,
     versionNo: versions.find((v) => v.id === a.sent_version_id)?.version_no ?? null,
@@ -122,8 +132,9 @@ function signingView(a: Agreement, versions: { id: string; version_no: number }[
     signedAt: a.completed_at ?? a.signed_at,
     expiresAt: a.expires_at ?? null,
     declineReason: a.decline_reason ?? null,
-    contractorEmbed: signers.find((s) => s.role === "Contractor")?.embed_src ?? null,
-    customerLink: a.sign_token ? signLink(a.sign_token) : null,
+    contractorEmbed: mine ? (links.signers.find((s) => s.role === "Contractor")?.embed_src ?? null) : null,
+    customerLink: viewer.isOwner && links ? signLink(links.sign_token) : null,
+    customerTexted: Boolean(links?.customer_texted_at),
     hasPdf: Boolean(a.signed_pdf_path && a.file_path),
     hasAudit: Boolean(a.audit_log_path),
     agreementId: a.id,

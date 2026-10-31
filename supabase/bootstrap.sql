@@ -178,23 +178,20 @@ create table public.agreements (
   current_version_id uuid,
   sent_version_id uuid,
   docuseal_submission_id bigint,
-  signers jsonb,
   contractor_signed_at timestamp with time zone,
   completed_at timestamp with time zone,
   expires_at timestamp with time zone,
   decline_reason text,
   signed_pdf_path text,
   audit_log_path text,
-  sign_token text,
   constraint agreements_pkey PRIMARY KEY (id),
   constraint agreements_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.staff(id) ON DELETE SET NULL,
   constraint agreements_quote_id_fkey FOREIGN KEY (quote_id) REFERENCES public.quote_requests(id) ON DELETE CASCADE,
   constraint agreements_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE CASCADE,
   constraint agreements_kind_check CHECK ((kind = ANY (ARRAY['contractor'::text, 'customer'::text]))),
   constraint agreements_docuseal_submission_key UNIQUE (docuseal_submission_id),
-  constraint agreements_sign_token_key UNIQUE (sign_token),
   constraint agreements_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'contractor_signed'::text, 'signed'::text, 'declined'::text, 'expired'::text, 'void'::text]))),
-  constraint agreements_signing_chk CHECK ((((signers IS NULL) OR (jsonb_typeof(signers) = 'array'::text)) AND ((decline_reason IS NULL) OR (char_length(decline_reason) <= 1000)) AND ((sign_token IS NULL) OR (sign_token ~ '^[0-9a-f]{32}$'::text)) AND ((signed_pdf_path IS NULL) OR (char_length(signed_pdf_path) <= 300)) AND ((audit_log_path IS NULL) OR (char_length(audit_log_path) <= 300)))),
+  constraint agreements_signing_chk CHECK ((((decline_reason IS NULL) OR (char_length(decline_reason) <= 1000)) AND ((signed_pdf_path IS NULL) OR (char_length(signed_pdf_path) <= 300)) AND ((audit_log_path IS NULL) OR (char_length(audit_log_path) <= 300)))),
   constraint agreements_target_chk CHECK ((((kind = 'contractor'::text) AND (staff_id IS NOT NULL) AND (quote_id IS NULL)) OR ((kind = 'customer'::text) AND (quote_id IS NOT NULL) AND (staff_id IS NULL))))
 );
 
@@ -212,26 +209,46 @@ create table public.agreement_versions (
   created_at timestamp with time zone default now() not null,
   constraint agreement_versions_pkey PRIMARY KEY (id),
   constraint agreement_versions_no_key UNIQUE (agreement_id, version_no),
+  constraint agreement_versions_agreement_id_id_key UNIQUE (agreement_id, id),
   constraint agreement_versions_agreement_fkey FOREIGN KEY (agreement_id) REFERENCES agreements(id) ON DELETE CASCADE,
   constraint agreement_versions_chk CHECK (((version_no >= 1) AND ((char_length(template_version) >= 1) AND (char_length(template_version) <= 40)) AND (jsonb_typeof(body) = 'object'::text) AND ((char_length(html) >= 1) AND (char_length(html) <= 500000)) AND (html_sha256 ~ '^[0-9a-f]{64}$'::text) AND ((note IS NULL) OR (char_length(note) <= 300)) AND ((created_by_name IS NULL) OR (char_length(created_by_name) <= 200))))
 );
 -- agreements.current_version_id points the other way, so its key is added once both tables exist.
 alter table public.agreements add constraint agreements_current_version_fkey FOREIGN KEY (current_version_id) REFERENCES agreement_versions(id) ON DELETE SET NULL;
-alter table public.agreements add constraint agreements_sent_version_fkey FOREIGN KEY (sent_version_id) REFERENCES agreement_versions(id);
+alter table public.agreements add constraint agreements_sent_version_fkey FOREIGN KEY (id, sent_version_id) REFERENCES agreement_versions(agreement_id, id);
 
--- Every DocuSeal webhook, stored once (unique on submission, event and its time). Service role only.
+-- What lets someone sign (DocuSeal embed links, the customer's /sign token). Service role only.
+create table public.agreement_signing (
+  agreement_id uuid not null,
+  submission_id bigint not null,
+  sign_token text not null,
+  contractor_staff_id uuid,
+  signers jsonb not null,
+  customer_texted_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint agreement_signing_pkey PRIMARY KEY (agreement_id),
+  constraint agreement_signing_submission_key UNIQUE (submission_id),
+  constraint agreement_signing_token_key UNIQUE (sign_token),
+  constraint agreement_signing_agreement_fkey FOREIGN KEY (agreement_id) REFERENCES agreements(id) ON DELETE CASCADE,
+  constraint agreement_signing_chk CHECK (((sign_token ~ '^[0-9a-f]{32}$'::text) AND (jsonb_typeof(signers) = 'array'::text)))
+);
+
+-- Every DocuSeal webhook, stored once (unique on submission, event, signer and its time); processed_at is set
+-- after it has been acted on. Service role only.
 create table public.document_events (
   id uuid default gen_random_uuid() not null,
   agreement_id uuid,
   submission_id bigint not null,
   event_type text not null,
+  signer_role text default ''::text not null,
   event_at timestamp with time zone not null,
   payload jsonb not null,
   received_at timestamp with time zone default now() not null,
+  processed_at timestamp with time zone,
   constraint document_events_pkey PRIMARY KEY (id),
-  constraint document_events_once_key UNIQUE (submission_id, event_type, event_at),
+  constraint document_events_once_key UNIQUE (submission_id, event_type, signer_role, event_at),
   constraint document_events_agreement_fkey FOREIGN KEY (agreement_id) REFERENCES agreements(id) ON DELETE SET NULL,
-  constraint document_events_chk CHECK ((((char_length(event_type) >= 1) AND (char_length(event_type) <= 60)) AND (jsonb_typeof(payload) = 'object'::text)))
+  constraint document_events_chk CHECK ((((char_length(event_type) >= 1) AND (char_length(event_type) <= 60)) AND (signer_role = ANY (ARRAY[''::text, 'Contractor'::text, 'Customer'::text])) AND (jsonb_typeof(payload) = 'object'::text)))
 );
 
 create table public.app_integrations (
@@ -1025,6 +1042,7 @@ $function$
 alter table public.agreements enable row level security;
 alter table public.agreement_versions enable row level security;
 alter table public.document_events enable row level security;
+alter table public.agreement_signing enable row level security;
 alter table public.app_integrations enable row level security;
 alter table public.contractor_invites enable row level security;
 alter table public.fee_settlements enable row level security;
@@ -1214,7 +1232,8 @@ grant select, insert, update, delete, truncate, references, trigger, maintain on
 grant select, references, trigger, maintain on public.agreement_versions to authenticated;
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.agreement_versions to service_role;
 
--- DocuSeal webhooks: the server only.
+-- DocuSeal webhooks and signing links: the server only.
+grant select, insert, update, delete, truncate, references, trigger, maintain on public.agreement_signing to service_role;
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.document_events to service_role;
 
 grant truncate, references, trigger, maintain on public.app_integrations to anon, authenticated;     -- (default)
