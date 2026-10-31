@@ -159,8 +159,9 @@ test("helpers", () => {
 
 test("attacker-chosen text is always storable: length, NUL, split emoji", () => {
   // 400-char path + 8 long query names would be 728 chars; the table allows 520.
-  const long = "/" + "a".repeat(450) + "?" + Array.from({ length: 8 }, (_, i) => `${"k".repeat(39)}${i}=1`).join("&");
-  assert.ok(cleanPath(long).length <= MAX_STORED_PATH);
+  // "z" so the segment isn't masked as an id and the 500-character cap is really exercised.
+  const long = "/" + "z".repeat(450) + "?" + Array.from({ length: 8 }, (_, i) => `${"k".repeat(39)}${i}=1`).join("&");
+  assert.equal(cleanPath(long).length, MAX_STORED_PATH);
   // %00 in a query name decodes to NUL, which Postgres refuses.
   assert.ok(!cleanPath("/x?%00=1&ok=2").includes("\u0000"));
   assert.equal(cleanPath("/x?%00=1&ok=2"), "/x?ok");

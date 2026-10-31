@@ -88,7 +88,9 @@ async function insertRows(rows: unknown[], resolution: Resolution): Promise<"ok"
   if (rows.length === 0) return "ok";
   const res = await post(rows, resolution);
   if (res?.ok) return "ok";
-  if (!res || res.status >= 500) {
+  // Only "this data was refused" (400/409/422) is worth splitting up. Anything else (no table yet, a rotated key,
+  // an outage) fails every row the same way: retried as a whole, so no delivery is silently lost.
+  if (!res || ![400, 409, 422].includes(res.status)) {
     console.error("[log-drain] insert failed", res?.status ?? "network", `${rows.length} rows`);
     return "retry";
   }
@@ -96,7 +98,7 @@ async function insertRows(rows: unknown[], resolution: Resolution): Promise<"ok"
   for (const row of rows) {
     const one = await post([row], resolution);
     if (one?.ok) continue;
-    if (!one || one.status >= 500) return "retry";
+    if (!one || ![400, 409, 422].includes(one.status)) return "retry";
     dropped += 1;
   }
   if (dropped) console.warn("[log-drain] dropped rows the database refused", dropped);
