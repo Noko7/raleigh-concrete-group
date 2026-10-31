@@ -80,3 +80,10 @@ test("the agreement the editor works on: newest written in the CRM, never an upl
   assert.equal(editableAgreement([a("file", "2026-10-30", null)]), null);
   assert.equal(editableAgreement([a("v1", "2026-10-01", "x"), a("v2", "2026-10-20", "y"), a("file", "2026-10-30", null)])?.["id" as never], "v2");
 });
+
+test("an agreement set aside (void) is never the one the editor works on", async () => {
+  const { editableAgreement } = await import("./documents.ts");
+  const a = (id: string, created_at: string, status: string) => ({ id, created_at, current_version_id: "x", kind: "customer", status }) as never;
+  assert.equal(editableAgreement([a("old", "2026-10-01", "void")]), null);
+  assert.equal(editableAgreement([a("new", "2026-10-20", "pending"), a("old", "2026-10-30", "void")])?.["id" as never], "new");
+});
