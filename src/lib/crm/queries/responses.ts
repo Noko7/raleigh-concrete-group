@@ -12,6 +12,7 @@ import {
 } from "../constants";
 import { pgUser, pgAdmin } from "../rest";
 import type { Quote, QuoteOption, QuotePackage, Session } from "../types";
+import { acceptedMethods, cleanCustomerChoice, type PayMethod } from "../pay-methods";
 import { ISO_DATE } from "./shared";
 import { getQuote } from "./quotes";
 import { listQuoteOptions, listQuoteOptionsAdmin, listQuotePackages, listQuotePackagesAdmin } from "./line-items";
@@ -73,6 +74,8 @@ export type CustomerResponseResult = {
   // The package they picked, if a choice was offered; else null. The crew needs
   // it: "approved" doesn't say what to load the truck with.
   package?: QuotePackage | null;
+  // How they said they'll pay the contractor (approval only), when asked.
+  payMethods?: PayMethod[];
 };
 
 /**
@@ -114,17 +117,21 @@ export async function recordCustomerResponse(
     // Package id. Required if a choice is offered; no default, since picking one
     // would pick their price.
     packageId?: string;
+    // Ways they'll pay the contractor, from the approval form. Kept only if the contractor takes them.
+    payMethods?: unknown;
+    // While online card payments are off, the approval form asks, and at least one is needed.
+    requirePayMethods?: boolean;
   },
 ): Promise<CustomerResponseResult> {
   if (!/^[a-f0-9]{16,40}$/i.test(token)) return { ok: false, error: "Invalid link." };
   const res = await pgAdmin(
     `quote_requests?public_token=eq.${token}` +
-      `&select=id,quote_amount,customer_response,discount_accepted,quote_expires_at,status&limit=1`,
+      `&select=id,quote_amount,customer_response,discount_accepted,quote_expires_at,status,assigned_to&limit=1`,
   );
   if (!res.ok) return { ok: false, error: "Could not load your quote." };
   const rows = (await res.json()) as Pick<
     Quote,
-    "id" | "quote_amount" | "customer_response" | "discount_accepted" | "quote_expires_at" | "status"
+    "id" | "quote_amount" | "customer_response" | "discount_accepted" | "quote_expires_at" | "status" | "assigned_to"
   >[];
   const q = rows[0];
   if (!q) return { ok: false, error: "Quote not found." };
@@ -153,6 +160,7 @@ export async function recordCustomerResponse(
   // Null unless the quote offered a choice.
   let chosenPackage: QuotePackage | null = null;
   let eventType: string;
+  let payMethods: PayMethod[] = [];
 
   if (input.action === "decline") {
     patch.customer_response = "declined";
@@ -231,6 +239,12 @@ export async function recordCustomerResponse(
         patch.quote_amount = Math.max(0, Math.round((Number(base) - DECLINE_CREDIT) * 100) / 100);
       }
     }
+    // How they'll pay the contractor: only methods that contractor takes (read here, never from the form).
+    if (input.requirePayMethods || input.payMethods !== undefined) {
+      payMethods = cleanCustomerChoice(input.payMethods, await jobPayMethods(q.assigned_to));
+      if (payMethods.length) patch.customer_pay_methods = payMethods;
+      else if (input.requirePayMethods) return { ok: false, error: "Please pick how you'll pay." };
+    }
     eventType = "customer_accepted";
   }
 
@@ -304,7 +318,7 @@ export async function recordCustomerResponse(
       },
     }),
   });
-  return { ok: true, accepted, declined, package: chosenPackage };
+  return { ok: true, accepted, declined, package: chosenPackage, payMethods };
 }
 
 // ── The customer said yes on the phone ──────────────────────────────────────
@@ -449,4 +463,12 @@ export async function recordOfflineAcceptance(
   }
 
   return { ok: true, accepted, declined, package: chosenPackage };
+}
+
+/** The ways the job's contractor takes payment (the default four when unassigned or unset). */
+export async function jobPayMethods(assignedTo: string | null | undefined): Promise<PayMethod[]> {
+  if (!assignedTo || !/^[0-9a-f-]{36}$/i.test(assignedTo)) return acceptedMethods(null);
+  const r = await pgAdmin(`staff?id=eq.${assignedTo}&select=payment_methods&limit=1`);
+  const row = r.ok ? ((await r.json()) as { payment_methods: string[] | null }[])[0] : undefined;
+  return acceptedMethods(row?.payment_methods ?? null);
 }

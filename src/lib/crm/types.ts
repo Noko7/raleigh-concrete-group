@@ -114,6 +114,8 @@ export type Quote = {
   quote_sent_at: string | null;
   customer_response: "accepted" | "declined" | null;
   customer_responded_at: string | null;
+  // How the customer plans to pay the contractor (picked at approval). Not money: the ledger is. Null if not asked.
+  customer_pay_methods?: string[] | null;
   scheduled_date: string | null;
   // Display copy like "9:00 AM".
   scheduled_time: string | null;

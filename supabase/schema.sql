@@ -40,6 +40,8 @@
 -- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
 -- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
 -- refusing saves while out for signature), checked against production after it was applied.
+-- Updated by hand for migration 20261031191727 (quote_requests.customer_pay_methods and its check),
+-- checked against production after it was applied.
 -- Updated by hand for migration 20261031180311 (staff_agreement_fields_chk allows card, five methods),
 -- checked against production after it was applied.
 -- Updated by hand for migration 20261031174615 (quote_requests.estimated_duration and its length check),
@@ -463,6 +465,7 @@ create table public.quote_requests (
   quote_pour text,
   quote_cleanup text,
   estimated_duration text,
+  customer_pay_methods text[],
   quote_expires_at timestamp with time zone,
   internal_urls text[],
   before_urls text[],
@@ -489,6 +492,7 @@ create table public.quote_requests (
   constraint qr_customer_response_chk CHECK (((customer_response IS NULL) OR (customer_response = ANY (ARRAY['accepted'::text, 'declined'::text])))),
   constraint qr_sections_chk CHECK ((((quote_scope IS NULL) OR (char_length(quote_scope) <= 2000)) AND ((quote_permits IS NULL) OR (char_length(quote_permits) <= 2000)) AND ((quote_prep IS NULL) OR (char_length(quote_prep) <= 2000)) AND ((quote_pour IS NULL) OR (char_length(quote_pour) <= 2000)) AND ((quote_cleanup IS NULL) OR (char_length(quote_cleanup) <= 2000)))),
   constraint qr_estimated_duration_chk CHECK (((estimated_duration IS NULL) OR (char_length(estimated_duration) <= 200))),
+  constraint qr_customer_pay_methods_chk CHECK (((customer_pay_methods IS NULL) OR (((cardinality(customer_pay_methods) >= 1) AND (cardinality(customer_pay_methods) <= 5)) AND (customer_pay_methods <@ '{zelle,venmo,check,cash,card}'::text[])))),
   constraint qr_status_chk CHECK ((status = ANY (ARRAY['new'::text, 'quoted'::text, 'approved'::text, 'scheduled'::text, 'completed'::text, 'paid'::text, 'lost'::text]))),
   constraint quote_requests_change_amount_sane CHECK (((change_amount IS NULL) OR ((change_amount >= (0)::numeric) AND (change_amount <= (99999999)::numeric)))),
   constraint quote_requests_change_complete CHECK ((((change_requested_at IS NULL) AND (change_amount IS NULL) AND (change_note IS NULL)) OR ((change_requested_at IS NOT NULL) AND (change_amount IS NOT NULL) AND (change_note IS NOT NULL)))),

@@ -65,6 +65,7 @@ export async function sendPayLink(_prev: PaymentState, formData: FormData): Prom
   const payee = await payeeState(quote);
   if (!payee.ok) {
     const why: Record<typeof payee.reason, string> = {
+      turned_off: "Online card payments are turned off. The customer pays the contractor directly.",
       no_stripe: "Card payments aren't set up on this site yet.",
       unassigned: "Assign this job to a contractor before sending a card link.",
       not_linked: "This crew has no Stripe account linked yet. The office can add one on the Contractors page.",

@@ -11,6 +11,7 @@
 // "Standard Work Agreement" template. AGREEMENT_TEMPLATE_VERSION versions the document format itself.
 
 import { DEFAULT_DEPOSIT_PERCENT } from "./fees.ts";
+import { DEFAULT_PAYMENT_METHODS, METHOD_NAMES, PAYMENT_METHODS, type PayMethod } from "./pay-methods.ts";
 
 export const AGREEMENT_TEMPLATE_VERSION = "2026-10-31.1";
 
@@ -21,11 +22,7 @@ export const OFFICE = {
   website: "www.raleighconcrete.net",
 } as const;
 
-export const PAYMENT_METHODS = ["zelle", "venmo", "check", "cash", "card"] as const;
-export type PayMethod = (typeof PAYMENT_METHODS)[number];
-/** When nobody has chosen (no contractor, or none set): the original four. Card is offered only when ticked. */
-export const DEFAULT_PAYMENT_METHODS: PayMethod[] = ["zelle", "venmo", "check", "cash"];
-export const METHOD_NAMES: Record<PayMethod, string> = { zelle: "Zelle", venmo: "Venmo", check: "Check", cash: "Cash", card: "Card" };
+export { DEFAULT_PAYMENT_METHODS, METHOD_NAMES, PAYMENT_METHODS, type PayMethod };
 
 export type TaxMode = "plus_tax" | "includes_tax";
 
