@@ -200,10 +200,8 @@ export default async function ContractorsPage() {
                       </form>
                     </td>
                     <td>
-                      {/* Online card payments off (Settings): they're paid directly, so no Stripe account to link. */}
-                      {!cardsOn ? (
-                        <span className="crm-muted crm-sm">Paid directly</span>
-                      ) : (
+                      {/* Linking stays available so an account can be ready before card payments are switched on. */}
+                      {!cardsOn && <p className="crm-muted crm-sm">Card payments are off in Settings.</p>}
                       <StripePayee
                         staffId={c.id}
                         name={c.full_name || "them"}
@@ -211,7 +209,6 @@ export default async function ContractorsPage() {
                         chargesEnabled={c.stripe_charges_enabled}
                         detailsSubmitted={c.stripe_details_submitted}
                       />
-                      )}
                     </td>
                     <td>
                       {(() => {

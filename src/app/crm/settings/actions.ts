@@ -129,7 +129,6 @@ export async function sendTestSms(_prev: TestSmsState, formData: FormData): Prom
   return { ok: results.some((r) => r.ok), results };
 }
 
-// Owner-only: the contractor every new quote auto-assigns to.
 /** Online card payments (Stripe) on or off for the whole site. Owner only. */
 export async function saveOnlineCardPayments(_prev: SaveState, formData: FormData): Promise<SaveState> {
   const session = await getSession();
@@ -145,6 +144,7 @@ export async function saveOnlineCardPayments(_prev: SaveState, formData: FormDat
   return { ok: true, saved: true };
 }
 
+// Owner-only: the contractor every new quote auto-assigns to.
 export async function savePrimaryContractor(_prev: SaveState, formData: FormData): Promise<SaveState> {
   const session = await getSession();
   if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
