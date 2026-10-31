@@ -155,6 +155,7 @@ async function wipeQuote(
     // Any answer was to a quote that no longer exists.
     customer_response: null,
     customer_responded_at: null,
+    customer_pay_methods: null,
     status: "new",
   };
   for (const f of QUOTE_SECTION_FIELDS) patch[f] = null;

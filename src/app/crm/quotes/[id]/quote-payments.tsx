@@ -46,6 +46,8 @@ export function QuotePayments({
   locale,
   isOwner,
   cardReady,
+  // False while online card payments are turned off site-wide.
+  onlineCard = true,
   totalCents,
   paidCents,
   dueCents,
@@ -63,6 +65,7 @@ export function QuotePayments({
   locale: Locale;
   isOwner: boolean;
   cardReady: boolean;
+  onlineCard?: boolean;
   totalCents: number;
   paidCents: number;
   dueCents: number;
@@ -213,7 +216,7 @@ export function QuotePayments({
           </button>
         </div>
       )}
-      {!settled && !cardReady && <p className="crm-muted crm-sm">{t.cardOff}</p>}
+      {!settled && !cardReady && onlineCard && <p className="crm-muted crm-sm">{t.cardOff}</p>}
 
       {openCash && !settled && (
         <form action={cashAction} className="qp-form">

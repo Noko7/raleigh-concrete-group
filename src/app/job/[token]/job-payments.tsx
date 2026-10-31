@@ -32,6 +32,8 @@ export function JobPayments({
   id,
   locale,
   cardReady,
+  // False while online card payments are turned off site-wide: no card-link panel at all.
+  onlineCard = true,
   totalCents,
   paidCents,
   dueCents,
@@ -48,6 +50,7 @@ export function JobPayments({
   id: string;
   locale: Locale;
   cardReady: boolean;
+  onlineCard?: boolean;
   totalCents: number;
   paidCents: number;
   dueCents: number;
@@ -145,18 +148,20 @@ export function JobPayments({
 
       {!settled && (
         <div className="jp-ways">
-          <div className="jp-way">
-            <h3>{t.cardTitle}</h3>
-            <p>{cardReady ? t.cardLead : t.cardOff}</p>
-            {cardReady && (
-              <form action={linkAction}>
-                <input type="hidden" name="id" value={id} />
-                <button type="submit" className="js-confirm" disabled={linking}>
-                  {linking ? t.cardSending : t.cardSend}
-                </button>
-              </form>
-            )}
-          </div>
+          {onlineCard && (
+            <div className="jp-way">
+              <h3>{t.cardTitle}</h3>
+              <p>{cardReady ? t.cardLead : t.cardOff}</p>
+              {cardReady && (
+                <form action={linkAction}>
+                  <input type="hidden" name="id" value={id} />
+                  <button type="submit" className="js-confirm" disabled={linking}>
+                    {linking ? t.cardSending : t.cardSend}
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
 
           <div className="jp-way">
             <h3>{t.cashTitle}</h3>

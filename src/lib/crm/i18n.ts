@@ -678,6 +678,8 @@ const en = {
     quoteFixOk: "Revised quote texted to the customer.",
     // The crew need this before loading the truck: "approved" doesn't say whether there's a sidewalk.
     approvedScope: "What they approved",
+    payPlan: "How they'll pay you",
+    payPlanHint: "What the customer ticked when they signed the agreement. Collect it yourself, then record the payment.",
     approvedScopeHint: "Build these. Anything below them was turned down.",
     turnedDown: "Turned down",
     quoteTitle: "Quote this job",

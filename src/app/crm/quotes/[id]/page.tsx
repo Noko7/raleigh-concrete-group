@@ -44,6 +44,8 @@ import { ScheduleCard } from "./schedule-card";
 import { EstimateCard } from "./estimate-card";
 import { preferredSlots } from "./types";
 import { rotateTokens, setTestFlag } from "./status-actions";
+import { methodList, PAYMENT_METHODS } from "@/lib/crm/pay-methods";
+import { ONLINE_CARD_PAYMENTS } from "@/lib/crm/stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -184,6 +186,9 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   // ── What to do next ──
   // One card, one sentence, one button, from where the job is.
   const firstName = firstNameOf(quote.name, quote.name);
+  // How the customer said they'll pay the contractor (ticked when they signed the agreement).
+  const payPlan = PAYMENT_METHODS.filter((m) => (quote.customer_pay_methods ?? []).includes(m));
+  const payPlanNote = payPlan.length ? ` Plans to pay by ${methodList(payPlan)}.` : "";
   const stageIndex = Math.max(0, STAGES.findIndex((st) => st.key === quote.status));
   const dueCents = money?.ledger.dueCents ?? 0;
   const next: { tone: "go" | "wait" | "done" | "lost"; title: string; body: string; href?: string; cta?: string } =
@@ -220,8 +225,8 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   title: "Pick the work day",
                   body:
                     (quote.preferred_dates ?? []).filter(Boolean).length > 0
-                      ? `${firstName} approved and suggested ${(quote.preferred_dates ?? []).filter(Boolean).map(shortDay).join(", ")}.`
-                      : `${firstName} approved the quote.`,
+                      ? `${firstName} approved and suggested ${(quote.preferred_dates ?? []).filter(Boolean).map(shortDay).join(", ")}.${payPlanNote}`
+                      : `${firstName} approved the quote.${payPlanNote}`,
                   href: "#schedule",
                   cta: "Schedule it",
                 }
@@ -427,11 +432,17 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
           {/* From approval on: deposits come long before the work is done. */}
           {money && (
             <div className="jb-o-step" id="payments">
+              {payPlan.length > 0 && (
+                <p className="crm-muted crm-sm jb-payplan">
+                  {firstName} plans to pay the contractor by <strong>{methodList(payPlan)}</strong>.
+                </p>
+              )}
               <QuotePayments
                 id={quote.id}
                 locale={locale}
                 isOwner={isOwner}
                 cardReady={cardReady}
+                onlineCard={ONLINE_CARD_PAYMENTS}
                 totalCents={money.ledger.totalCents}
                 paidCents={money.ledger.paidCents}
                 dueCents={money.ledger.dueCents}

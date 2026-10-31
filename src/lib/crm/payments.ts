@@ -16,6 +16,7 @@ import {
   createCheckoutSession,
   expireCheckoutSession,
   getCheckoutSession,
+  ONLINE_CARD_PAYMENTS,
   STRIPE_READY,
 } from "./stripe";
 import type { FeeSettlement, Quote, QuotePayment, Session, Staff } from "./types";
@@ -342,13 +343,14 @@ async function settledOnJob(quoteId: string): Promise<number> {
 
 export type PayeeState =
   | { ok: true; staff: Staff; account: string }
-  | { ok: false; reason: "unassigned" | "not_linked" | "not_ready" | "no_stripe" };
+  | { ok: false; reason: "turned_off" | "unassigned" | "not_linked" | "not_ready" | "no_stripe" };
 
 /**
  * Four reasons rather than a boolean: each needs a different fix (assign the job, link an account, finish
  * Stripe onboarding, set STRIPE_PRIV_KEY).
  */
 export async function payeeState(quote: Quote): Promise<PayeeState> {
+  if (!ONLINE_CARD_PAYMENTS) return { ok: false, reason: "turned_off" };
   if (!STRIPE_READY) return { ok: false, reason: "no_stripe" };
   if (!quote.assigned_to) return { ok: false, reason: "unassigned" };
   const staff = await payeeFor(quote.assigned_to);

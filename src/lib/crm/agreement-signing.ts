@@ -23,6 +23,7 @@ import { randomBytes } from "node:crypto";
 import { anySubmissionId, buildSubmissionRequest, readSigners, SENDABLE, transitionFor, type AgreementSigningStatus, type DocusealEvent, type Signer } from "./docuseal-core";
 import { archiveSubmission, createHtmlSubmission, docusealConfigured, getSubmission, storeSignedFile } from "./docuseal";
 import { parseBody, sendProblems } from "./agreement-doc";
+import { methodsFromSignedValues } from "./pay-methods";
 import { canEditJobAgreement } from "./documents";
 import { SITE_ORIGIN } from "./env";
 import { alertOwner, sendSms, sendSmsResult } from "./notify/send";
@@ -269,6 +270,23 @@ async function untracked(e: DocusealEvent): Promise<string> {
 }
 
 async function act(agreement: AgreementForEvent & { quote: NonNullable<AgreementForEvent["quote"]> }, e: DocusealEvent): Promise<string> {
+  // How the customer said they'll pay (the boxes they ticked when signing), kept on the job for the office and the
+  // contractor. Before the status check: submission.completed can move the agreement to signed first, and this
+  // form.completed then changes no status but still carries their ticks.
+  // The customer's own signature always writes it (null when they ticked nothing), so an earlier agreement's
+  // ticks never stand in for this one's.
+  const customerSigned = e.type === "form.completed" && e.role === "Customer";
+  if ((customerSigned || e.payMethods.length) && agreement.status !== "void") {
+    const saved = await pgAdmin(`quote_requests?id=eq.${agreement.quote.id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ customer_pay_methods: e.payMethods.length ? e.payMethods : null }),
+    });
+    if (!saved.ok) throw new Error(`[signing] couldn't save the customer's payment choice (${saved.status})`);
+    if (e.payMethods.length) {
+      await addAdminEvent(agreement.quote.id, "payment_choice", { choice: "direct", methods: e.payMethods, agreement_id: agreement.id });
+    }
+  }
   const t = transitionFor(agreement.status as AgreementSigningStatus, e);
   if (t.kind === "none") return "recorded";
   const q = agreement.quote;
@@ -352,6 +370,8 @@ export async function reconcileWithDocuseal(agreement: Agreement): Promise<boole
         auditLogUrl: sub.data.audit_log_url ?? null, combinedDocumentUrl: sub.data.combined_document_url ?? null,
         documentUrls: (sub.data.documents ?? []).map((d) => d.url).filter((u): u is string => Boolean(u)),
         sentForAgreement: agreement.id,
+        // The payment boxes the customer ticked, for a signature this site missed.
+        payMethods: methodsFromSignedValues((sub.data.submitters ?? []).find((s) => s.role === "Customer")?.values),
       });
       const c = at("Contractor");
       const k = at("Customer");

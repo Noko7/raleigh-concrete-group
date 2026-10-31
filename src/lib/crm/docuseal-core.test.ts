@@ -85,7 +85,7 @@ test("webhooks: form and submission events are read, junk is not", () => {
 });
 
 const ev = (type: string, role: "Contractor" | "Customer" | null = null): DocusealEvent => ({
-  type, at: "2026-10-31T12:00:00.000Z", submissionId: 77, role, declineReason: null, auditLogUrl: null, combinedDocumentUrl: null, documentUrls: [], sentForAgreement: null,
+  type, at: "2026-10-31T12:00:00.000Z", submissionId: 77, role, declineReason: null, auditLogUrl: null, combinedDocumentUrl: null, documentUrls: [], sentForAgreement: null, payMethods: [],
 });
 
 test("status: only forward, only while out for signature", () => {
@@ -119,4 +119,19 @@ test("a submission this site sent is recognised by its agreement id, and an unre
   assert.equal(anySubmissionId({ id: 43, submitters: [] }), 43);
   assert.equal(anySubmissionId([{ id: 5 }]), null, "a submitter's own id is not the submission's");
   assert.equal(anySubmissionId(null), null);
+});
+
+test("the customer's ticked payment boxes ride on their form.completed (and only theirs)", () => {
+  const values = [
+    { field: "Pays by Zelle", value: true },
+    { field: "Pays by Card", value: "true" },
+    { field: "Pays by Cash", value: false },
+    { field: "Customer signature", value: "https://x/sig.png" },
+  ];
+  const cust = parseEvent({ event_type: "form.completed", timestamp: "2026-10-31T12:00:00Z", data: { submission_id: 5, role: "Customer", values } });
+  assert.deepEqual(cust?.payMethods, ["zelle", "card"]);
+  const contr = parseEvent({ event_type: "form.completed", timestamp: "2026-10-31T12:00:00Z", data: { submission_id: 5, role: "Contractor", values } });
+  assert.deepEqual(contr?.payMethods, []);
+  const none = parseEvent({ event_type: "form.completed", timestamp: "2026-10-31T12:00:00Z", data: { submission_id: 5, role: "Customer" } });
+  assert.deepEqual(none?.payMethods, []);
 });

@@ -9,6 +9,8 @@
 // the agreement is contractor_signed (see /sign/[token]).
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+import { methodsFromSignedValues, type PayMethod } from "./pay-methods.ts";
+
 export type SignerRole = "Contractor" | "Customer";
 
 export type Signer = {
@@ -134,6 +136,8 @@ export type DocusealEvent = {
   documentUrls: string[];
   /** The agreement id this site put on the signer (metadata / external_id), if it is one of ours. */
   sentForAgreement: string | null;
+  /** On the customer's form.completed: the payment boxes they ticked ("Pays by Zelle", ...). */
+  payMethods: PayMethod[];
 };
 
 /** A webhook body ({event_type, timestamp, data}), reduced to what the site acts on; null if it isn't one. */
@@ -157,6 +161,7 @@ export function parseEvent(raw: unknown): DocusealEvent | null {
     combinedDocumentUrl: str(d.combined_document_url) ?? str(sub.combined_document_url),
     documentUrls: docs,
     sentForAgreement: ourAgreementId(d),
+    payMethods: isForm && d.role === "Customer" ? methodsFromSignedValues(d.values) : [],
   };
 }
 

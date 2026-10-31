@@ -55,7 +55,8 @@ export type PublicPackage = {
 
 function pretty(s: string): string {
   const d = new Date(`${s}T00:00:00`);
-  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  // Short enough to sit on one line beside the time picker on a phone ("Tue, Nov 10").
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 const DEPOSIT_LABEL = `${DEFAULT_DEPOSIT_PERCENT}%`;
 
@@ -89,6 +90,7 @@ export function QuoteActions({
   const [error, setError] = useState("");
   // Consent to electronic records: every Approve button waits on it, and the server refuses an approval without it.
   const [econsent, setEconsent] = useState(false);
+
   const [checking, setChecking] = useState(false);
   const [taken, setTaken] = useState<string[]>([]);
   // Yes/no per optional item. Nothing pre-answered: untouched isn't a decision.
@@ -296,26 +298,14 @@ export function QuoteActions({
 
   if (mode === "accepted") {
     const finalPrice = discount ? discounted : total;
-    const bought = [
-      ...(chosen ? [chosen.title] : []),
-      ...options.filter((o) => o.required || answers[o.id] === "accepted").map((o) => o.title),
-    ];
     return (
       <div className="cq-result cq-result-ok">
         <h3>Quote approved</h3>
-        {bought.length > 0 && <p className="cq-result-note">You approved: {bought.join(", ")}.</p>}
         <p className="cq-result-price">
           {discount && <span className="cq-result-save">${DECLINE_CREDIT} credit applied</span>}
           <strong>{usd(finalPrice)}</strong>
         </p>
-        {picks.length > 0 && (
-          <p className="cq-result-note">
-            You told us these work: {picks.map((p) => `${pretty(p.date)} at ${p.time}`).join(", ")}.
-          </p>
-        )}
-        <p className="cq-result-note">
-          We&apos;re checking the crew&apos;s schedule now and will text you to confirm your installation date.
-        </p>
+        <p className="cq-result-note">We&apos;ll text you to confirm your date.</p>
       </div>
     );
   }
@@ -364,21 +354,6 @@ export function QuoteActions({
     return (
       <div className="cq-schedule">
         <h3>Which days work for you?</h3>
-        {/* The date input's min already enforces the lead time, so it isn't spelled out here. */}
-        <p className="cq-fine">
-          Pick up to {MAX_PREFERRED_DATES} days and a start time. We&apos;ll text you to confirm one.
-        </p>
-        {/* Restate what they're approving before they commit. */}
-        {built && (
-          <p className="cq-fine cq-sched-scope">
-            Approving:{" "}
-            {[
-              ...(chosen ? [chosen.title] : []),
-              ...options.filter((o) => o.required || answers[o.id] === "accepted").map((o) => o.title),
-            ].join(", ")}{" "}
-            &middot; <strong>{usd(discount ? discounted : total)}</strong>
-          </p>
-        )}
         {discount && !built && (
           <p className="cq-offer-price">
             With ${DECLINE_CREDIT} credit: <strong>{usd(discounted)}</strong>
@@ -423,10 +398,18 @@ export function QuoteActions({
         {picks.length < MAX_PREFERRED_DATES && (
           <div className="cq-pick-add">
             <label className="cq-pick-field">
-              <span>Day</span>
+              <span>{picks.length > 0 ? "Add another day" : "Day"}</span>
+              <span className="cq-date-wrap">
+              {/* iPhone Safari shows an empty date box as blank: this says what to tap. */}
+              {!draft && (
+                <span className="cq-date-ph" aria-hidden="true">
+                  Pick a day
+                </span>
+              )}
               <input
                 type="date"
-                className="cq-date"
+                className={draft ? "cq-date" : "cq-date cq-date-empty"}
+                aria-label="Pick a day"
                 min={minDate}
                 value={draft}
                 onChange={(e) => {
@@ -435,6 +418,7 @@ export function QuoteActions({
                 }}
                 disabled={busy}
               />
+              </span>
             </label>
             <label className="cq-pick-field">
               <span>Start time</span>
@@ -497,7 +481,6 @@ export function QuoteActions({
             >
               Approve now, pay the crew directly
             </button>
-            <p className="cq-fine cq-pay-fine">Cash, check, Zelle or Venmo on site.</p>
           </div>
         ) : (
           <button
@@ -647,12 +630,6 @@ export function QuoteActions({
         </button>
       </div>
 
-      {/* Approving books nothing (they pick days, the crew confirm), so the
-          reassurance sits against the button. */}
-      <p className="cq-reassure">
-        Approving doesn&apos;t book a date. You&apos;ll pick a few days that suit you, and we&apos;ll text you back to
-        confirm one.
-      </p>
 
       {/* Phone only, and only while the real button is out of sight. */}
       {!ctaOnScreen && (

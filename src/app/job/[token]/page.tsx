@@ -31,6 +31,8 @@ import { JobQuote } from "./job-quote";
 import { JobReschedule } from "./job-reschedule";
 import { JobSchedule } from "./job-schedule";
 import { JobVisit } from "./job-visit";
+import { methodList, PAYMENT_METHODS } from "@/lib/crm/pay-methods";
+import { ONLINE_CARD_PAYMENTS } from "@/lib/crm/stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +117,8 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
   ]);
   const cardReady = payee?.ok ?? false;
   const chosen = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response !== "declined") : [];
+  // What the customer said they'll pay with, in the standard order.
+  const payPlan = accepted ? PAYMENT_METHODS.filter((m) => (quote.customer_pay_methods ?? []).includes(m)) : [];
   const rejected = quote.customer_response === "accepted" ? options.filter((o) => o.customer_response === "declined") : [];
   // The package they picked leads the scope card: it's what goes on the truck.
   const chosenPackage =
@@ -382,6 +386,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             id={quote.id}
             locale={locale}
             cardReady={cardReady}
+            onlineCard={ONLINE_CARD_PAYMENTS}
             totalCents={money.ledger.totalCents}
             paidCents={money.ledger.paidCents}
             dueCents={money.ledger.dueCents}
@@ -414,6 +419,15 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             })}
             tone="light"
           />
+        )}
+
+        {/* How the customer said they'll pay: the boxes they ticked when signing the agreement. */}
+        {payPlan.length > 0 && (
+          <section className="js-card jo-payplan">
+            <h2 className="js-title">{t.contractorJob.payPlan}</h2>
+            <p className="jo-payplan-list">{methodList(payPlan)}</p>
+            <p className="js-hint">{t.contractorJob.payPlanHint}</p>
+          </section>
         )}
 
         {/* What they bought, above customer details: on an options quote it

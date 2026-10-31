@@ -2626,9 +2626,20 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 /* Each chosen day carries its own start time, so somebody who wants an early
    Monday and a later Friday can say so without three separate steps. */
 .cq-pick-time { flex: none; padding: 0.4rem 0.5rem; border: 1px solid rgba(43, 26, 18, 0.22); border-radius: 0.5rem; font: inherit; font-weight: 700; background: #fff; min-height: 40px; }
-.cq-pick-add { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; align-items: end; }
+/* minmax(0, ...): iPhone Safari gives a date input a wide minimum that otherwise spills into the next column. */
+.cq-pick-add { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 0.6rem; align-items: start; margin-bottom: 0.4rem; }
 .cq-pick-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; font-weight: 800; color: rgba(43, 26, 18, 0.7); text-transform: uppercase; letter-spacing: 0.04em; }
 .cq-pick-field .cq-date { margin-bottom: 0; }
+.cq-pick-field { min-width: 0; text-align: left; }
+.cq-pick-add .cq-date { display: block; box-sizing: border-box; min-width: 0; max-width: 100%; height: 52px; background: #fff; color: #2b1a12; font-weight: 700; text-transform: none; letter-spacing: normal; -webkit-appearance: none; appearance: none; }
+.cq-pick-add .cq-date::-webkit-date-and-time-value { text-align: left; }
+.cq-pick-add select.cq-date { padding-right: 2rem; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%232b1a12' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 0.8rem center; }
+.cq-date-wrap { position: relative; display: block; }
+/* Empty: the browser's own "mm/dd/yyyy" is hidden behind "Pick a day" until the box is in use. */
+.cq-pick-add .cq-date-empty:not(:focus) { color: transparent; }
+.cq-pick-add .cq-date-empty:not(:focus)::-webkit-datetime-edit { color: transparent; }
+.cq-date-wrap:focus-within .cq-date-ph { display: none; }
+.cq-date-ph { position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: rgba(43, 26, 18, 0.5); font-weight: 600; font-size: 1rem; text-transform: none; letter-spacing: normal; pointer-events: none; }
 .cq-pick button { background: rgba(43, 26, 18, 0.06); border: none; border-radius: 50%; width: 36px; height: 36px; flex: none; font-size: 1.2rem; line-height: 1; cursor: pointer; color: rgba(43, 26, 18, 0.6); }
 .cq-pick button:hover { color: #2b1a12; background: rgba(43, 26, 18, 0.12); }
 
@@ -3662,6 +3673,14 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cq-pay-alt:hover { border-color: #2b1a12; }
 .cq-pay-alt:disabled { opacity: 0.55; cursor: not-allowed; }
 .cq-pay-fine { margin-top: 0.1rem; }
+/* "How will you pay the contractor?": big tap targets, any number picked. */
+.cq-paywith { border: 0; margin: 1rem 0 0.5rem; padding: 0; min-width: 0; text-align: left; }
+.cq-paywith .cq-fine { text-align: left; margin: 0; }
+.cq-paywith legend { font-weight: 800; font-size: 1rem; color: #2b1a12; padding: 0; margin-bottom: 0.2rem; }
+.cq-paywith-opts { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.cq-paywith-opt { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2.75rem; padding: 0 0.95rem; border: 2px solid rgba(43, 26, 18, 0.22); border-radius: 999px; background: #fff; color: #2b1a12; font-weight: 700; cursor: pointer; }
+.cq-paywith-opt input { width: 1.1rem; height: 1.1rem; accent-color: #2b1a12; }
+.cq-paywith-on { border-color: #2b1a12; background: rgba(43, 26, 18, 0.06); }
 .cq-confirm-paid { font-size: 0.95rem; color: rgba(43, 26, 18, 0.75); margin-bottom: 1rem; }
 .cq-confirm-pay { display: inline-flex; margin-bottom: 1.25rem; }
 
@@ -4690,3 +4709,7 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 @media (min-width: 1440px) {
   .pe-page { padding: 2rem 2.25rem 2.5rem; font-size: 1rem; }
 }
+
+/* How the customer said they'll pay: on the CRM job (payments) and the contractor's job page. */
+.jb-payplan { margin: 0 0 0.6rem; }
+.jo-payplan-list { font-size: 1.15rem; font-weight: 800; margin: 0.2rem 0 0.3rem; }

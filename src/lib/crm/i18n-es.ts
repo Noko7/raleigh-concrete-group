@@ -622,6 +622,8 @@ export const es: Dict = {
     quoteFixSend: "Enviar la cotización corregida",
     quoteFixOk: "Cotización corregida enviada al cliente por mensaje.",
     approvedScope: "Lo que aprobó",
+    payPlan: "Cómo te va a pagar",
+    payPlanHint: "Lo que marcó el cliente al firmar el acuerdo. Cobra tú mismo y luego registra el pago.",
     approvedScopeHint: "Construye esto. Lo que aparece abajo fue rechazado.",
     turnedDown: "Rechazado",
     quoteTitle: "Cotiza este trabajo",

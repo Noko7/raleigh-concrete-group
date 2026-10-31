@@ -342,16 +342,12 @@ export default async function CustomerQuotePage({
 
         {hasPrice ? (
           <>
-            <p className="cq-lead">
-              {offersChoice
-                ? "Here's your quote, priced both ways. Pick the one you'd like below and your total is worked out for you."
-                : itemised && options.every((o) => o.required)
-                  ? // A straight breakdown: nothing to choose, so don't ask.
-                    `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}, broken down line by line.`
-                  : itemised
-                  ? "Here's your quote. Some of it is up to you - say yes or no to each option below and your total updates as you go."
-                  : `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We'd love to do the work for you.`}
-            </p>
+            {/* One short line, only where there's something to decide. */}
+            {offersChoice ? (
+              <p className="cq-lead">Pick the option you&apos;d like.</p>
+            ) : itemised && !options.every((o) => o.required) ? (
+              <p className="cq-lead">Say yes or no to each extra.</p>
+            ) : null}
             {/* Itemised/choice quotes print no single price here: it moves with
                 their answers below. One price on the page, never two. */}
             {!itemised && !offersChoice && (
