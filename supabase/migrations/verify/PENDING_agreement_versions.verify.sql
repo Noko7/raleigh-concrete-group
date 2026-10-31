@@ -31,9 +31,13 @@ begin
   exception when others then r := sqlerrm; end;
   insert into _r values ('a saved version cannot be edited', r);
 
-  insert into _r values ('authenticated cannot update or delete',
-    case when has_table_privilege('authenticated', 'public.agreement_versions', 'UPDATE')
+  insert into _r values ('signed-in users can only read versions',
+    case when has_table_privilege('authenticated', 'public.agreement_versions', 'INSERT')
+           or has_table_privilege('authenticated', 'public.agreement_versions', 'UPDATE')
            or has_table_privilege('authenticated', 'public.agreement_versions', 'DELETE') then 'GRANTED (bad)' else 'ok' end);
+  insert into _r values ('deleting a staff member never touches a saved version',
+    case when exists (select 1 from pg_constraint where conrelid = 'public.agreement_versions'::regclass and contype = 'f'
+                      and confrelid = 'public.staff'::regclass) then 'FOREIGN KEY TO STAFF (bad)' else 'ok' end);
   insert into _r values ('anon has no access',
     case when has_table_privilege('anon', 'public.agreement_versions', 'SELECT') then 'GRANTED (bad)' else 'ok' end);
   insert into _r values ('RLS on', case when (select relrowsecurity from pg_class where oid = 'public.agreement_versions'::regclass) then 'ok' else 'OFF (bad)' end);

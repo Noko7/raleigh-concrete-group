@@ -19,8 +19,6 @@ drop table public.agreement_versions;
 drop function if exists public.number_agreement_version();
 drop function if exists public.point_agreement_at_version();
 drop function if exists public.guard_agreement_version();
-alter table public.quote_requests drop constraint if exists quote_requests_estimated_duration_chk;
-alter table public.quote_requests drop column if exists estimated_duration;
 alter table public.staff drop constraint if exists staff_agreement_fields_chk;
 alter table public.staff drop column if exists payment_methods;
 alter table public.staff drop column if exists license_number;

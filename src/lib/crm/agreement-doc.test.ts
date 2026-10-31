@@ -11,6 +11,8 @@ import {
   diffWords,
   draftAgreement,
   draftInputFromJob,
+  jobDepositCents,
+  setTaxMode,
   refreshFromJob,
   editedBlocks,
   parseBody,
@@ -161,11 +163,11 @@ test("parse: a saved body round-trips; anything malformed is refused", () => {
   assert.equal(parseBody(null), null);
 });
 
-test("from a job: package then accepted options under Scope; change-order deposit wins; repair turns on its clause", () => {
+test("from a job: package then accepted options under Scope; the job's deposit target wins; repair turns on its clause", () => {
   const base = input();
   const di = draftInputFromJob({
     today: "2026-10-31",
-    quote: { ...base.quote, service: "Concrete repair", change_deposit_cents: 300000 },
+    quote: { ...base.quote, service: "Concrete repair", deposit_target_cents: 300000 },
     options: [
       { title: "Sealer", description: null, required: false, customer_response: "accepted" },
       { title: "Steps", description: "3 risers", required: false, customer_response: "declined" },
@@ -197,4 +199,52 @@ test("refresh from the job: new money and untouched sections come in; edits and 
   assert.equal(r.blocks.find((b) => b.id === "work.cleanup")!.text, "Haul and sweep.");
   assert.equal(r.blocks.find((b) => b.id === "work.pour")!.text, "5 in. slab");
   assert.ok(editedBlocks(r).includes("work.pour"));
+});
+
+test("deposit: the target when set, never above the total, else half", () => {
+  assert.equal(jobDepositCents(850000, null), 425000);
+  assert.equal(jobDepositCents(850000, 300000), 300000);
+  assert.equal(jobDepositCents(100000, 500000), 100000);
+  assert.equal(jobDepositCents(0, null), 0);
+});
+
+test("parse: a tampered body is refused (money, dates, kinds, titles, methods, unknown keys dropped)", () => {
+  const d = draftAgreement(input({ optionalClauses: ["clause.repair"] }));
+  const j = () => JSON.parse(JSON.stringify(d));
+  const withV = (over: Record<string, unknown>) => { const x = j(); Object.assign(x.values, over); return parseBody(x); };
+  assert.equal(withV({ deposit_cents: 900000 }), null, "deposit above total");
+  assert.equal(withV({ total_cents: -1 }), null);
+  assert.equal(withV({ date: "2026-99-99" }), null);
+  assert.equal(withV({ date: "2026-02-30" }), null);
+  assert.equal(withV({ payment_methods: [] }), null);
+  assert.equal(withV({ payment_methods: ["bitcoin"] }), null);
+  const extra = j(); extra.values.evil = 1; extra.sneaky = 2;
+  const parsed = parseBody(extra)!;
+  assert.ok(!("evil" in parsed.values) && !("sneaky" in parsed));
+  const kind = j(); kind.blocks.find((b: { id: string }) => b.id === "clause.warranty").kind = "initials";
+  assert.equal(parseBody(kind), null, "initials only on Repair");
+  const tv = j(); tv.template_version = "<x>";
+  assert.equal(parseBody(tv), null);
+  const title = j(); title.blocks.find((b: { id: string }) => b.id === "clause.repair").title = 'X"></initials-field><signature-field name="Owner" role="Customer">';
+  const html = renderAgreementHtml(parseBody(title)!);
+  assert.equal((html.match(/<signature-field /g) ?? []).length, 2, "a template title can't be changed, so it can't add a field");
+  assert.ok(!html.includes('name="X'));
+});
+
+test("tax wording: Authorization follows it unless someone rewrote it", () => {
+  const d = draftAgreement(input());
+  const inc = setTaxMode(d, "includes_tax");
+  assert.ok(inc.blocks.find((b) => b.id === "clause.authorization")!.text.includes("includes all taxes and fees"));
+  const rewritten = { ...d, blocks: d.blocks.map((b) => (b.id === "clause.authorization" ? { ...b, text: "Custom." } : b)) };
+  assert.equal(setTaxMode(rewritten, "includes_tax").blocks.find((b) => b.id === "clause.authorization")!.text, "Custom.");
+});
+
+test("refresh keeps typed names and numbers, fills blanks, always takes the job's money", () => {
+  const d = draftAgreement(input({ contractor: { ...input().contractor!, license_number: "" } }));
+  const typed = { ...d, values: { ...d.values, customer_name: "Joshua Joyner", contractor_license: "" } };
+  const fresh = draftAgreement(input({ totalCents: 1, depositCents: 1 }));
+  const r = refreshFromJob(typed, fresh);
+  assert.equal(r.values.customer_name, "Joshua Joyner");
+  assert.equal(r.values.contractor_license, "L-123");
+  assert.equal(r.values.total_cents, 1);
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
 
 import {
   OPTIONAL_CLAUSE_IDS,
@@ -14,6 +14,7 @@ import {
   refreshFromJob,
   renderAgreementHtml,
   sendProblems,
+  setTaxMode,
   toggleClause,
   type AgreementBody,
   type AgreementValues,
@@ -23,8 +24,8 @@ import {
 import type { VersionSummary } from "@/lib/crm/agreement-versions";
 import { draftFromJobAction, getVersionAction, saveVersionAction } from "./agreement-actions";
 
-// The customer agreement, edited as a form (one box per section, big enough to type in on a phone) next to a
-// preview of the exact document. Each save is a new numbered version; nothing saved is ever changed, so the
+// The customer agreement, edited as a form (one box per section, big enough to type in on a phone) beside a live
+// preview of the exact document (on a phone, Preview opens it full screen). Each save is a new numbered version; nothing saved is ever changed, so the
 // history below is the whole back-and-forth. An old version can be viewed, compared with any other, or restored
 // (which saves it again as the newest version).
 
@@ -95,7 +96,7 @@ export function AgreementEditor({
   function save() {
     setMsg(null);
     start(async () => {
-      const r = await saveVersionAction(quoteId, agreementId, body, note);
+      const r = await saveVersionAction(quoteId, agreementId, body, note, latest?.id ?? null);
       if (!r.ok) return setMsg({ ok: false, text: r.error });
       setSaved(body);
       setHistory((h) => [r.version, ...h]);
@@ -130,8 +131,9 @@ export function AgreementEditor({
       const r = await getVersionAction(v.id);
       if (!r.ok) return setMsg({ ok: false, text: r.error });
       setBody(r.body);
-      setMsg({ ok: true, text: `Version ${r.version_no} loaded. Save to make it the newest version.` });
+      setMsg({ ok: true, text: `Version ${r.version_no} loaded. Save to make it the newest version (the price will be the job's current price).` });
       setNote(`Restored version ${r.version_no}`);
+      // The price on a saved version is always the job's at the time it is saved.
     });
   }
 
@@ -149,6 +151,9 @@ export function AgreementEditor({
   }
 
   const v = body.values;
+  // Rendered from a deferred copy, so typing stays quick on a phone while the preview catches up.
+  const deferred = useDeferredValue(body);
+  const liveHtml = useMemo(() => previewDoc(renderAgreementHtml(deferred)), [deferred]);
   const work = body.blocks.filter((b) => b.kind === "work");
   const clauses = body.blocks.filter((b) => b.kind === "clause" || b.kind === "initials");
   const customs = body.blocks.filter((b) => b.kind === "custom");
@@ -175,7 +180,9 @@ export function AgreementEditor({
         </div>
       </div>
 
-      {closed && <p className="ae-note">This agreement is closed. Changes go into an amended agreement.</p>}
+      <div className="ae-layout">
+      <div className="ae-form">
+      {closed && <p className="ae-note">This agreement is out for signature or closed, so it can&apos;t be changed.</p>}
       {!canEdit && !closed && <p className="ae-note">Only the owner or the job&apos;s contractor can edit this agreement.</p>}
 
       <fieldset className="ae-group" disabled={readOnly}>
@@ -219,7 +226,7 @@ export function AgreementEditor({
             ] as const
           ).map(([k, label]) => (
             <label key={k} className="ae-choice">
-              <input type="radio" name="tax" checked={v.tax_mode === k} onChange={() => setValue("tax_mode", k)} />
+              <input type="radio" name="tax" checked={v.tax_mode === k} onChange={() => setBody((b) => setTaxMode(b, k))} />
               {label}
             </label>
           ))}
@@ -325,6 +332,12 @@ export function AgreementEditor({
         </div>
       )}
       {msg && <p className={msg.ok ? "jr-ok" : "jr-err"} role={msg.ok ? "status" : "alert"}>{msg.text}</p>}
+
+      </div>
+      <aside className="ae-live" aria-label="Live preview">
+        <iframe title="Live preview of the agreement" className="ae-live-frame" sandbox="" srcDoc={liveHtml} />
+      </aside>
+      </div>
 
       {history.length > 0 && (
         <div className="ae-history">

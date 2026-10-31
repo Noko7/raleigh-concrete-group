@@ -7,6 +7,8 @@
 // like any other, and every saved agreement version records which template it started from. A sent version is
 // never re-rendered from a newer template: its HTML is frozen when it is saved (agreement-versions.ts).
 
+import { DEFAULT_DEPOSIT_PERCENT } from "./fees.ts";
+
 export const AGREEMENT_TEMPLATE_VERSION = "2026-10-31.1";
 
 export const OFFICE = {
@@ -315,52 +317,95 @@ export function sendProblems(body: AgreementBody): Problem[] {
   return out;
 }
 
-/** Structure checks on anything coming back from the browser, so a saved version is always renderable. */
+const ymdOk = (x: unknown): x is string => {
+  if (typeof x !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(x)) return false;
+  const [y, m, d] = x.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d && y >= 2020 && y <= 2100;
+};
+const textOk = (x: unknown, max: number): x is string => typeof x === "string" && x.length <= max;
+const MAX_CENTS = 99_999_999_99;
+
+/** The kind a block id may have: work.* is work, custom.* is custom, clause.* is a template clause (initials only on Repair). */
+function kindFor(id: string): BlockKind | null {
+  if (/^work\.(scope|permits|prep|pour|cleanup|duration)$/.test(id)) return "work";
+  if (/^custom\.[1-9]\d{0,2}$/.test(id)) return "custom";
+  const cl = CLAUSE_BY_ID.get(id);
+  return cl ? cl.kind : null;
+}
+
+/**
+ * Re-checks anything coming back from the browser and rebuilds it field by field, so a saved version is always
+ * renderable and can't carry anything the editor couldn't have produced: unknown keys are dropped, block kinds
+ * follow from their ids (initials only on Repair Limitations), dates are real dates, money is whole cents with
+ * 0 <= deposit <= total. The server still replaces the money with the job's own figures before saving.
+ */
 export function parseBody(raw: unknown): AgreementBody | null {
   if (!raw || typeof raw !== "object") return null;
-  const b = raw as AgreementBody;
-  const v = b.values as AgreementValues;
-  if (typeof b.template_version !== "string" || !v || !Array.isArray(b.blocks)) return null;
-  const str = (x: unknown, max: number) => typeof x === "string" && x.length <= max;
+  const b = raw as Record<string, unknown>;
+  const v = b.values as Record<string, unknown> | undefined;
+  if (typeof b.template_version !== "string" || !/^\d{4}-\d{2}-\d{2}\.\d{1,3}$/.test(b.template_version)) return null;
+  if (!v || typeof v !== "object" || !Array.isArray(b.blocks) || b.blocks.length > 40) return null;
+  const total = v.total_cents;
+  const deposit = v.deposit_cents;
+  const methods = v.payment_methods;
   if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(String(v.date)) ||
-    !str(v.customer_name, 200) ||
-    !str(v.customer_phone, 40) ||
-    !str(v.customer_email, 200) ||
-    !str(v.job_address, 300) ||
-    !str(v.contractor_name, 200) ||
-    !str(v.contractor_license, 60) ||
-    !str(v.contractor_phone, 40) ||
-    !Number.isInteger(v.total_cents) ||
-    !Number.isInteger(v.deposit_cents) ||
+    !ymdOk(v.date) ||
+    !textOk(v.customer_name, 200) ||
+    !textOk(v.customer_phone, 40) ||
+    !textOk(v.customer_email, 200) ||
+    !textOk(v.job_address, 300) ||
+    !textOk(v.contractor_name, 200) ||
+    !textOk(v.contractor_license, 60) ||
+    !textOk(v.contractor_phone, 40) ||
+    !Number.isInteger(total) || (total as number) < 0 || (total as number) > MAX_CENTS ||
+    !Number.isInteger(deposit) || (deposit as number) < 0 || (deposit as number) > (total as number) ||
     (v.tax_mode !== "plus_tax" && v.tax_mode !== "includes_tax") ||
-    !Array.isArray(v.payment_methods) ||
-    !v.payment_methods.every((m) => (PAYMENT_METHODS as readonly string[]).includes(m)) ||
-    !(v.replaces_signed_on === null || /^\d{4}-\d{2}-\d{2}$/.test(String(v.replaces_signed_on)))
+    !Array.isArray(methods) || methods.length < 1 || methods.length > 4 ||
+    !methods.every((m) => (PAYMENT_METHODS as readonly unknown[]).includes(m)) ||
+    !(v.replaces_signed_on === null || ymdOk(v.replaces_signed_on))
   ) {
     return null;
   }
-  if (b.blocks.length > 40) return null;
-  const ids = new Set<string>();
-  for (const k of b.blocks) {
-    if (
-      !k ||
-      !/^(work|clause|custom)\.[a-z0-9]+$/.test(String(k.id)) ||
-      ids.has(k.id) ||
-      !["work", "clause", "initials", "custom"].includes(k.kind) ||
-      !str(k.title, 120) ||
-      !str(k.text, 8000) ||
-      !(k.base === null || str(k.base, 8000))
-    ) {
-      return null;
-    }
-    ids.add(k.id);
-  }
-  return {
-    template_version: b.template_version,
-    values: { ...v, payment_methods: [...new Set(v.payment_methods)] },
-    blocks: b.blocks.map((k) => ({ id: k.id, kind: k.kind, title: k.title, text: k.text.replace(/\r\n?/g, "\n"), origin: k.origin, base: k.base })),
+  const values: AgreementValues = {
+    date: v.date,
+    customer_name: v.customer_name,
+    customer_phone: v.customer_phone,
+    customer_email: v.customer_email,
+    job_address: v.job_address,
+    contractor_name: v.contractor_name,
+    contractor_license: v.contractor_license,
+    contractor_phone: v.contractor_phone,
+    total_cents: total as number,
+    deposit_cents: deposit as number,
+    tax_mode: v.tax_mode,
+    payment_methods: PAYMENT_METHODS.filter((m) => (methods as unknown[]).includes(m)),
+    replaces_signed_on: (v.replaces_signed_on as string | null) ?? null,
   };
+  const ids = new Set<string>();
+  const blocks: AgreementBlock[] = [];
+  for (const k of b.blocks as Record<string, unknown>[]) {
+    if (!k || typeof k !== "object" || typeof k.id !== "string" || ids.has(k.id)) return null;
+    const kind = kindFor(k.id);
+    const origin = kind === "work" ? "quote" : kind === "custom" ? "custom" : "template";
+    if (!kind || k.kind !== kind || k.origin !== origin) return null;
+    if (!textOk(k.title, 120) || !textOk(k.text, 8000) || !(k.base === null || textOk(k.base, 8000))) return null;
+    // Template blocks keep their template titles; only custom sections are named by the editor.
+    const title = kind === "custom" ? (k.title.trim() || "Additional terms") : kind === "work" ? WORK_SECTIONS.find((w) => w.id === k.id)!.title : CLAUSE_BY_ID.get(k.id)!.title;
+    ids.add(k.id);
+    blocks.push({ id: k.id, kind, title, text: k.text.replace(/\r\n?/g, "\n"), origin, base: kind === "custom" ? null : (k.base as string | null) });
+  }
+  return { template_version: b.template_version, values, blocks: sortBlocks(blocks) };
+}
+
+/** Change the tax wording; the Authorization clause follows it unless someone has rewritten it. */
+export function setTaxMode(body: AgreementBody, mode: TaxMode): AgreementBody {
+  const values = { ...body.values, tax_mode: mode };
+  const blocks = body.blocks.map((b) => {
+    if (b.id !== "clause.authorization" || (b.base !== null && b.text.trim() !== b.base.trim())) return b;
+    return clauseBlock(b.id, values);
+  });
+  return { ...body, values, blocks };
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
@@ -383,7 +428,7 @@ const esc = (s: string) =>
 const inline = (s: string) => esc(s).replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
 
 /** Paragraphs and bullet lists from plain text. With initials, each bullet gets the customer's initials field. */
-export function textToHtml(text: string, opts: { initials?: { prefix: string } } = {}): string {
+export function textToHtml(text: string, opts: { initials?: boolean } = {}): string {
   const out: string[] = [];
   let bullets: string[] = [];
   let n = 0;
@@ -400,7 +445,7 @@ export function textToHtml(text: string, opts: { initials?: { prefix: string } }
         let li = inline(t.slice(2));
         if (opts.initials) {
           n += 1;
-          li += ` <span class="ag-initials">Initials: <initials-field name="${opts.initials.prefix} ${n}" role="Customer" required="true" style="width: 70px; height: 28px; display: inline-block;"></initials-field></span>`;
+          li += ` <span class="ag-initials">Initials: <initials-field name="Initials ${n}" role="Customer" required="true" style="width: 70px; height: 28px; display: inline-block;"></initials-field></span>`;
         }
         bullets.push(`<li>${li}</li>`);
       } else {
@@ -463,7 +508,7 @@ export function renderAgreementHtml(body: AgreementBody): string {
 
   for (const b of rest) {
     const isInitials = b.kind === "initials";
-    parts.push(`<h2>${esc(b.title)}</h2>${textToHtml(b.text, isInitials ? { initials: { prefix: b.title.split(" ")[0] } } : {})}`);
+    parts.push(`<h2>${esc(b.title)}</h2>${textToHtml(b.text, { initials: isInitials })}`);
   }
 
   parts.push(
@@ -580,13 +625,14 @@ export function editedBlocks(body: AgreementBody): string[] {
 
 // ── From a job ──────────────────────────────────────────────────────────────
 
-export type JobForDraft = DraftInput["quote"] & { service: string | null; change_deposit_cents?: number | null };
+export type JobForDraft = DraftInput["quote"] & { service: string | null; deposit_target_cents?: number | null };
 export type LineForDraft = { title: string; description: string | null; required?: boolean; customer_response: string | null };
 
 /**
  * What a new draft is built from: the job as approved, the lines the customer took (the package they picked first,
- * then required and accepted options), the contractor, and the job's money. The deposit is the change-order target
- * when one is set, else half. Repair jobs start with Repair Limitations on.
+ * then required and accepted options), the contractor, and the job's money. The deposit is the job's deposit
+ * target (what must be paid in total before work starts) when one is set, else the standard deposit (half).
+ * Repair jobs start with Repair Limitations on.
  */
 export function draftInputFromJob(input: {
   today: string;
@@ -602,8 +648,7 @@ export function draftInputFromJob(input: {
   const line = (l: LineForDraft) => [l.title, l.description].map((x) => (x ?? "").trim()).filter(Boolean).join(": ");
   const lines = [...(pkg ? [line(pkg)] : []), ...opts.map(line)].filter(Boolean);
   const total = Math.max(0, Math.round(input.totalCents));
-  const target = input.quote.change_deposit_cents;
-  const deposit = target != null && target > 0 ? Math.min(Math.round(target), total) : Math.round(total / 2);
+  const deposit = jobDepositCents(total, input.quote.deposit_target_cents);
   return {
     today: input.today,
     quote: input.quote,
@@ -617,19 +662,36 @@ export function draftInputFromJob(input: {
   };
 }
 
+/** The deposit printed on the agreement: the job's deposit target when set, else the standard half. Never above the total. */
+export function jobDepositCents(totalCents: number, targetCents: number | null | undefined): number {
+  const total = Math.max(0, Math.round(totalCents));
+  const want = targetCents != null && targetCents > 0 ? Math.round(targetCents) : Math.round((total * DEFAULT_DEPOSIT_PERCENT) / 100);
+  return Math.min(want, total);
+}
+
 /**
- * Bring a draft up to date with the job (a change order, a new contractor, a fixed phone number) without losing
- * anyone's edits: values that come from the job are replaced; a work section nobody edited takes the job's new
- * text, and an edited one keeps its text but now shows as differing from the quote. The date is today's.
+ * Bring a draft up to date with the job (a change order, a contractor's new license #) without losing anyone's
+ * edits: the money is replaced with the job's; names and numbers are filled in only where blank; a work section
+ * nobody edited takes the job's new text, and an edited one keeps its text but now shows as differing from the
+ * quote. The date and the editor's choices (tax wording, payment methods) stay.
  */
 export function refreshFromJob(body: AgreementBody, fresh: AgreementBody): AgreementBody {
   const keep = body.values;
+  const fill = (k: "customer_name" | "customer_phone" | "customer_email" | "job_address" | "contractor_name" | "contractor_license" | "contractor_phone") =>
+    keep[k].trim() ? keep[k] : fresh.values[k];
   const values: AgreementValues = {
-    ...fresh.values,
-    // Choices made in the editor, not facts about the job.
-    tax_mode: keep.tax_mode,
-    payment_methods: keep.payment_methods,
-    replaces_signed_on: keep.replaces_signed_on,
+    ...keep,
+    // The money is the job's, always.
+    total_cents: fresh.values.total_cents,
+    deposit_cents: fresh.values.deposit_cents,
+    // Names and numbers someone typed stay; blanks are filled from the job.
+    customer_name: fill("customer_name"),
+    customer_phone: fill("customer_phone"),
+    customer_email: fill("customer_email"),
+    job_address: fill("job_address"),
+    contractor_name: fill("contractor_name"),
+    contractor_license: fill("contractor_license"),
+    contractor_phone: fill("contractor_phone"),
   };
   const freshBy = new Map(fresh.blocks.map((b) => [b.id, b]));
   const blocks = body.blocks.map((b) => {

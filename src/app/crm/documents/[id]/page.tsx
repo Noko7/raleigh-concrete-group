@@ -8,7 +8,7 @@ import { jobLedger } from "@/lib/crm/payments";
 import { getQuote, listAgreementsForQuote } from "@/lib/crm/queries";
 import { listReceiptsForJob, receiptRowsFor } from "@/lib/crm/receipts";
 import { JobReceipts } from "@/app/crm/quotes/[id]/job-receipts";
-import { canEditJobAgreement, editableAgreement, getVersion, listVersions } from "@/lib/crm/agreement-versions";
+import { CLOSED_FOR_EDITS, canEditJobAgreement, editableAgreement, getVersion, listVersions } from "@/lib/crm/agreement-versions";
 import type { AgreementBody } from "@/lib/crm/agreement-doc";
 import { AddAgreement } from "../add-agreement";
 import { AgreementList } from "../agreement-list";
@@ -53,7 +53,7 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
   const where = [quote.address, quote.city].filter(Boolean).join(", ");
 
   return (
-    <main className="crm-page">
+    <main className="crm-page crm-page-wide">
       <div className="crm-breadcrumb">
         <Link href={`${base}/documents`}>← Documents</Link>
       </div>
@@ -73,7 +73,7 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
           initial={currentVersion.body as AgreementBody}
           versions={versions}
           canEdit={canEdit}
-          closed={current.status === "signed" || current.status === "void"}
+          closed={CLOSED_FOR_EDITS.includes(current.status)}
         />
       ) : (
         <section className="crm-card" aria-label="Customer agreement">
