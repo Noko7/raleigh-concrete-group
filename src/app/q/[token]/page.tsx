@@ -14,6 +14,7 @@ import { ContactButtons } from "@/components/contact-buttons";
 import { QuoteSections } from "@/components/quote-sections";
 import { PreviewGuard } from "./preview-guard";
 import { ViewBeacon } from "./view-beacon";
+import { jobPayMethods } from "@/lib/crm/queries/responses";
 
 export const dynamic = "force-dynamic";
 
@@ -386,6 +387,7 @@ export default async function CustomerQuotePage({
             // The assigned crew's real hours, so nobody is offered a 7am start by a 9am crew.
             slots={slotsFor(await getWorkHours(quote.assigned_to))}
             cardReady={payee.ok}
+            payMethods={await jobPayMethods(quote.assigned_to)}
             options={options.map((o) => ({
               id: o.id,
               title: o.title,

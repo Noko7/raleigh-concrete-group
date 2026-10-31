@@ -18,6 +18,7 @@ import {
   quoteTotal,
 } from "@/lib/crm/constants";
 import { SectionText } from "@/components/section-text";
+import { METHOD_NAMES, PAYMENT_METHODS, type PayMethod } from "@/lib/crm/pay-methods";
 import { DEFAULT_DEPOSIT_PERCENT, depositCents, usd as money } from "@/lib/crm/fees";
 
 // One day that works for the customer, with a start time. Not a booking (the
@@ -69,6 +70,8 @@ export function QuoteActions({
   // Whether this job's crew can take cards. If not, no deposit button: one that
   // fails on tap is worse than none.
   cardReady = false,
+  // How this job's contractor takes payment. With no online card payment, the customer picks from these.
+  payMethods = [],
 }: {
   token: string;
   amount: number | null;
@@ -76,6 +79,7 @@ export function QuoteActions({
   packages?: PublicPackage[];
   slots?: string[];
   cardReady?: boolean;
+  payMethods?: PayMethod[];
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("choose");
@@ -89,6 +93,9 @@ export function QuoteActions({
   const [error, setError] = useState("");
   // Consent to electronic records: every Approve button waits on it, and the server refuses an approval without it.
   const [econsent, setEconsent] = useState(false);
+  // How they'll pay the contractor (any number); asked when there's no online card payment.
+  const [payPicks, setPayPicks] = useState<PayMethod[]>([]);
+  const askPay = !cardReady && payMethods.length > 0;
   const [checking, setChecking] = useState(false);
   const [taken, setTaken] = useState<string[]>([]);
   // Yes/no per optional item. Nothing pre-answered: untouched isn't a decision.
@@ -250,6 +257,7 @@ export function QuoteActions({
           discount,
           // Recorded so the crew know what to expect; changes nothing owed.
           pay: action === "accept" ? pay : undefined,
+          pay_methods: action === "accept" && askPay ? payPicks : undefined,
           // Two index-aligned arrays: the columns' shape, read by index on the crew card.
           preferred_dates: action === "accept" ? picks.map((p) => p.date) : undefined,
           preferred_times: action === "accept" ? picks.map((p) => p.time) : undefined,
@@ -500,14 +508,41 @@ export function QuoteActions({
             <p className="cq-fine cq-pay-fine">Cash, check, Zelle or Venmo on site.</p>
           </div>
         ) : (
-          <button
-            type="button"
-            className="cq-btn cq-btn-accept"
-            disabled={picks.length === 0 || !econsent || busy}
-            onClick={() => submit("accept", "direct")}
-          >
-            {busy ? "Sending…" : "Approve quote"}
-          </button>
+          <>
+            {askPay && (
+              <fieldset className="cq-paywith">
+                <legend>How will you pay the contractor?</legend>
+                <p className="cq-fine">Pick any that work for you. You pay the contractor directly.</p>
+                <div className="cq-paywith-opts">
+                  {payMethods.map((m) => (
+                    <label key={m} className={payPicks.includes(m) ? "cq-paywith-opt cq-paywith-on" : "cq-paywith-opt"}>
+                      <input
+                        type="checkbox"
+                        checked={payPicks.includes(m)}
+                        disabled={busy}
+                        onChange={(e) =>
+                          setPayPicks((cur) => {
+                            const next = e.target.checked ? [...cur, m] : cur.filter((x) => x !== m);
+                            return PAYMENT_METHODS.filter((x) => next.includes(x));
+                          })
+                        }
+                      />
+                      {METHOD_NAMES[m]}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+            <button
+              type="button"
+              className="cq-btn cq-btn-accept"
+              disabled={picks.length === 0 || !econsent || (askPay && payPicks.length === 0) || busy}
+              onClick={() => submit("accept", "direct")}
+            >
+              {busy ? "Sending…" : "Approve quote"}
+            </button>
+            {askPay && payPicks.length === 0 && <p className="cq-fine">Pick how you&apos;ll pay to approve.</p>}
+          </>
         )}
         <button type="button" className="cq-textlink" disabled={busy} onClick={() => setMode("choose")}>
           Back

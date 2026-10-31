@@ -12,6 +12,7 @@ import {
   type OptionChoice,
 } from "@/lib/crm/queries";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { ONLINE_CARD_PAYMENTS } from "@/lib/crm/stripe";
 
 // Keyed by option id. Anything not a uuid mapped to accepted/declined is dropped; recordCustomerResponse
 // refuses a quote with an unanswered option.
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
     options?: unknown;
     package?: unknown;
     pay?: unknown;
+    pay_methods?: unknown;
     econsent?: unknown;
   };
   try {
@@ -95,6 +97,10 @@ export async function POST(request: Request) {
     // Matched against this quote's own packages downstream, so another quote's id can't set this price.
     packageId:
       typeof body.package === "string" && /^[0-9a-f-]{36}$/i.test(body.package) ? body.package : undefined,
+    // While online card payments are off, the customer picks how they'll pay the contractor (checked against
+    // the methods that contractor takes).
+    payMethods: action === "accept" ? body.pay_methods : undefined,
+    requirePayMethods: action === "accept" && !ONLINE_CARD_PAYMENTS,
   });
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
 
@@ -133,7 +139,11 @@ export async function POST(request: Request) {
       };
       const withChoices = { ...q, chosen };
       if (action === "accept") {
-        if (payChoice) await addAdminEvent(q.id, "payment_choice", { choice: payChoice });
+        if (result.payMethods?.length) {
+          await addAdminEvent(q.id, "payment_choice", { choice: "direct", methods: result.payMethods });
+        } else if (payChoice) {
+          await addAdminEvent(q.id, "payment_choice", { choice: payChoice });
+        }
         // The deposit ask only goes out if the crew can take a card.
         const payee = await payeeState(q);
         const deposit = payee.ok ? depositCents(toCents(q.quote_amount)) : null;

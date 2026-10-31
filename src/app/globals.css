@@ -3662,6 +3662,13 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .cq-pay-alt:hover { border-color: #2b1a12; }
 .cq-pay-alt:disabled { opacity: 0.55; cursor: not-allowed; }
 .cq-pay-fine { margin-top: 0.1rem; }
+/* "How will you pay the contractor?": big tap targets, any number picked. */
+.cq-paywith { border: 0; margin: 1rem 0 0.5rem; padding: 0; min-width: 0; text-align: left; }
+.cq-paywith legend { font-weight: 800; font-size: 1rem; color: #2b1a12; padding: 0; margin-bottom: 0.2rem; }
+.cq-paywith-opts { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.cq-paywith-opt { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2.75rem; padding: 0 0.95rem; border: 2px solid rgba(43, 26, 18, 0.22); border-radius: 999px; background: #fff; color: #2b1a12; font-weight: 700; cursor: pointer; }
+.cq-paywith-opt input { width: 1.1rem; height: 1.1rem; accent-color: #2b1a12; }
+.cq-paywith-on { border-color: #2b1a12; background: rgba(43, 26, 18, 0.06); }
 .cq-confirm-paid { font-size: 0.95rem; color: rgba(43, 26, 18, 0.75); margin-bottom: 1rem; }
 .cq-confirm-pay { display: inline-flex; margin-bottom: 1.25rem; }
 
@@ -4690,3 +4697,7 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 @media (min-width: 1440px) {
   .pe-page { padding: 2rem 2.25rem 2.5rem; font-size: 1rem; }
 }
+
+/* How the customer said they'll pay: on the CRM job (payments) and the contractor's job page. */
+.jb-payplan { margin: 0 0 0.6rem; }
+.jo-payplan-list { font-size: 1.15rem; font-weight: 800; margin: 0.2rem 0 0.3rem; }

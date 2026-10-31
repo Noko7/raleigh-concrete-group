@@ -5,6 +5,7 @@ import { usd } from "./fees";
 import { fill, type Dict } from "./i18n";
 import { messageLabel } from "./messages";
 import type { QuoteEvent } from "./types";
+import { isPayMethod, METHOD_NAMES } from "./pay-methods";
 
 const statusLabel = (v: unknown) => STATUS_LABELS[String(v) as keyof typeof STATUS_LABELS] ?? String(v ?? "N/A");
 
@@ -317,6 +318,9 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
         : `Card payment link FAILED to send${m.error ? ` - ${String(m.error)}` : ""}`;
     // Not a commitment; tells the crew whether to expect a card or a cheque.
     case "payment_choice":
+      if (Array.isArray(m.methods) && m.methods.length) {
+        return `Customer plans to pay the contractor by ${m.methods.filter(isPayMethod).map((x) => METHOD_NAMES[x]).join(", ")}`;
+      }
       return m.choice === "card"
         ? "Customer chose to pay by card"
         : "Customer chose to pay the crew directly";
