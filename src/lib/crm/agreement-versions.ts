@@ -110,7 +110,7 @@ async function insertVersion(agreementId: string, body: AgreementBody, note: str
   });
 }
 
-export type SaveResult = { ok: true; version: VersionSummary } | { ok: false; error: string };
+export type SaveResult = { ok: true; version: VersionSummary; body: AgreementBody } | { ok: false; error: string };
 
 /**
  * Save a new version of `agreement` (already read and matched to `quote` by the caller). Refused when the caller
@@ -142,7 +142,8 @@ export async function saveVersion(input: {
     return { ok: false, error: "Couldn't save. Try again." };
   }
   const [v] = (await res.json()) as VersionSummary[];
-  return v ? { ok: true, version: v } : { ok: false, error: "Couldn't save. Try again." };
+  // The body as stored (with the job's money), so the editor shows exactly what was saved.
+  return v ? { ok: true, version: v, body } : { ok: false, error: "Couldn't save. Try again." };
 }
 
 /**
@@ -152,6 +153,7 @@ export async function saveVersion(input: {
  */
 export async function startAgreement(session: Session, quote: Quote): Promise<{ ok: true; agreementId: string } | { ok: false; error: string }> {
   if (!canEditJobAgreement(session, quote)) return { ok: false, error: "Only the owner or the job's contractor can write its agreement." };
+  if (quote.change_requested_at) return { ok: false, error: "A change order is waiting on the customer. Write the agreement after they answer it." };
   const open = await pgAdmin(
     `agreements?quote_id=eq.${quote.id}&kind=eq.customer&current_version_id=not.is.null&status=not.in.(signed,void)&select=id&limit=1`,
   );
