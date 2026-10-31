@@ -32,6 +32,7 @@ import { JobReschedule } from "./job-reschedule";
 import { JobSchedule } from "./job-schedule";
 import { JobVisit } from "./job-visit";
 import { methodList, PAYMENT_METHODS } from "@/lib/crm/pay-methods";
+import { ONLINE_CARD_PAYMENTS } from "@/lib/crm/stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -385,6 +386,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             id={quote.id}
             locale={locale}
             cardReady={cardReady}
+            onlineCard={ONLINE_CARD_PAYMENTS}
             totalCents={money.ledger.totalCents}
             paidCents={money.ledger.paidCents}
             dueCents={money.ledger.dueCents}
@@ -419,7 +421,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           />
         )}
 
-        {/* How the customer said they'll pay, picked at approval (online card payments off). */}
+        {/* How the customer said they'll pay: the boxes they ticked when signing the agreement. */}
         {payPlan.length > 0 && (
           <section className="js-card jo-payplan">
             <h2 className="js-title">{t.contractorJob.payPlan}</h2>

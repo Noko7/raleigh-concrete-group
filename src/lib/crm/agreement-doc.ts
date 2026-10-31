@@ -11,7 +11,7 @@
 // "Standard Work Agreement" template. AGREEMENT_TEMPLATE_VERSION versions the document format itself.
 
 import { DEFAULT_DEPOSIT_PERCENT } from "./fees.ts";
-import { DEFAULT_PAYMENT_METHODS, METHOD_NAMES, PAYMENT_METHODS, type PayMethod } from "./pay-methods.ts";
+import { DEFAULT_PAYMENT_METHODS, METHOD_NAMES, PAYMENT_METHODS, payFieldName, type PayMethod } from "./pay-methods.ts";
 
 export const AGREEMENT_TEMPLATE_VERSION = "2026-10-31.1";
 
@@ -610,7 +610,7 @@ export function renderAgreementHtml(body: AgreementBody): string {
       v.payment_methods
         .map(
           (m) =>
-            `<span class="ag-pay-opt"><checkbox-field name="Pays by ${METHOD_NAMES[m]}" role="Customer" required="false" style="${PAY_BOX_STYLE}"></checkbox-field> ${esc(METHOD_NAMES[m])}</span>`,
+            `<span class="ag-pay-opt"><checkbox-field name="${payFieldName(m)}" role="Customer" required="false" style="${PAY_BOX_STYLE}"></checkbox-field> ${esc(METHOD_NAMES[m])}</span>`,
         )
         .join(" ") +
       `</p>`,

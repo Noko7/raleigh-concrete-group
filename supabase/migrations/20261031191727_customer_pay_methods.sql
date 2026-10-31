@@ -1,8 +1,8 @@
--- How the customer plans to pay the contractor, picked when they approve the quote (any of the contractor's
--- accepted methods: Zelle, Venmo, Check, Cash, Card). Not a commitment and not money: the ledger stays the record
--- of what was paid. Null on quotes approved before this, or approved while online card payments were on.
+-- How the customer plans to pay the contractor: the payment boxes they ticked when signing the agreement (any of
+-- the contractor's accepted methods: Zelle, Venmo, Check, Cash, Card). Not a commitment and not money: the ledger
+-- stays the record of what was paid. Null until a signed agreement says.
 --
--- Written only by the server (service role) from the customer's approval; staff read it with the quote under the
+-- Written by the server (service role) from DocuSeal's signing webhook; staff read it with the quote under the
 -- existing row policies. No policy or grant changes.
 
 set local lock_timeout = '5s';

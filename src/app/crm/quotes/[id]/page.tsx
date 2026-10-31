@@ -45,6 +45,7 @@ import { EstimateCard } from "./estimate-card";
 import { preferredSlots } from "./types";
 import { rotateTokens, setTestFlag } from "./status-actions";
 import { methodList, PAYMENT_METHODS } from "@/lib/crm/pay-methods";
+import { ONLINE_CARD_PAYMENTS } from "@/lib/crm/stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -185,7 +186,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   // ── What to do next ──
   // One card, one sentence, one button, from where the job is.
   const firstName = firstNameOf(quote.name, quote.name);
-  // How the customer said they'll pay the contractor (picked at approval).
+  // How the customer said they'll pay the contractor (ticked when they signed the agreement).
   const payPlan = PAYMENT_METHODS.filter((m) => (quote.customer_pay_methods ?? []).includes(m));
   const payPlanNote = payPlan.length ? ` Plans to pay by ${methodList(payPlan)}.` : "";
   const stageIndex = Math.max(0, STAGES.findIndex((st) => st.key === quote.status));
@@ -441,6 +442,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 locale={locale}
                 isOwner={isOwner}
                 cardReady={cardReady}
+                onlineCard={ONLINE_CARD_PAYMENTS}
                 totalCents={money.ledger.totalCents}
                 paidCents={money.ledger.paidCents}
                 dueCents={money.ledger.dueCents}

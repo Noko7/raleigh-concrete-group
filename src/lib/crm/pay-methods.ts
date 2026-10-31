@@ -21,13 +21,22 @@ export function acceptedMethods(staffMethods: readonly string[] | null | undefin
   return ordered.length ? ordered : [...DEFAULT_PAYMENT_METHODS];
 }
 
-/**
- * What the customer picked, kept only if the contractor takes it, in the standard order, no repeats. Empty
- * means nothing valid was picked.
- */
-export function cleanCustomerChoice(raw: unknown, accepted: readonly PayMethod[]): PayMethod[] {
-  if (!Array.isArray(raw)) return [];
-  return PAYMENT_METHODS.filter((m) => accepted.includes(m) && raw.includes(m));
-}
-
 export const methodList = (ms: readonly PayMethod[]) => ms.map((m) => METHOD_NAMES[m]).join(", ");
+
+/** The agreement's field name for a method's box, e.g. "Pays by Zelle" (agreement-doc renders it). */
+export const payFieldName = (m: PayMethod) => `Pays by ${METHOD_NAMES[m]}`;
+
+/**
+ * The methods a customer ticked on the signed agreement, from DocuSeal's field values
+ * ([{ field: "Pays by Zelle", value: true }, ...]), in the standard order.
+ */
+export function methodsFromSignedValues(values: unknown): PayMethod[] {
+  if (!Array.isArray(values)) return [];
+  const ticked = new Set<string>();
+  for (const v of values) {
+    const r = (v ?? {}) as { field?: unknown; value?: unknown };
+    const on = r.value === true || (typeof r.value === "string" && /^(true|yes|1|checked|on)$/i.test(r.value.trim()));
+    if (typeof r.field === "string" && on) ticked.add(r.field.trim());
+  }
+  return PAYMENT_METHODS.filter((m) => ticked.has(payFieldName(m)));
+}

@@ -14,7 +14,6 @@ import { ContactButtons } from "@/components/contact-buttons";
 import { QuoteSections } from "@/components/quote-sections";
 import { PreviewGuard } from "./preview-guard";
 import { ViewBeacon } from "./view-beacon";
-import { jobPayMethods } from "@/lib/crm/queries/responses";
 
 export const dynamic = "force-dynamic";
 
@@ -343,16 +342,12 @@ export default async function CustomerQuotePage({
 
         {hasPrice ? (
           <>
-            <p className="cq-lead">
-              {offersChoice
-                ? "Here's your quote, priced both ways. Pick the one you'd like below and your total is worked out for you."
-                : itemised && options.every((o) => o.required)
-                  ? // A straight breakdown: nothing to choose, so don't ask.
-                    `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}, broken down line by line.`
-                  : itemised
-                  ? "Here's your quote. Some of it is up to you - say yes or no to each option below and your total updates as you go."
-                  : `Here's your quote${quote.service ? ` for ${quote.service.toLowerCase()}` : ""}. We'd love to do the work for you.`}
-            </p>
+            {/* One short line, only where there's something to decide. */}
+            {offersChoice ? (
+              <p className="cq-lead">Pick the option you&apos;d like.</p>
+            ) : itemised && !options.every((o) => o.required) ? (
+              <p className="cq-lead">Say yes or no to each extra.</p>
+            ) : null}
             {/* Itemised/choice quotes print no single price here: it moves with
                 their answers below. One price on the page, never two. */}
             {!itemised && !offersChoice && (
@@ -387,7 +382,6 @@ export default async function CustomerQuotePage({
             // The assigned crew's real hours, so nobody is offered a 7am start by a 9am crew.
             slots={slotsFor(await getWorkHours(quote.assigned_to))}
             cardReady={payee.ok}
-            payMethods={await jobPayMethods(quote.assigned_to)}
             options={options.map((o) => ({
               id: o.id,
               title: o.title,

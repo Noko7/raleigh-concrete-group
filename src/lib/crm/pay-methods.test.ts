@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { acceptedMethods, cleanCustomerChoice, isPayMethod, methodList } from "./pay-methods.ts";
+import { acceptedMethods, isPayMethod, methodList, methodsFromSignedValues, payFieldName } from "./pay-methods.ts";
 
 test("accepted methods: the contractor's, in order; the default four when unset", () => {
   assert.deepEqual(acceptedMethods(["card", "zelle"]), ["zelle", "card"]);
@@ -14,13 +14,20 @@ test("accepted methods: the contractor's, in order; the default four when unset"
   assert.deepEqual(acceptedMethods(["bitcoin"]), ["zelle", "venmo", "check", "cash"], "junk falls back");
 });
 
-test("customer choice: kept only if the contractor takes it; order fixed; no repeats", () => {
-  const accepted = acceptedMethods(["zelle", "cash", "card"]);
-  assert.deepEqual(cleanCustomerChoice(["card", "zelle", "zelle"], accepted), ["zelle", "card"]);
-  assert.deepEqual(cleanCustomerChoice(["venmo"], accepted), [], "not taken by this contractor");
-  assert.deepEqual(cleanCustomerChoice("cash", accepted), [], "not an array");
-  assert.deepEqual(cleanCustomerChoice([{ x: 1 }, "drop table"], accepted), []);
-  assert.deepEqual(cleanCustomerChoice(undefined, accepted), []);
+test("signed values: the ticked Pays-by boxes, in order; anything else ignored", () => {
+  assert.deepEqual(
+    methodsFromSignedValues([
+      { field: "Pays by Card", value: true },
+      { field: "Pays by Zelle", value: "Yes" },
+      { field: "Pays by Venmo", value: false },
+      { field: "Pays by Bitcoin", value: true },
+      { field: "Initials 1", value: "AB" },
+    ]),
+    ["zelle", "card"],
+  );
+  assert.deepEqual(methodsFromSignedValues(null), []);
+  assert.deepEqual(methodsFromSignedValues("x"), []);
+  assert.equal(payFieldName("check"), "Pays by Check");
 });
 
 test("names", () => {

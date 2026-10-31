@@ -53,7 +53,7 @@ export const getSubmission = (id: number, timeoutMs?: number) =>
     audit_log_url?: string | null;
     combined_document_url?: string | null;
     documents?: { url?: string }[];
-    submitters?: { role?: string; completed_at?: string | null }[];
+    submitters?: { role?: string; completed_at?: string | null; values?: { field?: string; value?: unknown }[] }[];
   }>(
     "GET",
     `/submissions/${id}`,
