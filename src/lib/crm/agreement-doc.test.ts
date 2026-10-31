@@ -5,8 +5,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { REPAIR_SEED, STANDARD_SEED, defaultTemplateNameFor } from "./template-seeds.ts";
 import {
+  BUILTIN_STANDARD,
   addCustomBlock,
+  parseSnapshot,
+  parseTemplateBody,
+  type TemplateSnapshot,
   diffVersions,
   diffWords,
   draftAgreement,
@@ -163,7 +168,7 @@ test("parse: a saved body round-trips; anything malformed is refused", () => {
   assert.equal(parseBody(null), null);
 });
 
-test("from a job: package then accepted options under Scope; the job's deposit target wins; repair turns on its clause", () => {
+test("from a job: package then accepted options under Scope; the job's deposit target wins; the template decides the clauses", () => {
   const base = input();
   const di = draftInputFromJob({
     today: "2026-10-31",
@@ -179,10 +184,10 @@ test("from a job: package then accepted options under Scope; the job's deposit t
   });
   assert.deepEqual(di.boughtLines, ["Premium: Stamped", "Sealer", "Base: 4 in gravel"]);
   assert.equal(di.depositCents, 300000);
-  assert.deepEqual(di.optionalClauses, ["clause.repair"]);
+  assert.equal(di.optionalClauses, undefined);
+  assert.equal(di.taxMode, undefined);
   const half = draftInputFromJob({ today: "2026-10-31", quote: { ...base.quote, service: "Patio" }, options: [], packages: [], contractor: null, totalCents: 100001 });
   assert.equal(half.depositCents, 50001);
-  assert.deepEqual(half.optionalClauses, []);
 });
 
 test("refresh from the job: new money and untouched sections come in; edits and editor choices stay", () => {
@@ -247,4 +252,111 @@ test("refresh keeps typed names and numbers, fills blanks, always takes the job'
   assert.equal(r.values.customer_name, "Joshua Joyner");
   assert.equal(r.values.contractor_license, "L-123");
   assert.equal(r.values.total_cents, 1);
+});
+
+// ── Templates ───────────────────────────────────────────────────────────────
+
+const repairSnap: TemplateSnapshot = { ...REPAIR_SEED.body, id: "33333333-3333-4333-8333-333333333333", version_no: 2, name: "Repair Agreement" };
+
+test("templates: the Standard seed is exactly the built-in, and both seeds are valid templates", () => {
+  assert.deepEqual(STANDARD_SEED.body.clauses, BUILTIN_STANDARD.clauses);
+  for (const t of [STANDARD_SEED, REPAIR_SEED]) {
+    const r = parseTemplateBody(t.body);
+    assert.ok(r.ok, t.name);
+    assert.deepEqual(r.ok && r.body, t.body, `${t.name} round-trips`);
+  }
+  assert.equal(defaultTemplateNameFor("Concrete Repair"), "Repair Agreement");
+  assert.equal(defaultTemplateNameFor("Patio"), "Standard Work Agreement");
+});
+
+test("templates: a repair draft has the repair wording, no warranty, includes-tax price, initials for each item", () => {
+  const d = draftAgreement(input({ template: repairSnap, taxMode: undefined, optionalClauses: undefined }));
+  const ids = d.blocks.map((b) => b.id);
+  assert.ok(ids.includes("clause.repair") && ids.includes("clause.insurance") && ids.includes("clause.liability"));
+  assert.ok(!ids.includes("clause.warranty"));
+  assert.equal(d.values.tax_mode, "includes_tax");
+  assert.ok(d.blocks.find((b) => b.id === "clause.cancel")!.text.includes("Raleigh Concrete Group or the Contractor"));
+  assert.ok(d.blocks.find((b) => b.id === "clause.authorization")!.text.includes("which includes all taxes and fees"));
+  const html = renderAgreementHtml(d);
+  assert.equal((html.match(/<initials-field /g) ?? []).length, 4);
+  assert.ok(html.includes("(includes all sales tax and fees)"));
+  assert.deepEqual(sendProblems(d), []);
+  assert.deepEqual(d.template, repairSnap, "the agreement keeps the template it came from");
+});
+
+test("templates: optional clauses on by default, and required ones can't be switched off", () => {
+  const t: TemplateSnapshot = {
+    ...BUILTIN_STANDARD,
+    id: "44444444-4444-4444-8444-444444444444",
+    version_no: 1,
+    name: "Stamped",
+    clauses: BUILTIN_STANDARD.clauses.map((c) => (c.id === "clause.insurance" ? { ...c, on_by_default: true } : c)),
+  };
+  const d = draftAgreement(input({ template: t, optionalClauses: undefined }));
+  assert.ok(d.blocks.some((b) => b.id === "clause.insurance"));
+  assert.ok(!d.blocks.some((b) => b.id === "clause.liability"));
+  assert.equal(toggleClause(d, "clause.warranty", false), d);
+});
+
+test("templates: a clause that only exists in the template round-trips; a forged one is refused", () => {
+  const t: TemplateSnapshot = {
+    ...BUILTIN_STANDARD,
+    id: "55555555-5555-4555-8555-555555555555",
+    version_no: 3,
+    name: "Commercial",
+    clauses: [
+      { id: "clause.site_access", kind: "clause", title: "Site Access", text: "Gate open 7-5.", text_includes_tax: null, optional: false, on_by_default: false },
+      ...BUILTIN_STANDARD.clauses,
+    ],
+  };
+  const d = draftAgreement(input({ template: t }));
+  assert.deepEqual(parseBody(JSON.parse(JSON.stringify(d))), d);
+  const forged = JSON.parse(JSON.stringify(d));
+  forged.blocks.push({ id: "clause.not_in_template", kind: "clause", title: "X", text: "y", origin: "template", base: "y" });
+  assert.equal(parseBody(forged), null);
+  assert.ok(renderAgreementHtml(d).includes("<h2>Site Access</h2>"));
+});
+
+test("templates: an agreement saved before templates existed reads as the built-in standard", () => {
+  const d = draftAgreement(input());
+  const legacy = JSON.parse(JSON.stringify(d));
+  delete legacy.template;
+  assert.deepEqual(parseBody(legacy)?.template, BUILTIN_STANDARD);
+});
+
+test("templates: bad template bodies are refused with a reason", () => {
+  const ok = { tax_mode: "plus_tax", clauses: BUILTIN_STANDARD.clauses };
+  const bad = (over: Record<string, unknown>) => parseTemplateBody({ ...ok, ...over });
+  assert.equal(bad({ tax_mode: "x" }).ok, false);
+  assert.equal(bad({ clauses: [] }).ok, false);
+  assert.equal(bad({ clauses: BUILTIN_STANDARD.clauses.filter((c) => c.id !== "clause.authorization") }).ok, false);
+  assert.equal(bad({ clauses: [...BUILTIN_STANDARD.clauses, BUILTIN_STANDARD.clauses[0]] }).ok, false, "repeated id");
+  assert.equal(bad({ clauses: [{ ...BUILTIN_STANDARD.clauses[0], id: "clause.Bad Id" }, ...BUILTIN_STANDARD.clauses.slice(1)] }).ok, false);
+  assert.equal(bad({ clauses: BUILTIN_STANDARD.clauses.map((c) => (c.id === "clause.authorization" ? { ...c, optional: true } : c)) }).ok, false);
+  assert.equal(parseSnapshot({ ...ok, id: "nope", version_no: 1, name: "x" }), null);
+  assert.equal(parseSnapshot({ ...ok, id: null, version_no: 2, name: "x" }), null, "id and version go together");
+});
+
+test("initials field names are unique across every initialed section", () => {
+  const second = { ...BUILTIN_STANDARD.clauses.find((c) => c.id === "clause.repair")!, id: "clause.repair_two", title: "More Limitations", text: "- One more.\n- And another.", optional: false };
+  const t: TemplateSnapshot = {
+    ...BUILTIN_STANDARD,
+    id: "66666666-6666-4666-8666-666666666666",
+    version_no: 1,
+    name: "Two initialed",
+    clauses: [...BUILTIN_STANDARD.clauses.map((c) => (c.id === "clause.repair" ? { ...c, optional: false } : c)), second].sort((a) =>
+      a.id === "clause.authorization" ? 1 : 0,
+    ),
+  };
+  const html = renderAgreementHtml(draftAgreement(input({ template: t, optionalClauses: undefined })));
+  const names = [...html.matchAll(/<initials-field name="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(names.length, 6);
+  assert.equal(new Set(names).size, 6, names.join(","));
+});
+
+test("templates: the version diff says when the template changed", () => {
+  const a = draftAgreement(input());
+  const b = draftAgreement(input({ template: repairSnap, taxMode: undefined, optionalClauses: undefined }));
+  const t = diffVersions(a, b).find((c) => c.kind === "value" && c.key === "template");
+  assert.ok(t && t.kind === "value" && t.after === "Repair Agreement (v2)");
 });

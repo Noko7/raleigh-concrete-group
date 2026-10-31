@@ -4629,3 +4629,26 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .pe-sign p { margin: 0 0 0.9rem; }
 .pe-box { display: inline-block; min-width: 9rem; padding: 0.6rem 0.4rem; border: 1.5px dashed #c2682a; border-radius: 4px; background: #fdf3ec; color: #9a4f1c; font-size: 0.72rem; vertical-align: middle; }
 .pe-box-sm { min-width: 5rem; }
+
+/* Agreement templates: the list in the Documents hub, the template editor, and "Earlier agreements" on a job. */
+.tl-new { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; margin: 0.8rem 0 1rem; }
+.tl-new .ae-field { flex: 1 1 14rem; }
+.tl-list { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.tl-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.9rem; padding: 0.75rem 1rem; border-radius: 0.7rem; background: var(--crm-surface); border: 1px solid var(--crm-border); }
+.tl-archived { opacity: 0.7; }
+.tl-name { font-weight: 800; color: var(--crm-text); text-decoration: none; }
+.tl-meta { flex: 1 1 12rem; font-size: 0.85rem; color: var(--crm-muted); }
+.tl-acts { display: flex; gap: 0.9rem; }
+.tl-archive > summary { cursor: pointer; font-weight: 800; margin-bottom: 0.5rem; }
+.te-clause { border: 1px solid var(--crm-border); border-radius: 0.6rem; padding: 0.7rem 0.8rem; margin-bottom: 0.7rem; display: flex; flex-direction: column; gap: 0.45rem; }
+.te-row { display: flex; gap: 0.5rem; align-items: center; }
+.te-title { flex: 1; font-weight: 800; min-height: 2.6rem; }
+.te-moves { display: flex; gap: 0.3rem; }
+.te-moves .ae-link { font-size: 1.1rem; padding: 0.3rem 0.5rem; text-decoration: none; }
+.te-alt > summary { cursor: pointer; font-size: 0.85rem; font-weight: 700; color: var(--crm-muted); }
+.ae-pickt { max-width: 22rem; }
+.ae-restart-row { margin: -0.5rem 0 1rem; }
+.ae-restart { margin-top: 0.5rem; padding: 0.8rem; border-radius: 0.6rem; border: 1px solid var(--crm-border); }
+.ea-summary { cursor: pointer; }
+.ea-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.ea-versions { list-style: none; margin: 0.3rem 0 0 0.8rem; padding: 0; }
