@@ -1,4 +1,4 @@
--- Undo PENDING_document_templates.
+-- Undo 20261031172234_document_templates.
 --
 -- Templates and their saved versions are the owner's wording. This refuses to run once any template has a second
 -- version or a third template exists (that is, once someone has edited, cloned or created one): dropping the tables

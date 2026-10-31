@@ -1,4 +1,4 @@
--- Check PENDING_document_templates on the real database.
+-- Check 20261031172234_document_templates on the real database.
 --
 -- Run AFTER the migration, as the SQL editor's own role (postgres), the whole file at once. It opens its own
 -- transaction and ends in ROLLBACK, so nothing it creates is kept. No customer details are read or printed.

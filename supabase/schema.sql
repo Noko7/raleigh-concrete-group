@@ -37,9 +37,9 @@
 -- staff.license_number/payment_methods), checked against production after it was
 -- applied (columns, RLS, grants, triggers, policy).
 --
--- Updated by hand for the document_templates migration (PENDING until applied: document_templates and
--- document_template_versions, their three trigger functions, policies and grants, and two seeded templates).
--- Re-check against production once applied.
+-- Updated by hand for migration 20261031172234 (document_templates and document_template_versions,
+-- their trigger functions, policies and grants, and the two seeded templates), checked against production
+-- after it was applied (both templates at version 1, RLS on, read-only for signed-in users).
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1. Tables (columns, defaults, constraints)
