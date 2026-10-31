@@ -342,7 +342,8 @@ export function TrafficSection({ traffic, range, base, configured }: { traffic: 
         What this covers: every request the website served through Vercel, kept 30 days. Links that carry a customer
         token are stored masked (:id) and query values are dropped. It can&apos;t see someone using a leaked database
         key directly against Supabase: that traffic never passes through the website and shows only in Supabase&apos;s
-        own logs.
+        own logs. Vercel reports the size of what the site sends back, not uploads or network packets, so &quot;data
+        out&quot; is response size per request.
       </p>
     </section>
   );

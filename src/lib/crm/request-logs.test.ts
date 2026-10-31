@@ -12,10 +12,13 @@ import {
   cleanPath,
   formatBytes,
   GB,
+  isWindow,
+  MAX_STORED_PATH,
   median,
   parseDrainBody,
   probeReason,
   rowsFromDrain,
+  safeText,
   toRequestRow,
   verifyDrainSignature,
 } from "./request-logs.ts";
@@ -152,4 +155,31 @@ test("helpers", () => {
   assert.equal(median([]), 0);
   assert.equal(median([5, 1, 3]), 3);
   assert.equal(median([4, 1, 3, 2]), 2.5);
+});
+
+test("attacker-chosen text is always storable: length, NUL, split emoji", () => {
+  // 400-char path + 8 long query names would be 728 chars; the table allows 520.
+  const long = "/" + "a".repeat(450) + "?" + Array.from({ length: 8 }, (_, i) => `${"k".repeat(39)}${i}=1`).join("&");
+  assert.ok(cleanPath(long).length <= MAX_STORED_PATH);
+  // %00 in a query name decodes to NUL, which Postgres refuses.
+  assert.ok(!cleanPath("/x?%00=1&ok=2").includes("\u0000"));
+  assert.equal(cleanPath("/x?%00=1&ok=2"), "/x?ok");
+  // An emoji at the 40-char cut is kept whole or dropped, never halved.
+  const name = "k".repeat(39) + "\u{1F600}";
+  const out = cleanPath(`/x?${encodeURIComponent(name)}=1`);
+  assert.ok(!/[\ud800-\udbff](?![\udc00-\udfff])/.test(out));
+  assert.equal(safeText("ab\u0000c\ud83d", 10), "abc");
+  assert.equal(safeText("\u{1F600}\u{1F600}", 1), "\u{1F600}");
+});
+
+test("probes: no false alarm on ordinary text or real downloads; attacks on the drain itself are kept", () => {
+  assert.equal(probeReason("/search?q=select colors from menu", 200), null);
+  assert.equal(probeReason("/x?id=1 union select password from users", 200), "sql");
+  assert.equal(probeReason("/files/plans.zip", 200), null);
+  assert.equal(probeReason("/backup.zip", 404), "backup-file");
+  const line = (status: number) => ({ id: "x1", requestId: "r1", timestamp: 1, proxy: { timestamp: 1, path: "/api/logs/vercel", statusCode: status, clientIp: "1.2.3.4" } });
+  assert.equal(toRequestRow(line(200)), null, "our own accepted delivery");
+  assert.ok(toRequestRow(line(403)), "a refused post to the endpoint is kept");
+  assert.ok(!isWindow("constructor"));
+  assert.ok(isWindow("7d"));
 });

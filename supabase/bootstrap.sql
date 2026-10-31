@@ -616,9 +616,7 @@ CREATE INDEX qr_scheduled_date_idx ON public.quote_requests USING btree (schedul
 CREATE INDEX qr_status_idx ON public.quote_requests USING btree (status);
 CREATE INDEX qr_visit_date_idx ON public.quote_requests USING btree (visit_date);
 CREATE INDEX request_logs_at_idx ON public.request_logs USING btree (at DESC);
-CREATE INDEX request_logs_ip_at_idx ON public.request_logs USING btree (ip, at DESC);
 CREATE INDEX request_logs_probe_at_idx ON public.request_logs USING btree (at DESC) WHERE (probe IS NOT NULL);
-CREATE INDEX request_logs_status_at_idx ON public.request_logs USING btree (status, at DESC);
 CREATE INDEX site_funnel_events_created_at_idx ON public.site_funnel_events USING btree (created_at DESC);
 CREATE UNIQUE INDEX staff_stripe_account_idx ON public.staff USING btree (stripe_account_id) WHERE (stripe_account_id IS NOT NULL);
 
@@ -1161,7 +1159,7 @@ as $$
         'waf', count(*) filter (where waf_action is not null and waf_action not in ('allow', 'log')),
         'probes', count(*) filter (where probe is not null),
         'first', min(at), 'last', max(at)) from w),
-    'last_received', (select max(received_at) from public.request_logs),
+    'last_received', (select received_at from public.request_logs order by id desc limit 1),
     'series', coalesce((select jsonb_agg(x order by x.bucket) from (
         select date_trunc('hour', at) as bucket, count(*) as requests, coalesce(sum(bytes_out), 0) as bytes,
                count(*) filter (where status >= 400) as errors

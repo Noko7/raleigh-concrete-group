@@ -47,8 +47,6 @@ create table public.request_logs (
   )
 );
 create index request_logs_at_idx on public.request_logs using btree (at desc);
-create index request_logs_ip_at_idx on public.request_logs using btree (ip, at desc);
-create index request_logs_status_at_idx on public.request_logs using btree (status, at desc);
 create index request_logs_probe_at_idx on public.request_logs using btree (at desc) where probe is not null;
 
 alter table public.request_logs enable row level security;
@@ -91,7 +89,7 @@ as $$
         'waf', count(*) filter (where waf_action is not null and waf_action not in ('allow', 'log')),
         'probes', count(*) filter (where probe is not null),
         'first', min(at), 'last', max(at)) from w),
-    'last_received', (select max(received_at) from public.request_logs),
+    'last_received', (select received_at from public.request_logs order by id desc limit 1),
     'series', coalesce((select jsonb_agg(x order by x.bucket) from (
         select date_trunc('hour', at) as bucket, count(*) as requests, coalesce(sum(bytes_out), 0) as bytes,
                count(*) filter (where status >= 400) as errors

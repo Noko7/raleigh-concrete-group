@@ -66,10 +66,27 @@ export type RequestRow = {
   probe: string | null;
 };
 
+/**
+ * Text Postgres will always accept: no control characters (a NUL is refused outright), no lone surrogate halves,
+ * and cut by code point so an emoji is never split in two. Attackers choose these strings, and a single row the
+ * database refuses would otherwise fail the whole delivery.
+ */
+export function safeText(s: string, max: number): string {
+  const cleaned = s
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "");
+  return Array.from(cleaned).slice(0, max).join("");
+}
+
 const str = (v: unknown, max: number): string | null => {
   if (Array.isArray(v)) v = v.find((x) => typeof x === "string");
-  return typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null;
+  if (typeof v !== "string") return null;
+  const s = safeText(v.trim(), max).trim();
+  return s || null;
 };
+
+/** The longest path stored; the table allows 520. */
+export const MAX_STORED_PATH = 500;
 const num = (v: unknown): number | null => {
   const n = typeof v === "string" && v.trim() ? Number(v) : v;
   return typeof n === "number" && Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
@@ -108,9 +125,9 @@ export function cleanPath(raw: unknown): string {
     .map((seg) => (LONG_ID.test(seg) ? ":id" : seg))
     .join("/");
   const keys = query
-    ? [...new Set(query.split("&").map((kv) => decodeSafe(kv.split("=")[0]).slice(0, 40)).filter(Boolean))].slice(0, 8)
+    ? [...new Set(query.split("&").map((kv) => safeText(decodeSafe(kv.split("=")[0]), 40)).filter(Boolean))].slice(0, 8)
     : [];
-  return (path || "/").slice(0, 400) + (keys.length ? `?${keys.join("&")}` : "");
+  return safeText((path || "/").slice(0, 400) + (keys.length ? `?${keys.join("&")}` : ""), MAX_STORED_PATH) || "/";
 }
 
 function decodeSafe(s: string): string {
@@ -127,7 +144,8 @@ const PROBES: [string, RegExp][] = [
   ["wordpress", /\/(wp-admin|wp-login\.php|wp-content|wp-includes|xmlrpc\.php|wp-json)\b/i],
   ["dotfile", /\/\.(env|git|svn|hg|aws|ssh|htaccess|htpasswd|ds_store|vscode|idea|npmrc|docker)/i],
   ["traversal", /(\.\.\/|\.\.\\|%2e%2e|%252e|\/etc\/passwd|\/proc\/self|c:\\windows)/i],
-  ["sql", /(union(\s|%20|\+)+select|select(\s|%20|\+)+.*from|'\s*or\s*'?1'?\s*=\s*'?1|sleep\(\d|benchmark\(|information_schema|;--|%27%20or|or%201=1)/i],
+  // Only shapes that don't occur in normal text ("select colors from menu" is a search, not an attack).
+  ["sql", /(union(\s|%20|\+)+(all(\s|%20|\+)+)?select|'\s*or\s*'?1'?\s*=\s*'?1|sleep\(\d|benchmark\(|information_schema|;--|%27%20or|or%201=1|pg_sleep|waitfor(\s|%20|\+)+delay)/i],
   ["script", /(<script|%3cscript|javascript:|onerror=|\$\{jndi:|%24%7bjndi)/i],
   ["admin-panel", /\/(phpmyadmin|pma|myadmin|adminer|cpanel|webmail|manager\/html|actuator|solr|jenkins|boaform|hnap1|cgi-bin|server-status)\b/i],
   ["php", /\.(php\d?|asp|aspx|jsp|cgi|pl)(\?|$|\/)/i],
@@ -139,7 +157,12 @@ const PROBES: [string, RegExp][] = [
 export function probeReason(rawPath: unknown, status: number | null): string | null {
   const s = str(rawPath, 4000) ?? "";
   const lower = s.toLowerCase();
-  for (const [why, re] of PROBES) if (re.test(lower) || re.test(decodeSafe(lower))) return why;
+  for (const [why, re] of PROBES) {
+    if (!(re.test(lower) || re.test(decodeSafe(lower)))) continue;
+    // Asking for an archive or database file only counts when it isn't there: a real download isn't a probe.
+    if (why === "backup-file" && status !== null && status < 400) continue;
+    return why;
+  }
   const path = lower.split("?")[0];
   if (status === 404 && path.startsWith("/api/")) return "api-guess";
   if (status === 405 && path.startsWith("/api/")) return "api-method";
@@ -164,7 +187,10 @@ export function toRequestRow(line: unknown): RequestRow | null {
   if (!p) return null;
   const rawPath = p.path ?? l.path;
   const path = cleanPath(rawPath);
-  if (path === DRAIN_PATH || path.startsWith(`${DRAIN_PATH}?`)) return null;
+  const status = num(p.statusCode ?? l.statusCode);
+  // The drain's own accepted deliveries are skipped (logging them would log forever); anything refused there,
+  // such as a forged post that got a 403, is kept so attacks on the endpoint show up.
+  if ((path === DRAIN_PATH || path.startsWith(`${DRAIN_PATH}?`)) && status !== null && status < 300) return null;
   const ts = num(p.timestamp) ?? num(l.timestamp);
   if (!ts) return null;
   const at = new Date(ts);
@@ -172,7 +198,6 @@ export function toRequestRow(line: unknown): RequestRow | null {
   const requestId = str(l.requestId ?? p.requestId, 120);
   const id = str(l.id, 120);
   if (!requestId && !id) return null;
-  const status = num(p.statusCode ?? l.statusCode);
   return {
     log_key: requestId ? `r:${requestId}` : `l:${id}`,
     at: at.toISOString(),
@@ -211,7 +236,7 @@ export function rowsFromDrain(lines: unknown[]): RequestRow[] {
 
 export const WINDOWS = { "24h": 1, "7d": 7, "30d": 30 } as const;
 export type WindowKey = keyof typeof WINDOWS;
-export const isWindow = (v: unknown): v is WindowKey => typeof v === "string" && v in WINDOWS;
+export const isWindow = (v: unknown): v is WindowKey => typeof v === "string" && Object.hasOwn(WINDOWS, v);
 
 export const GB = 1024 ** 3;
 

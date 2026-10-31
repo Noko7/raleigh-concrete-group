@@ -52,16 +52,53 @@ export async function POST(request: Request) {
   }
 
   const rows = rowsFromDrain(parseDrainBody(text));
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const res = await pgAdmin("request_logs?on_conflict=log_key", {
-      method: "POST",
-      headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
-      body: JSON.stringify(rows.slice(i, i + CHUNK)),
-    }).catch(() => null);
-    if (!res?.ok) {
-      console.error("[log-drain] insert failed", res?.status ?? "network", `${rows.length} rows`);
-      return withVerify(new NextResponse("Try again", { status: 503 }));
+  // Rows that carry a byte count replace an earlier copy of the same request (its first line may have had no
+  // size); rows without one never overwrite. Same request id, so the merge only ever adds detail.
+  const sized = rows.filter((r) => r.bytes_out !== null);
+  const unsized = rows.filter((r) => r.bytes_out === null);
+  for (const [group, resolution] of [
+    [sized, "merge-duplicates"],
+    [unsized, "ignore-duplicates"],
+  ] as const) {
+    for (let i = 0; i < group.length; i += CHUNK) {
+      const outcome = await insertRows(group.slice(i, i + CHUNK), resolution);
+      // Only an outage is retried: Vercel resends the batch. A row the database refuses is dropped, never a 5xx.
+      if (outcome === "retry") return withVerify(new NextResponse("Try again", { status: 503 }));
     }
   }
   return withVerify(NextResponse.json({ ok: true, stored: rows.length }));
+}
+
+type Resolution = "merge-duplicates" | "ignore-duplicates";
+
+async function post(rows: unknown[], resolution: Resolution): Promise<Response | null> {
+  return pgAdmin("request_logs?on_conflict=log_key", {
+    method: "POST",
+    headers: { Prefer: `resolution=${resolution},return=minimal` },
+    body: JSON.stringify(rows),
+  }).catch(() => null);
+}
+
+/**
+ * Stores a chunk. On a 4xx (one row the database refuses fails the whole insert) it falls back to one row at a
+ * time and drops the rows that still fail, so a single crafted request can't make the log refuse a delivery.
+ * "retry" only for a network failure or a database 5xx.
+ */
+async function insertRows(rows: unknown[], resolution: Resolution): Promise<"ok" | "retry"> {
+  if (rows.length === 0) return "ok";
+  const res = await post(rows, resolution);
+  if (res?.ok) return "ok";
+  if (!res || res.status >= 500) {
+    console.error("[log-drain] insert failed", res?.status ?? "network", `${rows.length} rows`);
+    return "retry";
+  }
+  let dropped = 0;
+  for (const row of rows) {
+    const one = await post([row], resolution);
+    if (one?.ok) continue;
+    if (!one || one.status >= 500) return "retry";
+    dropped += 1;
+  }
+  if (dropped) console.warn("[log-drain] dropped rows the database refused", dropped);
+  return "ok";
 }
