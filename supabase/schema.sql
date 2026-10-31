@@ -31,6 +31,11 @@
 -- (payment receipts: two tables, two staff columns, guard_payment_receipt(),
 -- issue_payment_receipt(), the policy, trigger and grants), each checked
 -- against pg_get_functiondef, relacl and proacl after it was applied.
+--
+-- Updated by hand for the agreement_versions migration (PENDING until applied:
+-- agreement_versions with its three trigger functions, policies and grants,
+-- agreements.current_version_id, staff.license_number/payment_methods and
+-- quote_requests.estimated_duration). Re-check against production once applied.
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1. Tables (columns, defaults, constraints)
@@ -51,6 +56,7 @@ create table public.agreements (
   created_by uuid,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
+  current_version_id uuid,
   constraint agreements_pkey PRIMARY KEY (id),
   constraint agreements_created_by_fkey FOREIGN KEY (created_by) REFERENCES staff(id) ON DELETE SET NULL,
   constraint agreements_quote_id_fkey FOREIGN KEY (quote_id) REFERENCES quote_requests(id) ON DELETE CASCADE,
@@ -59,6 +65,27 @@ create table public.agreements (
   constraint agreements_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'signed'::text, 'declined'::text, 'void'::text]))),
   constraint agreements_target_chk CHECK ((((kind = 'contractor'::text) AND (staff_id IS NOT NULL) AND (quote_id IS NULL)) OR ((kind = 'customer'::text) AND (quote_id IS NOT NULL) AND (staff_id IS NULL))))
 );
+
+create table public.agreement_versions (
+  id uuid default gen_random_uuid() not null,
+  agreement_id uuid not null,
+  version_no integer not null,
+  template_version text not null,
+  body jsonb not null,
+  html text not null,
+  html_sha256 text not null,
+  note text,
+  created_by uuid,
+  created_by_name text,
+  created_at timestamp with time zone default now() not null,
+  constraint agreement_versions_pkey PRIMARY KEY (id),
+  constraint agreement_versions_no_key UNIQUE (agreement_id, version_no),
+  constraint agreement_versions_agreement_fkey FOREIGN KEY (agreement_id) REFERENCES agreements(id) ON DELETE CASCADE,
+  constraint agreement_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES staff(id) ON DELETE SET NULL,
+  constraint agreement_versions_chk CHECK (((version_no >= 1) AND ((char_length(template_version) >= 1) AND (char_length(template_version) <= 40)) AND (jsonb_typeof(body) = 'object'::text) AND ((char_length(html) >= 1) AND (char_length(html) <= 500000)) AND (html_sha256 ~ '^[0-9a-f]{64}$'::text) AND ((note IS NULL) OR (char_length(note) <= 300)) AND ((created_by_name IS NULL) OR (char_length(created_by_name) <= 200))))
+);
+-- agreements.current_version_id points the other way, so its key is added once both tables exist.
+alter table public.agreements add constraint agreements_current_version_fkey FOREIGN KEY (current_version_id) REFERENCES agreement_versions(id) ON DELETE SET NULL;
 
 create table public.app_integrations (
   provider text not null,
@@ -364,6 +391,7 @@ create table public.quote_requests (
   deposit_target_cents integer,
   fee_waived_cents integer default 0 not null,
   fee_waived_note text,
+  estimated_duration text,
   constraint quote_requests_pkey PRIMARY KEY (id),
   constraint quote_requests_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES staff(id) ON DELETE SET NULL,
   constraint quote_requests_change_requested_by_fkey FOREIGN KEY (change_requested_by) REFERENCES staff(id) ON DELETE SET NULL,
@@ -372,6 +400,7 @@ create table public.quote_requests (
   constraint qr_customer_response_chk CHECK (((customer_response IS NULL) OR (customer_response = ANY (ARRAY['accepted'::text, 'declined'::text])))),
   constraint qr_sections_chk CHECK ((((quote_scope IS NULL) OR (char_length(quote_scope) <= 2000)) AND ((quote_permits IS NULL) OR (char_length(quote_permits) <= 2000)) AND ((quote_prep IS NULL) OR (char_length(quote_prep) <= 2000)) AND ((quote_pour IS NULL) OR (char_length(quote_pour) <= 2000)) AND ((quote_cleanup IS NULL) OR (char_length(quote_cleanup) <= 2000)))),
   constraint qr_status_chk CHECK ((status = ANY (ARRAY['new'::text, 'quoted'::text, 'approved'::text, 'scheduled'::text, 'completed'::text, 'paid'::text, 'lost'::text]))),
+  constraint quote_requests_estimated_duration_chk CHECK (((estimated_duration IS NULL) OR (char_length(estimated_duration) <= 200))),
   constraint quote_requests_change_amount_sane CHECK (((change_amount IS NULL) OR ((change_amount >= (0)::numeric) AND (change_amount <= (99999999)::numeric)))),
   constraint quote_requests_change_complete CHECK ((((change_requested_at IS NULL) AND (change_amount IS NULL) AND (change_note IS NULL)) OR ((change_requested_at IS NOT NULL) AND (change_amount IS NOT NULL) AND (change_note IS NOT NULL)))),
   constraint quote_requests_change_deposit_sane CHECK (((change_deposit_cents IS NULL) OR ((change_requested_at IS NOT NULL) AND (change_deposit_cents > 0) AND (change_deposit_cents <= '9999999999'::bigint)))),
@@ -420,11 +449,14 @@ create table public.staff (
   is_test boolean default false not null,
   business_name text,
   business_address text,
+  license_number text,
+  payment_methods text[] default '{zelle,venmo,check,cash}'::text[] not null,
   constraint staff_pkey PRIMARY KEY (id),
   constraint staff_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE,
   constraint staff_locale_chk CHECK ((locale = ANY (ARRAY['en'::text, 'es'::text]))),
   constraint staff_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'contractor'::text]))),
   constraint staff_business_chk CHECK ((((business_name IS NULL) OR (char_length(business_name) <= 120)) AND ((business_address IS NULL) OR (char_length(business_address) <= 300)))),
+  constraint staff_agreement_fields_chk CHECK ((((license_number IS NULL) OR (char_length(license_number) <= 60)) AND ((cardinality(payment_methods) >= 1) AND (cardinality(payment_methods) <= 4)) AND (payment_methods <@ '{zelle,venmo,check,cash}'::text[]))),
   constraint staff_work_hours_chk CHECK ((((work_start_hour >= 5) AND (work_start_hour <= 21)) AND ((work_end_hour >= 5) AND (work_end_hour <= 21)) AND (work_end_hour >= work_start_hour)))
 );
 
@@ -436,6 +468,7 @@ CREATE INDEX ag_created_idx ON public.agreements USING btree (created_at DESC);
 CREATE INDEX ag_quote_idx ON public.agreements USING btree (quote_id);
 CREATE INDEX ag_staff_idx ON public.agreements USING btree (staff_id);
 CREATE INDEX ag_status_idx ON public.agreements USING btree (status);
+CREATE INDEX agreement_versions_agreement_idx ON public.agreement_versions USING btree (agreement_id, version_no DESC);
 CREATE INDEX ci_created_idx ON public.contractor_invites USING btree (created_at DESC);
 CREATE INDEX ci_token_idx ON public.contractor_invites USING btree (token);
 CREATE INDEX fs_staff_idx ON public.fee_settlements USING btree (staff_id, created_at DESC);
@@ -475,6 +508,7 @@ CREATE UNIQUE INDEX staff_stripe_account_idx ON public.staff USING btree (stripe
 -- ════════════════════════════════════════════════════════════════════════════
 
 alter table public.agreements enable row level security;
+alter table public.agreement_versions enable row level security;
 alter table public.app_integrations enable row level security;
 alter table public.contractor_invites enable row level security;
 alter table public.fee_settlements enable row level security;
@@ -505,6 +539,20 @@ create policy "staff read agreements" on public.agreements as permissive for sel
   using ((is_owner() OR (staff_id = auth.uid()) OR (EXISTS ( SELECT 1
    FROM quote_requests q
   WHERE ((q.id = agreements.quote_id) AND (q.assigned_to = auth.uid()))))));
+
+create policy "staff read agreement versions" on public.agreement_versions as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM agreements a
+  WHERE ((a.id = agreement_versions.agreement_id) AND (is_owner() OR (a.staff_id = auth.uid()) OR (EXISTS ( SELECT 1
+           FROM quote_requests q
+          WHERE ((q.id = a.quote_id) AND (q.assigned_to = auth.uid())))))))));
+
+create policy "staff save agreement versions" on public.agreement_versions as permissive for insert to authenticated
+  with check ((EXISTS ( SELECT 1
+   FROM agreements a
+  WHERE ((a.id = agreement_versions.agreement_id) AND (is_owner() OR ((a.kind = 'customer'::text) AND (EXISTS ( SELECT 1
+           FROM quote_requests q
+          WHERE ((q.id = a.quote_id) AND (q.assigned_to = auth.uid()))))))))));
 
 create policy "owner reads invites" on public.contractor_invites as permissive for select to authenticated
   using (is_owner());
@@ -1034,6 +1082,55 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.guard_agreement_version()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  raise exception 'a saved agreement version cannot be changed; save a new version instead' using errcode = '42501';
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.number_agreement_version()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare who uuid := auth.uid();
+begin
+  perform 1 from public.agreements where id = new.agreement_id for update;
+  if not found then
+    raise exception 'agreement % does not exist', new.agreement_id using errcode = '23503';
+  end if;
+  select coalesce(max(version_no), 0) + 1 into new.version_no from public.agreement_versions where agreement_id = new.agreement_id;
+  new.created_at := now();
+  new.html_sha256 := encode(sha256(convert_to(new.html, 'UTF8')), 'hex');
+  -- A signed-in save is stamped with that person, whatever the app sent. Server jobs (service role) pass their own.
+  if who is not null then
+    new.created_by := who;
+    select full_name into new.created_by_name from public.staff where id = who;
+  end if;
+  return new;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.point_agreement_at_version()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  update public.agreements set current_version_id = new.id where id = new.agreement_id;
+  return null;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.touch_agreements_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -1065,6 +1162,9 @@ $function$
 
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 CREATE TRIGGER agreements_touch_updated_at BEFORE UPDATE ON public.agreements FOR EACH ROW EXECUTE FUNCTION touch_agreements_updated_at();
+CREATE TRIGGER agreement_versions_guard BEFORE UPDATE ON public.agreement_versions FOR EACH ROW EXECUTE FUNCTION guard_agreement_version();
+CREATE TRIGGER agreement_versions_number BEFORE INSERT ON public.agreement_versions FOR EACH ROW EXECUTE FUNCTION number_agreement_version();
+CREATE TRIGGER agreement_versions_point AFTER INSERT ON public.agreement_versions FOR EACH ROW EXECUTE FUNCTION point_agreement_at_version();
 CREATE TRIGGER payment_receipts_guard BEFORE DELETE OR UPDATE ON public.payment_receipts FOR EACH ROW EXECUTE FUNCTION guard_payment_receipt();
 CREATE TRIGGER qo_guard_line_prices BEFORE INSERT OR DELETE OR UPDATE ON public.quote_options FOR EACH ROW EXECUTE FUNCTION guard_quote_line_prices();
 CREATE TRIGGER qo_touch_updated_at BEFORE UPDATE ON public.quote_options FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
@@ -1092,6 +1192,10 @@ alter table public.quote_requests disable trigger send_to_make;
 grant truncate, references, trigger, maintain on public.agreements to anon;                          -- (default)
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.agreements to authenticated;
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.agreements to service_role;
+
+-- Saved versions are permanent: authenticated may read and add, never change or remove; anon has nothing.
+grant select, insert, references, trigger, maintain on public.agreement_versions to authenticated;
+grant select, insert, update, delete, truncate, references, trigger, maintain on public.agreement_versions to service_role;
 
 grant truncate, references, trigger, maintain on public.app_integrations to anon, authenticated;     -- (default)
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.app_integrations to service_role;
@@ -1170,6 +1274,9 @@ revoke all on function public.expire_unanswered_quotes() from public;
 grant execute on function public.expire_unanswered_quotes() to service_role;
 revoke all on function public.guard_payment_not_over_total() from public;                   -- postgres only
 revoke all on function public.guard_payment_receipt() from public;                         -- postgres only
+revoke all on function public.guard_agreement_version() from public;                      -- postgres only (trigger)
+revoke all on function public.number_agreement_version() from public;                     -- postgres only (trigger)
+revoke all on function public.point_agreement_at_version() from public;                   -- postgres only (trigger)
 revoke all on function public.guard_quote_line_prices() from public;                        -- postgres only
 revoke all on function public.guard_quote_money_columns() from public;                      -- postgres only
 revoke all on function public.handle_new_user() from public;                                -- postgres only
