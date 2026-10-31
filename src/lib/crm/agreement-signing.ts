@@ -3,6 +3,9 @@
 //   send     the newest saved version goes to DocuSeal exactly as stored (POST /submissions/html). The agreement
 //            becomes `sent` and its text is frozen. If the owner sent it, the contractor is texted a link to sign
 //            in the CRM; a contractor who sent it signs right there.
+//            DocuSeal also emails the signers in order (order "preserved"): the contractor at once, the customer
+//            once the contractor has signed. A submission DocuSeal created but this site never recorded (a send
+//            that timed out) is withdrawn when its first signature arrives, so it can't go on to the customer.
 //   webhook  the contractor signs -> `contractor_signed`, and the customer is texted their link (/sign/<token>,
 //            quiet hours apply). The customer signs -> `signed`: the signed PDF and audit log are copied into
 //            the private agreements bucket at once (DocuSeal's links expire), and the owner is texted once.
@@ -17,7 +20,7 @@
 // moves nothing twice and texts nobody twice.
 import { randomBytes } from "node:crypto";
 
-import { buildSubmissionRequest, readSigners, SENDABLE, transitionFor, type AgreementSigningStatus, type DocusealEvent, type Signer } from "./docuseal-core";
+import { anySubmissionId, buildSubmissionRequest, readSigners, SENDABLE, transitionFor, type AgreementSigningStatus, type DocusealEvent, type Signer } from "./docuseal-core";
 import { archiveSubmission, createHtmlSubmission, docusealConfigured, getSubmission, storeSignedFile } from "./docuseal";
 import { parseBody, sendProblems } from "./agreement-doc";
 import { canEditJobAgreement } from "./documents";
@@ -127,8 +130,13 @@ export async function sendForSigning(session: Session, quote: Quote, agreement: 
   if (!created.ok) return { ok: false, error: `DocuSeal didn't accept it: ${created.error}` };
   const read = readSigners(created.data);
   if (!read) {
+    // DocuSeal emails the first signer as soon as it creates the submission, so an unreadable reply is withdrawn
+    // (its link then says it's no longer active) rather than left live and untracked.
     console.error("[signing] unexpected DocuSeal response for agreement", agreement.id);
-    return { ok: false, error: "DocuSeal's reply was incomplete. Nothing was sent; try again." };
+    const stray = anySubmissionId(created.data);
+    if (stray) await withdraw(stray, "reply couldn't be read");
+    else console.error("[signing] COULDN'T WITHDRAW an unreadable DocuSeal submission; find it in DocuSeal and archive it by hand. Agreement", agreement.id);
+    return { ok: false, error: "DocuSeal's reply was incomplete, so the send was withdrawn. If the contractor got an email for it, that link won't work. Try again." };
   }
 
   // The links first (server-only), then the agreement, guarded on its status AND on the version that was sent,
@@ -232,10 +240,24 @@ export async function handleDocusealEvent(e: DocusealEvent, payload: unknown): P
     if (!rec.ok) throw new Error(`[signing] document_events insert failed (${rec.status})`);
   }
 
-  const outcome = agreement?.quote ? await act(agreement as AgreementForEvent & { quote: NonNullable<AgreementForEvent["quote"]> }, e) : "no matching agreement";
+  const outcome = agreement?.quote ? await act(agreement as AgreementForEvent & { quote: NonNullable<AgreementForEvent["quote"]> }, e) : await untracked(e);
   const done = await pgAdmin(`document_events?${key}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ processed_at: new Date().toISOString() }) });
   if (!done.ok) throw new Error(`[signing] couldn't mark the event processed (${done.status})`);
   return outcome;
+}
+
+/**
+ * A signature on a submission this site sent but never recorded (the send timed out after DocuSeal had already
+ * created it and emailed the contractor). DocuSeal would email the customer next, for a signature the site would
+ * never see, so it is withdrawn. A submission whose links were saved is a send still finishing: left alone.
+ */
+async function untracked(e: DocusealEvent): Promise<string> {
+  if (e.type !== "form.completed" || !e.sentForAgreement) return "no matching agreement";
+  const known = await pgAdmin(`agreement_signing?submission_id=eq.${e.submissionId}&select=agreement_id&limit=1`);
+  if (!known.ok) throw new Error(`[signing] couldn't read agreement_signing (${known.status})`);
+  if (((await known.json()) as unknown[]).length) return "no matching agreement (send still finishing)";
+  await withdraw(e.submissionId, `untracked submission for agreement ${e.sentForAgreement}`);
+  return "untracked submission withdrawn";
 }
 
 async function act(agreement: AgreementForEvent & { quote: NonNullable<AgreementForEvent["quote"]> }, e: DocusealEvent): Promise<string> {
@@ -321,6 +343,7 @@ export async function reconcileWithDocuseal(agreement: Agreement): Promise<boole
         type, at: new Date(when).toISOString(), submissionId: agreement.docuseal_submission_id!, role, declineReason: null,
         auditLogUrl: sub.data.audit_log_url ?? null, combinedDocumentUrl: sub.data.combined_document_url ?? null,
         documentUrls: (sub.data.documents ?? []).map((d) => d.url).filter((u): u is string => Boolean(u)),
+        sentForAgreement: agreement.id,
       });
       const c = at("Contractor");
       const k = at("Customer");

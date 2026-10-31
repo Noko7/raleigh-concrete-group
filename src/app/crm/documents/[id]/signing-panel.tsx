@@ -6,8 +6,9 @@ import { DocusealForm } from "@docuseal/react";
 
 import { cancelSigningAction } from "./agreement-actions";
 
-// Where an agreement is in signing, on the job's documents page. The contractor signs here, embedded; the customer
-// signs on their own page (/sign/<token>) once the contractor has. The owner sees the customer's link to resend.
+// Where an agreement is in signing, on the job's documents page. The contractor signs here, embedded (or from
+// DocuSeal's email); the customer signs on their own page (/sign/<token>) or from DocuSeal's email, either only
+// once the contractor has. The owner sees the customer's link to resend.
 export type SigningView = {
   status: string;
   versionNo: number | null;

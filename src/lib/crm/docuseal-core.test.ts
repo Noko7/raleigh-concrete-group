@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  anySubmissionId,
   buildSubmissionRequest,
   customerStage,
   parseEvent,
@@ -84,7 +85,7 @@ test("webhooks: form and submission events are read, junk is not", () => {
 });
 
 const ev = (type: string, role: "Contractor" | "Customer" | null = null): DocusealEvent => ({
-  type, at: "2026-10-31T12:00:00.000Z", submissionId: 77, role, declineReason: null, auditLogUrl: null, combinedDocumentUrl: null, documentUrls: [],
+  type, at: "2026-10-31T12:00:00.000Z", submissionId: 77, role, declineReason: null, auditLogUrl: null, combinedDocumentUrl: null, documentUrls: [], sentForAgreement: null,
 });
 
 test("status: only forward, only while out for signature", () => {
@@ -105,4 +106,17 @@ test("the customer can sign only after the contractor", () => {
   assert.equal(customerStage("contractor_signed"), "sign");
   assert.equal(customerStage("signed"), "done");
   for (const s of ["pending", "declined", "expired", "void"] as const) assert.equal(customerStage(s), "closed");
+});
+
+test("a submission this site sent is recognised by its agreement id, and an unreadable reply still yields its id", () => {
+  const A = "0b6f1c2e-3d4a-4b5c-8d9e-0f1a2b3c4d5e";
+  const f = (data: Record<string, unknown>) => parseEvent({ event_type: "form.completed", timestamp: "2026-10-31T12:00:00Z", data: { submission_id: 9, role: "Contractor", ...data } });
+  assert.equal(f({ metadata: { agreement_id: A } })?.sentForAgreement, A);
+  assert.equal(f({ external_id: `${A}:contractor` })?.sentForAgreement, A);
+  assert.equal(f({ metadata: { agreement_id: "nope" }, external_id: "x:y" })?.sentForAgreement, null, "someone else's submission");
+  assert.equal(f({})?.sentForAgreement, null);
+  assert.equal(anySubmissionId([{ submission_id: 42, role: "Contractor" }]), 42);
+  assert.equal(anySubmissionId({ id: 43, submitters: [] }), 43);
+  assert.equal(anySubmissionId([{ id: 5 }]), null, "a submitter's own id is not the submission's");
+  assert.equal(anySubmissionId(null), null);
 });

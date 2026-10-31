@@ -132,6 +132,8 @@ export type DocusealEvent = {
   auditLogUrl: string | null;
   combinedDocumentUrl: string | null;
   documentUrls: string[];
+  /** The agreement id this site put on the signer (metadata / external_id), if it is one of ours. */
+  sentForAgreement: string | null;
 };
 
 /** A webhook body ({event_type, timestamp, data}), reduced to what the site acts on; null if it isn't one. */
@@ -154,7 +156,34 @@ export function parseEvent(raw: unknown): DocusealEvent | null {
     auditLogUrl: str(d.audit_log_url) ?? str(sub.audit_log_url),
     combinedDocumentUrl: str(d.combined_document_url) ?? str(sub.combined_document_url),
     documentUrls: docs,
+    sentForAgreement: ourAgreementId(d),
   };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function ourAgreementId(d: Record<string, unknown>): string | null {
+  const meta = (d.metadata ?? {}) as Record<string, unknown>;
+  const fromMeta = typeof meta.agreement_id === "string" ? meta.agreement_id : null;
+  const fromExt = typeof d.external_id === "string" ? d.external_id.split(":")[0] : null;
+  const id = fromMeta ?? fromExt;
+  return id && UUID.test(id) ? id.toLowerCase() : null;
+}
+
+/** The submission id from a /submissions/html reply that couldn't be read in full, so it can still be withdrawn. */
+export function anySubmissionId(resp: unknown): number | null {
+  const ok = (x: unknown) => (Number.isInteger(Number(x)) && Number(x) > 0 ? Number(x) : null);
+  // An object reply is the submission itself; an array reply is its submitters, each carrying submission_id.
+  if (resp && typeof resp === "object" && !Array.isArray(resp)) {
+    const o = resp as { id?: unknown; submission_id?: unknown; submitters?: unknown };
+    const own = ok(o.submission_id) ?? (Array.isArray(o.submitters) ? ok(o.id) : null);
+    if (own) return own;
+    resp = o.submitters;
+  }
+  for (const x of Array.isArray(resp) ? resp : []) {
+    const n = ok((x as { submission_id?: unknown } | null)?.submission_id);
+    if (n) return n;
+  }
+  return null;
 }
 
 export type Transition =
