@@ -34,8 +34,7 @@
 --
 -- Updated by hand for the agreement_versions migration (PENDING until applied:
 -- agreement_versions with its three trigger functions, policies and grants,
--- agreements.current_version_id, staff.license_number/payment_methods and
--- quote_requests.estimated_duration). Re-check against production once applied.
+-- agreements.current_version_id and staff.license_number/payment_methods). Re-check against production once applied.
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1. Tables (columns, defaults, constraints)
@@ -81,7 +80,6 @@ create table public.agreement_versions (
   constraint agreement_versions_pkey PRIMARY KEY (id),
   constraint agreement_versions_no_key UNIQUE (agreement_id, version_no),
   constraint agreement_versions_agreement_fkey FOREIGN KEY (agreement_id) REFERENCES agreements(id) ON DELETE CASCADE,
-  constraint agreement_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES staff(id) ON DELETE SET NULL,
   constraint agreement_versions_chk CHECK (((version_no >= 1) AND ((char_length(template_version) >= 1) AND (char_length(template_version) <= 40)) AND (jsonb_typeof(body) = 'object'::text) AND ((char_length(html) >= 1) AND (char_length(html) <= 500000)) AND (html_sha256 ~ '^[0-9a-f]{64}$'::text) AND ((note IS NULL) OR (char_length(note) <= 300)) AND ((created_by_name IS NULL) OR (char_length(created_by_name) <= 200))))
 );
 -- agreements.current_version_id points the other way, so its key is added once both tables exist.
@@ -391,7 +389,6 @@ create table public.quote_requests (
   deposit_target_cents integer,
   fee_waived_cents integer default 0 not null,
   fee_waived_note text,
-  estimated_duration text,
   constraint quote_requests_pkey PRIMARY KEY (id),
   constraint quote_requests_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES staff(id) ON DELETE SET NULL,
   constraint quote_requests_change_requested_by_fkey FOREIGN KEY (change_requested_by) REFERENCES staff(id) ON DELETE SET NULL,
@@ -400,7 +397,6 @@ create table public.quote_requests (
   constraint qr_customer_response_chk CHECK (((customer_response IS NULL) OR (customer_response = ANY (ARRAY['accepted'::text, 'declined'::text])))),
   constraint qr_sections_chk CHECK ((((quote_scope IS NULL) OR (char_length(quote_scope) <= 2000)) AND ((quote_permits IS NULL) OR (char_length(quote_permits) <= 2000)) AND ((quote_prep IS NULL) OR (char_length(quote_prep) <= 2000)) AND ((quote_pour IS NULL) OR (char_length(quote_pour) <= 2000)) AND ((quote_cleanup IS NULL) OR (char_length(quote_cleanup) <= 2000)))),
   constraint qr_status_chk CHECK ((status = ANY (ARRAY['new'::text, 'quoted'::text, 'approved'::text, 'scheduled'::text, 'completed'::text, 'paid'::text, 'lost'::text]))),
-  constraint quote_requests_estimated_duration_chk CHECK (((estimated_duration IS NULL) OR (char_length(estimated_duration) <= 200))),
   constraint quote_requests_change_amount_sane CHECK (((change_amount IS NULL) OR ((change_amount >= (0)::numeric) AND (change_amount <= (99999999)::numeric)))),
   constraint quote_requests_change_complete CHECK ((((change_requested_at IS NULL) AND (change_amount IS NULL) AND (change_note IS NULL)) OR ((change_requested_at IS NOT NULL) AND (change_amount IS NOT NULL) AND (change_note IS NOT NULL)))),
   constraint quote_requests_change_deposit_sane CHECK (((change_deposit_cents IS NULL) OR ((change_requested_at IS NOT NULL) AND (change_deposit_cents > 0) AND (change_deposit_cents <= '9999999999'::bigint)))),
@@ -546,13 +542,6 @@ create policy "staff read agreement versions" on public.agreement_versions as pe
   WHERE ((a.id = agreement_versions.agreement_id) AND (is_owner() OR (a.staff_id = auth.uid()) OR (EXISTS ( SELECT 1
            FROM quote_requests q
           WHERE ((q.id = a.quote_id) AND (q.assigned_to = auth.uid())))))))));
-
-create policy "staff save agreement versions" on public.agreement_versions as permissive for insert to authenticated
-  with check ((EXISTS ( SELECT 1
-   FROM agreements a
-  WHERE ((a.id = agreement_versions.agreement_id) AND (is_owner() OR ((a.kind = 'customer'::text) AND (EXISTS ( SELECT 1
-           FROM quote_requests q
-          WHERE ((q.id = a.quote_id) AND (q.assigned_to = auth.uid()))))))))));
 
 create policy "owner reads invites" on public.contractor_invites as permissive for select to authenticated
   using (is_owner());
@@ -1193,8 +1182,8 @@ grant truncate, references, trigger, maintain on public.agreements to anon;     
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.agreements to authenticated;
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.agreements to service_role;
 
--- Saved versions are permanent: authenticated may read and add, never change or remove; anon has nothing.
-grant select, insert, references, trigger, maintain on public.agreement_versions to authenticated;
+-- Saved versions are permanent and saved only by the server: authenticated may read them; anon has nothing.
+grant select, references, trigger, maintain on public.agreement_versions to authenticated;
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.agreement_versions to service_role;
 
 grant truncate, references, trigger, maintain on public.app_integrations to anon, authenticated;     -- (default)

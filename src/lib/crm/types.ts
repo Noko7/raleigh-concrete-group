@@ -98,8 +98,6 @@ export type Quote = {
   quote_prep: string | null;
   quote_pour: string | null;
   quote_cleanup: string | null;
-  // The agreement's last work line. Optional on old rows until the migration is applied.
-  estimated_duration?: string | null;
   // QUOTE_TTL_DAYS from the last send. Null on quotes predating expiry, which stay valid.
   quote_expires_at: string | null;
   // Staff photos (internal shots, required before/after pair). Customer uploads stay in file_urls.

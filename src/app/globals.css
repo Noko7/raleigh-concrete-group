@@ -4594,3 +4594,11 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .ae-d-text { white-space: pre-wrap; margin-top: 0.3rem; line-height: 1.5; }
 .ae-diff ins { background: rgba(74, 222, 128, 0.2); color: #bbf7d0; text-decoration: none; }
 .ae-diff del { background: rgba(248, 113, 113, 0.2); color: #fecaca; }
+/* Agreement editor: form and live preview side by side on a wide screen; on a phone, Preview opens it. */
+.ae-layout { display: block; }
+.ae-live { display: none; }
+@media (min-width: 1100px) {
+  .ae-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+  .ae-live { display: block; position: sticky; top: 1rem; height: calc(100vh - 2rem); }
+  .ae-live-frame { width: 100%; height: 100%; border: 0; border-radius: 0.6rem; background: #fff; }
+}

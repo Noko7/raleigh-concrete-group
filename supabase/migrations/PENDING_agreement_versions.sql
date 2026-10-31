@@ -7,19 +7,23 @@
 --
 --   1. staff.license_number and staff.payment_methods: printed on the agreement (the license line and "How you
 --      pay"). payment_methods defaults to all four the business takes.
---   2. quote_requests.estimated_duration: the agreement's last work line ("Estimated Duration").
---   3. agreement_versions: one row per save.
+--   2. agreement_versions: one row per save.
 --        * version_no: 1, 2, 3... per agreement with no gaps, assigned by the database under a lock on the
 --          agreement row, so two people saving at once get 2 and 3, never two 2s.
 --        * body: the editor's blocks and values (jsonb). html: the document rendered from it by the server, the
 --          exact text that is previewed and later sent for signing. html_sha256: computed here, not sent by the
 --          app, so the stored fingerprint always matches the stored text.
---        * Rows are never edited or deleted through the API (no policy and no grant for it), and a trigger
---          refuses any UPDATE for every role, the service role included. They go only when their agreement does.
---   4. agreements.current_version_id: the latest version, set by the database on each save.
---   5. RLS: the owner reads and saves versions of any agreement. A contractor reads versions of agreements on
---      jobs assigned to them and of their own onboarding agreement, and may save new versions of customer
---      agreements on jobs assigned to them. Nobody else, and nothing for anon.
+--        * created_by is the saver's staff id with no foreign key, and created_by_name a copy of their name, so
+--          a version still says who saved it after that person's account is deleted (and deleting them never
+--          has to touch a saved version).
+--        * Rows are never edited or deleted through the API (no grant for it), and a trigger refuses any UPDATE
+--          for every role, the service role included. They go only when their agreement does.
+--        * Saving is done by the server only (service role), after it has checked the caller may edit this
+--          job's agreement, re-read the body, put the job's own money in it and rendered the HTML itself. No
+--          signed-in role can insert directly, so no HTML reaches this table any other way.
+--   3. agreements.current_version_id: the latest version, set by the database on each save.
+--   4. RLS: the owner reads versions of any agreement; a contractor reads versions of agreements on jobs
+--      assigned to them and of their own onboarding agreement. Nothing for anon.
 
 set local lock_timeout = '5s';
 
@@ -31,12 +35,7 @@ alter table public.staff add constraint staff_agreement_fields_chk
      and cardinality(payment_methods) between 1 and 4
      and payment_methods <@ '{zelle,venmo,check,cash}'::text[]);
 
--- ── 2. The job's estimated duration ─────────────────────────────────────────
-alter table public.quote_requests add column if not exists estimated_duration text;
-alter table public.quote_requests add constraint quote_requests_estimated_duration_chk
-  check (estimated_duration is null or char_length(estimated_duration) <= 200);
-
--- ── 3. Versions ─────────────────────────────────────────────────────────────
+-- ── 2. Versions ─────────────────────────────────────────────────────────────
 create table public.agreement_versions (
   id uuid default gen_random_uuid() not null,
   agreement_id uuid not null,
@@ -51,7 +50,6 @@ create table public.agreement_versions (
   created_at timestamp with time zone default now() not null,
   constraint agreement_versions_pkey PRIMARY KEY (id),
   constraint agreement_versions_agreement_fkey FOREIGN KEY (agreement_id) REFERENCES agreements(id) ON DELETE CASCADE,
-  constraint agreement_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES staff(id) ON DELETE SET NULL,
   constraint agreement_versions_no_key UNIQUE (agreement_id, version_no),
   constraint agreement_versions_chk CHECK (
     version_no >= 1
@@ -120,12 +118,12 @@ CREATE TRIGGER agreement_versions_number BEFORE INSERT ON public.agreement_versi
 CREATE TRIGGER agreement_versions_point AFTER INSERT ON public.agreement_versions FOR EACH ROW EXECUTE FUNCTION point_agreement_at_version();
 CREATE TRIGGER agreement_versions_guard BEFORE UPDATE ON public.agreement_versions FOR EACH ROW EXECUTE FUNCTION guard_agreement_version();
 
--- ── 4. The agreement's latest version ───────────────────────────────────────
+-- ── 3. The agreement's latest version ───────────────────────────────────────
 alter table public.agreements add column if not exists current_version_id uuid;
 alter table public.agreements add constraint agreements_current_version_fkey
   FOREIGN KEY (current_version_id) REFERENCES agreement_versions(id) ON DELETE SET NULL;
 
--- ── 5. Access ───────────────────────────────────────────────────────────────
+-- ── 4. Access ───────────────────────────────────────────────────────────────
 alter table public.agreement_versions enable row level security;
 
 create policy "staff read agreement versions" on public.agreement_versions as permissive for select to authenticated
@@ -135,14 +133,8 @@ create policy "staff read agreement versions" on public.agreement_versions as pe
                         or a.staff_id = auth.uid()
                         or exists (select 1 from quote_requests q where q.id = a.quote_id and q.assigned_to = auth.uid()))));
 
-create policy "staff save agreement versions" on public.agreement_versions as permissive for insert to authenticated
-  with check (exists (select 1 from agreements a
-                      where a.id = agreement_versions.agreement_id
-                        and (is_owner()
-                             or (a.kind = 'customer'
-                                 and exists (select 1 from quote_requests q where q.id = a.quote_id and q.assigned_to = auth.uid())))));
-
 revoke all on public.agreement_versions from anon;
 revoke update, delete, truncate on public.agreement_versions from authenticated;
-grant select, insert on public.agreement_versions to authenticated;
+revoke insert on public.agreement_versions from authenticated;
+grant select on public.agreement_versions to authenticated;
 grant all on public.agreement_versions to service_role;

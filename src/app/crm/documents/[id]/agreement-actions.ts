@@ -43,14 +43,13 @@ export async function saveVersionAction(
   agreementId: string,
   body: AgreementBody,
   note: string,
+  baseVersionId: string | null,
 ): Promise<{ ok: true; version: VersionSummary } | { ok: false; error: string }> {
   const ctx = await jobFor(quoteId);
   if (!ctx) return { ok: false, error: "This job isn't available." };
-  if (!canEditJobAgreement(ctx.session, ctx.quote)) return { ok: false, error: "Only the owner or the job's contractor can edit this agreement." };
   const ag = await getAgreement(ctx.session, agreementId);
   if (!ag || ag.quote_id !== quoteId || ag.kind !== "customer") return { ok: false, error: "This agreement isn't on this job." };
-  if (ag.status === "signed" || ag.status === "void") return { ok: false, error: "This agreement is closed. Start an amendment instead." };
-  const r = await saveVersion(ctx.session, agreementId, body, note);
+  const r = await saveVersion({ session: ctx.session, quote: ctx.quote, agreement: ag, raw: body, note, baseVersionId });
   if (r.ok) refresh(quoteId);
   return r;
 }
@@ -60,7 +59,12 @@ export async function draftFromJobAction(quoteId: string): Promise<{ ok: true; b
   const ctx = await jobFor(quoteId);
   if (!ctx) return { ok: false, error: "This job isn't available." };
   if (!canEditJobAgreement(ctx.session, ctx.quote)) return { ok: false, error: "Only the owner or the job's contractor can edit this agreement." };
-  return { ok: true, body: await draftFromJob(ctx.quote) };
+  try {
+    return { ok: true, body: await draftFromJob(ctx.quote) };
+  } catch (e) {
+    console.error((e as Error).message);
+    return { ok: false, error: "Couldn't read the whole job. Try again." };
+  }
 }
 
 /** One saved version, as stored, for viewing, comparing or restoring. RLS decides whether the caller may read it. */

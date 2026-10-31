@@ -949,10 +949,13 @@ marked paid with no payment behind it already shows up on the cash board's
 
 **Writing a customer agreement.** On a job's documents page, **Write the agreement** drafts it from the job:
 customer, contractor (name, license #, phone, how they take payment), the five quote sections plus the lines
-the customer bought, the estimated duration, and the price, deposit and balance. Every section is a box you can
+the customer bought, and the price, deposit and balance (Estimated Duration is written in the editor). Every section is a box you can
 edit; optional terms (repair limitations with initials, insurance, limitation of liability) are switches; any
 section edited away from the quote or the standard wording is flagged, with a button to put it back. Money comes
-from the job only; change it with the quote or a change order, then **Refresh from the job** (edits are kept).
+from the job only, and the server re-applies the job's figures on every save; change it with the quote or a
+change order, then **Refresh from the job** (typed names and numbers and edited sections are kept; blanks are
+filled). Saving is refused while a change order is waiting, or if someone saved a newer version meanwhile.
+On a wide screen a live preview sits beside the form.
 **Save version** keeps an exact, numbered copy (who, when, an optional note, and a SHA-256 fingerprint of the
 document) that can never be changed; **Versions** lists them all, opens any one, compares any two word by word,
 or restores an old one as the newest. The owner and the job's contractor can edit; the template's standard
