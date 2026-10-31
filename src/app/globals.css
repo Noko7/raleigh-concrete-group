@@ -4524,3 +4524,8 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .rl-void td { opacity: 0.55; }
 .rl-void .rl-num { text-decoration: line-through; }
 .rl-tag { margin-left: 0.4rem; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: var(--crm-muted); }
+
+/* Consent to electronic records, above the Approve buttons on a customer's quote. */
+.cq-consent { display: flex; gap: 0.6rem; align-items: flex-start; margin: 1rem 0 0.25rem; text-align: left; font-size: 0.85rem; line-height: 1.45; color: rgba(43, 26, 18, 0.85); cursor: pointer; }
+.cq-consent input { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; margin-top: 0.1rem; accent-color: #2b1a12; }
+.cq-consent a { color: inherit; font-weight: 700; text-decoration: underline; }

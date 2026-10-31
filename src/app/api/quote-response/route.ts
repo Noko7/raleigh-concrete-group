@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { ECONSENT_TEXT, ECONSENT_VERSION } from "@/lib/crm/constants";
 import { depositCents, toCents } from "@/lib/crm/fees";
 import { notifyCustomerApproved, notifyDeclined, notifyNeedsScheduling } from "@/lib/crm/notify";
 import { payeeState } from "@/lib/crm/payments";
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
     options?: unknown;
     package?: unknown;
     pay?: unknown;
+    econsent?: unknown;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -53,6 +55,27 @@ export async function POST(request: Request) {
       { ok: false, error: "Too many attempts. Please give us a call." },
       { status: 429 },
     );
+  }
+
+  // An approval needs the consent box ticked, on the current wording: agreements and invoices for the job are
+  // sent electronically. A page opened before the box existed (or before the wording changed) is asked to
+  // refresh rather than approving under words the customer never saw.
+  let consent: { version: string } | null = null;
+  if (action === "accept") {
+    const c = body.econsent as { agreed?: unknown; version?: unknown } | undefined;
+    if (!c || typeof c !== "object" || c.version !== ECONSENT_VERSION) {
+      return NextResponse.json(
+        { ok: false, error: "This page was updated. Please refresh it and approve again." },
+        { status: 400 },
+      );
+    }
+    if (c.agreed !== true) {
+      return NextResponse.json(
+        { ok: false, error: "Please tick the box agreeing to receive documents electronically." },
+        { status: 400 },
+      );
+    }
+    consent = { version: ECONSENT_VERSION };
   }
 
   // Recorded, not enforced: what a job is owed comes from the ledger.
@@ -74,6 +97,20 @@ export async function POST(request: Request) {
       typeof body.package === "string" && /^[0-9a-f-]{36}$/i.test(body.package) ? body.package : undefined,
   });
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+
+  // The consent itself, kept as evidence: the exact words, their version, when, and from where. Logged on every
+  // accepted approval, a repeat included (it is still a fresh tick of the box).
+  if (consent) {
+    const q = await getQuoteByToken("public_token", token).catch(() => null);
+    if (q) {
+      await addAdminEvent(q.id, "customer_econsent", {
+        version: consent.version,
+        text: ECONSENT_TEXT,
+        ip: clientIp(request),
+        user_agent: (request.headers.get("user-agent") ?? "").slice(0, 300),
+      }).catch(() => {});
+    }
+  }
 
   // Already on file and unchanged: nobody is told again, but the customer still sees success.
   if (result.duplicate) return NextResponse.json({ ok: true });
