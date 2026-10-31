@@ -969,6 +969,29 @@ single **Documents** line linking there instead of their own sections. The old `
 `/crm/money/receipts` links redirect here. RLS scopes everything: a contractor sees their own jobs and
 their own agreement.
 
+**Signing (DocuSeal).** On a saved agreement with nothing missing, **Send vN for signing** sends that exact
+saved version to DocuSeal (its stored HTML, never re-rendered; the version id and SHA-256 ride along) and freezes
+it: no version can be saved while it is out, enforced by the database. The contractor signs first, embedded on
+the job's documents page (texted a link if someone else pressed Send). Once they have, the customer is texted
+`/sign/<token>` (quiet hours apply) and signs on that page; before the contractor signs, the page only says it's
+not their turn yet. When the customer signs, the signed PDF and DocuSeal's audit log are copied into the private
+agreements bucket (DocuSeal's links expire in about 40 minutes; a missed copy is fetched again on the next visit
+to the job's documents page), the owner is texted once, and the customer can download their copy from the same
+link. Declined or expired: the owner is texted once and it can be edited and sent again. **Cancel signing**
+archives the DocuSeal submission and makes it editable (old links then say they're no longer active). DocuSeal
+also emails the signers in order (`order: "preserved"`): only the contractor at first, then the customer
+automatically once the contractor has signed; a signer with no email on file just gets the text. The signing links live in `agreement_signing`, which only the server reads:
+the contractor who was sent it sees only their own link, and only the owner sees the customer's (to resend it).
+A missed webhook is caught up from DocuSeal the next time the job's documents page or the customer's link is
+opened.
+
+Setup, in Vercel environment variables (never in the repo): `DOCUSEAL_API_KEY` (the test-mode key until counsel
+signs off), `DOCUSEAL_WEBHOOK_SECRET` (the `whsec_...` value) and optionally `DOCUSEAL_API_URL` (default
+`https://api.docuseal.com`). In DocuSeal, add the webhook `https://raleighconcrete.net/api/docuseal/webhook` for the
+form and submission events, and turn on "enforce signing order" as a second guard. Every webhook is verified
+(`X-Docuseal-Signature`, 5-minute window), recorded in `document_events`, and marked processed only once acted
+on, so a retry after a failure is acted on again and a retry after success is not.
+
 **Agreement templates.** **Documents → Templates** (owner only) holds the wording agreements start from. It
 starts with **Standard Work Agreement** (the Drive master) and **Repair Agreement** (the Drive repair agreement:
 repair limitations initialed item by item, insurance, limitation of liability, no warranty section, prices

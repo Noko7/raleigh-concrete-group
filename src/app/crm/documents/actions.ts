@@ -87,7 +87,8 @@ export async function setAgreementStatus(formData: FormData): Promise<void> {
   if (!id || !STATUSES.includes(status)) return;
 
   const existing = await getAgreement(session, id);
-  if (!existing) return;
+  // Agreements written in the CRM are moved by DocuSeal, never by hand.
+  if (!existing || existing.current_version_id) return;
 
   const now = new Date().toISOString();
   await updateAgreement(session, id, {
@@ -110,6 +111,8 @@ export async function removeAgreement(formData: FormData): Promise<void> {
   // Read first to know which paths to refresh and which file to clean up.
   const existing = await getAgreement(session, id);
   if (!existing) return;
+  // A signed record, or one out for signature, is kept. Cancel the signing first; a signed one stays for good.
+  if (existing.docuseal_submission_id || (existing.current_version_id && ["sent", "contractor_signed", "signed"].includes(existing.status))) return;
 
   if (await deleteAgreement(session, id)) {
     if (existing.file_path) await deleteAgreementFile(existing.file_path);

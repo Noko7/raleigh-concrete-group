@@ -8,11 +8,14 @@ const statusLabel = (t: Dict, s: AgreementStatus): string =>
   ({
     pending: t.agreements.statusPending,
     sent: t.agreements.statusSent,
+    contractor_signed: t.agreements.statusContractorSigned,
+    expired: t.agreements.statusExpired,
     signed: t.agreements.statusSigned,
     declined: t.agreements.statusDeclined,
     void: t.agreements.statusVoid,
   })[s];
 
+// Set by hand only for agreements kept as a file; DocuSeal moves the others.
 const ORDER: AgreementStatus[] = ["pending", "sent", "signed", "declined", "void"];
 
 function fmt(iso: string, locale: Locale) {

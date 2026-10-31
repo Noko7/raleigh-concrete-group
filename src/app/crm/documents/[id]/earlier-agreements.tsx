@@ -33,7 +33,7 @@ export function EarlierAgreements({ items }: { items: EarlierAgreement[] }) {
               <strong>{a.title}</strong>
               <span className="crm-muted crm-sm">
                 {" "}
-                · started {when(a.created_at)} · {a.status === "void" ? "set aside" : a.status}
+                · started {when(a.created_at)} · {a.status === "void" ? "set aside" : a.status.replace(/_/g, " ")}
               </span>
               <ul className="ea-versions">
                 {a.versions.map((v) => (

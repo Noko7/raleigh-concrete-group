@@ -229,7 +229,7 @@ export type ContractorInvite = {
 };
 
 export type AgreementKind = "contractor" | "customer";
-export type AgreementStatus = "pending" | "sent" | "signed" | "declined" | "void";
+export type AgreementStatus = "pending" | "sent" | "contractor_signed" | "signed" | "declined" | "expired" | "void";
 
 // Signing happens in DocuSeal; this is the record plus the stored file.
 export type Agreement = {
@@ -249,6 +249,15 @@ export type Agreement = {
   updated_at: string;
   /** The latest saved version of an agreement written in the CRM; null for an uploaded file. */
   current_version_id?: string | null;
+  // DocuSeal signing (after the signing migration). See src/lib/crm/agreement-signing.ts.
+  sent_version_id?: string | null;
+  docuseal_submission_id?: number | null;
+  contractor_signed_at?: string | null;
+  completed_at?: string | null;
+  expires_at?: string | null;
+  decline_reason?: string | null;
+  signed_pdf_path?: string | null;
+  audit_log_path?: string | null;
 };
 
 /** One saved version of an agreement. Never changed after it is saved (database-enforced). */

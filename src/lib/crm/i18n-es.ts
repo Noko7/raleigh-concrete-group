@@ -311,6 +311,8 @@ export const es: Dict = {
     noneRecorded: "Todavía no hay acuerdos registrados.",
     statusPending: "Sin enviar",
     statusSent: "Esperando firma",
+    statusContractorSigned: "Firmado por el contratista",
+    statusExpired: "Vencido",
     statusSigned: "Firmado",
     statusDeclined: "Rechazado",
     statusVoid: "Anulado",

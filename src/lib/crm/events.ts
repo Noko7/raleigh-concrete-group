@@ -186,6 +186,18 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
         ? "Choice of options removed - back to a single quote"
         : `Customer will be asked to pick between ${n} options`;
     }
+    case "agreement_sent":
+      return `Agreement version ${String(m.version_no ?? "")} sent for signing`;
+    case "agreement_contractor_signed":
+      return "Contractor signed the agreement; customer texted their link";
+    case "agreement_signed":
+      return m.stored === false ? "Customer signed the agreement (signed copy not stored yet)" : "Customer signed the agreement";
+    case "agreement_declined":
+      return `Agreement declined by the ${m.by === "Contractor" ? "contractor" : "customer"}${m.reason ? `: ${String(m.reason)}` : ""}`;
+    case "agreement_expired":
+      return "Agreement expired unsigned";
+    case "agreement_cancelled":
+      return "Agreement signing cancelled";
     case "customer_econsent":
       return `Agreed to receive and sign documents electronically (disclosure version ${String(m.version ?? "")})`;
     case "customer_accepted": {

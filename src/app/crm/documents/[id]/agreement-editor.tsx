@@ -21,8 +21,10 @@ import {
   type PayMethod,
 } from "@/lib/crm/agreement-doc";
 import type { VersionSummary } from "@/lib/crm/agreement-versions";
+import { useRouter } from "next/navigation";
+
 import { PageEditor } from "./page-editor";
-import { draftFromJobAction, getVersionAction, saveVersionAction } from "./agreement-actions";
+import { draftFromJobAction, getVersionAction, saveVersionAction, sendForSigningAction } from "./agreement-actions";
 
 // The customer agreement, edited as a form (one box per section, big enough to type in on a phone) beside a live
 // preview of the exact document (on a phone, Preview opens it full screen). Each save is a new numbered version; nothing saved is ever changed, so the
@@ -52,15 +54,19 @@ export function AgreementEditor({
   versions,
   canEdit,
   closed,
+  canSend = false,
 }: {
   quoteId: string;
   agreementId: string;
   initial: AgreementBody;
   versions: VersionSummary[];
   canEdit: boolean;
-  /** Signed or void: read-only; changes go into an amendment. */
+  /** Out for signature, signed or void: read-only. */
   closed: boolean;
+  /** Signing is set up and the agreement is a draft (or was declined or expired). */
+  canSend?: boolean;
 }) {
+  const router = useRouter();
   const [body, setBody] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [history, setHistory] = useState(versions);
@@ -109,6 +115,17 @@ export function AgreementEditor({
       setHistory((h) => [r.version, ...h]);
       setNote("");
       setMsg({ ok: true, text: `Saved as version ${r.version.version_no}.` });
+    });
+  }
+
+  function send() {
+    if (!latest) return;
+    if (!window.confirm(`Send version ${latest.version_no} for signing? The contractor signs first, then the customer is texted their link. It can't be edited while it's out.`)) return;
+    setMsg(null);
+    start(async () => {
+      const r = await sendForSigningAction(quoteId, agreementId, latest.id);
+      if (!r.ok) return setMsg({ ok: false, text: r.error ?? "Couldn't send." });
+      router.refresh();
     });
   }
 
@@ -344,6 +361,11 @@ export function AgreementEditor({
             <button type="button" className="crm-btn crm-btn-primary" onClick={save} disabled={!dirty || pending}>
               {pending ? "Saving…" : "Save version"}
             </button>
+            {canSend && latest && !dirty && problems.length === 0 && (
+              <button type="button" className="crm-btn crm-btn-primary" onClick={send} disabled={pending}>
+                Send v{latest.version_no} for signing
+              </button>
+            )}
           </div>
         </div>
       )}

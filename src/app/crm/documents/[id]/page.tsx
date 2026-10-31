@@ -10,10 +10,15 @@ import { listReceiptsForJob, receiptRowsFor } from "@/lib/crm/receipts";
 import { JobReceipts } from "@/app/crm/quotes/[id]/job-receipts";
 import { CLOSED_FOR_EDITS, canEditJobAgreement, editableAgreement, getVersion, listVersions } from "@/lib/crm/agreement-versions";
 import { parseBody } from "@/lib/crm/agreement-doc";
+import type { Agreement } from "@/lib/crm/types";
 import { AddAgreement } from "../add-agreement";
 import { AgreementList } from "../agreement-list";
 import { AgreementEditor } from "./agreement-editor";
 import { EarlierAgreements } from "./earlier-agreements";
+import { SigningPanel, type SigningView } from "./signing-panel";
+import { reconcileWithDocuseal, signingFor, signLink, type SigningSecrets } from "@/lib/crm/agreement-signing";
+import { docusealConfigured } from "@/lib/crm/docuseal";
+import { SENDABLE, type AgreementSigningStatus } from "@/lib/crm/docuseal-core";
 import { RestartAgreement, StartAgreement } from "./start-agreement";
 import { templateChoices } from "@/lib/crm/templates";
 
@@ -31,7 +36,7 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
 
   const isOwner = session.staff.role === "owner";
   const locale = isLocale(session.staff.locale) ? session.staff.locale : "en";
-  const [agreements, receipts, money] = await Promise.all([
+  const [firstRead, receipts, money] = await Promise.all([
     listAgreementsForQuote(session, id),
     listReceiptsForJob(session, id),
     // Only to find paid payments with no receipt, which only the owner can fix.
@@ -39,8 +44,16 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
   ]);
   // The agreement written in the CRM (versioned) leads; files uploaded by hand are listed apart.
   const canEdit = canEditJobAgreement(session, quote);
+  let agreements = firstRead;
+  // A missed webhook or a signed copy that didn't reach storage is caught up from DocuSeal on each visit.
+  const first = editableAgreement(agreements);
+  if (first && (await reconcileWithDocuseal(first))) agreements = await listAgreementsForQuote(session, id);
   const current = editableAgreement(agreements);
   const others = agreements.filter((a) => a.id !== current?.id && !a.current_version_id);
+  // What lets people sign is server-only: the contractor who was sent it gets their own link; only the owner sees
+  // the customer's.
+  const found = current?.docuseal_submission_id ? await signingFor(current.id).catch(() => null) : null;
+  const links = found && found.submission_id === current?.docuseal_submission_id ? found : null;
   // Agreements written in the CRM and set aside to start over: read-only, with their history.
   const earlier = agreements.filter((a) => a.id !== current?.id && a.current_version_id);
   const [versions, currentVersion, earlierVersions, picker] = await Promise.all([
@@ -81,6 +94,10 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
+      {current && current.sent_at && current.status !== "pending" && (
+        <SigningPanel quoteId={quote.id} view={signingView(current, versions, links, { isOwner, staffId: session.staff.id })} isContractor={Boolean(links && session.staff.id === links.contractor_staff_id)} isOwner={isOwner} />
+      )}
+
       {current && currentBody ? (
         <AgreementEditor
           quoteId={quote.id}
@@ -89,6 +106,7 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
           versions={versions}
           canEdit={canEdit}
           closed={CLOSED_FOR_EDITS.includes(current.status)}
+          canSend={canEdit && docusealConfigured() && SENDABLE.includes(current.status as AgreementSigningStatus)}
         />
       ) : unreadable ? (
         <section className="crm-card" aria-label="Customer agreement">
@@ -133,4 +151,28 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
       <JobReceipts quoteId={quote.id} locale={locale} receipts={receiptRowsFor(receipts)} missing={missing} />
     </main>
   );
+}
+
+function signingView(
+  a: Agreement,
+  versions: { id: string; version_no: number }[],
+  links: SigningSecrets | null,
+  viewer: { isOwner: boolean; staffId: string },
+): SigningView {
+  const mine = links && viewer.staffId === links.contractor_staff_id;
+  return {
+    status: a.status,
+    versionNo: versions.find((v) => v.id === a.sent_version_id)?.version_no ?? null,
+    sentAt: a.sent_at,
+    contractorSignedAt: a.contractor_signed_at ?? null,
+    signedAt: a.completed_at ?? a.signed_at,
+    expiresAt: a.expires_at ?? null,
+    declineReason: a.decline_reason ?? null,
+    contractorEmbed: mine ? (links.signers.find((s) => s.role === "Contractor")?.embed_src ?? null) : null,
+    customerLink: viewer.isOwner && links ? signLink(links.sign_token) : null,
+    customerTexted: Boolean(links?.customer_texted_at),
+    hasPdf: Boolean(a.signed_pdf_path && a.file_path),
+    hasAudit: Boolean(a.audit_log_path),
+    agreementId: a.id,
+  };
 }

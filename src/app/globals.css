@@ -4594,6 +4594,8 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .ae-d-text { white-space: pre-wrap; margin-top: 0.3rem; line-height: 1.5; }
 .ae-diff ins { background: rgba(74, 222, 128, 0.2); color: #bbf7d0; text-decoration: none; }
 .ae-diff del { background: rgba(248, 113, 113, 0.2); color: #fecaca; }
+.ag-badge-contractor_signed { background: #0e7490; color: #fff; }
+.ag-badge-expired  { background: rgba(255, 255, 255, 0.06); color: var(--crm-muted); }
 /* Agreement editor: form and live preview side by side on a wide screen; on a phone, Preview opens it. */
 .ae-layout { display: block; }
 .ae-live { display: none; }
@@ -4602,6 +4604,22 @@ textarea.qm-input { min-height: 0; resize: vertical; }
   .ae-live { display: block; position: sticky; top: 1rem; height: calc(100vh - 2rem); }
   .ae-live-frame { width: 100%; height: 100%; border: 0; border-radius: 0.6rem; background: #fff; }
 }
+
+/* Signing: the panel on a job's documents page, and the customer's /sign page. */
+.sp-steps { list-style: none; margin: 0.4rem 0 0.8rem; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.92rem; }
+.sp-steps li { opacity: 0.6; }
+.sp-steps .sp-done { opacity: 1; font-weight: 700; }
+.sp-steps em { font-style: normal; font-weight: 400; color: var(--crm-muted); }
+.sp-form { margin-top: 0.8rem; background: #fff; border-radius: 0.6rem; padding: 0.5rem; color: #111; }
+.sp-form p { color: #111; padding: 0.4rem 0.4rem 0.6rem; margin: 0; }
+.sp-link { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.4rem; }
+.sp-link code { font-size: 0.8rem; word-break: break-all; }
+.sp-files { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.sg-title { margin: 0.5rem 0 0.4rem; font-size: 1.5rem; text-align: center; }
+.sg-lead { text-align: center; margin: 0 0 1rem; line-height: 1.5; }
+.sg-form { margin: 0.5rem 0 1rem; }
+.sg-small { font-size: 0.85rem; text-align: center; opacity: 0.85; line-height: 1.5; }
+.sg-dl { display: block; margin: 0 auto 1rem; max-width: 22rem; }
 
 /* "Edit on the page": the agreement as a sheet of paper, each paragraph editable in place. */
 .ae-pagecol { margin-top: 1rem; }
