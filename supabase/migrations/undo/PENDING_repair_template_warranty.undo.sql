@@ -12,7 +12,13 @@ begin
   if exists (select 1 from public.document_template_versions where template_id = t and version_no > 2) then
     raise exception 'the Repair template has versions after 2; restore an earlier version from the Templates page instead';
   end if;
+  -- Only undo our own version 2: if the owner saved their own version 2 instead, leave everything as is.
+  if not exists (select 1 from public.document_template_versions
+                  where template_id = t and version_no = 2 and created_by_name = 'Wording fix (warranty)') then
+    raise notice 'version 2 of the Repair template is not the wording fix; nothing to undo';
+    return;
+  end if;
   select id into v1 from public.document_template_versions where template_id = t and version_no = 1;
   update public.document_templates set current_version_id = v1, updated_at = now() where id = t;
-  delete from public.document_template_versions where template_id = t and version_no = 2 and note = 'Limited Workmanship Warranty added; repair limitations and authorization now point to it';
+  delete from public.document_template_versions where template_id = t and version_no = 2 and created_by_name = 'Wording fix (warranty)' and note = 'Limited Workmanship Warranty added; repair limitations and authorization now point to it';
 end $$;

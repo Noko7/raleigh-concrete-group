@@ -4,7 +4,8 @@
 //   Standard Work Agreement: the Drive master ("CUSTOMER AGREEMENT AND WORK AUTH TEMPLATE DO NOT EDIT"), with the
 //     Alexavier amendment's clauses as switches. Identical to BUILTIN_STANDARD.
 //   Repair Agreement: the Drive "Alexavier_95_Parkland_Dr_Amended_Agreement", made generic: Repair Limitations
-//     (initialed) on, Insurance and Limitation of Liability on, no Warranty section, the cancellation notice may go
+//     (initialed) on, a one-year Limited Workmanship Warranty on the repaired areas (the original had none, though
+//     it pointed to one), Insurance and Limitation of Liability on, the cancellation notice may go
 //     to the Contractor too, prices include tax by default, and its longer Authorization (without the "amended
 //     agreement" sentence, which the engine adds only to an agreement that replaces a signed one).
 import { BUILTIN_STANDARD, type TemplateBody, type TemplateClause } from "./agreement-doc.ts";
@@ -40,9 +41,9 @@ export const REPAIR_SEED: { name: string; body: TemplateBody } = {
         kind: "clause",
         title: "Limited Workmanship Warranty",
         text: [
-          "The Contractor warrants the workmanship on the repaired areas listed above for one (1) year from completion. If the repair material comes loose, flakes, or separates in that time because of how the work was done, the Contractor will fix it at no charge.",
+          "The Contractor warrants the workmanship on the repaired areas listed above for one (1) year from completion. If the repair material itself loses its bond, flakes, or separates from the existing concrete in that time because of how the work was done, the Contractor will fix it at no charge.",
           "",
-          "- **Not covered:** color or texture differences, hairline cracks, existing cracks that reopen, new cracks or damage outside the repaired areas, settlement, soil movement, tree roots, drainage, freeze-thaw, de-icing salt, chemicals, misuse, or lack of maintenance.",
+          "- **Not covered:** color or texture differences; hairline cracks; cracks that reopen, or new cracks, caused by movement of the slab or the soil under it (such as settlement, tree roots, or drainage); anything outside the repaired areas; and damage from chemicals, impact, misuse, lack of maintenance, or freeze-thaw and de-icing salt that is not caused by the workmanship.",
           "- **How to claim:** tell the Contractor in writing within 30 days of noticing the problem. Fixing the faulty work is the remedy under this warranty.",
           "- Warranty claims are handled by the Contractor, not Raleigh Concrete Group. This warranty does not limit any rights you have under North Carolina law.",
         ].join("\n"),
