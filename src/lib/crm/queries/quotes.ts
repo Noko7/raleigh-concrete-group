@@ -179,12 +179,14 @@ export async function listEvents(session: Session, quoteId: string): Promise<Quo
 }
 
 // Activity-log entry from server-only processes (no session).
-export async function addAdminEvent(quoteId: string, type: string, meta?: Record<string, unknown>): Promise<void> {
-  await pgAdmin("quote_events", {
+/** True when the event was stored. Callers that keep evidence (consent) check it; the rest can ignore it. */
+export async function addAdminEvent(quoteId: string, type: string, meta?: Record<string, unknown>): Promise<boolean> {
+  const res = await pgAdmin("quote_events", {
     method: "POST",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ quote_id: quoteId, type, meta: meta ?? null, actor: null }),
   });
+  return res.ok;
 }
 
 // ── Platform activity (who did what, across every job) ──────────────────────

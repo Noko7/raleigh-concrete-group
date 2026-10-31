@@ -186,6 +186,8 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
         ? "Choice of options removed - back to a single quote"
         : `Customer will be asked to pick between ${n} options`;
     }
+    case "customer_econsent":
+      return `Agreed to receive and sign documents electronically (disclosure version ${String(m.version ?? "")})`;
     case "customer_accepted": {
       const picks = Array.isArray(m.preferred_dates) ? (m.preferred_dates as string[]) : [];
       // Older entries recorded days only.

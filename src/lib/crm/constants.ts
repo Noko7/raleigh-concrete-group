@@ -3,6 +3,15 @@
 // Flat credit offered when a customer goes to decline a quote, in dollars.
 export const DECLINE_CREDIT = 150;
 
+// Consent to electronic records, ticked before a customer approves a quote (ESIGN Act, 15 U.S.C. 7001(c)).
+// The exact words and this version are stored with each consent, so change the version whenever the words
+// or the disclosure page change: earlier consents keep the wording they agreed to.
+export const ECONSENT_VERSION = "2026-10-31";
+export const ECONSENT_DISCLOSURE_PATH = "/electronic-records";
+export const ECONSENT_DISCLOSURE_TITLE = "Electronic Records and Signature Disclosure";
+export const ECONSENT_TEXT =
+  "I agree to receive and sign project-related contracts, estimates, change orders, and other documents electronically. I understand that I may request paper copies and withdraw my consent to electronic records as described in the Electronic Records and Signature Disclosure.";
+
 // Lives here, not in queries.ts, because the crew's client-side card counts against it while typing.
 export const CHANGE_NOTE_MAX = 600;
 
