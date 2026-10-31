@@ -992,6 +992,21 @@ form and submission events, and turn on "enforce signing order" as a second guar
 (`X-Docuseal-Signature`, 5-minute window), recorded in `document_events`, and marked processed only once acted
 on, so a retry after a failure is acted on again and a retry after success is not.
 
+**Agreement templates.** **Documents → Templates** (owner only) holds the wording agreements start from. It
+starts with **Standard Work Agreement** (the Drive master) and **Repair Agreement** (the Drive repair agreement:
+repair limitations initialed item by item, insurance, limitation of liability, no warranty section, prices
+including tax). The owner can create a template (blank or a copy of another), **Copy** one to make a variant,
+edit its sections (title, text, "customer initials each bullet", optional and on-by-default switches, different
+wording when the price includes tax, order), and **Archive** or **Restore** it. Every save is a numbered version
+that is never changed, with view, compare and restore like an agreement. **Write the agreement** on a job asks
+which active template to start from (repair jobs default to Repair). An agreement keeps a copy of the template
+version it was drafted from, so editing or archiving a template never changes an agreement already written, sent
+or signed; when an agreement is saved, the server re-reads it against its stored template version, never the
+browser's copy. **Start over from a template** sets a draft (or a declined or expired agreement) aside, kept
+with its history under **Earlier agreements**, and drafts a new one. Templates live in `document_templates` and
+`document_template_versions` (written only by the server; the seeds come from `src/lib/crm/template-seeds.ts`
+via `node scripts/template-seed-sql.ts`).
+
 ## Receipts
 
 Every customer payment gets a numbered receipt the moment it counts, kept for good, for the contractor's and the owner's books (and taxes). The customer pays the **contractor**, so a receipt names the contractor as the one paid and says Raleigh Concrete Group only arranged the job.

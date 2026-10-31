@@ -1,6 +1,7 @@
 import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { dict, type Dict, intlLocale, type Locale } from "@/lib/crm/i18n";
 import type { Agreement, AgreementStatus } from "@/lib/crm/types";
+import type { AgreementShown } from "@/lib/crm/documents";
 import { removeAgreement, setAgreementStatus } from "./actions";
 
 const statusLabel = (t: Dict, s: AgreementStatus): string =>
@@ -26,7 +27,8 @@ function fmt(iso: string, locale: Locale) {
   });
 }
 
-export function AgreementStatusBadge({ status, locale = "en" }: { status: AgreementStatus; locale?: Locale }) {
+export function AgreementStatusBadge({ status, locale = "en" }: { status: AgreementShown; locale?: Locale }) {
+  if (status === "set_aside") return <span className="crm-badge ag-badge-void">{dict(locale).agreements.statusSetAside}</span>;
   return <span className={`crm-badge ag-badge-${status}`}>{statusLabel(dict(locale), status)}</span>;
 }
 

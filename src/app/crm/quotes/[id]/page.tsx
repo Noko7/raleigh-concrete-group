@@ -11,7 +11,7 @@ import { crmBase } from "@/lib/crm/nav";
 import { eventActor, eventText, quoteSends } from "@/lib/crm/events";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { correctableReason, jobLedger, payeeState } from "@/lib/crm/payments";
-import { agreementHeadline, docsLine } from "@/lib/crm/documents";
+import { agreementHeadline, docsLine, shownStatus } from "@/lib/crm/documents";
 import { listReceiptsForJob } from "@/lib/crm/receipts";
 import { listCrewViews } from "@/lib/crm/crew-views";
 import { usd } from "@/lib/crm/fees";
@@ -468,7 +468,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
             <JobDocsLine
               href={`${base}/documents/${quote.id}`}
               line={docsLine({
-                agreement: agreementHeadline(agreements.map((a) => a.status)),
+                agreement: agreementHeadline(agreements.map(shownStatus)),
                 receipts: receipts.filter((r) => !r.voided_at).length,
               })}
               warning={

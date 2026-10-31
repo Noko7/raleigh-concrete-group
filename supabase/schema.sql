@@ -40,6 +40,9 @@
 -- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
 -- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
 -- refusing saves while out for signature), checked against production after it was applied.
+-- Updated by hand for migration 20261031172234 (document_templates and document_template_versions,
+-- their trigger functions, policies and grants, and the two seeded templates), checked against production
+-- after it was applied (both templates at version 1, RLS on, read-only for signed-in users).
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1. Tables (columns, defaults, constraints)
@@ -135,6 +138,39 @@ create table public.document_events (
   constraint document_events_agreement_fkey FOREIGN KEY (agreement_id) REFERENCES agreements(id) ON DELETE SET NULL,
   constraint document_events_chk CHECK ((((char_length(event_type) >= 1) AND (char_length(event_type) <= 60)) AND (signer_role = ANY (ARRAY[''::text, 'Contractor'::text, 'Customer'::text])) AND (jsonb_typeof(payload) = 'object'::text)))
 );
+
+-- Agreement templates (owner-edited, versioned). Versions are immutable; writes only by the server.
+create table public.document_templates (
+  id uuid default gen_random_uuid() not null,
+  name text not null,
+  kind text default 'customer_agreement'::text not null,
+  status text default 'active'::text not null,
+  current_version_id uuid,
+  cloned_from_id uuid,
+  created_by uuid,
+  created_by_name text,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint document_templates_pkey PRIMARY KEY (id),
+  constraint document_templates_cloned_from_fkey FOREIGN KEY (cloned_from_id) REFERENCES document_templates(id) ON DELETE SET NULL,
+  constraint document_templates_chk CHECK ((((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 120)) AND (kind = 'customer_agreement'::text) AND (status = ANY (ARRAY['active'::text, 'archived'::text])) AND ((created_by_name IS NULL) OR (char_length(created_by_name) <= 200))))
+);
+
+create table public.document_template_versions (
+  id uuid default gen_random_uuid() not null,
+  template_id uuid not null,
+  version_no integer not null,
+  body jsonb not null,
+  note text,
+  created_by uuid,
+  created_by_name text,
+  created_at timestamp with time zone default now() not null,
+  constraint document_template_versions_pkey PRIMARY KEY (id),
+  constraint document_template_versions_no_key UNIQUE (template_id, version_no),
+  constraint document_template_versions_template_fkey FOREIGN KEY (template_id) REFERENCES document_templates(id) ON DELETE CASCADE,
+  constraint document_template_versions_chk CHECK (((version_no >= 1) AND (jsonb_typeof(body) = 'object'::text) AND (jsonb_typeof((body -> 'clauses'::text)) = 'array'::text) AND (pg_column_size(body) <= 300000) AND ((note IS NULL) OR (char_length(note) <= 300)) AND ((created_by_name IS NULL) OR (char_length(created_by_name) <= 200))))
+);
+alter table public.document_templates add constraint document_templates_current_version_fkey FOREIGN KEY (current_version_id) REFERENCES document_template_versions(id) ON DELETE SET NULL;
 
 create table public.app_integrations (
   provider text not null,
@@ -517,6 +553,8 @@ CREATE INDEX ag_staff_idx ON public.agreements USING btree (staff_id);
 CREATE INDEX ag_status_idx ON public.agreements USING btree (status);
 CREATE INDEX agreement_versions_agreement_idx ON public.agreement_versions USING btree (agreement_id, version_no DESC);
 CREATE INDEX document_events_agreement_idx ON public.document_events USING btree (agreement_id, received_at DESC);
+CREATE INDEX document_template_versions_template_idx ON public.document_template_versions USING btree (template_id, version_no DESC);
+CREATE INDEX document_templates_status_idx ON public.document_templates USING btree (status, name);
 CREATE INDEX ci_created_idx ON public.contractor_invites USING btree (created_at DESC);
 CREATE INDEX ci_token_idx ON public.contractor_invites USING btree (token);
 CREATE INDEX fs_staff_idx ON public.fee_settlements USING btree (staff_id, created_at DESC);
@@ -559,6 +597,8 @@ alter table public.agreements enable row level security;
 alter table public.agreement_versions enable row level security;
 alter table public.document_events enable row level security;
 alter table public.agreement_signing enable row level security;
+alter table public.document_template_versions enable row level security;
+alter table public.document_templates enable row level security;
 alter table public.app_integrations enable row level security;
 alter table public.contractor_invites enable row level security;
 alter table public.fee_settlements enable row level security;
@@ -596,6 +636,18 @@ create policy "staff read agreement versions" on public.agreement_versions as pe
   WHERE ((a.id = agreement_versions.agreement_id) AND (is_owner() OR (a.staff_id = auth.uid()) OR (EXISTS ( SELECT 1
            FROM quote_requests q
           WHERE ((q.id = a.quote_id) AND (q.assigned_to = auth.uid())))))))));
+
+create policy "staff read template versions" on public.document_template_versions as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM document_templates t
+  WHERE ((t.id = document_template_versions.template_id) AND (is_owner() OR ((t.status = 'active'::text) AND (EXISTS ( SELECT 1
+           FROM staff s
+          WHERE ((s.id = auth.uid()) AND s.active)))))))));
+
+create policy "staff read templates" on public.document_templates as permissive for select to authenticated
+  using ((is_owner() OR ((status = 'active'::text) AND (EXISTS ( SELECT 1
+   FROM staff s
+  WHERE ((s.id = auth.uid()) AND s.active))))));
 
 create policy "owner reads invites" on public.contractor_invites as permissive for select to authenticated
   using (is_owner());
@@ -1125,6 +1177,48 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.guard_template_version()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  raise exception 'a saved template version cannot be changed; save a new version instead' using errcode = '42501';
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.number_template_version()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  perform 1 from public.document_templates where id = new.template_id for update;
+  if not found then
+    raise exception 'template % does not exist', new.template_id using errcode = '23503';
+  end if;
+  select coalesce(max(version_no), 0) + 1 into new.version_no from public.document_template_versions where template_id = new.template_id;
+  new.created_at := now();
+  return new;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.point_template_at_version()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  update public.document_templates set current_version_id = new.id where id = new.template_id;
+  return null;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.guard_agreement_version()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -1211,6 +1305,10 @@ CREATE TRIGGER agreements_touch_updated_at BEFORE UPDATE ON public.agreements FO
 CREATE TRIGGER agreement_versions_guard BEFORE UPDATE ON public.agreement_versions FOR EACH ROW EXECUTE FUNCTION guard_agreement_version();
 CREATE TRIGGER agreement_versions_number BEFORE INSERT ON public.agreement_versions FOR EACH ROW EXECUTE FUNCTION number_agreement_version();
 CREATE TRIGGER agreement_versions_point AFTER INSERT ON public.agreement_versions FOR EACH ROW EXECUTE FUNCTION point_agreement_at_version();
+CREATE TRIGGER document_template_versions_guard BEFORE UPDATE ON public.document_template_versions FOR EACH ROW EXECUTE FUNCTION guard_template_version();
+CREATE TRIGGER document_template_versions_number BEFORE INSERT ON public.document_template_versions FOR EACH ROW EXECUTE FUNCTION number_template_version();
+CREATE TRIGGER document_template_versions_point AFTER INSERT ON public.document_template_versions FOR EACH ROW EXECUTE FUNCTION point_template_at_version();
+CREATE TRIGGER document_templates_touch_updated_at BEFORE UPDATE ON public.document_templates FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 CREATE TRIGGER payment_receipts_guard BEFORE DELETE OR UPDATE ON public.payment_receipts FOR EACH ROW EXECUTE FUNCTION guard_payment_receipt();
 CREATE TRIGGER qo_guard_line_prices BEFORE INSERT OR DELETE OR UPDATE ON public.quote_options FOR EACH ROW EXECUTE FUNCTION guard_quote_line_prices();
 CREATE TRIGGER qo_touch_updated_at BEFORE UPDATE ON public.quote_options FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
@@ -1246,6 +1344,11 @@ grant select, insert, update, delete, truncate, references, trigger, maintain on
 -- DocuSeal webhooks and signing links: the server only.
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.agreement_signing to service_role;
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.document_events to service_role;
+-- Templates: the server writes (service role); signed-in staff read what RLS allows; anon nothing.
+grant select, references, trigger, maintain on public.document_templates to authenticated;
+grant select, references, trigger, maintain on public.document_template_versions to authenticated;
+grant select, insert, update, delete, truncate, references, trigger, maintain on public.document_templates to service_role;
+grant select, insert, update, delete, truncate, references, trigger, maintain on public.document_template_versions to service_role;
 
 grant truncate, references, trigger, maintain on public.app_integrations to anon, authenticated;     -- (default)
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.app_integrations to service_role;
@@ -1327,6 +1430,9 @@ revoke all on function public.guard_payment_receipt() from public;              
 revoke all on function public.guard_agreement_version() from public;                      -- postgres only (trigger)
 revoke all on function public.number_agreement_version() from public;                     -- postgres only (trigger)
 revoke all on function public.point_agreement_at_version() from public;                   -- postgres only (trigger)
+revoke all on function public.guard_template_version() from public;                       -- postgres only (trigger)
+revoke all on function public.number_template_version() from public;                      -- postgres only (trigger)
+revoke all on function public.point_template_at_version() from public;                    -- postgres only (trigger)
 revoke all on function public.guard_quote_line_prices() from public;                        -- postgres only
 revoke all on function public.guard_quote_money_columns() from public;                      -- postgres only
 revoke all on function public.handle_new_user() from public;                                -- postgres only

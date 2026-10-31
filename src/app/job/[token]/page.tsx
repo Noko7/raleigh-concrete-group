@@ -12,7 +12,7 @@ import { dict, intlLocale, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { signMediaPath } from "@/lib/crm/media-token";
 import { jobLedger, payeeState } from "@/lib/crm/payments";
-import { agreementHeadline, docsLine } from "@/lib/crm/documents";
+import { agreementHeadline, docsLine, shownStatus } from "@/lib/crm/documents";
 import { listReceiptsForJob } from "@/lib/crm/receipts";
 import { JobDocsLine } from "@/app/crm/quotes/[id]/job-docs-line";
 import { getQuoteByToken, listAgreementsForQuote, listEvents, listMessages, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
@@ -409,7 +409,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           <JobDocsLine
             href={`${base}/documents/${quote.id}`}
             line={docsLine({
-              agreement: agreementHeadline(agreements.map((a) => a.status)),
+              agreement: agreementHeadline(agreements.map(shownStatus)),
               receipts: receipts.filter((r) => !r.voided_at).length,
             })}
             tone="light"

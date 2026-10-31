@@ -3,14 +3,13 @@
 import { useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
 
 import {
-  OPTIONAL_CLAUSE_IDS,
   PAYMENT_METHODS,
-  CLAUSES,
   addCustomBlock,
   clauseBlock,
   diffVersions,
   editedBlocks,
   money,
+  optionalClauseIds,
   refreshFromJob,
   renderAgreementHtml,
   sendProblems,
@@ -33,7 +32,6 @@ import { draftFromJobAction, getVersionAction, saveVersionAction, sendForSigning
 // (which saves it again as the newest version).
 
 const METHOD_NAMES: Record<PayMethod, string> = { zelle: "Zelle", venmo: "Venmo", check: "Check", cash: "Cash" };
-const CLAUSE_TITLES = new Map(CLAUSES.map((c) => [c.id, c.title]));
 
 // Signature, initials and date fields are DocuSeal tags; in the preview they are drawn as labelled boxes.
 const PREVIEW_CSS =
@@ -301,10 +299,10 @@ export function AgreementEditor({
       <fieldset className="ae-group" disabled={readOnly}>
         <legend>Terms</legend>
         <div className="ae-choices">
-          {OPTIONAL_CLAUSE_IDS.map((id) => (
+          {optionalClauseIds(body.template).map((id) => (
             <label key={id} className="ae-choice">
               <input type="checkbox" checked={body.blocks.some((b) => b.id === id)} onChange={(e) => setBody((b) => toggleClause(b, id, e.target.checked))} />
-              {CLAUSE_TITLES.get(id)}
+              {body.template.clauses.find((c) => c.id === id)?.title}
             </label>
           ))}
         </div>
@@ -318,8 +316,8 @@ export function AgreementEditor({
             </summary>
             <textarea className="crm-input ae-text" rows={8} value={b.text} maxLength={8000} onChange={(e) => setBlock(b.id, { text: e.target.value })} />
             {edited.has(b.id) && (
-              <button type="button" className="ae-reset" onClick={() => setBlock(b.id, { text: clauseBlock(b.id, v).text })}>
-                Use the standard wording
+              <button type="button" className="ae-reset" onClick={() => setBlock(b.id, { text: clauseBlock(body.template, b.id, v).text })}>
+                Use the template&apos;s wording
               </button>
             )}
           </details>
