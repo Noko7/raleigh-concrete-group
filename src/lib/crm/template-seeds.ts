@@ -26,7 +26,30 @@ export const REPAIR_SEED: { name: string; body: TemplateBody } = {
     tax_mode: "includes_tax",
     clauses: [
       std("clause.basics"),
-      { ...std("clause.repair"), optional: false, on_by_default: false },
+      {
+        ...std("clause.repair"),
+        optional: false,
+        on_by_default: false,
+        // Points at this template's own warranty section (the built-in wording says "the Warranty below").
+        text: std("clause.repair").text.replace("except as stated in the Warranty below", "except as stated in the Limited Workmanship Warranty below"),
+      },
+      // A short, labor-only warranty on the repaired areas: the usual term for patch and crack repair (about one year),
+      // and clearer than pointing at a warranty that isn't there. It does not try to waive what NC law implies.
+      {
+        id: "clause.warranty",
+        kind: "clause",
+        title: "Limited Workmanship Warranty",
+        text: [
+          "The Contractor warrants the workmanship on the repaired areas listed above for one (1) year from completion. If the repair material comes loose, flakes, or separates in that time because of how the work was done, the Contractor will fix it at no charge.",
+          "",
+          "- **Not covered:** color or texture differences, hairline cracks, existing cracks that reopen, new cracks or damage outside the repaired areas, settlement, soil movement, tree roots, drainage, freeze-thaw, de-icing salt, chemicals, misuse, or lack of maintenance.",
+          "- **How to claim:** tell the Contractor in writing within 30 days of noticing the problem. Fixing the faulty work is the remedy under this warranty.",
+          "- Warranty claims are handled by the Contractor, not Raleigh Concrete Group. This warranty does not limit any rights you have under North Carolina law.",
+        ].join("\n"),
+        text_includes_tax: null,
+        optional: false,
+        on_by_default: false,
+      },
       std("clause.responsible"),
       { ...std("clause.insurance"), optional: false, on_by_default: false },
       { ...std("clause.liability"), optional: false, on_by_default: false },
@@ -38,9 +61,9 @@ export const REPAIR_SEED: { name: string; body: TemplateBody } = {
         id: "clause.authorization",
         kind: "clause",
         title: "Authorization",
-        text: "I authorize the Contractor to perform the work described above at the price shown. I have read and understand the concrete basics, repair limitations, warranty, insurance, limitation of liability, and cancellation terms.",
+        text: "I authorize the Contractor to perform the work described above at the price shown. I have read and understand the concrete basics, repair limitations, limited workmanship warranty, insurance, limitation of liability, and cancellation terms.",
         text_includes_tax:
-          "I authorize the Contractor to perform the work described above for the total price shown, which includes all taxes and fees. I have read and understand the concrete basics, repair limitations, warranty, insurance, limitation of liability, and cancellation terms.",
+          "I authorize the Contractor to perform the work described above for the total price shown, which includes all taxes and fees. I have read and understand the concrete basics, repair limitations, limited workmanship warranty, insurance, limitation of liability, and cancellation terms.",
         optional: false,
         on_by_default: false,
       },

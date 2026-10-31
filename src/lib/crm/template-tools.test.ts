@@ -35,7 +35,7 @@ test("template diff: tax default, order, flags, text and removed/added sections"
   const b = REPAIR_SEED.body;
   const keys = diffTemplates(a, b).map((c) => (c.kind === "value" ? c.key : `${c.change}:${c.id}`));
   assert.ok(keys.includes("tax_mode"));
-  assert.ok(keys.includes("removed:clause.warranty"));
+  assert.ok(keys.includes("edited:clause.warranty"), "the repair template has its own limited warranty");
   assert.ok(keys.includes("clause.repair.optional"));
   assert.ok(keys.includes("edited:clause.cancel"));
   assert.ok(keys.includes("edited:clause.authorization"));
