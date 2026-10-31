@@ -194,6 +194,10 @@ export async function cancelSigning(session: Session, quote: Quote, agreement: A
     const r = await archiveSubmission(agreement.docuseal_submission_id);
     if (!r.ok && r.status !== 404) return { ok: false, error: `DocuSeal didn't cancel it: ${r.error}` };
   }
+  // The links die first: if that fails, nothing else changes and Cancel can simply be pressed again. (Cleared the
+  // other way round, a leftover row would block every later send.)
+  const del = await pgAdmin(`agreement_signing?agreement_id=eq.${agreement.id}`, { method: "DELETE" });
+  if (!del.ok) return { ok: false, error: "Couldn't cancel just now. Try again." };
   let ok = false;
   try {
     ok = await patchAgreement(agreement.id, { status: "pending", docuseal_submission_id: null }, ["sent", "contractor_signed"]);
@@ -201,8 +205,6 @@ export async function cancelSigning(session: Session, quote: Quote, agreement: A
     console.error((e as Error).message);
   }
   if (!ok) return { ok: false, error: "It changed meanwhile (maybe it was just signed). Reload." };
-  // The links die with the send: an old /sign link now says it's no longer active.
-  await pgAdmin(`agreement_signing?agreement_id=eq.${agreement.id}`, { method: "DELETE" });
   await addAdminEvent(quote.id, "agreement_cancelled", { agreement_id: agreement.id, by: session.staff.id });
   return { ok: true };
 }
