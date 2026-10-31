@@ -116,6 +116,8 @@ export async function middleware(request: NextRequest) {
       pathname.startsWith("/pay/") ||
       // A payment receipt: the link texted to the customer, crew and owner.
       pathname.startsWith("/r/") ||
+      // An agreement's signing page: the link texted to the customer.
+      pathname.startsWith("/sign/") ||
       // Contractor onboarding: public (no login yet) but a capability link.
       pathname.startsWith("/join/") ||
       pathname.startsWith("/confirm") ||

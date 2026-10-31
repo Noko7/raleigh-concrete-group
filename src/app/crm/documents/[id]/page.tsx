@@ -10,9 +10,14 @@ import { listReceiptsForJob, receiptRowsFor } from "@/lib/crm/receipts";
 import { JobReceipts } from "@/app/crm/quotes/[id]/job-receipts";
 import { CLOSED_FOR_EDITS, canEditJobAgreement, editableAgreement, getVersion, listVersions } from "@/lib/crm/agreement-versions";
 import type { AgreementBody } from "@/lib/crm/agreement-doc";
+import type { Agreement } from "@/lib/crm/types";
 import { AddAgreement } from "../add-agreement";
 import { AgreementList } from "../agreement-list";
 import { AgreementEditor } from "./agreement-editor";
+import { SigningPanel, type SigningView } from "./signing-panel";
+import { signLink, storeMissingSignedCopy } from "@/lib/crm/agreement-signing";
+import { docusealConfigured } from "@/lib/crm/docuseal";
+import { SENDABLE, type AgreementSigningStatus, type Signer } from "@/lib/crm/docuseal-core";
 import { StartAgreement } from "./start-agreement";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +44,8 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
   const canEdit = canEditJobAgreement(session, quote);
   const current = editableAgreement(agreements);
   const others = agreements.filter((a) => a.id !== current?.id && !a.current_version_id);
+  // A signed copy that didn't reach storage is fetched again on each visit until it does.
+  if (current && (await storeMissingSignedCopy(current))) current.signed_pdf_path = current.file_path = "stored";
   const [versions, currentVersion] = current?.current_version_id
     ? await Promise.all([listVersions(session, current.id), getVersion(session, current.current_version_id)])
     : [[], null];
@@ -66,6 +73,10 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
+      {current && current.sent_at && current.status !== "pending" && (
+        <SigningPanel quoteId={quote.id} view={signingView(current, versions)} isContractor={session.staff.id === quote.assigned_to} isOwner={isOwner} />
+      )}
+
       {current && currentVersion ? (
         <AgreementEditor
           quoteId={quote.id}
@@ -74,6 +85,7 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
           versions={versions}
           canEdit={canEdit}
           closed={CLOSED_FOR_EDITS.includes(current.status)}
+          canSend={canEdit && docusealConfigured() && SENDABLE.includes(current.status as AgreementSigningStatus)}
         />
       ) : (
         <section className="crm-card" aria-label="Customer agreement">
@@ -98,4 +110,22 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
       <JobReceipts quoteId={quote.id} locale={locale} receipts={receiptRowsFor(receipts)} missing={missing} />
     </main>
   );
+}
+
+function signingView(a: Agreement, versions: { id: string; version_no: number }[]): SigningView {
+  const signers = (Array.isArray(a.signers) ? a.signers : []) as Signer[];
+  return {
+    status: a.status,
+    versionNo: versions.find((v) => v.id === a.sent_version_id)?.version_no ?? null,
+    sentAt: a.sent_at,
+    contractorSignedAt: a.contractor_signed_at ?? null,
+    signedAt: a.completed_at ?? a.signed_at,
+    expiresAt: a.expires_at ?? null,
+    declineReason: a.decline_reason ?? null,
+    contractorEmbed: signers.find((s) => s.role === "Contractor")?.embed_src ?? null,
+    customerLink: a.sign_token ? signLink(a.sign_token) : null,
+    hasPdf: Boolean(a.signed_pdf_path && a.file_path),
+    hasAudit: Boolean(a.audit_log_path),
+    agreementId: a.id,
+  };
 }

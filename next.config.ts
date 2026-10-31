@@ -112,6 +112,7 @@ const nextConfig: NextConfig = {
       { source: "/q/:path*", headers: [NOINDEX, NO_REFERRER, ...QUOTE_FRAMING] },
       { source: "/job/:path*", headers: [NOINDEX, NO_REFERRER] },
       { source: "/r/:path*", headers: [NOINDEX, NO_REFERRER] },
+      { source: "/sign/:path*", headers: [NOINDEX, NO_REFERRER] },
       { source: "/confirm/:path*", headers: [NOINDEX, NO_REFERRER] },
     ];
   },

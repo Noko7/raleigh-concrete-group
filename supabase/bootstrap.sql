@@ -176,12 +176,25 @@ create table public.agreements (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   current_version_id uuid,
+  sent_version_id uuid,
+  docuseal_submission_id bigint,
+  signers jsonb,
+  contractor_signed_at timestamp with time zone,
+  completed_at timestamp with time zone,
+  expires_at timestamp with time zone,
+  decline_reason text,
+  signed_pdf_path text,
+  audit_log_path text,
+  sign_token text,
   constraint agreements_pkey PRIMARY KEY (id),
   constraint agreements_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.staff(id) ON DELETE SET NULL,
   constraint agreements_quote_id_fkey FOREIGN KEY (quote_id) REFERENCES public.quote_requests(id) ON DELETE CASCADE,
   constraint agreements_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE CASCADE,
   constraint agreements_kind_check CHECK ((kind = ANY (ARRAY['contractor'::text, 'customer'::text]))),
-  constraint agreements_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'signed'::text, 'declined'::text, 'void'::text]))),
+  constraint agreements_docuseal_submission_key UNIQUE (docuseal_submission_id),
+  constraint agreements_sign_token_key UNIQUE (sign_token),
+  constraint agreements_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'contractor_signed'::text, 'signed'::text, 'declined'::text, 'expired'::text, 'void'::text]))),
+  constraint agreements_signing_chk CHECK ((((signers IS NULL) OR (jsonb_typeof(signers) = 'array'::text)) AND ((decline_reason IS NULL) OR (char_length(decline_reason) <= 1000)) AND ((sign_token IS NULL) OR (sign_token ~ '^[0-9a-f]{32}$'::text)) AND ((signed_pdf_path IS NULL) OR (char_length(signed_pdf_path) <= 300)) AND ((audit_log_path IS NULL) OR (char_length(audit_log_path) <= 300)))),
   constraint agreements_target_chk CHECK ((((kind = 'contractor'::text) AND (staff_id IS NOT NULL) AND (quote_id IS NULL)) OR ((kind = 'customer'::text) AND (quote_id IS NOT NULL) AND (staff_id IS NULL))))
 );
 
@@ -204,6 +217,22 @@ create table public.agreement_versions (
 );
 -- agreements.current_version_id points the other way, so its key is added once both tables exist.
 alter table public.agreements add constraint agreements_current_version_fkey FOREIGN KEY (current_version_id) REFERENCES agreement_versions(id) ON DELETE SET NULL;
+alter table public.agreements add constraint agreements_sent_version_fkey FOREIGN KEY (sent_version_id) REFERENCES agreement_versions(id);
+
+-- Every DocuSeal webhook, stored once (unique on submission, event and its time). Service role only.
+create table public.document_events (
+  id uuid default gen_random_uuid() not null,
+  agreement_id uuid,
+  submission_id bigint not null,
+  event_type text not null,
+  event_at timestamp with time zone not null,
+  payload jsonb not null,
+  received_at timestamp with time zone default now() not null,
+  constraint document_events_pkey PRIMARY KEY (id),
+  constraint document_events_once_key UNIQUE (submission_id, event_type, event_at),
+  constraint document_events_agreement_fkey FOREIGN KEY (agreement_id) REFERENCES agreements(id) ON DELETE SET NULL,
+  constraint document_events_chk CHECK ((((char_length(event_type) >= 1) AND (char_length(event_type) <= 60)) AND (jsonb_typeof(payload) = 'object'::text)))
+);
 
 create table public.app_integrations (
   provider text not null,
@@ -466,6 +495,7 @@ CREATE INDEX ag_quote_idx ON public.agreements USING btree (quote_id);
 CREATE INDEX ag_staff_idx ON public.agreements USING btree (staff_id);
 CREATE INDEX ag_status_idx ON public.agreements USING btree (status);
 CREATE INDEX agreement_versions_agreement_idx ON public.agreement_versions USING btree (agreement_id, version_no DESC);
+CREATE INDEX document_events_agreement_idx ON public.document_events USING btree (agreement_id, received_at DESC);
 CREATE INDEX ci_created_idx ON public.contractor_invites USING btree (created_at DESC);
 CREATE INDEX ci_token_idx ON public.contractor_invites USING btree (token);
 CREATE INDEX fs_staff_idx ON public.fee_settlements USING btree (staff_id, created_at DESC);
@@ -928,11 +958,14 @@ CREATE OR REPLACE FUNCTION public.number_agreement_version()
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$
-declare who uuid := auth.uid();
+declare who uuid := auth.uid(); st text;
 begin
-  perform 1 from public.agreements where id = new.agreement_id for update;
+  select status into st from public.agreements where id = new.agreement_id for update;
   if not found then
     raise exception 'agreement % does not exist', new.agreement_id using errcode = '23503';
+  end if;
+  if st in ('sent', 'contractor_signed', 'signed', 'void') then
+    raise exception 'this agreement is out for signature or closed; cancel the signing or start an amendment' using errcode = '42501';
   end if;
   select coalesce(max(version_no), 0) + 1 into new.version_no from public.agreement_versions where agreement_id = new.agreement_id;
   new.created_at := now();
@@ -991,6 +1024,7 @@ $function$
 
 alter table public.agreements enable row level security;
 alter table public.agreement_versions enable row level security;
+alter table public.document_events enable row level security;
 alter table public.app_integrations enable row level security;
 alter table public.contractor_invites enable row level security;
 alter table public.fee_settlements enable row level security;
@@ -1179,6 +1213,9 @@ grant select, insert, update, delete, truncate, references, trigger, maintain on
 -- Saved versions are permanent and saved only by the server: authenticated may read them; anon has nothing.
 grant select, references, trigger, maintain on public.agreement_versions to authenticated;
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.agreement_versions to service_role;
+
+-- DocuSeal webhooks: the server only.
+grant select, insert, update, delete, truncate, references, trigger, maintain on public.document_events to service_role;
 
 grant truncate, references, trigger, maintain on public.app_integrations to anon, authenticated;     -- (default)
 grant select, insert, update, delete, truncate, references, trigger, maintain on public.app_integrations to service_role;

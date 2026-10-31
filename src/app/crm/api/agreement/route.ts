@@ -13,12 +13,12 @@ export async function GET(request: Request) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response("Bad request", { status: 400 });
 
   const agreement = await getAgreement(session, id);
-  if (!agreement?.file_path) return new Response("Not found", { status: 404 });
+  // ?part=audit: DocuSeal's audit log for a signed agreement. Otherwise the agreement's file (the signed PDF).
+  const path = searchParams.get("part") === "audit" ? agreement?.audit_log_path : agreement?.file_path;
+  if (!path) return new Response("Not found", { status: 404 });
 
   const prefix = `${AGREEMENT_BUCKET}/`;
-  const obj = agreement.file_path.startsWith(prefix)
-    ? agreement.file_path.slice(prefix.length)
-    : agreement.file_path;
+  const obj = path.startsWith(prefix) ? path.slice(prefix.length) : path;
   if (!obj || obj.includes("..") || obj.startsWith("/")) {
     return new Response("Bad request", { status: 400 });
   }

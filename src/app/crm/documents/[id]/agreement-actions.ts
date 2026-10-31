@@ -12,6 +12,7 @@ import {
   startAgreement,
   type VersionSummary,
 } from "@/lib/crm/agreement-versions";
+import { cancelSigning, sendForSigning } from "@/lib/crm/agreement-signing";
 import { getAgreement, getQuote } from "@/lib/crm/queries";
 
 // The agreement editor's server side. Every write is checked twice: here (owner, or the job's contractor) and by
@@ -76,4 +77,26 @@ export async function getVersionAction(
   const v = await getVersion(session, versionId);
   if (!v) return { ok: false, error: "That version isn't available." };
   return { ok: true, body: v.body as AgreementBody, html: v.html, version_no: v.version_no };
+}
+
+/** Send the newest saved version for signing (contractor first, then the customer). */
+export async function sendForSigningAction(quoteId: string, agreementId: string, versionId: string | null): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await jobFor(quoteId);
+  if (!ctx) return { ok: false, error: "This job isn't available." };
+  const ag = await getAgreement(ctx.session, agreementId);
+  if (!ag || ag.quote_id !== quoteId || ag.kind !== "customer") return { ok: false, error: "This agreement isn't on this job." };
+  const r = await sendForSigning(ctx.session, ctx.quote, ag, versionId);
+  refresh(quoteId);
+  return r.ok ? { ok: true } : r;
+}
+
+/** Withdraw it from signing: archived in DocuSeal, editable again here. */
+export async function cancelSigningAction(quoteId: string, agreementId: string): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await jobFor(quoteId);
+  if (!ctx) return { ok: false, error: "This job isn't available." };
+  const ag = await getAgreement(ctx.session, agreementId);
+  if (!ag || ag.quote_id !== quoteId || ag.kind !== "customer") return { ok: false, error: "This agreement isn't on this job." };
+  const r = await cancelSigning(ctx.session, ctx.quote, ag);
+  refresh(quoteId);
+  return r.ok ? { ok: true } : r;
 }
