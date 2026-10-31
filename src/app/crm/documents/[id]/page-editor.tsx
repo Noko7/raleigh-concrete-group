@@ -9,7 +9,7 @@ import { longDate, money, WORK_NOTE, type AgreementBody } from "@/lib/crm/agreem
 // same as the form); names, numbers and money are set in the form, so they can't drift from the job here.
 // Edits are committed when the text loses focus, so the cursor never jumps while typing; Escape puts it back.
 
-function EditableText({ value, onCommit, label, disabled }: { value: string; onCommit: (v: string) => void; label: string; disabled: boolean }) {
+function EditableText({ value, onCommit, onTyping, label, disabled }: { value: string; onCommit: (v: string) => void; onTyping: () => void; label: string; disabled: boolean }) {
   const ref = useRef<HTMLDivElement | null>(null);
   // Written into the DOM by hand (not as React children), and only when it isn't being typed in.
   useEffect(() => {
@@ -22,13 +22,17 @@ function EditableText({ value, onCommit, label, disabled }: { value: string; onC
       role="textbox"
       aria-multiline="true"
       aria-label={label}
+      aria-readonly={disabled || undefined}
       tabIndex={disabled ? -1 : 0}
       contentEditable={disabled ? false : "plaintext-only"}
       suppressContentEditableWarning
       className={disabled ? "pe-text" : "pe-text pe-editable"}
+      // Typing that hasn't been committed yet still counts as unsaved (Save lights up, leaving warns).
+      onInput={onTyping}
       onBlur={(e) => {
         const next = e.currentTarget.innerText.replace(/ /g, " ").replace(/\n{3,}/g, "\n\n").replace(/[ \t]+$/gm, "").trim();
-        if (next !== value) onCommit(next);
+        // Always reported, even unchanged, so the "still typing" flag clears.
+        onCommit(next);
       }}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
@@ -44,10 +48,12 @@ export function PageEditor({
   body,
   readOnly,
   setBlock,
+  onTyping,
 }: {
   body: AgreementBody;
   readOnly: boolean;
   setBlock: (id: string, patch: { text?: string; title?: string }) => void;
+  onTyping: () => void;
 }) {
   const v = body.values;
   const work = body.blocks.filter((b) => b.kind === "work");
@@ -81,7 +87,7 @@ export function PageEditor({
       {work.map((b) => (
         <section key={b.id}>
           <h3>{b.title}</h3>
-          <EditableText value={b.text} label={b.title} disabled={readOnly} onCommit={(t) => setBlock(b.id, { text: t })} />
+          <EditableText value={b.text} label={b.title} disabled={readOnly} onTyping={onTyping} onCommit={(t) => setBlock(b.id, { text: t })} />
         </section>
       ))}
       <p className="pe-note">{WORK_NOTE}</p>
@@ -104,7 +110,7 @@ export function PageEditor({
           ) : (
             <h2>{b.title}</h2>
           )}
-          <EditableText value={b.text} label={b.title} disabled={readOnly} onCommit={(t) => setBlock(b.id, { text: t })} />
+          <EditableText value={b.text} label={b.title} disabled={readOnly} onTyping={onTyping} onCommit={(t) => setBlock(b.id, { text: t })} />
           {b.kind === "initials" && <p className="pe-note">The customer initials each item when signing.</p>}
         </section>
       ))}

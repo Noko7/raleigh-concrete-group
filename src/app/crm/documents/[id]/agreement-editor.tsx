@@ -77,9 +77,11 @@ export function AgreementEditor({
   const [pick, setPick] = useState<string[]>([]);
   // Two ways to edit the same body: a form (roomy boxes, best on a phone) or the page itself, click and type.
   const [mode, setMode] = useState<"form" | "page">("form");
+  // Set while a paragraph on the page is being typed in and not yet committed (it commits when it loses focus).
+  const [typing, setTyping] = useState(false);
 
   const readOnly = !canEdit || closed;
-  const dirty = useMemo(() => JSON.stringify(body) !== JSON.stringify(saved), [body, saved]);
+  const dirty = useMemo(() => typing || JSON.stringify(body) !== JSON.stringify(saved), [typing, body, saved]);
   const problems = useMemo(() => sendProblems(body), [body]);
   const edited = useMemo(() => new Set(editedBlocks(body)), [body]);
   const latest = history[0];
@@ -93,8 +95,10 @@ export function AgreementEditor({
   }, [dirty]);
 
   const setValue = <K extends keyof AgreementValues>(k: K, v: AgreementValues[K]) => setBody((b) => ({ ...b, values: { ...b.values, [k]: v } }));
-  const setBlock = (id: string, patch: { text?: string; title?: string }) =>
+  const setBlock = (id: string, patch: { text?: string; title?: string }) => {
+    setTyping(false);
     setBody((b) => ({ ...b, blocks: b.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+  };
 
   function save() {
     setMsg(null);
@@ -350,7 +354,7 @@ export function AgreementEditor({
       </div>
       {mode === "page" ? (
         <div className="ae-pagecol">
-          <PageEditor body={body} readOnly={readOnly} setBlock={setBlock} />
+          <PageEditor body={body} readOnly={readOnly} setBlock={setBlock} onTyping={() => setTyping(true)} />
         </div>
       ) : (
         <aside className="ae-live" aria-label="Live preview">
