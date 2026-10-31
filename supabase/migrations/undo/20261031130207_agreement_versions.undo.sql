@@ -1,4 +1,4 @@
--- Undo PENDING_agreement_versions.
+-- Undo 20261031130207_agreement_versions.
 --
 -- Saved agreement versions are the record of what was offered and signed. This refuses to run once any version
 -- exists: dropping the table would destroy that history. Export them first (select * from

@@ -32,9 +32,10 @@
 -- issue_payment_receipt(), the policy, trigger and grants), each checked
 -- against pg_get_functiondef, relacl and proacl after it was applied.
 --
--- Updated by hand for the agreement_versions migration (PENDING until applied:
--- agreement_versions with its three trigger functions, policies and grants,
--- agreements.current_version_id and staff.license_number/payment_methods). Re-check against production once applied.
+-- Updated by hand for migration 20261031130207 (agreement_versions with its three
+-- trigger functions, policy and grants, agreements.current_version_id and
+-- staff.license_number/payment_methods), checked against production after it was
+-- applied (columns, RLS, grants, triggers, policy).
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1. Tables (columns, defaults, constraints)
