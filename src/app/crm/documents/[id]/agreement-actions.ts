@@ -44,7 +44,7 @@ export async function saveVersionAction(
   body: AgreementBody,
   note: string,
   baseVersionId: string | null,
-): Promise<{ ok: true; version: VersionSummary } | { ok: false; error: string }> {
+): Promise<{ ok: true; version: VersionSummary; body: AgreementBody } | { ok: false; error: string }> {
   const ctx = await jobFor(quoteId);
   if (!ctx) return { ok: false, error: "This job isn't available." };
   const ag = await getAgreement(ctx.session, agreementId);

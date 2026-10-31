@@ -98,7 +98,9 @@ export function AgreementEditor({
     start(async () => {
       const r = await saveVersionAction(quoteId, agreementId, body, note, latest?.id ?? null);
       if (!r.ok) return setMsg({ ok: false, text: r.error });
-      setSaved(body);
+      // What the server stored: the job's money may differ from what this page had.
+      setBody(r.body);
+      setSaved(r.body);
       setHistory((h) => [r.version, ...h]);
       setNote("");
       setMsg({ ok: true, text: `Saved as version ${r.version.version_no}.` });
