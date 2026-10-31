@@ -4660,6 +4660,8 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .pe-sign p { margin: 0 0 0.9rem; }
 .pe-box { display: inline-block; min-width: 9rem; padding: 0.6rem 0.4rem; border: 1.5px dashed #c2682a; border-radius: 4px; background: #fdf3ec; color: #9a4f1c; font-size: 0.72rem; vertical-align: middle; }
 .pe-box-sm { min-width: 5rem; }
+.pe-box-xs { min-width: 0; width: 1rem; height: 1rem; padding: 0; border-style: solid; }
+.pe-pay { white-space: nowrap; margin-right: 0.9rem; }
 
 /* Agreement templates: the list in the Documents hub, the template editor, and "Earlier agreements" on a job. */
 .tl-new { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; margin: 0.8rem 0 1rem; }

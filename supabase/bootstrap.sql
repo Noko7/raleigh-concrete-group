@@ -26,7 +26,7 @@
 --   * No migration history: supabase_migrations.schema_migrations stays empty.
 --     If you later use `supabase db push`, mark the existing migrations as
 --     applied first, since this file already contains them:
---       supabase migration repair --status applied 20261017221826 20261017222017 20261030221241 20261030221338 20261031130207 20261031130427 20261031172234 20261031174615
+--       supabase migration repair --status applied 20261017221826 20261017222017 20261030221241 20261030221338 20261031130207 20261031130427 20261031172234 20261031174615 20261031180311
 --
 -- When the schema changes, update this file along with supabase/schema.sql.
 
@@ -70,7 +70,7 @@ create table public.staff (
   constraint staff_locale_chk CHECK ((locale = ANY (ARRAY['en'::text, 'es'::text]))),
   constraint staff_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'contractor'::text]))),
   constraint staff_business_chk CHECK ((((business_name IS NULL) OR (char_length(business_name) <= 120)) AND ((business_address IS NULL) OR (char_length(business_address) <= 300)))),
-  constraint staff_agreement_fields_chk CHECK ((((license_number IS NULL) OR (char_length(license_number) <= 60)) AND ((cardinality(payment_methods) >= 1) AND (cardinality(payment_methods) <= 4)) AND (payment_methods <@ '{zelle,venmo,check,cash}'::text[]))),
+  constraint staff_agreement_fields_chk CHECK ((((license_number IS NULL) OR (char_length(license_number) <= 60)) AND ((cardinality(payment_methods) >= 1) AND (cardinality(payment_methods) <= 5)) AND (payment_methods <@ '{zelle,venmo,check,cash,card}'::text[]))),
   constraint staff_work_hours_chk CHECK ((((work_start_hour >= 5) AND (work_start_hour <= 21)) AND ((work_end_hour >= 5) AND (work_end_hour <= 21)) AND (work_end_hour >= work_start_hour)))
 );
 

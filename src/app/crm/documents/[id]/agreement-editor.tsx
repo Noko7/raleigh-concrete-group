@@ -31,7 +31,7 @@ import { draftFromJobAction, getVersionAction, saveVersionAction, sendForSigning
 // history below is the whole back-and-forth. An old version can be viewed, compared with any other, or restored
 // (which saves it again as the newest version).
 
-const METHOD_NAMES: Record<PayMethod, string> = { zelle: "Zelle", venmo: "Venmo", check: "Check", cash: "Cash" };
+const METHOD_NAMES: Record<PayMethod, string> = { zelle: "Zelle", venmo: "Venmo", check: "Check", cash: "Cash", card: "Card" };
 
 // Signature, initials and date fields are DocuSeal tags; in the preview they are drawn as labelled boxes.
 const PREVIEW_CSS =

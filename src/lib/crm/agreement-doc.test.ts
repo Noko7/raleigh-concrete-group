@@ -125,7 +125,11 @@ test("render: money, balance, signature fields for both roles, initials per repa
   assert.equal((html.match(/<signature-field /g) ?? []).length, 2);
   assert.ok(html.includes('role="Contractor"') && html.includes('role="Customer"'));
   assert.equal((html.match(/<initials-field /g) ?? []).length, 4);
-  assert.ok(html.includes("How you pay:</strong> Zelle, Check"));
+  // One box per accepted method, for the customer, never required (they tick as many as they like).
+  assert.match(html, /<checkbox-field name="Pays by Zelle" role="Customer"[^>]*><\/checkbox-field> Zelle/);
+  assert.match(html, /<checkbox-field name="Pays by Check" role="Customer"[^>]*><\/checkbox-field> Check/);
+  assert.ok(!html.includes('name="Pays by Venmo"'), "only the contractor's methods");
+  assert.ok(!/<checkbox-field[^>]*required/.test(html));
 });
 
 test("render: anything typed is text, never markup or a field", () => {
@@ -372,4 +376,13 @@ test("no license #: the agreement leaves the line out instead of printing a blan
   const withLicense = renderAgreementHtml(draftAgreement(input()));
   assert.ok(withLicense.includes("Contractor license #"));
   assert.ok(withLicense.includes("The licensed contractor named below"));
+});
+
+test("card is a payment method: kept through parseBody and offered on the agreement", () => {
+  const d = draftAgreement(input({ contractor: { ...input().contractor!, payment_methods: ["zelle", "card"] } }));
+  assert.deepEqual(d.values.payment_methods, ["zelle", "card"]);
+  assert.deepEqual(parseBody(JSON.parse(JSON.stringify(d)))!.values.payment_methods, ["zelle", "card"]);
+  assert.match(renderAgreementHtml(d), /name="Pays by Card" role="Customer"/);
+  const all = { ...d, values: { ...d.values, payment_methods: ["zelle", "venmo", "check", "cash", "card"] } };
+  assert.ok(parseBody(JSON.parse(JSON.stringify(all))), "all five are allowed");
 });

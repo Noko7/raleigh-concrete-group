@@ -40,6 +40,8 @@
 -- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
 -- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
 -- refusing saves while out for signature), checked against production after it was applied.
+-- Updated by hand for migration 20261031180311 (staff_agreement_fields_chk allows card, five methods),
+-- checked against production after it was applied.
 -- Updated by hand for migration 20261031174615 (quote_requests.estimated_duration and its length check),
 -- checked against production after it was applied.
 -- Updated by hand for migration 20261031172234 (document_templates and document_template_versions,
@@ -543,7 +545,7 @@ create table public.staff (
   constraint staff_locale_chk CHECK ((locale = ANY (ARRAY['en'::text, 'es'::text]))),
   constraint staff_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'contractor'::text]))),
   constraint staff_business_chk CHECK ((((business_name IS NULL) OR (char_length(business_name) <= 120)) AND ((business_address IS NULL) OR (char_length(business_address) <= 300)))),
-  constraint staff_agreement_fields_chk CHECK ((((license_number IS NULL) OR (char_length(license_number) <= 60)) AND ((cardinality(payment_methods) >= 1) AND (cardinality(payment_methods) <= 4)) AND (payment_methods <@ '{zelle,venmo,check,cash}'::text[]))),
+  constraint staff_agreement_fields_chk CHECK ((((license_number IS NULL) OR (char_length(license_number) <= 60)) AND ((cardinality(payment_methods) >= 1) AND (cardinality(payment_methods) <= 5)) AND (payment_methods <@ '{zelle,venmo,check,cash,card}'::text[]))),
   constraint staff_work_hours_chk CHECK ((((work_start_hour >= 5) AND (work_start_hour <= 21)) AND ((work_end_hour >= 5) AND (work_end_hour <= 21)) AND (work_end_hour >= work_start_hour)))
 );
 

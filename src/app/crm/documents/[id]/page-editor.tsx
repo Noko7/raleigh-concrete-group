@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-import { longDate, money, WORK_NOTE, type AgreementBody } from "@/lib/crm/agreement-doc";
+import { longDate, METHOD_NAMES, money, WORK_NOTE, type AgreementBody } from "@/lib/crm/agreement-doc";
 
 // The agreement laid out as the page it will be, with every section's text editable in place: click a paragraph
 // and type, like the proposal builder. Plain text only (a line starting "- " is a bullet, **bold** is bold, the
@@ -100,6 +100,14 @@ export function PageEditor({
           {row("Balance due at completion", money(v.total_cents - v.deposit_cents))}
         </tbody>
       </table>
+      <p>
+        <strong>How you&apos;ll pay</strong> (the customer ticks any that apply when signing):{" "}
+        {v.payment_methods.map((m) => (
+          <span key={m} className="pe-pay">
+            <span className="pe-box pe-box-xs" aria-hidden="true" /> {METHOD_NAMES[m]}
+          </span>
+        ))}
+      </p>
 
       {rest.map((b) => (
         <section key={b.id}>
