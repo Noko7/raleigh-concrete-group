@@ -100,16 +100,18 @@ export async function POST(request: Request) {
 
   // The consent itself, kept as evidence: the exact words, their version, when, and from where. Logged on every
   // accepted approval, a repeat included (it is still a fresh tick of the box).
+  // A failure doesn't undo the approval, but it is logged loudly so the missing record can be followed up.
   if (consent) {
     const q = await getQuoteByToken("public_token", token).catch(() => null);
-    if (q) {
-      await addAdminEvent(q.id, "customer_econsent", {
-        version: consent.version,
-        text: ECONSENT_TEXT,
-        ip: clientIp(request),
-        user_agent: (request.headers.get("user-agent") ?? "").slice(0, 300),
-      }).catch(() => {});
-    }
+    const stored = q
+      ? await addAdminEvent(q.id, "customer_econsent", {
+          version: consent.version,
+          text: ECONSENT_TEXT,
+          ip: clientIp(request),
+          user_agent: (request.headers.get("user-agent") ?? "").slice(0, 300),
+        }).catch(() => false)
+      : false;
+    if (!stored) console.error("[econsent] consent NOT recorded for an approved quote", q?.id ?? `token ${token.slice(0, 6)}…`);
   }
 
   // Already on file and unchanged: nobody is told again, but the customer still sees success.

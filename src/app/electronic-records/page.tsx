@@ -64,8 +64,8 @@ export default function ElectronicRecordsPage() {
             <p>
               You may withdraw your consent to electronic records at any time by calling, texting or emailing us
               using the contact details above. There is no fee. After you withdraw, we will send future documents on
-              paper by mail, which may take longer. Withdrawing does not affect documents you already received or
-              signed electronically.
+              paper by mail, which may take longer. We note your choice on your project so documents stop going out
+              electronically. Withdrawing does not affect documents you already received or signed electronically.
             </p>
 
             <h2>4. Keeping your contact details current</h2>
@@ -82,13 +82,14 @@ export default function ElectronicRecordsPage() {
             </ul>
             <p>
               By ticking the consent box before approving your quote, you confirm that you can open and read this
-              page, which shows you meet these requirements.
+              page and that you meet these requirements. If you can&apos;t open or save a PDF, ask us for paper copies
+              instead.
             </p>
 
             <h2>6. Keeping copies</h2>
             <p>
-              Signed documents are sent to you when they are complete. Please download or print a copy for your
-              records. You can also ask us for a copy at any time.
+              When a document is fully signed, you can download it from the signing page, and a copy is emailed to you
+              when we have your email address. Please download or print a copy for your records. You can also ask us for a copy at any time.
             </p>
 
             <h2>7. Questions</h2>
