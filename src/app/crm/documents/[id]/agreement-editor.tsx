@@ -24,6 +24,7 @@ import {
 import type { VersionSummary } from "@/lib/crm/agreement-versions";
 import { useRouter } from "next/navigation";
 
+import { PageEditor } from "./page-editor";
 import { draftFromJobAction, getVersionAction, saveVersionAction, sendForSigningAction } from "./agreement-actions";
 
 // The customer agreement, edited as a form (one box per section, big enough to type in on a phone) beside a live
@@ -80,9 +81,13 @@ export function AgreementEditor({
     | null
   >(null);
   const [pick, setPick] = useState<string[]>([]);
+  // Two ways to edit the same body: a form (roomy boxes, best on a phone) or the page itself, click and type.
+  const [mode, setMode] = useState<"form" | "page">("form");
+  // Set while a paragraph on the page is being typed in and not yet committed (it commits when it loses focus).
+  const [typing, setTyping] = useState(false);
 
   const readOnly = !canEdit || closed;
-  const dirty = useMemo(() => JSON.stringify(body) !== JSON.stringify(saved), [body, saved]);
+  const dirty = useMemo(() => typing || JSON.stringify(body) !== JSON.stringify(saved), [typing, body, saved]);
   const problems = useMemo(() => sendProblems(body), [body]);
   const edited = useMemo(() => new Set(editedBlocks(body)), [body]);
   const latest = history[0];
@@ -96,8 +101,10 @@ export function AgreementEditor({
   }, [dirty]);
 
   const setValue = <K extends keyof AgreementValues>(k: K, v: AgreementValues[K]) => setBody((b) => ({ ...b, values: { ...b.values, [k]: v } }));
-  const setBlock = (id: string, patch: { text?: string; title?: string }) =>
+  const setBlock = (id: string, patch: { text?: string; title?: string }) => {
+    setTyping(false);
     setBody((b) => ({ ...b, blocks: b.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+  };
 
   function save() {
     setMsg(null);
@@ -188,6 +195,9 @@ export function AgreementEditor({
           </p>
         </div>
         <div className="ae-head-acts">
+          <button type="button" className="crm-btn crm-btn-ghost" aria-pressed={mode === "page"} onClick={() => setMode((m) => (m === "form" ? "page" : "form"))}>
+            {mode === "form" ? "Edit on the page" : "Edit as a form"}
+          </button>
           <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setModal({ kind: "preview", title: dirty ? "Preview with your changes" : `Version ${latest?.version_no ?? ""}`, html: renderAgreementHtml(body) })}>
             Preview
           </button>
@@ -267,6 +277,7 @@ export function AgreementEditor({
         </div>
       </fieldset>
 
+      {mode === "form" && (
       <fieldset className="ae-group" disabled={readOnly}>
         <legend>Work to be done</legend>
         {work.map((b) => (
@@ -285,6 +296,7 @@ export function AgreementEditor({
         ))}
         <p className="crm-muted crm-sm">A line starting with &quot;- &quot; is a bullet. **Bold** is bold.</p>
       </fieldset>
+      )}
 
       <fieldset className="ae-group" disabled={readOnly}>
         <legend>Terms</legend>
@@ -296,6 +308,8 @@ export function AgreementEditor({
             </label>
           ))}
         </div>
+        {mode === "form" && (
+          <>
         {clauses.map((b) => (
           <details key={b.id} className="ae-clause">
             <summary>
@@ -319,6 +333,8 @@ export function AgreementEditor({
             </button>
           </div>
         ))}
+          </>
+        )}
         <button type="button" className="crm-btn crm-btn-ghost" onClick={() => setBody((b) => addCustomBlock(b, "Additional terms", ""))}>
           Add a section
         </button>
@@ -358,9 +374,15 @@ export function AgreementEditor({
       {msg && <p className={msg.ok ? "jr-ok" : "jr-err"} role={msg.ok ? "status" : "alert"}>{msg.text}</p>}
 
       </div>
-      <aside className="ae-live" aria-label="Live preview">
-        <iframe title="Live preview of the agreement" className="ae-live-frame" sandbox="" srcDoc={liveHtml} />
-      </aside>
+      {mode === "page" ? (
+        <div className="ae-pagecol">
+          <PageEditor body={body} readOnly={readOnly} setBlock={setBlock} onTyping={() => setTyping(true)} />
+        </div>
+      ) : (
+        <aside className="ae-live" aria-label="Live preview">
+          <iframe title="Live preview of the agreement" className="ae-live-frame" sandbox="" srcDoc={liveHtml} />
+        </aside>
+      )}
       </div>
 
       {history.length > 0 && (
