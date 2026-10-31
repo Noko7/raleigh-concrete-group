@@ -8,7 +8,7 @@ import { businessName, phoneDisplay, phoneHref } from "@/lib/site-data";
 // The page the consent box on a customer's quote links to. Its version is ECONSENT_VERSION: change both
 // together, so every stored consent points at the words that were on this page when it was given.
 const EFFECTIVE_DATE = "October 31, 2026";
-const OFFICE_EMAIL = "noah@raleighconcrete.net";
+const OFFICE_EMAIL = "info@raleighconcrete.net";
 
 export const metadata: Metadata = {
   title: ECONSENT_DISCLOSURE_TITLE,
