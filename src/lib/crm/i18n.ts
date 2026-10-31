@@ -335,6 +335,7 @@ const en = {
     statusSigned: "Signed",
     statusDeclined: "Declined",
     statusVoid: "Void",
+    statusSetAside: "Set aside",
     viewFileFull: "View file",
     openDocusealFull: "Open in DocuSeal",
     update: "Update",

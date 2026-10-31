@@ -9,7 +9,15 @@ export type DocAgreement = {
   status: AgreementStatus;
   created_at: string;
   updated_at: string;
+  current_version_id?: string | null;
 };
+
+/** How an agreement's status reads: one written in the CRM and voided to start over was "set aside", not voided. */
+export type AgreementShown = AgreementStatus | "set_aside";
+
+export function shownStatus(a: { status: AgreementStatus; current_version_id?: string | null }): AgreementShown {
+  return a.status === "void" && a.current_version_id ? "set_aside" : a.status;
+}
 
 export type DocReceipt = {
   id: string;
@@ -23,7 +31,7 @@ export type DocReceipt = {
 export type JobDocs = {
   quoteId: string;
   /** The agreement that speaks for the job: signed beats sent beats pending; declined and void only if nothing else. */
-  agreement: AgreementStatus | null;
+  agreement: AgreementShown | null;
   agreements: number;
   /** Live receipts only: a voided one was replaced or the payment undone. */
   receipts: number;
@@ -31,17 +39,17 @@ export type JobDocs = {
   lastActivity: string;
 };
 
-const RANK: Record<AgreementStatus, number> = { signed: 5, sent: 4, pending: 3, declined: 2, void: 1 };
+const RANK: Record<AgreementShown, number> = { signed: 5, sent: 4, pending: 3, declined: 2, void: 1, set_aside: 0 };
 
-export function agreementHeadline(statuses: AgreementStatus[]): AgreementStatus | null {
-  let best: AgreementStatus | null = null;
+export function agreementHeadline(statuses: AgreementShown[]): AgreementShown | null {
+  let best: AgreementShown | null = null;
   for (const s of statuses) if (!best || RANK[s] > RANK[best]) best = s;
   return best;
 }
 
 /** One entry per job with any document, newest activity first. Contractor onboarding agreements are not jobs. */
 export function groupByJob(agreements: DocAgreement[], receipts: DocReceipt[]): JobDocs[] {
-  const jobs = new Map<string, { statuses: AgreementStatus[]; receipts: number; cents: number; last: string }>();
+  const jobs = new Map<string, { statuses: AgreementShown[]; receipts: number; cents: number; last: string }>();
   const at = (id: string) => {
     let j = jobs.get(id);
     if (!j) jobs.set(id, (j = { statuses: [], receipts: 0, cents: 0, last: "" }));
@@ -50,7 +58,7 @@ export function groupByJob(agreements: DocAgreement[], receipts: DocReceipt[]): 
   for (const a of agreements) {
     if (a.kind !== "customer" || !a.quote_id) continue;
     const j = at(a.quote_id);
-    j.statuses.push(a.status);
+    j.statuses.push(shownStatus(a));
     if (a.updated_at > j.last) j.last = a.updated_at;
   }
   for (const r of receipts) {
@@ -74,12 +82,13 @@ export function groupByJob(agreements: DocAgreement[], receipts: DocReceipt[]): 
     .sort((a, b) => (a.lastActivity < b.lastActivity ? 1 : a.lastActivity > b.lastActivity ? -1 : 0));
 }
 
-const AGREEMENT_WORDS: Record<AgreementStatus, string> = {
+const AGREEMENT_WORDS: Record<AgreementShown, string> = {
   pending: "agreement not sent",
   sent: "agreement awaiting signature",
   signed: "agreement signed",
   declined: "agreement declined",
   void: "agreement void",
+  set_aside: "agreement set aside",
 };
 
 /** The single line a job page shows in place of its old document sections, e.g. "Agreement signed · 2 receipts". */

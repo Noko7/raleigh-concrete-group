@@ -51,7 +51,12 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
   ]);
   // Read through parseBody: a version saved before templates existed gets the built-in template.
   const currentBody = currentVersion ? parseBody(currentVersion.body) : null;
-  const canRestart =Boolean(canEdit && current && ["pending", "declined", "expired"].includes(current.status));
+  // A stored version that can't be read is shown as an error, never replaced by "Write the agreement".
+  const unreadable = Boolean(current && currentVersion && !currentBody);
+  if (unreadable) console.error("[agreements] stored version doesn't parse", current?.id, currentVersion?.id);
+  const canRestart = Boolean(
+    canEdit && current && !unreadable && !quote.change_requested_at && ["pending", "declined", "expired"].includes(current.status),
+  );
   const liveReceiptFor = new Set(receipts.filter((r) => !r.voided_at).map((r) => r.payment_id));
   const missing = money
     ? money.rows
@@ -85,6 +90,14 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
           canEdit={canEdit}
           closed={CLOSED_FOR_EDITS.includes(current.status)}
         />
+      ) : unreadable ? (
+        <section className="crm-card" aria-label="Customer agreement">
+          <h2 className="crm-card-title">Customer agreement</h2>
+          <p className="jr-err" role="alert">
+            This agreement&apos;s saved version couldn&apos;t be read, so it can&apos;t be shown or edited here. Nothing has been
+            changed. Contact support before writing a new one.
+          </p>
+        </section>
       ) : (
         <section className="crm-card" aria-label="Customer agreement">
           <h2 className="crm-card-title">Customer agreement</h2>

@@ -314,6 +314,7 @@ export const es: Dict = {
     statusSigned: "Firmado",
     statusDeclined: "Rechazado",
     statusVoid: "Anulado",
+    statusSetAside: "Apartado",
     viewFileFull: "Ver archivo",
     openDocusealFull: "Abrir en DocuSeal",
     update: "Actualizar",

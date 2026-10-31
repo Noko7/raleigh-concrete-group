@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { agreementHeadline, docsLine, groupByJob, type DocAgreement, type DocReceipt } from "./documents.ts";
+import { agreementHeadline, docsLine, groupByJob, shownStatus, type DocAgreement, type DocReceipt } from "./documents.ts";
 
 const ag = (over: Partial<DocAgreement>): DocAgreement => ({
   id: "a",
@@ -86,4 +86,15 @@ test("an agreement set aside (void) is never the one the editor works on", async
   const a = (id: string, created_at: string, status: string) => ({ id, created_at, current_version_id: "x", kind: "customer", status }) as never;
   assert.equal(editableAgreement([a("old", "2026-10-01", "void")]), null);
   assert.equal(editableAgreement([a("new", "2026-10-20", "pending"), a("old", "2026-10-30", "void")])?.["id" as never], "new");
+});
+
+test("a CRM agreement voided to start over reads 'set aside'; a void file still reads 'void'", () => {
+  assert.equal(shownStatus({ status: "void", current_version_id: "v1" }), "set_aside");
+  assert.equal(shownStatus({ status: "void", current_version_id: null }), "void");
+  assert.equal(shownStatus({ status: "pending", current_version_id: "v1" }), "pending");
+  const [job] = groupByJob([ag({ status: "void", current_version_id: "v1" })], []);
+  assert.equal(job?.agreement, "set_aside");
+  assert.equal(docsLine({ agreement: "set_aside", receipts: 0 }), "Agreement set aside");
+  // The agreement written after setting one aside is what the job shows.
+  assert.equal(agreementHeadline(["set_aside", "pending"]), "pending");
 });

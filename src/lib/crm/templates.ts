@@ -117,12 +117,6 @@ export async function resolveTemplateFor(templateId: string | null, service: str
   return (defaultId && (await templateSnapshot(defaultId))) || BUILTIN_STANDARD;
 }
 
-/** The authoritative copy of the template an agreement says it came from (never the browser's copy). */
-export async function authoritativeSnapshot(claimed: TemplateSnapshot): Promise<TemplateSnapshot | null> {
-  if (claimed.id === null) return BUILTIN_STANDARD;
-  return templateSnapshot(claimed.id, claimed.version_no);
-}
-
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 async function insertTemplateVersion(templateId: string, body: TemplateBody, note: string | null, who: Session["staff"]) {
@@ -202,8 +196,9 @@ export async function renameTemplate(session: Session, templateId: string, rawNa
   if (!isOwner(session)) return { ok: false, error: "Only the owner can rename templates." };
   const name = cleanName(rawName);
   if (!name || !UUID_RE.test(templateId)) return { ok: false, error: "Give the template a name." };
-  const res = await pgAdmin(`document_templates?id=eq.${templateId}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ name }) });
-  return res.ok ? { ok: true } : { ok: false, error: "Couldn't rename. Try again." };
+  const res = await pgAdmin(`document_templates?id=eq.${templateId}&select=id`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ name }) });
+  if (!res.ok) return { ok: false, error: "Couldn't rename. Try again." };
+  return ((await res.json()) as unknown[]).length === 1 ? { ok: true } : { ok: false, error: "That template isn't available." };
 }
 
 /** Archive (hide from new agreements; still readable) or restore. The last active template can't be archived. */
@@ -214,6 +209,7 @@ export async function setTemplateStatus(session: Session, templateId: string, st
     const others = await pgAdmin(`document_templates?status=eq.active&id=neq.${templateId}&select=id&limit=1`);
     if (!others.ok || ((await others.json()) as unknown[]).length === 0) return { ok: false, error: "Keep at least one active template." };
   }
-  const res = await pgAdmin(`document_templates?id=eq.${templateId}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status }) });
-  return res.ok ? { ok: true } : { ok: false, error: "Couldn't update the template. Try again." };
+  const res = await pgAdmin(`document_templates?id=eq.${templateId}&select=id`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status }) });
+  if (!res.ok) return { ok: false, error: "Couldn't update the template. Try again." };
+  return ((await res.json()) as unknown[]).length === 1 ? { ok: true } : { ok: false, error: "That template isn't available." };
 }

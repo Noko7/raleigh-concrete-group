@@ -526,11 +526,13 @@ const esc = (s: string) =>
 /** **bold** only; everything else is literal text. */
 const inline = (s: string) => esc(s).replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
 
-/** Paragraphs and bullet lists from plain text. With initials, each bullet gets the customer's initials field. */
-export function textToHtml(text: string, opts: { initials?: boolean } = {}): string {
+/**
+ * Paragraphs and bullet lists from plain text. With `initials`, each bullet gets the customer's initials field,
+ * numbered from the counter passed in: one counter per document, so field names never repeat across sections.
+ */
+export function textToHtml(text: string, opts: { initials?: { n: number } } = {}): string {
   const out: string[] = [];
   let bullets: string[] = [];
-  let n = 0;
   const flush = () => {
     if (!bullets.length) return;
     out.push(`<ul>${bullets.join("")}</ul>`);
@@ -543,8 +545,8 @@ export function textToHtml(text: string, opts: { initials?: boolean } = {}): str
       if (t.startsWith("- ")) {
         let li = inline(t.slice(2));
         if (opts.initials) {
-          n += 1;
-          li += ` <span class="ag-initials">Initials: <initials-field name="Initials ${n}" role="Customer" required="true" style="width: 70px; height: 28px; display: inline-block;"></initials-field></span>`;
+          opts.initials.n += 1;
+          li += ` <span class="ag-initials">Initials: <initials-field name="Initials ${opts.initials.n}" role="Customer" required="true" style="width: 70px; height: 28px; display: inline-block;"></initials-field></span>`;
         }
         bullets.push(`<li>${li}</li>`);
       } else {
@@ -605,9 +607,11 @@ export function renderAgreementHtml(body: AgreementBody): string {
     `<p>${esc(PRICE_NOTE[v.tax_mode])}</p>`,
   );
 
+  // One counter for the whole document: initials field names must be unique across every initialed section.
+  const initials = { n: 0 };
   for (const b of rest) {
     const isInitials = b.kind === "initials";
-    parts.push(`<h2>${esc(b.title)}</h2>${textToHtml(b.text, { initials: isInitials })}`);
+    parts.push(`<h2>${esc(b.title)}</h2>${textToHtml(b.text, isInitials ? { initials } : {})}`);
   }
 
   parts.push(

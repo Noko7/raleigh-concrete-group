@@ -337,6 +337,23 @@ test("templates: bad template bodies are refused with a reason", () => {
   assert.equal(parseSnapshot({ ...ok, id: null, version_no: 2, name: "x" }), null, "id and version go together");
 });
 
+test("initials field names are unique across every initialed section", () => {
+  const second = { ...BUILTIN_STANDARD.clauses.find((c) => c.id === "clause.repair")!, id: "clause.repair_two", title: "More Limitations", text: "- One more.\n- And another.", optional: false };
+  const t: TemplateSnapshot = {
+    ...BUILTIN_STANDARD,
+    id: "66666666-6666-4666-8666-666666666666",
+    version_no: 1,
+    name: "Two initialed",
+    clauses: [...BUILTIN_STANDARD.clauses.map((c) => (c.id === "clause.repair" ? { ...c, optional: false } : c)), second].sort((a) =>
+      a.id === "clause.authorization" ? 1 : 0,
+    ),
+  };
+  const html = renderAgreementHtml(draftAgreement(input({ template: t, optionalClauses: undefined })));
+  const names = [...html.matchAll(/<initials-field name="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(names.length, 6);
+  assert.equal(new Set(names).size, 6, names.join(","));
+});
+
 test("templates: the version diff says when the template changed", () => {
   const a = draftAgreement(input());
   const b = draftAgreement(input({ template: repairSnap, taxMode: undefined, optionalClauses: undefined }));
