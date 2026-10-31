@@ -14,7 +14,7 @@ export const docusealConfigured = () => Boolean(API_KEY);
 
 type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; error: string };
 
-async function call<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<ApiResult<T>> {
+async function call<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown, timeoutMs = 20_000): Promise<ApiResult<T>> {
   if (!API_KEY) return { ok: false, status: 0, error: "DocuSeal isn't set up (DOCUSEAL_API_KEY is missing)." };
   try {
     const res = await fetch(`${API_URL}${path}`, {
@@ -22,7 +22,7 @@ async function call<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, 
       cache: "no-store",
       headers: { "X-Auth-Token": API_KEY, "Content-Type": "application/json", Accept: "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const text = await res.text();
     if (!res.ok) {
@@ -46,7 +46,8 @@ async function call<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, 
 
 export const createHtmlSubmission = (body: Record<string, unknown>) => call<unknown>("POST", "/submissions/html", body);
 export const archiveSubmission = (id: number) => call<unknown>("DELETE", `/submissions/${id}`);
-export const getSubmission = (id: number) =>
+/** A short timeout when read on a page view, so a slow DocuSeal never holds the page. */
+export const getSubmission = (id: number, timeoutMs?: number) =>
   call<{
     status?: string;
     audit_log_url?: string | null;
@@ -56,6 +57,8 @@ export const getSubmission = (id: number) =>
   }>(
     "GET",
     `/submissions/${id}`,
+    undefined,
+    timeoutMs,
   );
 
 /**

@@ -134,9 +134,14 @@ export async function sendForSigning(session: Session, quote: Quote, agreement: 
   // The links first (server-only), then the agreement, guarded on its status AND on the version that was sent,
   // so a save that slipped in meanwhile stops this send instead of signing an older version.
   const token = randomBytes(16).toString("hex");
-  const links = await pgAdmin("agreement_signing?on_conflict=agreement_id", {
+  // The row left by the previous, finished send (declined or expired) is cleared, by its own submission id, so
+  // a send racing this one can never clear this one's links; if two race, the second insert fails on the key.
+  if (agreement.docuseal_submission_id) {
+    await pgAdmin(`agreement_signing?agreement_id=eq.${agreement.id}&submission_id=eq.${agreement.docuseal_submission_id}`, { method: "DELETE" });
+  }
+  const links = await pgAdmin("agreement_signing", {
     method: "POST",
-    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ agreement_id: agreement.id, submission_id: read.submissionId, sign_token: token, contractor_staff_id: contractor.id, signers: read.signers, customer_texted_at: null }),
   });
   let saved = false;
@@ -163,6 +168,8 @@ export async function sendForSigning(session: Session, quote: Quote, agreement: 
     console.error((e as Error).message);
   }
   if (!saved) {
+    // Only this send's links are removed: a send that won meanwhile keeps its own.
+    await pgAdmin(`agreement_signing?agreement_id=eq.${agreement.id}&submission_id=eq.${read.submissionId}`, { method: "DELETE" });
     await withdraw(read.submissionId, "send didn't complete");
     return { ok: false, error: "It changed while sending (a new save, or someone else sent it). Reload and check before sending again." };
   }
@@ -303,7 +310,7 @@ export async function reconcileWithDocuseal(agreement: Agreement): Promise<boole
     const needsFile = agreement.status === "signed" && !agreement.signed_pdf_path;
     const waiting = agreement.status === "sent" || agreement.status === "contractor_signed";
     if (!needsFile && !waiting) return false;
-    const sub = await getSubmission(agreement.docuseal_submission_id);
+    const sub = await getSubmission(agreement.docuseal_submission_id, 5_000);
     if (!sub.ok) return false;
     if (waiting) {
       const done = (sub.data.submitters ?? []).filter((s) => s.completed_at && (s.role === "Contractor" || s.role === "Customer"));

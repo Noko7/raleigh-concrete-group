@@ -50,7 +50,8 @@ export default async function JobDocuments({ params }: { params: Promise<{ id: s
   const others = agreements.filter((a) => a.id !== current?.id && !a.current_version_id);
   // What lets people sign is server-only: the contractor who was sent it gets their own link; only the owner sees
   // the customer's.
-  const links = current?.docuseal_submission_id ? await signingFor(current.id).catch(() => null) : null;
+  const found = current?.docuseal_submission_id ? await signingFor(current.id).catch(() => null) : null;
+  const links = found && found.submission_id === current?.docuseal_submission_id ? found : null;
   const [versions, currentVersion] = current?.current_version_id
     ? await Promise.all([listVersions(session, current.id), getVersion(session, current.current_version_id)])
     : [[], null];
