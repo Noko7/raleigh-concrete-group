@@ -129,18 +129,18 @@ alter table public.agreements add constraint agreements_current_version_fkey
 alter table public.agreement_versions enable row level security;
 
 create policy "staff read agreement versions" on public.agreement_versions as permissive for select to authenticated
-  using (EXISTS ( SELECT 1
-     FROM agreements a
-    WHERE ((a.id = agreement_versions.agreement_id) AND (is_owner() OR (a.staff_id = auth.uid()) OR (EXISTS ( SELECT 1
-             FROM quote_requests q
-            WHERE ((q.id = a.quote_id) AND (q.assigned_to = auth.uid())))))));
+  using (exists (select 1 from agreements a
+                 where a.id = agreement_versions.agreement_id
+                   and (is_owner()
+                        or a.staff_id = auth.uid()
+                        or exists (select 1 from quote_requests q where q.id = a.quote_id and q.assigned_to = auth.uid()))));
 
 create policy "staff save agreement versions" on public.agreement_versions as permissive for insert to authenticated
-  with check (EXISTS ( SELECT 1
-     FROM agreements a
-    WHERE ((a.id = agreement_versions.agreement_id) AND (is_owner() OR ((a.kind = 'customer'::text) AND (EXISTS ( SELECT 1
-             FROM quote_requests q
-            WHERE ((q.id = a.quote_id) AND (q.assigned_to = auth.uid())))))))));
+  with check (exists (select 1 from agreements a
+                      where a.id = agreement_versions.agreement_id
+                        and (is_owner()
+                             or (a.kind = 'customer'
+                                 and exists (select 1 from quote_requests q where q.id = a.quote_id and q.assigned_to = auth.uid())))));
 
 revoke all on public.agreement_versions from anon;
 revoke update, delete, truncate on public.agreement_versions from authenticated;
