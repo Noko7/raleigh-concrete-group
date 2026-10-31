@@ -1,5 +1,5 @@
--- Undo customer_pay_methods. The customers' stated choices are lost (they are also in the job's event history as
--- "payment_choice"). Export first if needed: select id, customer_pay_methods from public.quote_requests
+-- Undo customer_pay_methods. The customers' stated choices are lost here (each signing that ticked a box also
+-- logged a "payment_choice" event in the job's history). Export first if needed: select id, customer_pay_methods from public.quote_requests
 -- where customer_pay_methods is not null;
 
 set local lock_timeout = '5s';

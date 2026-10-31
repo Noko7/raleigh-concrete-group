@@ -273,13 +273,19 @@ async function act(agreement: AgreementForEvent & { quote: NonNullable<Agreement
   // How the customer said they'll pay (the boxes they ticked when signing), kept on the job for the office and the
   // contractor. Before the status check: submission.completed can move the agreement to signed first, and this
   // form.completed then changes no status but still carries their ticks.
-  if (e.payMethods.length && agreement.status !== "void") {
+  // The customer's own signature always writes it (null when they ticked nothing), so an earlier agreement's
+  // ticks never stand in for this one's.
+  const customerSigned = e.type === "form.completed" && e.role === "Customer";
+  if ((customerSigned || e.payMethods.length) && agreement.status !== "void") {
     const saved = await pgAdmin(`quote_requests?id=eq.${agreement.quote.id}`, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ customer_pay_methods: e.payMethods }),
+      body: JSON.stringify({ customer_pay_methods: e.payMethods.length ? e.payMethods : null }),
     });
     if (!saved.ok) throw new Error(`[signing] couldn't save the customer's payment choice (${saved.status})`);
+    if (e.payMethods.length) {
+      await addAdminEvent(agreement.quote.id, "payment_choice", { choice: "direct", methods: e.payMethods, agreement_id: agreement.id });
+    }
   }
   const t = transitionFor(agreement.status as AgreementSigningStatus, e);
   if (t.kind === "none") return "recorded";
