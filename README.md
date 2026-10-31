@@ -400,9 +400,9 @@ you want.
 **Agreements (DocuSeal)**
 Signing itself happens in **DocuSeal**, which you manage separately: you build the template there,
 send it, and DocuSeal emails the signer and hosts the signing page. The CRM is the *record* of it -
-**CRM → Agreements** (`/crm/agreements`) tracks status, and stores the signed file.
-- **Contractor agreements** - one onboarding doc per crew member, added from **CRM → Contractors**.
-- **Customer agreements** - one per job, added from that job's page.
+**CRM → Documents** (`/crm/documents`) tracks status, and stores the signed file.
+- **Contractor agreements** - one onboarding doc per crew member, under **Documents → Contractor agreements**.
+- **Customer agreements** - one per job, on that job's page in Documents.
 - Statuses: Not sent → Awaiting signature → Signed (or Declined / Void). You set these yourself,
   since DocuSeal isn't wired into the app.
 - Files live in a **private** `agreements` storage bucket and are only ever served through
@@ -945,6 +945,16 @@ and so are `status` and `paid_at` (the crew move their own cards, and a job
 marked paid with no payment behind it already shows up on the cash board's
 "check these rows").
 
+## Documents
+
+**CRM → Documents** (`/crm/documents`) is the one place for a job's paperwork. **By job** lists every job
+with an agreement or a receipt, newest activity first, with the agreement's status and the receipts
+received; each opens the job's documents page, where the agreement and receipts are managed. **Receipts**
+is the year's book with the CSV. **Contractor agreements** holds onboarding agreements. Job pages show a
+single **Documents** line linking there instead of their own sections. The old `/crm/agreements` and
+`/crm/money/receipts` links redirect here. RLS scopes everything: a contractor sees their own jobs and
+their own agreement.
+
 ## Receipts
 
 Every customer payment gets a numbered receipt the moment it counts, kept for good, for the contractor's and the owner's books (and taxes). The customer pays the **contractor**, so a receipt names the contractor as the one paid and says Raleigh Concrete Group only arranged the job.
@@ -957,7 +967,7 @@ Every customer payment gets a numbered receipt the moment it counts, kept for go
 
 **Never edited, never deleted.** A corrected payment voids its receipt (stamped VOID with the date and why) and issues a new one that says what it replaces; a voided payment voids its receipt and nothing replaces it. The database enforces this for every role (`guard_payment_receipt()`), and numbers come from `issue_payment_receipt()` only: 1, 2, 3... with no gaps, one live receipt per payment.
 
-**Where they are.** `/r/<token>` is the receipt (the token is the key, like a quote link), with Print and Download PDF. Each job page lists its receipts; the owner's also lists paid payments with no receipt (recorded before receipts existed, or one that failed to issue) with an **Issue receipt** button that texts nobody. **Money → Receipts** lists a year's receipts (owner: all; contractor: theirs) with totals, and **Download CSV** for an accountant: every receipt in number order, voids included and marked, practice leads left out unless shown.
+**Where they are.** `/r/<token>` is the receipt (the token is the key, like a quote link), with Print and Download PDF. Each job's receipts are on its page in **Documents** (`/crm/documents/<job>`), which the job pages link to in one line; the owner's also lists paid payments with no receipt (recorded before receipts existed, or one that failed to issue) with an **Issue receipt** button that texts nobody, and the owner's job page flags them on that line. **Documents → Receipts** lists a year's receipts (owner: all; contractor: theirs) with totals, and **Download CSV** for an accountant: every receipt in number order, voids included and marked, practice leads left out unless shown.
 
 Payments recorded before receipts started have none unless issued by hand. Refunds of card payments do not change or void the receipt.
 

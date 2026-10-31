@@ -45,7 +45,7 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
                 { href: "/", label: t.nav.pipeline, also: ["/quotes"] },
                 { href: "/calendar", label: t.nav.calendar },
                 { href: "/customers", label: t.nav.customers },
-                { href: "/agreements", label: t.nav.agreements },
+                { href: "/documents", label: t.nav.documents, also: ["/agreements"] },
                 // A contractor's Money page shows only their jobs, so it sits with the shared items.
                 ...(isOwner ? [] : [{ href: "/money", label: t.nav.money }]),
                 ...(isOwner

@@ -8,7 +8,7 @@ export const es: Dict = {
     pipeline: "Trabajos",
     calendar: "Calendario",
     customers: "Clientes",
-    agreements: "Acuerdos",
+    documents: "Documentos",
     contractors: "Contratistas",
     money: "Dinero",
     archived: "Archivados",

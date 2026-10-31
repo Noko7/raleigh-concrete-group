@@ -25,6 +25,7 @@ import {
   notifyReceiptToOwner,
   type ReceiptText,
 } from "./notify/payments";
+import type { DocReceipt } from "./documents";
 import type { Quote, Session } from "./types";
 
 const UUID_RE = /^[0-9a-fA-F-]{36}$/;
@@ -116,6 +117,26 @@ export async function listReceiptsIssued(
       return { rows, ok: false };
     }
     const page = (await res.json()) as PaymentReceipt[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return { rows, ok: true };
+}
+
+/** Every receipt the signed-in user may see, just what the Documents index groups by job. Paged past 1000. */
+export async function listReceiptsForHub(session: Session): Promise<{ rows: DocReceipt[]; ok: boolean }> {
+  const rows: DocReceipt[] = [];
+  const PAGE = 1000;
+  for (let offset = 0; offset < 50_000; offset += PAGE) {
+    const res = await pgUser(
+      `payment_receipts?select=id,quote_id,amount_cents,issued_at,voided_at,is_test&order=receipt_number.asc&limit=${PAGE}&offset=${offset}`,
+      session.accessToken,
+    );
+    if (!res.ok) {
+      console.error("[receipts] hub list failed", res.status);
+      return { rows, ok: false };
+    }
+    const page = (await res.json()) as DocReceipt[];
     rows.push(...page);
     if (page.length < PAGE) break;
   }
