@@ -275,11 +275,20 @@ test("templates: the Standard seed is exactly the built-in, and both seeds are v
   assert.equal(defaultTemplateNameFor("Patio"), "Standard Work Agreement");
 });
 
-test("templates: a repair draft has the repair wording, no warranty, includes-tax price, initials for each item", () => {
+test("templates: a repair draft has the repair wording, its own limited warranty, includes-tax price, initials for each item", () => {
   const d = draftAgreement(input({ template: repairSnap, taxMode: undefined, optionalClauses: undefined }));
   const ids = d.blocks.map((b) => b.id);
   assert.ok(ids.includes("clause.repair") && ids.includes("clause.insurance") && ids.includes("clause.liability"));
-  assert.ok(!ids.includes("clause.warranty"));
+  // Its own limited workmanship warranty, which the repair limitations now point to by name.
+  const warranty = d.blocks.find((b) => b.id === "clause.warranty")!;
+  assert.equal(warranty.title, "Limited Workmanship Warranty");
+  assert.ok(warranty.text.includes("repaired areas listed above for one (1) year"));
+  assert.ok(warranty.text.includes("does not limit any rights you have under North Carolina law"));
+  const repair = d.blocks.find((b) => b.id === "clause.repair")!.text;
+  assert.ok(repair.includes("except as stated in the Limited Workmanship Warranty below"));
+  assert.ok(!repair.includes("the Warranty below"));
+  assert.ok(ids.indexOf("clause.repair") < ids.indexOf("clause.warranty"), "the warranty comes after the item that points to it");
+  assert.ok(d.blocks.find((b) => b.id === "clause.authorization")!.text.includes("limited workmanship warranty"));
   assert.equal(d.values.tax_mode, "includes_tax");
   assert.ok(d.blocks.find((b) => b.id === "clause.cancel")!.text.includes("Raleigh Concrete Group or the Contractor"));
   assert.ok(d.blocks.find((b) => b.id === "clause.authorization")!.text.includes("which includes all taxes and fees"));
