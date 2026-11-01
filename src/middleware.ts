@@ -1,8 +1,9 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 
 import { isStaffAllowed } from "@/lib/crm/access";
 import { AT_COOKIE, RT_COOKIE, sessionCookieOpts } from "@/lib/crm/env";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { clientIpOf, writeSelfLog } from "@/lib/crm/request-log-write";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -101,7 +102,51 @@ async function getStaffAccess(userId: string) {
   }
 }
 
-export async function middleware(request: NextRequest) {
+// ── The site's own request log (security page) ─────────────────────────────
+// Vercel's Log Drains aren't available on this plan, so every request through here is written to request_logs
+// after the response is decided (waitUntil: never delays it). A flood from one IP is sampled per instance, so an
+// attack can't turn into the same number of database writes: the first 120 a minute are all logged, then 1 in 25.
+const FLOOD_LIMIT = 120;
+const FLOOD_EVERY = 25;
+const ipCounts = new Map<string, { n: number; since: number }>();
+
+function shouldLog(ip: string | null): boolean {
+  const key = ip ?? "unknown";
+  const now = Date.now();
+  let c = ipCounts.get(key);
+  if (!c || now - c.since > 60_000) {
+    if (ipCounts.size > 5000) ipCounts.clear();
+    c = { n: 0, since: now };
+    ipCounts.set(key, c);
+  }
+  c.n += 1;
+  return c.n <= FLOOD_LIMIT || c.n % FLOOD_EVERY === 0;
+}
+
+export async function middleware(request: NextRequest, event: NextFetchEvent) {
+  const response = await handle(request);
+  try {
+    if (shouldLog(clientIpOf(request.headers))) {
+      // Passed on to the page or route: its status isn't known here (a download route fills it in). Answered here
+      // (a redirect to sign in, a 401): that status is the answer.
+      const passedOn = response.headers.has("x-middleware-next") || response.headers.has("x-middleware-rewrite");
+      event.waitUntil(
+        writeSelfLog({
+          headers: request.headers,
+          method: request.method,
+          url: request.url,
+          status: passedOn ? null : response.status,
+          source: "middleware",
+        }),
+      );
+    }
+  } catch {
+    // logging never breaks a request
+  }
+  return response;
+}
+
+async function handle(request: NextRequest): Promise<NextResponse> {
   const host = (request.headers.get("host") ?? "").split(":")[0];
   const isCrmHost = host.startsWith("crm.");
   const { pathname } = request.nextUrl;

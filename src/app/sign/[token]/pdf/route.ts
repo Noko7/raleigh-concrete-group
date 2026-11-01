@@ -1,11 +1,12 @@
 import { AGREEMENT_BUCKET, SERVICE_KEY, SUPABASE_URL } from "@/lib/crm/env";
 import { signingByToken } from "@/lib/crm/agreement-signing";
 import { pgAdmin } from "@/lib/crm/rest";
+import { logDataOut } from "@/lib/crm/request-log-write";
 
 export const dynamic = "force-dynamic";
 
 // The customer's copy of their signed agreement. The token is the key; only a signed agreement's stored PDF.
-export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+async function serve(_req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const no = (status: number) => new Response("Not found", { status, headers: { "Cache-Control": "no-store" } });
   const links = await signingByToken(token);
@@ -28,4 +29,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       "Cache-Control": "private, no-store",
     },
   });
+}
+
+// Logged for the security page: who downloaded this, and how many bytes went out.
+export async function GET(request: Request, ctx: { params: Promise<{ token: string }> }) {
+  return logDataOut(request, await serve(request, ctx));
 }

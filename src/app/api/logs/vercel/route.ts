@@ -2,7 +2,8 @@ import { gunzipSync } from "node:zlib";
 import { NextResponse } from "next/server";
 
 import { pgAdmin } from "@/lib/crm/rest";
-import { parseDrainBody, rowsFromDrain, verifyDrainSignature } from "@/lib/crm/request-logs";
+import { parseDrainBody, rowsFromDrain } from "@/lib/crm/request-logs";
+import { verifyDrainSignature } from "@/lib/crm/request-log-signature";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

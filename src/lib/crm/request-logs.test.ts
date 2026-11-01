@@ -20,8 +20,8 @@ import {
   rowsFromDrain,
   safeText,
   toRequestRow,
-  verifyDrainSignature,
 } from "./request-logs.ts";
+import { verifyDrainSignature } from "./request-log-signature.ts";
 
 const SECRET = "drain-secret-123";
 const sign = (body: string) => createHmac("sha1", SECRET).update(body).digest("hex");

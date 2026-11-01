@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/crm/auth";
 import { getQuote, isOpenAgain, isQuoteExpired, listQuoteOptions, listQuotePackages } from "@/lib/crm/queries";
 import { quotePdfResponse } from "@/lib/crm/quote-pdf-response";
+import { logDataOut } from "@/lib/crm/request-log-write";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,7 +13,7 @@ const AGREED = new Set(["approved", "scheduled", "completed", "paid"]);
 // The staff copy of any priced quote, whatever its stage and even once the
 // customer's link has expired. Read as the signed-in user, so RLS decides
 // access: the owner any quote, a contractor only jobs assigned to them.
-export async function GET(request: Request) {
+async function serve(request: Request) {
   const session = await getSession();
   if (!session) return new Response("Unauthorized", { status: 401, headers: { "Cache-Control": "no-store" } });
 
@@ -36,4 +37,9 @@ export async function GET(request: Request) {
     goodThrough: !isQuoteExpired(quote),
     link: !isQuoteExpired(quote),
   });
+}
+
+// Logged for the security page: who downloaded this, and how many bytes went out.
+export async function GET(request: Request) {
+  return logDataOut(request, await serve(request));
 }

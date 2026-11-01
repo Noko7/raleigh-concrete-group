@@ -1,12 +1,13 @@
 import { getSession } from "@/lib/crm/auth";
 import { easternYearStartIso, receiptsCsv, receiptYear } from "@/lib/crm/receipt-format";
 import { listReceiptsIssued, receiptNumbersById } from "@/lib/crm/receipts";
+import { logDataOut } from "@/lib/crm/request-log-write";
 
 export const dynamic = "force-dynamic";
 
 // A year's receipts as CSV for an accountant: every receipt in number order, voided ones included and marked.
 // Read as the signed-in user, so RLS decides what's in it (the owner: everything; a contractor: theirs).
-export async function GET(request: Request) {
+async function serve(request: Request) {
   const session = await getSession();
   if (!session) return new Response("Unauthorized", { status: 401, headers: { "Cache-Control": "no-store" } });
 
@@ -36,4 +37,9 @@ export async function GET(request: Request) {
       "Cache-Control": "private, no-store",
     },
   });
+}
+
+// Logged for the security page: who downloaded this, and how many bytes went out.
+export async function GET(request: Request) {
+  return logDataOut(request, await serve(request));
 }
