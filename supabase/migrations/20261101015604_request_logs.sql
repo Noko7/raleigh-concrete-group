@@ -1,5 +1,5 @@
 -- Raleigh Concrete Group - request logs from Vercel, for the owner's security page
--- Undo: undo/PENDING_request_logs.undo.sql. Check: verify/PENDING_request_logs.verify.sql.
+-- Undo: undo/20261101015604_request_logs.undo.sql. Check: verify/20261101015604_request_logs.verify.sql.
 --
 -- A Vercel Log Drain posts every request the website serves to /api/logs/vercel; the server checks the drain's
 -- signature and stores one row per request here (client IP, method, path with tokens masked and query values

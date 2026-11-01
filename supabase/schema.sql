@@ -40,7 +40,7 @@
 -- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
 -- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
 -- refusing saves while out for signature), checked against production after it was applied.
--- Updated by hand for migration PENDING_request_logs (request_logs, security_traffic(), purge_request_logs()
+-- Updated by hand for migration 20261101015604_request_logs (request_logs, security_traffic(), purge_request_logs()
 -- and the purge-request-logs pg_cron job). Re-check against production once applied.
 -- Updated by hand for migration 20261031191727 (quote_requests.customer_pay_methods and its check),
 -- checked against production after it was applied.

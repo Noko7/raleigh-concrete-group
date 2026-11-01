@@ -1,4 +1,4 @@
--- Check PENDING_request_logs on the real database.
+-- Check 20261101015604_request_logs on the real database.
 --
 -- Run AFTER the migration, as the SQL editor's own role (postgres), the whole file at once. It opens its own
 -- transaction and ends in ROLLBACK, so the probe row it writes is not kept. Output: one row per check; any result

@@ -160,7 +160,7 @@ export function TrafficSection({ traffic, range, base, configured }: { traffic: 
               {configured ? " (Already set on this deployment.)" : " (Not set on this deployment yet.)"}
             </li>
           </ol>
-          <p className="crm-muted crm-sm">Log Drains need a Vercel Pro plan. Requests show up here within a minute or two of being served.</p>
+          <p className="crm-muted crm-sm">One drain is all this needs. Requests show up here within a minute or two of being served.</p>
         </div>
       ) : (
         <>

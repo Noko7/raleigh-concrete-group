@@ -1,4 +1,4 @@
--- Undo PENDING_request_logs: the request log, its read function, its purge and the daily job.
+-- Undo 20261101015604_request_logs: the request log, its read function, its purge and the daily job.
 -- The stored request history (at most 30 days) is lost. Nothing else reads it.
 
 set local lock_timeout = '5s';
