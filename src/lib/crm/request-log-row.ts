@@ -3,6 +3,7 @@
 import { cleanIp, cleanPath, probeReason, safeText } from "./request-logs.ts";
 
 /**
+ * Exact paths only (no pattern matching): a dynamic API route added later (api/x/[id]) needs matching here too.
  * Every API route the site has (src/app/api and src/app/crm/api; request-log-write.test.ts keeps this in step
  * with the files). A request for any other /api address is a guess: Next answers it with a 404 the middleware
  * can't see, so the row records the 404 and the probe tag itself.
@@ -75,7 +76,10 @@ export function selfLogRow(i: SelfLogInput) {
   } catch {
     // keep "/"
   }
-  const unknownApi = i.source === "middleware" && i.status == null && isUnknownApi(pathname);
+  // On the crm. subdomain the middleware serves /api/x from /crm/api/x, so check the address it really reaches.
+  const host = (i.headers.get("host") ?? "").toLowerCase();
+  const served = host.startsWith("crm.") && !pathname.startsWith("/crm") ? `/crm${pathname}` : pathname;
+  const unknownApi = i.source === "middleware" && i.status == null && isUnknownApi(served);
   const status = unknownApi ? 404 : (i.status ?? null);
   return {
     log_key: requestKey(i.headers),

@@ -64,4 +64,11 @@ test("the known API list matches the route files, and unknown /api addresses are
   assert.equal(guess.probe, "api-guess");
   const real = selfLogRow({ headers: h, method: "POST", url: "https://raleighconcrete.net/api/quote", source: "middleware" });
   assert.equal(real.status, null);
+  // The crm. subdomain serves /api/login from /crm/api/login: a staff sign-in is not a guess.
+  const crm = headers({ "x-vercel-id": "iad1::q-2", host: "crm.raleighconcrete.net" });
+  const login = selfLogRow({ headers: crm, method: "POST", url: "https://crm.raleighconcrete.net/api/login", source: "middleware" });
+  assert.equal(login.status, null);
+  assert.equal(login.probe, null);
+  const crmGuess = selfLogRow({ headers: crm, method: "GET", url: "https://crm.raleighconcrete.net/api/admin", source: "middleware" });
+  assert.equal(crmGuess.status, 404);
 });
