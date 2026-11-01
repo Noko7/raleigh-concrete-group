@@ -126,7 +126,9 @@ function shouldLog(ip: string | null): boolean {
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
   const response = await handle(request);
   try {
-    if (shouldLog(clientIpOf(request.headers))) {
+    // Link prefetches aren't visits: the browser fetches pages it might open next.
+    const prefetch = request.headers.get("next-router-prefetch") === "1" || request.headers.get("purpose") === "prefetch";
+    if (!prefetch && shouldLog(clientIpOf(request.headers))) {
       // Passed on to the page or route: its status isn't known here (a download route fills it in). Answered here
       // (a redirect to sign in, a 401): that status is the answer.
       const passedOn = response.headers.has("x-middleware-next") || response.headers.has("x-middleware-rewrite");

@@ -134,7 +134,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
         </div>
       </div>
 
-      <TrafficSection traffic={traffic} range={range} base={base} configured />
+      <TrafficSection traffic={traffic} range={range} base={base} />
 
       <h2 className="crm-card-title sec-section-title">Sign-ins and team, last {WINDOW_DAYS} days</h2>
 
