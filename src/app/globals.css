@@ -4744,3 +4744,4 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 
 /* The customer's signing page: open the same DocuSeal form full screen in its own tab. */
 .sg-full { display: block; width: 100%; max-width: 26rem; margin: 0 auto 0.9rem; text-align: center; }
+.sg-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

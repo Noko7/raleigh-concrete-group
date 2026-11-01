@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DocusealForm } from "@docuseal/react";
 
@@ -10,13 +10,15 @@ import { DocusealForm } from "@docuseal/react";
 export function CustomerSign({ src }: { src: string }) {
   const router = useRouter();
   const [done, setDone] = useState(false);
+  // Set once they open the full-screen tab: only then is there anything to catch up on when they come back.
+  const openedFull = useRef(false);
   // Only a real https link is offered as a button (it comes from DocuSeal, but never trust a stored URL blindly).
   const fullScreen = /^https:\/\//i.test(src) ? src : null;
 
   useEffect(() => {
     // Back from the full-screen tab: show whatever happened there (signed, or still waiting).
     const back = () => {
-      if (document.visibilityState === "visible") router.refresh();
+      if (document.visibilityState === "visible" && openedFull.current) router.refresh();
     };
     document.addEventListener("visibilitychange", back);
     return () => document.removeEventListener("visibilitychange", back);
@@ -25,8 +27,16 @@ export function CustomerSign({ src }: { src: string }) {
   return (
     <div className="sg-form">
       {fullScreen && (
-        <a className="cq-btn cq-btn-primary sg-full" href={fullScreen} target="_blank" rel="noopener noreferrer">
-          Open full screen to read and sign
+        <a
+          className="cq-btn cq-btn-primary sg-full"
+          href={fullScreen}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => {
+            openedFull.current = true;
+          }}
+        >
+          Open full screen to read and sign<span className="sg-sr"> (opens in a new tab)</span>
         </a>
       )}
       <DocusealForm
