@@ -45,7 +45,6 @@ import { EstimateCard } from "./estimate-card";
 import { preferredSlots } from "./types";
 import { rotateTokens, setTestFlag } from "./status-actions";
 import { methodList, PAYMENT_METHODS } from "@/lib/crm/pay-methods";
-import { ONLINE_CARD_PAYMENTS } from "@/lib/crm/stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -442,7 +441,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                 locale={locale}
                 isOwner={isOwner}
                 cardReady={cardReady}
-                onlineCard={ONLINE_CARD_PAYMENTS}
+                onlineCard={!(payee && !payee.ok && payee.reason === "turned_off")}
                 totalCents={money.ledger.totalCents}
                 paidCents={money.ledger.paidCents}
                 dueCents={money.ledger.dueCents}

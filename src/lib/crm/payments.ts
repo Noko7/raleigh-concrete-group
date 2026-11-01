@@ -10,13 +10,12 @@ import {
   toCents,
   type Ledger,
 } from "./fees";
-import { addAdminEvent } from "./queries";
+import { addAdminEvent, onlineCardPaymentsOn } from "./queries";
 import { pgAdmin, pgUser } from "./rest";
 import {
   createCheckoutSession,
   expireCheckoutSession,
   getCheckoutSession,
-  ONLINE_CARD_PAYMENTS,
   STRIPE_READY,
 } from "./stripe";
 import type { FeeSettlement, Quote, QuotePayment, Session, Staff } from "./types";
@@ -350,7 +349,7 @@ export type PayeeState =
  * Stripe onboarding, set STRIPE_PRIV_KEY).
  */
 export async function payeeState(quote: Quote): Promise<PayeeState> {
-  if (!ONLINE_CARD_PAYMENTS) return { ok: false, reason: "turned_off" };
+  if (!(await onlineCardPaymentsOn())) return { ok: false, reason: "turned_off" };
   if (!STRIPE_READY) return { ok: false, reason: "no_stripe" };
   if (!quote.assigned_to) return { ok: false, reason: "unassigned" };
   const staff = await payeeFor(quote.assigned_to);
