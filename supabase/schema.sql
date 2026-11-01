@@ -40,6 +40,8 @@
 -- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
 -- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
 -- refusing saves while out for signature), checked against production after it was applied.
+-- Updated by hand for migration 20261101015604_request_logs (request_logs, security_traffic(), purge_request_logs()
+-- and the purge-request-logs pg_cron job). Re-check against production once applied.
 -- Updated by hand for migration 20261031191727 (quote_requests.customer_pay_methods and its check),
 -- checked against production after it was applied.
 -- Updated by hand for migration 20261031180311 (staff_agreement_fields_chk allows card, five methods),
@@ -502,6 +504,38 @@ create table public.quote_requests (
   constraint quote_requests_fee_waived_sane CHECK (((fee_waived_cents >= 0) AND (fee_waived_cents <= '9999999999'::bigint)))
 );
 
+create table public.request_logs (
+  id bigint generated always as identity,
+  log_key text not null,
+  at timestamp with time zone not null,
+  ip text,
+  method text,
+  host text,
+  path text not null,
+  status integer,
+  bytes_out bigint,
+  source text,
+  ua text,
+  referer_host text,
+  region text,
+  cache text,
+  waf_action text,
+  waf_rule text,
+  request_id text,
+  deployment_id text,
+  probe text,
+  received_at timestamp with time zone default now() not null,
+  constraint request_logs_pkey PRIMARY KEY (id),
+  constraint request_logs_log_key_key UNIQUE (log_key),
+  constraint request_logs_chk CHECK (
+    char_length(log_key) <= 130 and char_length(path) <= 520
+    and (ip is null or char_length(ip) <= 64)
+    and (ua is null or char_length(ua) <= 300)
+    and (status is null or status between 0 and 999)
+    and (bytes_out is null or bytes_out >= 0)
+  )
+);
+
 create table public.site_funnel_events (
   id bigint generated always as identity not null,
   created_at timestamp with time zone default now() not null,
@@ -596,6 +630,8 @@ CREATE UNIQUE INDEX qr_public_token_idx ON public.quote_requests USING btree (pu
 CREATE INDEX qr_scheduled_date_idx ON public.quote_requests USING btree (scheduled_date);
 CREATE INDEX qr_status_idx ON public.quote_requests USING btree (status);
 CREATE INDEX qr_visit_date_idx ON public.quote_requests USING btree (visit_date);
+CREATE INDEX request_logs_at_idx ON public.request_logs USING btree (at DESC);
+CREATE INDEX request_logs_probe_at_idx ON public.request_logs USING btree (at DESC) WHERE (probe IS NOT NULL);
 CREATE INDEX site_funnel_events_created_at_idx ON public.site_funnel_events USING btree (created_at DESC);
 CREATE UNIQUE INDEX staff_stripe_account_idx ON public.staff USING btree (stripe_account_id) WHERE (stripe_account_id IS NOT NULL);
 
@@ -623,12 +659,13 @@ alter table public.quote_options enable row level security;
 alter table public.quote_packages enable row level security;
 alter table public.quote_payments enable row level security;
 alter table public.quote_requests enable row level security;
+alter table public.request_logs enable row level security;
 alter table public.site_funnel_events enable row level security;
 alter table public.staff enable row level security;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 4. Policies (pg_policies). Tables with RLS on and no policy here are
---    service-role only: app_integrations, quote_drafts, site_funnel_events.
+--    service-role only: app_integrations, quote_drafts, request_logs, site_funnel_events.
 -- ════════════════════════════════════════════════════════════════════════════
 
 create policy "owner writes agreements" on public.agreements as permissive for all to authenticated
@@ -1281,6 +1318,78 @@ end;
 $function$
 ;
 
+create or replace function public.security_traffic(p_since timestamp with time zone)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with w as (
+    select * from public.request_logs where at >= greatest(p_since, now() - interval '31 days')
+  ),
+  per_ip as (
+    select ip,
+           count(*) as requests,
+           coalesce(sum(bytes_out), 0) as bytes,
+           count(*) filter (where status between 400 and 499) as c4xx,
+           count(*) filter (where status >= 500) as c5xx,
+           count(*) filter (where probe is not null) as probes,
+           count(distinct path) as paths,
+           min(at) as first_seen,
+           max(at) as last_seen,
+           mode() within group (order by path) as top_path,
+           mode() within group (order by ua) as ua
+      from w where ip is not null group by ip
+  )
+  select jsonb_build_object(
+    'totals', (select jsonb_build_object(
+        'requests', count(*),
+        'bytes', coalesce(sum(bytes_out), 0),
+        'ips', count(distinct ip),
+        'c4xx', count(*) filter (where status between 400 and 499),
+        'c5xx', count(*) filter (where status >= 500),
+        'waf', count(*) filter (where waf_action is not null and waf_action not in ('allow', 'log')),
+        'probes', count(*) filter (where probe is not null),
+        'first', min(at), 'last', max(at)) from w),
+    'last_received', (select received_at from public.request_logs order by id desc limit 1),
+    'series', coalesce((select jsonb_agg(x order by x.bucket) from (
+        select date_trunc('hour', at) as bucket, count(*) as requests, coalesce(sum(bytes_out), 0) as bytes,
+               count(*) filter (where status >= 400) as errors
+          from w group by 1) x), '[]'::jsonb),
+    'median_ip_bytes', (select coalesce(percentile_cont(0.5) within group (order by bytes), 0) from per_ip),
+    'by_bytes', coalesce((select jsonb_agg(x) from (select * from per_ip order by bytes desc limit 20) x), '[]'::jsonb),
+    'by_requests', coalesce((select jsonb_agg(x) from (select * from per_ip order by requests desc limit 10) x), '[]'::jsonb),
+    'by_errors', coalesce((select jsonb_agg(x) from (select * from per_ip where c4xx + c5xx > 0 order by c4xx + c5xx desc limit 10) x), '[]'::jsonb),
+    'by_paths', coalesce((select jsonb_agg(x) from (select * from per_ip order by paths desc limit 10) x), '[]'::jsonb),
+    'probes', coalesce((select jsonb_agg(x) from (
+        select ip, count(*) as hits, array_agg(distinct probe) as kinds,
+               (array_agg(distinct path))[1:5] as examples, max(at) as last_seen,
+               mode() within group (order by ua) as ua
+          from w where probe is not null group by ip order by count(*) desc limit 25) x), '[]'::jsonb),
+    'largest', coalesce((select jsonb_agg(x) from (
+        select at, ip, method, path, status, bytes_out, ua from w where bytes_out is not null
+         order by bytes_out desc limit 15) x), '[]'::jsonb),
+    'routes', coalesce((select jsonb_agg(x) from (
+        select regexp_replace(split_part(path, '?', 1), '^(/[^/]*(/[^/]*)?).*$', '\1') as route,
+               count(*) as requests, coalesce(sum(bytes_out), 0) as bytes, count(distinct ip) as ips,
+               max(bytes_out) as biggest
+          from w group by 1 order by 3 desc limit 20) x), '[]'::jsonb),
+    'statuses', coalesce((select jsonb_object_agg(s, n) from (
+        select coalesce(status::text, 'none') as s, count(*) as n from w group by 1) x), '{}'::jsonb)
+  );
+$$;
+
+create or replace function public.purge_request_logs()
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  with gone as (delete from public.request_logs where at < now() - interval '30 days' returning 1)
+  select count(*)::integer from gone;
+$$;
+
 CREATE OR REPLACE FUNCTION public.touch_agreements_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -1412,6 +1521,8 @@ grant select, insert, update, delete, truncate, references, trigger, maintain on
 grant select, insert, update, truncate, references, trigger, maintain on public.quote_requests to authenticated;
 grant select, insert, update, truncate, references, trigger, maintain on public.quote_requests to service_role;
 
+-- request_logs: the Vercel request log, server only (nothing for anon or authenticated).
+grant select, insert, update, delete, truncate, references, trigger on public.request_logs to service_role;
 -- site_funnel_events: nothing for anon or authenticated.
 grant select, insert, truncate, references, trigger, maintain on public.site_funnel_events to service_role;
 grant select, usage on sequence public.site_funnel_events_id_seq to service_role;
@@ -1450,12 +1561,17 @@ revoke all on function public.is_owner() from public;
 grant execute on function public.is_owner() to authenticated, service_role;
 revoke all on function public.issue_payment_receipt(jsonb) from public;
 grant execute on function public.issue_payment_receipt(jsonb) to service_role;
+revoke all on function public.purge_request_logs() from public;
+grant execute on function public.purge_request_logs() to service_role;
+revoke all on function public.security_traffic(timestamp with time zone) from public;
+grant execute on function public.security_traffic(timestamp with time zone) to service_role;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 8. Outside public, for context
 -- ════════════════════════════════════════════════════════════════════════════
 -- cron.job (pg_cron): expire-unanswered-quotes, '*/5 * * * *',
 --   'select public.expire_unanswered_quotes()'.
+-- cron.job (pg_cron): purge-request-logs, '17 7 * * *', 'select public.purge_request_logs()'.
 -- storage.buckets (private, no storage.objects policies; uploads use signed URLs):
 --   quote-uploads  file_size_limit 52428800  image/jpeg, image/png, image/webp,
 --                  image/heic, image/heif, image/heic-sequence, image/heif-sequence,

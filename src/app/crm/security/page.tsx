@@ -6,6 +6,9 @@ import { eventActor, eventText } from "@/lib/crm/events";
 import { crmBase } from "@/lib/crm/nav";
 import { getQuoteNames, listLoginAttempts, listRecentActivity, listStaff } from "@/lib/crm/queries";
 import type { LoginAttempt, Staff } from "@/lib/crm/types";
+import { isWindow } from "@/lib/crm/request-logs";
+import { drainConfigured, loadTraffic } from "@/lib/crm/security-traffic";
+import { TrafficSection } from "./traffic-section";
 
 export const dynamic = "force-dynamic";
 
@@ -74,15 +77,19 @@ function belongsTo(attempt: LoginAttempt, member: Staff): boolean {
   return Boolean(typed && known && typed === known);
 }
 
-export default async function SecurityPage() {
+export default async function SecurityPage({ searchParams }: { searchParams: Promise<{ window?: string }> }) {
   const session = await requireOwner();
   const base = await crmBase();
+  const asked = (await searchParams).window;
+  const range = isWindow(asked) ? asked : "24h";
 
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const [attempts, staff, activity] = await Promise.all([
+  const [attempts, staff, activity, traffic] = await Promise.all([
     listLoginAttempts(session, 2000, since),
     listStaff(session),
     listRecentActivity(session, 250),
+    // Owner checked above: the request log is read with the service role.
+    loadTraffic(range),
   ]);
   // The only dependent read: names for the rows above.
   const quoteNames = await getQuoteNames(
@@ -121,10 +128,15 @@ export default async function SecurityPage() {
         <div>
           <h1>Security</h1>
           <p className="crm-muted">
-            Sign-ins and team activity across the CRM, last {WINDOW_DAYS} days, newest first.
+            Website traffic from Vercel (who got how much data, who is probing), then sign-ins and team activity across
+            the CRM.
           </p>
         </div>
       </div>
+
+      <TrafficSection traffic={traffic} range={range} base={base} configured={drainConfigured()} />
+
+      <h2 className="crm-card-title sec-section-title">Sign-ins and team, last {WINDOW_DAYS} days</h2>
 
       <div className="crm-stats">
         <div className="crm-stat">

@@ -3170,6 +3170,34 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 /* ── Security dashboard ── */
 .sec-inline-badge { margin-left: 0.45rem; }
 .sec-failed { color: #f87171; font-weight: 700; }
+/* Website traffic (Vercel request logs). */
+.sec-traffic { margin-bottom: 1.5rem; }
+.sec-traffic-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.8rem; }
+.sec-traffic-head .crm-card-title { margin: 0; }
+.sec-windows { display: inline-flex; border: 1px solid var(--crm-border); border-radius: 999px; overflow: hidden; }
+.sec-window { padding: 0.45rem 0.9rem; font-size: 0.85rem; font-weight: 800; color: var(--crm-muted); text-decoration: none; min-height: 2.25rem; display: inline-flex; align-items: center; }
+.sec-window-on { background: var(--crm-accent); color: #fff; }
+.sec-h3 { margin: 0 0 0.35rem; font-size: 1rem; font-weight: 800; }
+.sec-sub { margin-top: 1rem; }
+.sec-steps { margin: 0.5rem 0 0.7rem 1.1rem; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.sec-steps code, .sec-traffic code { font-size: 0.82rem; word-break: break-all; }
+.sec-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: nowrap; }
+.sec-path { white-space: normal; word-break: break-all; max-width: 22rem; }
+.sec-strong { font-weight: 800; white-space: nowrap; }
+.sec-row-flag td { background: rgba(220, 38, 38, 0.08); }
+.sec-traffic-table td, .sec-traffic-table th { vertical-align: top; }
+.sec-traffic-table { min-width: 860px; }
+.sec-ipcell { min-width: 11rem; max-width: 16rem; }
+.sec-flags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.35rem; }
+.sec-steps { list-style: decimal; }
+.sec-traffic .crm-stat { min-width: 120px; }
+.sec-chart { display: flex; align-items: flex-end; gap: 2px; height: 120px; margin-top: 0.6rem; }
+.sec-bar-col { flex: 1 1 0; min-width: 2px; height: 100%; display: flex; align-items: flex-end; }
+.sec-bar { width: 100%; background: var(--crm-accent); border-radius: 3px 3px 0 0; opacity: 0.85; }
+.sec-bar-col:hover .sec-bar { opacity: 1; }
+.sec-chart-axis { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.35rem; }
+.sec-limits { margin-top: 0.5rem; }
+.sec-section-title { margin: 1.5rem 0 0.8rem; }
 
 /* ── Agreements (contracts tracked alongside DocuSeal) ── */
 .ag-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
