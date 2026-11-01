@@ -50,7 +50,7 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
           <>
             <h1 className="sg-title">Hi {first}, here&apos;s your agreement</h1>
             <p className="sg-lead">
-              Your contractor has signed it. Read it through, then sign at the bottom. You&apos;ll be able to download a copy when you&apos;re done.
+              Your contractor has signed it. Read it through, then sign at the bottom, here or full screen in a new tab. You&apos;ll be able to download a copy when you&apos;re done.
             </p>
             <CustomerSign src={customer.embed_src} />
             <p className="sg-small">

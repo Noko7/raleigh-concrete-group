@@ -4741,3 +4741,6 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 /* How the customer said they'll pay: on the CRM job (payments) and the contractor's job page. */
 .jb-payplan { margin: 0 0 0.6rem; }
 .jo-payplan-list { font-size: 1.15rem; font-weight: 800; margin: 0.2rem 0 0.3rem; }
+
+/* The customer's signing page: open the same DocuSeal form full screen in its own tab. */
+.sg-full { display: block; width: 100%; max-width: 26rem; margin: 0 auto 0.9rem; text-align: center; }
