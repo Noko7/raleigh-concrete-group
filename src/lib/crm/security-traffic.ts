@@ -49,5 +49,3 @@ export async function loadTraffic(window: WindowKey): Promise<Traffic | null> {
   }
 }
 
-/** Whether the drain is configured on this deployment (the secret is set). */
-export const drainConfigured = () => Boolean(process.env.VERCEL_LOG_DRAIN_SECRET);

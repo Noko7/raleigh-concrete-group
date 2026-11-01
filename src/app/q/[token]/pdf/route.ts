@@ -1,6 +1,7 @@
 import { getQuoteByToken, isOpenAgain, isQuoteExpired, listQuoteOptionsAdmin, listQuotePackagesAdmin } from "@/lib/crm/queries";
 import { quotePdfResponse } from "@/lib/crm/quote-pdf-response";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { logDataOut } from "@/lib/crm/request-log-write";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,7 +11,7 @@ const notFound = () => new Response("Not found", { status: 404, headers: { "Cach
 // The customer's copy. Same access as the quote page: whoever holds the
 // unguessable public_token, and only while the page would show a price.
 // Staff download from /crm/api/quote-pdf, which has no such limits.
-export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
+async function serve(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   if (await rateLimit(`qpdf:${clientIp(request)}`, 30, 10 * 60 * 1000)) {
     return new Response("Too many requests", { status: 429, headers: { "Cache-Control": "no-store" } });
@@ -31,4 +32,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     goodThrough: true,
     link: true,
   });
+}
+
+// Logged for the security page: who downloaded this, and how many bytes went out.
+export async function GET(request: Request, ctx: { params: Promise<{ token: string }> }) {
+  return logDataOut(request, await serve(request, ctx));
 }

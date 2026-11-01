@@ -7,7 +7,7 @@ import { crmBase } from "@/lib/crm/nav";
 import { getQuoteNames, listLoginAttempts, listRecentActivity, listStaff } from "@/lib/crm/queries";
 import type { LoginAttempt, Staff } from "@/lib/crm/types";
 import { isWindow } from "@/lib/crm/request-logs";
-import { drainConfigured, loadTraffic } from "@/lib/crm/security-traffic";
+import { loadTraffic } from "@/lib/crm/security-traffic";
 import { TrafficSection } from "./traffic-section";
 
 export const dynamic = "force-dynamic";
@@ -134,7 +134,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
         </div>
       </div>
 
-      <TrafficSection traffic={traffic} range={range} base={base} configured={drainConfigured()} />
+      <TrafficSection traffic={traffic} range={range} base={base} />
 
       <h2 className="crm-card-title sec-section-title">Sign-ins and team, last {WINDOW_DAYS} days</h2>
 

@@ -6,19 +6,12 @@
 // request can produce several lines (each console.log of a function carries the same `proxy` block), so rows are
 // keyed by requestId and stored once. Lines without a `proxy` block (build output) aren't requests and are
 // skipped, as is anything malformed: one bad line never costs the batch.
-import { createHmac, timingSafeEqual } from "node:crypto";
+//
+// No Node-only imports: the middleware (Edge) uses cleanPath/cleanIp/probeReason to log each request itself
+// (request-log-write.ts). The drain's signature check lives in request-log-signature.ts.
 
 /** The drain endpoint itself: its own deliveries are not traffic worth watching. */
 export const DRAIN_PATH = "/api/logs/vercel";
-
-/** x-vercel-signature is the hex HMAC-SHA1 of the raw body with the drain's secret (Vercel Drains security). */
-export function verifyDrainSignature(rawBody: Uint8Array | string, header: string | null, secret: string): boolean {
-  if (!secret || !header) return false;
-  const want = createHmac("sha1", secret).update(rawBody).digest("hex");
-  const got = header.trim().toLowerCase();
-  if (got.length !== want.length || !/^[0-9a-f]+$/.test(got)) return false;
-  return timingSafeEqual(Buffer.from(got, "utf8"), Buffer.from(want, "utf8"));
-}
 
 /** Every log object in a drain body: a JSON array, one JSON object, or NDJSON. Unparseable lines are dropped. */
 export function parseDrainBody(raw: string): unknown[] {

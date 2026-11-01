@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/crm/auth";
 import { SUPABASE_URL, SERVICE_KEY, UPLOAD_BUCKET } from "@/lib/crm/env";
 import { verifyMediaPath } from "@/lib/crm/media-token";
+import { logDataOut } from "@/lib/crm/request-log-write";
 
 // Authenticated media proxy: streams a private storage object (service role) to signed-in staff.
 // A session alone isn't enough: the path must be signed for THIS viewer by the page that loaded the job
@@ -8,7 +9,7 @@ import { verifyMediaPath } from "@/lib/crm/media-token";
 // See lib/crm/media-token.
 export const runtime = "nodejs";
 
-export async function GET(request: Request) {
+async function serve(request: Request) {
   const session = await getSession();
   if (!session) return new Response("Unauthorized", { status: 401 });
 
@@ -57,4 +58,9 @@ export async function GET(request: Request) {
       "Cache-Control": "private, max-age=86400",
     },
   });
+}
+
+// Logged for the security page: who downloaded this, and how many bytes went out.
+export async function GET(request: Request) {
+  return logDataOut(request, await serve(request));
 }

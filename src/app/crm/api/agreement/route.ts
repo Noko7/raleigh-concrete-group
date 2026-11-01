@@ -1,10 +1,11 @@
 import { getSession } from "@/lib/crm/auth";
 import { AGREEMENT_BUCKET, SUPABASE_URL, SERVICE_KEY } from "@/lib/crm/env";
 import { getAgreement } from "@/lib/crm/queries";
+import { logDataOut } from "@/lib/crm/request-log-write";
 
 // Takes an agreement ID, not a storage path: the row is read as the user, so RLS decides access
 // (owner = any; contractor = their onboarding doc or assigned jobs).
-export async function GET(request: Request) {
+async function serve(request: Request) {
   const session = await getSession();
   if (!session) return new Response("Unauthorized", { status: 401 });
 
@@ -39,4 +40,9 @@ export async function GET(request: Request) {
       "Cache-Control": "private, no-store",
     },
   });
+}
+
+// Logged for the security page: who downloaded this, and how many bytes went out.
+export async function GET(request: Request) {
+  return logDataOut(request, await serve(request));
 }

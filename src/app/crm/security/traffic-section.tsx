@@ -114,7 +114,7 @@ function IpTable({ rows, show, total, median }: { rows: IpStat[]; show: "bytes" 
   );
 }
 
-export function TrafficSection({ traffic, range, base, configured }: { traffic: Traffic | null; range: WindowKey; base: string; configured: boolean }) {
+export function TrafficSection({ traffic, range, base }: { traffic: Traffic | null; range: WindowKey; base: string }) {
   const t = traffic;
   const total = Number(t?.totals.bytes ?? 0);
   const median = Number(t?.median_ip_bytes ?? 0);
@@ -137,36 +137,23 @@ export function TrafficSection({ traffic, range, base, configured }: { traffic: 
         </nav>
       </div>
 
-      {!t && configured && <div className="crm-alert">The request log couldn&apos;t be read just now. Refresh in a minute.</div>}
+      {!t && <div className="crm-alert">The request log couldn&apos;t be read just now. Refresh in a minute.</div>}
 
       {empty ? (
         <div className="crm-card">
-          <h3 className="sec-h3">Connect Vercel&apos;s request logs</h3>
+          <h3 className="sec-h3">Waiting for the first requests</h3>
           <p className="crm-sm">
-            Nothing has arrived yet. Every request to the website (who, what, and how much data went back) comes from a
-            Vercel Log Drain. To turn it on:
+            The website records its own traffic: every page and API request, and the size of every download (PDFs, the
+            receipts export, files and agreements). Nothing has been recorded yet; requests show up here within seconds
+            of being served.
           </p>
-          <ol className="crm-sm sec-steps">
-            <li>In Vercel, open the project, then Settings, then Drains (Log Drains), and add a drain.</li>
-            <li>
-              Data: <strong>Logs</strong>. Sources: static, lambda, edge, external and firewall. Environment: production.
-            </li>
-            <li>
-              Endpoint: <code>https://raleighconcrete.net/api/logs/vercel</code>, format JSON.
-            </li>
-            <li>
-              Copy the drain&apos;s signature secret into the project&apos;s environment variables as{" "}
-              <code>VERCEL_LOG_DRAIN_SECRET</code> (Production), then redeploy.
-              {configured ? " (Already set on this deployment.)" : " (Not set on this deployment yet.)"}
-            </li>
-          </ol>
-          <p className="crm-muted crm-sm">One drain is all this needs. Requests show up here within a minute or two of being served.</p>
         </div>
       ) : (
         <>
           {stale && (
             <div className="crm-alert">
-              No new requests have arrived since {when(t.last_received)}. Check the drain in Vercel (Settings, Drains).
+              No new requests have been recorded since {when(t.last_received)}. On a quiet site that can be normal; if the
+              site has been busy, the request log may be failing to write.
             </div>
           )}
           {flagged.length > 0 && (
@@ -191,11 +178,11 @@ export function TrafficSection({ traffic, range, base, configured }: { traffic: 
             </div>
             <div className="crm-stat">
               <strong>{Number(t.totals.c4xx).toLocaleString()}</strong>
-              <span>Client errors (4xx)</span>
+              <span>Refused (4xx)*</span>
             </div>
             <div className="crm-stat">
               <strong>{Number(t.totals.c5xx).toLocaleString()}</strong>
-              <span>Server errors (5xx)</span>
+              <span>Failed (5xx)*</span>
             </div>
             <div className="crm-stat">
               <strong>{Number(t.totals.probes).toLocaleString()}</strong>
@@ -271,7 +258,9 @@ export function TrafficSection({ traffic, range, base, configured }: { traffic: 
             <h3 className="sec-h3">Noisiest IPs</h3>
             <p className="crm-muted crm-sm">Most requests</p>
             <IpTable rows={t.by_requests} show="requests" total={total} median={median} />
-            <p className="crm-muted crm-sm sec-sub">Most errors (requests the site refused or failed)</p>
+            <p className="crm-muted crm-sm sec-sub">
+              Most errors* (refused at sign-in or by rate limits, unknown API addresses, and failed downloads)
+            </p>
             <IpTable rows={t.by_errors} show="errors" total={total} median={median} />
             <p className="crm-muted crm-sm sec-sub">Most different paths (crawlers and scanners)</p>
             <IpTable rows={t.by_paths} show="paths" total={total} median={median} />
@@ -339,11 +328,15 @@ export function TrafficSection({ traffic, range, base, configured }: { traffic: 
       )}
 
       <p className="crm-muted crm-sm sec-limits">
-        What this covers: every request the website served through Vercel, kept 30 days. Links that carry a customer
-        token are stored masked (:id) and query values are dropped. It can&apos;t see someone using a leaked database
-        key directly against Supabase: that traffic never passes through the website and shows only in Supabase&apos;s
-        own logs. Vercel reports the size of what the site sends back, not uploads or network packets, so &quot;data
-        out&quot; is response size per request.
+        * Error counts cover what the site can see: requests refused at sign-in or by rate limits, unknown API
+        addresses (counted as 404 guesses), and downloads. A page that turns out not to exist isn&apos;t counted as an
+        error, but scanners looking for well-known weak spots (WordPress, .env, admin panels) are caught by name under
+        Probing. What this covers: every page and API request to the website, kept 30 days (a flood from one IP is sampled after
+        120 a minute). &quot;Data out&quot; is the size of downloads and exports (PDFs, the receipts CSV, files and
+        agreements), where your data would leave in bulk; ordinary page views are counted but not sized, and uploads or
+        network packets aren&apos;t measured. Links that carry a customer token are stored masked (:id) and query values
+        are dropped. It can&apos;t see someone using a leaked database key directly against Supabase: that traffic never
+        passes through the website and shows only in Supabase&apos;s own logs.
       </p>
     </section>
   );
