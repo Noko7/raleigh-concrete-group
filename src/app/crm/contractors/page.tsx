@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireOwner } from "@/lib/crm/auth";
 import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { crmBase } from "@/lib/crm/nav";
-import { listAllAgreements, listInvites, listStaff } from "@/lib/crm/queries";
+import { listAllAgreements, listInvites, listStaff, onlineCardPaymentsOn } from "@/lib/crm/queries";
 import { AgreementStatusBadge } from "../documents/agreement-list";
 import { AddContractor } from "./add-contractor";
 import { DeleteContractor } from "./delete-contractor";
@@ -25,10 +25,11 @@ function prettyPhone(raw: string | null): string {
 export default async function ContractorsPage() {
   const session = await requireOwner();
   const base = await crmBase();
-  const [staff, rawInvites, allAgreements] = await Promise.all([
+  const [staff, rawInvites, allAgreements, cardsOn] = await Promise.all([
     listStaff(session),
     listInvites(session),
     listAllAgreements(session),
+    onlineCardPaymentsOn(),
   ]);
   const contractors = staff.filter((s) => s.role === "contractor");
 
@@ -199,6 +200,8 @@ export default async function ContractorsPage() {
                       </form>
                     </td>
                     <td>
+                      {/* Linking stays available so an account can be ready before card payments are switched on. */}
+                      {!cardsOn && <p className="crm-muted crm-sm">Card payments are off in Settings.</p>}
                       <StripePayee
                         staffId={c.id}
                         name={c.full_name || "them"}

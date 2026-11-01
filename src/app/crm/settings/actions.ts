@@ -7,7 +7,7 @@ import { isLocale } from "@/lib/crm/i18n";
 import { BUSINESS_TZ, now } from "@/lib/crm/clock";
 import { readWorkHours } from "@/lib/crm/constants";
 import { ownerRecipients, sendSmsResult, toE164 } from "@/lib/crm/notify";
-import { listContractors, setPrimaryContractorId, updateOwnProfile } from "@/lib/crm/queries";
+import { listContractors, setOnlineCardPayments, setPrimaryContractorId, updateOwnProfile } from "@/lib/crm/queries";
 import { getPhoneLines, listQuoNumbers, savePhoneLines } from "@/lib/crm/phone-lines";
 import { rateLimit } from "@/lib/rate-limit";
 import type { SaveState, TestSmsState } from "./types";
@@ -127,6 +127,21 @@ export async function sendTestSms(_prev: TestSmsState, formData: FormData): Prom
   );
 
   return { ok: results.some((r) => r.ok), results };
+}
+
+/** Online card payments (Stripe) on or off for the whole site. Owner only. */
+export async function saveOnlineCardPayments(_prev: SaveState, formData: FormData): Promise<SaveState> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return { ok: false, error: "Owners only." };
+  const on = formData.get("online_card_payments") === "on";
+  const ok = await setOnlineCardPayments(on);
+  if (!ok) return { ok: false, error: "Could not save. Please try again." };
+  console.info("[settings] online card payments", on ? "ON" : "OFF", "by", session.staff.id);
+  revalidatePath("/crm", "layout");
+  revalidatePath("/q", "layout");
+  revalidatePath("/pay", "layout");
+  revalidatePath("/job", "layout");
+  return { ok: true, saved: true };
 }
 
 // Owner-only: the contractor every new quote auto-assigns to.

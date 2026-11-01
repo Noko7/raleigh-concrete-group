@@ -18,12 +18,7 @@ const API_VERSION = "2026-07-29.dahlia";
 const API = "https://api.stripe.com/v1";
 
 export const STRIPE_READY = Boolean(SECRET);
-/**
- * Online card payments (customer checkout, deposit and pay links) are OFF unless the Vercel environment variable
- * ONLINE_CARD_PAYMENTS is "on". While off, customers pick how they'll pay the contractor directly, and
- * refunds of earlier card payments and the Stripe webhook keep working.
- */
-export const ONLINE_CARD_PAYMENTS = process.env.ONLINE_CARD_PAYMENTS === "on";
+// Whether customers can pay online at all is the owner's switch in Settings (onlineCardPaymentsOn, queries/staff).
 
 export const ACCOUNT_RE = /^acct_[A-Za-z0-9]{8,}$/;
 
