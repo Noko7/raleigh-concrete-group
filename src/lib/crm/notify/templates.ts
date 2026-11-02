@@ -18,6 +18,10 @@ import {
 export function receiptLink(token: string): string {
   return `${SITE_ORIGIN}/r/${token}`;
 }
+/** The job's documents page in the CRM (sign-in required; the owner, or the contractor assigned to the job). */
+export function documentsLink(quoteId: string): string {
+  return `${SITE_ORIGIN}/crm/documents/${quoteId}`;
+}
 export function jobLink(token: string): string {
   return `${SITE_ORIGIN}/job/${token}`;
 }
