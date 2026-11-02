@@ -211,7 +211,16 @@ async function handle(request: NextRequest): Promise<NextResponse> {
   if (!hasSession && !isLogin && !isAuthApi) {
     const url = request.nextUrl.clone();
     url.pathname = isCrmHost ? "/login" : "/crm/login";
-    url.search = isJobPath ? `?next=${encodeURIComponent(pathname)}` : "";
+    // Back to the page they asked for after signing in (a job, or a CRM page such as a job's documents linked
+    // from a text). Pages only: an API call, the home page and anything odd go to the default. The login page
+    // checks it again (safeNext: same-site paths only).
+    const backTo =
+      request.method === "GET" &&
+      !pathname.includes("/api/") &&
+      pathname !== "/" &&
+      pathname !== "/crm" &&
+      !pathname.startsWith("//");
+    url.search = backTo ? `?next=${encodeURIComponent(pathname)}` : "";
     return withNoIndex(NextResponse.redirect(url));
   }
   if (hasSession && isLogin) {

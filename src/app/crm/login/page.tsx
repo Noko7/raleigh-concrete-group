@@ -4,17 +4,12 @@ import Image from "next/image";
 import { dict, isLocale, LOCALES, LOCALE_LABELS } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
 import { LoginForm } from "./login-form";
+import { safeNext } from "@/lib/crm/safe-next";
 
 export const metadata: Metadata = {
   title: { absolute: "CRM Login | Raleigh Concrete Group" },
   robots: { index: false, follow: false },
 };
-
-// Same-site relative paths only, so this can't be an open redirect.
-function safeNext(next: string | undefined): string | undefined {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return undefined;
-  return next;
-}
 
 export default async function CrmLoginPage({
   searchParams,

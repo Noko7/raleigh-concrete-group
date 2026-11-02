@@ -22,7 +22,7 @@ import {
   customerBrief,
   dayAndTime,
 } from "./format";
-import { jobLink, quoteLink, payLink, newQuoteMessage, assignmentMessage } from "./templates";
+import { documentsLink, jobLink, quoteLink, payLink, newQuoteMessage, assignmentMessage } from "./templates";
 
 // Line items with prices for crew/owner texts: "approved" alone doesn't say
 // whether the sidewalk is in. Never in customer texts (money); see below.
@@ -414,7 +414,8 @@ export async function notifyNeedsScheduling(q: QuoteInfo, contractorPhone?: stri
         "Confirm the day that works:",
         jobLink(q.job_token ?? ""),
         "",
-        "Sign in with your CRM login to pick it.",
+        ...agreementAsk(q.id),
+        "Sign in with your CRM login to use these links.",
       ]),
       { quoteId: q.id, kind: "needs_scheduling", role: "crew" },
     ).catch(() => {});
@@ -462,8 +463,15 @@ export async function notifyOfflineApproval(
   await alertOwner(msg, opts.actorPhone, { quoteId: q.id, kind: "approved_offline" });
   // Crew copy only if someone else recorded it; otherwise their screen is the receipt.
   if (contractorPhone && !samePhone(contractorPhone, opts.actorPhone)) {
-    await sendSms(contractorPhone, msg, { quoteId: q.id, kind: "approved_offline", role: "crew" }).catch(() => {});
+    const crewMsg = text([msg, "", ...agreementAsk(q.id), "Sign in with your CRM login to use these links."]);
+    await sendSms(contractorPhone, crewMsg, { quoteId: q.id, kind: "approved_offline", role: "crew" }).catch(() => {});
   }
+}
+
+/** The next step after an approval: the customer agreement, written and sent from the job's documents page. */
+function agreementAsk(quoteId: string | null | undefined): string[] {
+  if (!quoteId) return [];
+  return ["Ready to send the customer agreement? Write and send it here:", documentsLink(quoteId), ""];
 }
 
 // ── 6d. Approved on the phone: the customer's written record ────────────────
