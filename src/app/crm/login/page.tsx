@@ -11,8 +11,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-// Same-site relative paths only, so this can't be an open redirect.
-
 export default async function CrmLoginPage({
   searchParams,
 }: {

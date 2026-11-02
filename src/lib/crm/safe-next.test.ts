@@ -13,8 +13,8 @@ test("same-site paths pass", () => {
 });
 
 test("anything that could leave the site is refused", () => {
-  for (const bad of ["//evil.com", "/\\evil.com", "/\t/evil.com", "/\n/evil.com", "https://evil.com", "evil.com", "/\u0000x", "", undefined, null]) {
-    assert.equal(safeNext(bad as string | undefined), undefined, JSON.stringify(bad));
+  for (const bad of ["//evil.com", "/\\evil.com", "/\t/evil.com", "/\n/evil.com", "https://evil.com", "evil.com", "/\u0000x", "", undefined, null, ["/a", "/b"]]) {
+    assert.equal(safeNext(bad), undefined, JSON.stringify(bad));
   }
   // What the login page receives after the browser decodes "?next=/%5Cevil.com" and "?next=/%09/evil.com".
   assert.equal(safeNext(decodeURIComponent("/%5Cevil.com")), undefined);
