@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { reconcileOutstanding } from "@/lib/crm/agreement-signing";
 import { cronAuthorized } from "@/lib/crm/cron-auth";
 import { ymdInDays } from "@/lib/crm/clock";
 import { CREW_REMINDER_DAYS, STALE_LEAD_HOURS } from "@/lib/crm/constants";
@@ -29,7 +30,7 @@ import {
 export const dynamic = "force-dynamic";
 
 // Daily Vercel Cron, 13:00 UTC (9am EDT / 8am EST). Protected by CRON_SECRET (Bearer token).
-//   0. Flush texts quiet hours held overnight.
+//   0. Flush texts quiet hours held overnight, and catch up agreements DocuSeal's webhooks missed.
 //   1. Ask the customer to confirm a job ~2 days out.
 //   2. Remind the crew 3 days out, the day before and the morning of; soonest first, 15 min apart per person.
 //   3. Nudge contractor (+owner) about leads unquoted/unvisited for STALE_LEAD_HOURS, one digest each.
@@ -130,10 +131,15 @@ export async function GET(request: Request) {
     if (res?.ok) followupSent += 1;
   }
 
+  // Agreements whose DocuSeal webhook never arrived (a texted signing link, an owner alert) catch up here too. Last, so a
+  // slow DocuSeal never holds up the reminders.
+  const agreementsCaughtUp = await reconcileOutstanding({ force: true });
+
   return NextResponse.json({
     ok: true,
     date: target,
     flushed,
+    agreementsCaughtUp,
     found: jobs.length,
     sent,
     crewSent,

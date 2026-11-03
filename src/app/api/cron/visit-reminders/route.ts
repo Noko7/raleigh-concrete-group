@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { reconcileOutstanding } from "@/lib/crm/agreement-signing";
 import { cronAuthorized } from "@/lib/crm/cron-auth";
 import { ymdInDays } from "@/lib/crm/clock";
 import { flushHeldMessages, notifyVisitReminder, notifyVisitReminderCrew, spacer } from "@/lib/crm/notify";
@@ -56,5 +57,9 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, date: tomorrow, flushed, customerSent, crewSent });
+  // Agreements whose DocuSeal webhook never arrived (a texted signing link, an owner alert) catch up here too. Last, so a
+  // slow DocuSeal never holds up the reminders.
+  const agreementsCaughtUp = await reconcileOutstanding({ force: true });
+
+  return NextResponse.json({ ok: true, date: tomorrow, flushed, agreementsCaughtUp, customerSent, crewSent });
 }

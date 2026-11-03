@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
+import { reconcileOutstandingInBackground } from "@/lib/crm/agreement-signing";
 import { getSession } from "@/lib/crm/auth";
 import { dict, isLocale } from "@/lib/crm/i18n";
 import { crmBase } from "@/lib/crm/nav";
@@ -23,6 +24,9 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
   // silently (e.g. a rotated CRON_SECRET 401s). Free when empty (one indexed SELECT, in after()); claimMessage
   // keeps each text single-send when racing a cron or another tab.
   if (session) await flushInBackground();
+  // Likewise a backstop for DocuSeal's webhooks: agreements out for signature are checked against DocuSeal, so
+  // a missed "contractor signed" still texts the customer their link. Throttled, and run after the response.
+  if (session) await reconcileOutstandingInBackground();
   const isOwner = session?.staff.role === "owner";
   // Narrowing `session?.staff.locale` doesn't narrow `session` itself.
   const rawLocale = session?.staff.locale;

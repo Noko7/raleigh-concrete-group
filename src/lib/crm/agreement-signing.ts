@@ -6,9 +6,10 @@
 //            DocuSeal also emails the signers in order (order "preserved"): the contractor at once, the customer
 //            once the contractor has signed. A submission DocuSeal created but this site never recorded (a send
 //            that timed out) is withdrawn when its first signature arrives, so the customer's link to it is dead.
-//   webhook  the contractor signs -> `contractor_signed`, and the customer is texted their link (/sign/<token>,
-//            quiet hours apply). The customer signs -> `signed`: the signed PDF and audit log are copied into
-//            the private agreements bucket at once (DocuSeal's links expire), and the owner is texted once.
+//   webhook  the contractor signs -> `contractor_signed`, the customer is texted their link (/sign/<token>,
+//            quiet hours apply) and the owner is texted once. The customer signs -> `signed`: the signed PDF and
+//            audit log are copied into the private agreements bucket at once (DocuSeal's links expire), and the
+//            owner is texted once.
 //            Declined or expired -> the owner is texted once and the agreement can be edited and sent again.
 //   cancel   archives the DocuSeal submission and puts the agreement back to a draft.
 //
@@ -307,6 +308,17 @@ async function act(agreement: AgreementForEvent & { quote: NonNullable<Agreement
       ).catch(() => null);
       if (sent?.ok) await patchSigning(agreement.id, { customer_texted_at: new Date().toISOString() });
     }
+    // The owner hears too, unless the owner is the contractor who just signed. The status has already moved, so a
+    // failure here is logged rather than thrown (a retry would find it "already moved" and text nobody anyway).
+    await staffRow(links?.contractor_staff_id ?? q.assigned_to)
+      .then((contractor) =>
+        alertOwner(
+          text([`CONTRACTOR SIGNED`, "", `${contractor?.full_name || "The contractor"} signed the agreement for ${q.name}. Waiting on ${firstName(q.name)} to sign now.`, "", hubLink(q.id)]),
+          contractor?.phone,
+          { quoteId: q.id, kind: "agreement_contractor_signed" },
+        ),
+      )
+      .catch((err) => console.error("[signing] contractor-signed owner alert failed", agreement.id, (err as Error).message));
     return "contractor signed";
   }
 
@@ -362,6 +374,8 @@ export async function reconcileWithDocuseal(agreement: Agreement): Promise<boole
     if (!needsFile && !waiting) return false;
     const sub = await getSubmission(agreement.docuseal_submission_id, 5_000);
     if (!sub.ok) return false;
+    // Withdrawn in DocuSeal by hand: its links are dead, so nobody is texted one.
+    if (waiting && sub.data.archived_at) return false;
     if (waiting) {
       const done = (sub.data.submitters ?? []).filter((s) => s.completed_at && (s.role === "Contractor" || s.role === "Customer"));
       const at = (role: string) => done.find((s) => s.role === role)?.completed_at ?? null;
@@ -390,5 +404,49 @@ export async function reconcileWithDocuseal(agreement: Agreement): Promise<boole
   } catch (e) {
     console.error("[signing] reconcile failed", agreement.id, (e as Error).message);
     return false;
+  }
+}
+
+/** At most one sweep per server instance this often: opening the CRM runs one, and pages are opened a lot. */
+const SWEEP_EVERY_MS = 2 * 60_000;
+let lastSweep = 0;
+
+/**
+ * The safety net under DocuSeal's webhooks: every agreement still out for signature (or signed without its PDF
+ * stored) is checked against DocuSeal, so a signature whose webhook never arrived still moves the agreement on,
+ * texts the customer their link and texts the owner, without anyone opening that agreement. Run by both daily
+ * crons and, at most every couple of minutes, whenever staff open the CRM. Never throws. Returns how many moved.
+ */
+export async function reconcileOutstanding(opts?: { force?: boolean }): Promise<number> {
+  if (!docusealConfigured()) return 0;
+  if (!opts?.force && Date.now() - lastSweep < SWEEP_EVERY_MS) return 0;
+  lastSweep = Date.now();
+  try {
+    // Expired ones are left alone after a day's grace: DocuSeal won't let anyone sign them. A signed PDF that
+    // still hasn't been stored after a week stops being fetched (DocuSeal's links will have expired).
+    const since = new Date(Date.now() - 86_400_000).toISOString();
+    const week = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    const res = await pgAdmin(
+      `agreements?docuseal_submission_id=not.is.null&or=(and(status.in.(sent,contractor_signed),or(expires_at.is.null,expires_at.gt.${since})),and(status.eq.signed,signed_pdf_path.is.null,completed_at.gt.${week}))&select=*&order=sent_at.desc&limit=25`,
+    );
+    if (!res.ok) throw new Error(`couldn't list agreements (${res.status})`);
+    let moved = 0;
+    // One at a time: a handful of DocuSeal reads, and each already guards itself against a racing webhook.
+    for (const a of (await res.json()) as Agreement[]) if (await reconcileWithDocuseal(a)) moved += 1;
+    if (moved) console.info("[signing] sweep caught up", moved, "agreement(s) DocuSeal's webhooks hadn't reported");
+    return moved;
+  } catch (e) {
+    console.error("[signing] sweep failed", (e as Error).message);
+    return 0;
+  }
+}
+
+/** reconcileOutstanding after the response is sent, so opening the CRM never waits on DocuSeal. */
+export async function reconcileOutstandingInBackground(): Promise<void> {
+  try {
+    const { after } = await import("next/server");
+    after(() => reconcileOutstanding().catch(() => 0));
+  } catch {
+    await reconcileOutstanding().catch(() => 0);
   }
 }
