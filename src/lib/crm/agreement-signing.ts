@@ -6,9 +6,10 @@
 //            DocuSeal also emails the signers in order (order "preserved"): the contractor at once, the customer
 //            once the contractor has signed. A submission DocuSeal created but this site never recorded (a send
 //            that timed out) is withdrawn when its first signature arrives, so the customer's link to it is dead.
-//   webhook  the contractor signs -> `contractor_signed`, and the customer is texted their link (/sign/<token>,
-//            quiet hours apply). The customer signs -> `signed`: the signed PDF and audit log are copied into
-//            the private agreements bucket at once (DocuSeal's links expire), and the owner is texted once.
+//   webhook  the contractor signs -> `contractor_signed`, the customer is texted their link (/sign/<token>,
+//            quiet hours apply) and the owner is texted once. The customer signs -> `signed`: the signed PDF and
+//            audit log are copied into the private agreements bucket at once (DocuSeal's links expire), and the
+//            owner is texted once.
 //            Declined or expired -> the owner is texted once and the agreement can be edited and sent again.
 //   cancel   archives the DocuSeal submission and puts the agreement back to a draft.
 //
@@ -307,6 +308,17 @@ async function act(agreement: AgreementForEvent & { quote: NonNullable<Agreement
       ).catch(() => null);
       if (sent?.ok) await patchSigning(agreement.id, { customer_texted_at: new Date().toISOString() });
     }
+    // The owner hears too, unless the owner is the contractor who just signed. The status has already moved, so a
+    // failure here is logged rather than thrown (a retry would find it "already moved" and text nobody anyway).
+    await staffRow(links?.contractor_staff_id ?? q.assigned_to)
+      .then((contractor) =>
+        alertOwner(
+          text([`CONTRACTOR SIGNED`, "", `${contractor?.full_name || "The contractor"} signed the agreement for ${q.name}. Waiting on ${firstName(q.name)} to sign now.`, "", hubLink(q.id)]),
+          contractor?.phone,
+          { quoteId: q.id, kind: "agreement_contractor_signed" },
+        ),
+      )
+      .catch((err) => console.error("[signing] contractor-signed owner alert failed", agreement.id, (err as Error).message));
     return "contractor signed";
   }
 
