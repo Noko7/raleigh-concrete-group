@@ -47,8 +47,6 @@ export async function GET(request: Request) {
 
   // First: last night's held texts have waited longest.
   const flushed = await flushHeldMessages();
-  // Agreements whose DocuSeal webhook never arrived (a texted signing link, an owner alert) catch up here too.
-  const agreementsCaughtUp = await reconcileOutstanding({ force: true });
 
   // One spacer for the crew countdown and stale nudge: a contractor's several texts go 15 minutes apart
   // instead of as one buzz. Customers get at most one text per run, so they aren't spaced.
@@ -132,6 +130,10 @@ export async function GET(request: Request) {
     await addAdminEvent(q.id, "quote_followup_sent", { quote_amount: q.quote_amount });
     if (res?.ok) followupSent += 1;
   }
+
+  // Agreements whose DocuSeal webhook never arrived (a texted signing link, an owner alert) catch up here too. Last, so a
+  // slow DocuSeal never holds up the reminders.
+  const agreementsCaughtUp = await reconcileOutstanding({ force: true });
 
   return NextResponse.json({
     ok: true,

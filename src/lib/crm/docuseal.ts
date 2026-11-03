@@ -51,6 +51,7 @@ export const getSubmission = (id: number, timeoutMs?: number) =>
   call<{
     status?: string;
     audit_log_url?: string | null;
+    archived_at?: string | null;
     combined_document_url?: string | null;
     documents?: { url?: string }[];
     submitters?: { role?: string; completed_at?: string | null; values?: { field?: string; value?: unknown }[] }[];

@@ -374,6 +374,8 @@ export async function reconcileWithDocuseal(agreement: Agreement): Promise<boole
     if (!needsFile && !waiting) return false;
     const sub = await getSubmission(agreement.docuseal_submission_id, 5_000);
     if (!sub.ok) return false;
+    // Withdrawn in DocuSeal by hand: its links are dead, so nobody is texted one.
+    if (waiting && sub.data.archived_at) return false;
     if (waiting) {
       const done = (sub.data.submitters ?? []).filter((s) => s.completed_at && (s.role === "Contractor" || s.role === "Customer"));
       const at = (role: string) => done.find((s) => s.role === role)?.completed_at ?? null;
@@ -420,10 +422,12 @@ export async function reconcileOutstanding(opts?: { force?: boolean }): Promise<
   if (!opts?.force && Date.now() - lastSweep < SWEEP_EVERY_MS) return 0;
   lastSweep = Date.now();
   try {
-    // Expired ones are left alone after a day's grace: DocuSeal won't let anyone sign them.
+    // Expired ones are left alone after a day's grace: DocuSeal won't let anyone sign them. A signed PDF that
+    // still hasn't been stored after a week stops being fetched (DocuSeal's links will have expired).
     const since = new Date(Date.now() - 86_400_000).toISOString();
+    const week = new Date(Date.now() - 7 * 86_400_000).toISOString();
     const res = await pgAdmin(
-      `agreements?docuseal_submission_id=not.is.null&or=(and(status.in.(sent,contractor_signed),or(expires_at.is.null,expires_at.gt.${since})),and(status.eq.signed,signed_pdf_path.is.null))&select=*&order=sent_at.desc&limit=25`,
+      `agreements?docuseal_submission_id=not.is.null&or=(and(status.in.(sent,contractor_signed),or(expires_at.is.null,expires_at.gt.${since})),and(status.eq.signed,signed_pdf_path.is.null,completed_at.gt.${week}))&select=*&order=sent_at.desc&limit=25`,
     );
     if (!res.ok) throw new Error(`couldn't list agreements (${res.status})`);
     let moved = 0;

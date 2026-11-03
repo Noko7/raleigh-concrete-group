@@ -25,8 +25,6 @@ export async function GET(request: Request) {
 
   // 6pm ET is inside business hours, so this also clears anything still queued from the morning.
   const flushed = await flushHeldMessages();
-  // Agreements whose DocuSeal webhook never arrived (a texted signing link, an owner alert) catch up here too.
-  const agreementsCaughtUp = await reconcileOutstanding({ force: true });
 
   const tomorrow = ymdInDays(1);
   let customerSent = 0;
@@ -58,6 +56,10 @@ export async function GET(request: Request) {
       await addAdminEvent(q.id, "visit_reminder_sent", { visit_date: q.visit_date, assigned_to: q.assigned_to });
     }
   }
+
+  // Agreements whose DocuSeal webhook never arrived (a texted signing link, an owner alert) catch up here too. Last, so a
+  // slow DocuSeal never holds up the reminders.
+  const agreementsCaughtUp = await reconcileOutstanding({ force: true });
 
   return NextResponse.json({ ok: true, date: tomorrow, flushed, agreementsCaughtUp, customerSent, crewSent });
 }
