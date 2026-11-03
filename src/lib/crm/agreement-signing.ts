@@ -404,3 +404,45 @@ export async function reconcileWithDocuseal(agreement: Agreement): Promise<boole
     return false;
   }
 }
+
+/** At most one sweep per server instance this often: opening the CRM runs one, and pages are opened a lot. */
+const SWEEP_EVERY_MS = 2 * 60_000;
+let lastSweep = 0;
+
+/**
+ * The safety net under DocuSeal's webhooks: every agreement still out for signature (or signed without its PDF
+ * stored) is checked against DocuSeal, so a signature whose webhook never arrived still moves the agreement on,
+ * texts the customer their link and texts the owner, without anyone opening that agreement. Run by both daily
+ * crons and, at most every couple of minutes, whenever staff open the CRM. Never throws. Returns how many moved.
+ */
+export async function reconcileOutstanding(opts?: { force?: boolean }): Promise<number> {
+  if (!docusealConfigured()) return 0;
+  if (!opts?.force && Date.now() - lastSweep < SWEEP_EVERY_MS) return 0;
+  lastSweep = Date.now();
+  try {
+    // Expired ones are left alone after a day's grace: DocuSeal won't let anyone sign them.
+    const since = new Date(Date.now() - 86_400_000).toISOString();
+    const res = await pgAdmin(
+      `agreements?docuseal_submission_id=not.is.null&or=(and(status.in.(sent,contractor_signed),or(expires_at.is.null,expires_at.gt.${since})),and(status.eq.signed,signed_pdf_path.is.null))&select=*&order=sent_at.desc&limit=25`,
+    );
+    if (!res.ok) throw new Error(`couldn't list agreements (${res.status})`);
+    let moved = 0;
+    // One at a time: a handful of DocuSeal reads, and each already guards itself against a racing webhook.
+    for (const a of (await res.json()) as Agreement[]) if (await reconcileWithDocuseal(a)) moved += 1;
+    if (moved) console.info("[signing] sweep caught up", moved, "agreement(s) DocuSeal's webhooks hadn't reported");
+    return moved;
+  } catch (e) {
+    console.error("[signing] sweep failed", (e as Error).message);
+    return 0;
+  }
+}
+
+/** reconcileOutstanding after the response is sent, so opening the CRM never waits on DocuSeal. */
+export async function reconcileOutstandingInBackground(): Promise<void> {
+  try {
+    const { after } = await import("next/server");
+    after(() => reconcileOutstanding().catch(() => 0));
+  } catch {
+    await reconcileOutstanding().catch(() => 0);
+  }
+}

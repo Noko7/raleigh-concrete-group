@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { reconcileOutstanding } from "@/lib/crm/agreement-signing";
 import { cronAuthorized } from "@/lib/crm/cron-auth";
 import { ymdInDays } from "@/lib/crm/clock";
 import { flushHeldMessages, notifyVisitReminder, notifyVisitReminderCrew, spacer } from "@/lib/crm/notify";
@@ -24,6 +25,8 @@ export async function GET(request: Request) {
 
   // 6pm ET is inside business hours, so this also clears anything still queued from the morning.
   const flushed = await flushHeldMessages();
+  // Agreements whose DocuSeal webhook never arrived (a texted signing link, an owner alert) catch up here too.
+  const agreementsCaughtUp = await reconcileOutstanding({ force: true });
 
   const tomorrow = ymdInDays(1);
   let customerSent = 0;
@@ -56,5 +59,5 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, date: tomorrow, flushed, customerSent, crewSent });
+  return NextResponse.json({ ok: true, date: tomorrow, flushed, agreementsCaughtUp, customerSent, crewSent });
 }
