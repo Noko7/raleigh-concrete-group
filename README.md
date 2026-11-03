@@ -987,7 +987,8 @@ opened.
 
 Setup, in Vercel environment variables (never in the repo): `DOCUSEAL_API_KEY` (the test-mode key until counsel
 signs off), `DOCUSEAL_WEBHOOK_SECRET` (the `whsec_...` value) and optionally `DOCUSEAL_API_URL` (default
-`https://api.docuseal.com`). In DocuSeal, add the webhook `https://raleighconcrete.net/api/docuseal/webhook` for the
+`https://api.docuseal.com`). In DocuSeal, add the webhook `https://www.raleighconcrete.net/api/docuseal/webhook` (with `www`: the bare domain redirects, and a
+redirected webhook never arrives) for the
 form and submission events, and turn on "enforce signing order" as a second guard. Every webhook is verified
 (`X-Docuseal-Signature`, 5-minute window), recorded in `document_events`, and marked processed only once acted
 on, so a retry after a failure is acted on again and a retry after success is not.
