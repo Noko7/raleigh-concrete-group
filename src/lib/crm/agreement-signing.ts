@@ -3,9 +3,9 @@
 //   send     the newest saved version goes to DocuSeal exactly as stored (POST /submissions/html). The agreement
 //            becomes `sent` and its text is frozen. If the owner sent it, the contractor is texted a link to sign
 //            in the CRM; a contractor who sent it signs right there.
-//            DocuSeal also emails the signers in order (order "preserved"): the contractor at once, the customer
-//            once the contractor has signed. A submission DocuSeal created but this site never recorded (a send
-//            that timed out) is withdrawn when its first signature arrives, so the customer's link to it is dead.
+//            DocuSeal emails nobody (send_email false): signers hear only by text. It still keeps the order
+//            (order "preserved"): the customer can't sign before the contractor. A submission DocuSeal created but
+//            this site never recorded (a send that timed out) is withdrawn when its first signature arrives.
 //   webhook  the contractor signs -> `contractor_signed`, the customer is texted their link (/sign/<token>,
 //            quiet hours apply) and the owner is texted once. The customer signs -> `signed`: the signed PDF and
 //            audit log are copied into the private agreements bucket at once (DocuSeal's links expire), and the
@@ -132,13 +132,13 @@ export async function sendForSigning(session: Session, quote: Quote, agreement: 
   if (!created.ok) return { ok: false, error: `DocuSeal didn't accept it: ${created.error}` };
   const read = readSigners(created.data);
   if (!read) {
-    // DocuSeal emails the first signer as soon as it creates the submission, so an unreadable reply is withdrawn
+    // DocuSeal created a live submission (its links work), so an unreadable reply is withdrawn
     // (its link then says it's no longer active) rather than left live and untracked.
     console.error("[signing] unexpected DocuSeal response for agreement", agreement.id);
     const stray = anySubmissionId(created.data);
     if (stray) await withdraw(stray, "reply couldn't be read");
     else console.error("[signing] COULDN'T WITHDRAW an unreadable DocuSeal submission; find it in DocuSeal and archive it by hand. Agreement", agreement.id);
-    return { ok: false, error: "DocuSeal's reply was incomplete, so the send was withdrawn. If the contractor got an email for it, that link won't work. Try again." };
+    return { ok: false, error: "DocuSeal's reply was incomplete, so the send was withdrawn. Try again." };
   }
 
   // The links first (server-only), then the agreement, guarded on its status AND on the version that was sent,
@@ -250,8 +250,8 @@ export async function handleDocusealEvent(e: DocusealEvent, payload: unknown): P
 
 /**
  * A signature on a submission this site sent but never recorded (the send timed out after DocuSeal had already
- * created it and emailed the contractor). It is withdrawn, so the customer's link (which DocuSeal may already have
- * emailed them) says it's no longer active and nothing can be signed that the site would never see. A submission
+ * created it, or, before emails were turned off, emailed the contractor). It is withdrawn, so any link to it says
+ * it's no longer active and nothing can be signed that the site would never see. A submission
  * whose links were saved is a send still finishing, and is left alone. If DocuSeal can't withdraw it, this throws,
  * so the event stays unprocessed and DocuSeal's retry tries again.
  */

@@ -92,7 +92,8 @@ export function buildSubmissionRequest(s: SendInput): Record<string, unknown> {
   const meta = { agreement_id: s.agreementId, version_id: s.version.id, version_no: s.version.version_no, html_sha256: s.version.html_sha256 };
   return {
     name: s.title.slice(0, 200),
-    send_email: true,
+    // Signers hear only by text, from this site: DocuSeal sends no invitation emails.
+    send_email: false,
     order: "preserved",
     expire_at: s.expireAt,
     documents: [{ name: `${s.title} (v${s.version.version_no})`.slice(0, 200), html: s.version.html, size: "Letter" }],

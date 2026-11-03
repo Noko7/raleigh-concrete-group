@@ -51,7 +51,7 @@ test("send: the saved HTML goes as is, contractor first, no DocuSeal emails, fin
     expireAt: "2026-11-30T12:00:00.000Z",
   }) as { send_email: boolean; order: string; documents: { html: string }[]; submitters: Record<string, unknown>[] };
   assert.equal(r.documents[0].html, html);
-  assert.equal(r.send_email, true);
+  assert.equal(r.send_email, false, "DocuSeal emails nobody; signers are texted by the site");
   assert.equal(r.order, "preserved");
   assert.deepEqual(r.submitters.map((s) => [s.role, s.order, s.send_email]), [["Contractor", 0, undefined], ["Customer", 1, undefined]]);
   assert.equal(r.submitters[1].email, undefined, "a bad email is left out, not sent");
