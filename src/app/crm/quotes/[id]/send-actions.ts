@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/crm/auth";
 import { QUOTE_SECTION_FIELDS } from "@/lib/crm/constants";
-import { sendHeldMessageNow } from "@/lib/crm/notify";
+import { sendHeldMessageNow, sendSmsResult } from "@/lib/crm/notify";
+import { retryRefusal } from "@/lib/crm/retry-text";
 import {
   addEvent,
   cancelMessage,
@@ -12,6 +13,7 @@ import {
   getMessage,
   isHeld,
   getQuote,
+  listMessages,
   saveQuoteOptions,
   saveQuotePackages,
   updateQuote,
@@ -65,6 +67,43 @@ export async function sendHeldTextNow(_prev: ScheduleState, formData: FormData):
     return { ok: false, error: [r.detail, r.status ? `(HTTP ${r.status})` : ""].filter(Boolean).join(" ").slice(0, 500) };
   }
   return { ok: true, message: "Sent. It has gone out now rather than waiting." };
+}
+
+/**
+ * Retry a text that failed (e.g. the SMS account ran out of credit). Owner only: it texts a customer or the crew
+ * again, so it's a deliberate office decision. retryRefusal decides whether it may go: a real failure, under 2
+ * days old, nothing newer of the same kind already sent to that number, at most 3 tries a day. It goes through
+ * the normal send path, so a customer text in quiet hours waits for the morning, and the attempt is logged as a
+ * new row next to the failed one plus an event on the job.
+ */
+export async function retryFailedText(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session expired. Please sign in again." };
+  if (session.staff.role !== "owner") return { ok: false, error: "Only the office can retry a text." };
+  const id = String(formData.get("id") ?? "");
+  const messageId = String(formData.get("messageId") ?? "");
+  if (!id || !messageId) return { ok: false, error: "Missing message." };
+
+  const current = await getQuote(session, id);
+  if (!current) return { ok: false, error: "You don't have access to this job." };
+
+  // Re-read: someone may have retried it a moment ago.
+  const [m, all] = await Promise.all([getMessage(messageId, id), listMessages(session, id)]);
+  if (!m) return { ok: false, error: "That text is no longer on this job." };
+  const refusal = retryRefusal(m, all, Date.now());
+  if (refusal) return { ok: false, error: refusal };
+
+  const role = m.role === "customer" || m.role === "crew" || m.role === "owner" ? m.role : "customer";
+  const r = await sendSmsResult(m.to_phone!, m.body!, { quoteId: id, kind: m.kind, role });
+  await addEvent(session, id, "message_retried", { kind: m.kind, role: m.role, delivered: r.ok, held: Boolean(r.held) });
+
+  revalidatePath(`/crm/quotes/${id}`);
+  revalidatePath("/crm");
+
+  if (!r.ok && !r.held) {
+    return { ok: false, error: [r.detail, r.status ? `(HTTP ${r.status})` : ""].filter(Boolean).join(" ").slice(0, 500) };
+  }
+  return { ok: true, message: r.held ? `Queued: it goes out ${r.sendAfterLabel ?? "when quiet hours end"}.` : "Sent again." };
 }
 
 /**

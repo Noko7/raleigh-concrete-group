@@ -359,6 +359,10 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
       return `Queued text sent early${m.kind ? ` (${messageLabel(String(m.kind))})` : ""}${
         m.delivered === false ? ", and it failed" : ""
       }`;
+    case "message_retried":
+      return `Failed text retried${m.kind ? ` (${messageLabel(String(m.kind))})` : ""}${
+        m.held ? ", held until quiet hours end" : m.delivered === false ? ", and it failed again" : ""
+      }`;
     case "message_cancelled":
       return `Queued text cancelled before it sent${m.kind ? ` (${messageLabel(String(m.kind))})` : ""}`;
     case "quote_retracted":
