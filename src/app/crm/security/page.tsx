@@ -9,6 +9,8 @@ import type { LoginAttempt, Staff } from "@/lib/crm/types";
 import { isWindow } from "@/lib/crm/request-logs";
 import { loadTraffic } from "@/lib/crm/security-traffic";
 import { TrafficSection } from "./traffic-section";
+import { connectorEnabled, listActivity, listConnections, MCP_URL } from "@/lib/mcp/store";
+import { ClaudeSection } from "./claude-section";
 
 export const dynamic = "force-dynamic";
 
@@ -84,12 +86,16 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
   const range = isWindow(asked) ? asked : "24h";
 
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const [attempts, staff, activity, traffic] = await Promise.all([
+  const [attempts, staff, activity, traffic, claudeOn, claudeConnections, claudeActivity] = await Promise.all([
     listLoginAttempts(session, 2000, since),
     listStaff(session),
     listRecentActivity(session, 250),
     // Owner checked above: the request log is read with the service role.
     loadTraffic(range),
+    // Owner checked above: the connector's records are server-only and read with the service role.
+    connectorEnabled(),
+    listConnections().catch(() => []),
+    listActivity().catch(() => []),
   ]);
   // The only dependent read: names for the rows above.
   const quoteNames = await getQuoteNames(
@@ -128,11 +134,19 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
         <div>
           <h1>Security</h1>
           <p className="crm-muted">
-            Website traffic from Vercel (who got how much data, who is probing), then sign-ins and team activity across
-            the CRM.
+            The Claude connector, website traffic from Vercel (who got how much data, who is probing), then sign-ins
+            and team activity across the CRM.
           </p>
         </div>
       </div>
+
+      <ClaudeSection
+        enabled={claudeOn}
+        mcpUrl={MCP_URL}
+        connections={claudeConnections}
+        activity={claudeActivity}
+        names={nameMap}
+      />
 
       <TrafficSection traffic={traffic} range={range} base={base} />
 
