@@ -86,16 +86,23 @@ export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; is
                 {/* Holds and cancellations explain themselves in the badge; this line is for real provider failures. */}
                 {m.detail && !m.ok && !isHeld(m) && !isCancelled(m) && <pre className="msg-detail">{m.detail}</pre>}
 
+                {/* Retry (owner only) on a failure that surely didn't arrive; the server re-checks retryRefusal. */}
+                {isOwner && m.quote_id && m.to_phone && retryRefusal(m, messages, nowMs) === null && (
+                  <RetryFailedText
+                    quoteId={m.quote_id}
+                    messageId={m.id}
+                    to={m.to_phone}
+                    what={messageLabel(m.kind).toLowerCase()}
+                    preview={(m.body ?? "").replace(/\s+/g, " ").slice(0, 120)}
+                  />
+                )}
+
                 {/*
                   On the row, not a menu: the queued-to-sent window is short.
                   Send shows on ANY held row (past its hour too, e.g. a stalled queue): losing the race just reports it
                   was claimed. Cancel hides once the hour arrives: a cancel landing just after a send would mark a
                   delivered text cancelled.
                 */}
-                {isOwner && m.quote_id && m.to_phone && retryRefusal(m, messages, nowMs) === null && (
-                  <RetryFailedText quoteId={m.quote_id} messageId={m.id} to={m.to_phone} />
-                )}
-
                 {isHeld(m) && m.quote_id && <SendHeldNow quoteId={m.quote_id} messageId={m.id} quiet={quiet} />}
 
                 {isCancellable(m) && m.quote_id && (

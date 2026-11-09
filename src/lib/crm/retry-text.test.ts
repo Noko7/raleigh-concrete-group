@@ -14,6 +14,8 @@ const base: RetryableText = {
   to_phone: "+19195550100",
   body: "Hi Ray, confirming your free estimate",
   ok: false,
+  status: 402,
+  detail: '{"message":"The organization does not have enough prepaid credits to send the message"}',
 };
 const row = (o: Partial<RetryableText>): RetryableText => ({ ...base, ...o });
 
@@ -49,4 +51,13 @@ test("retry the newest failure, and at most 3 a day", () => {
   const third = row({ id: "c", created_at: "2026-11-09T14:00:00Z" });
   assert.match(retryRefusal(third, [base, second, third], NOW)!, /3 times/);
   assert.equal(retryRefusal(second, [base, second], NOW), null);
+});
+
+test("only failures that surely didn't arrive", () => {
+  assert.equal(retryRefusal(row({ status: 400 }), [], NOW), null);
+  assert.equal(retryRefusal(row({ status: null, detail: "QUO_API_KEY is not set" }), [], NOW), null);
+  assert.equal(retryRefusal(row({ status: null, detail: 'Invalid phone number: "555"' }), [], NOW), null);
+  assert.match(retryRefusal(row({ status: 502, detail: "Bad gateway" }), [], NOW)!, /may have reached/);
+  assert.match(retryRefusal(row({ status: null, detail: "TypeError: fetch failed" }), [], NOW)!, /may have reached/);
+  assert.match(retryRefusal(row({ status: null, detail: null }), [], NOW)!, /may have reached/);
 });

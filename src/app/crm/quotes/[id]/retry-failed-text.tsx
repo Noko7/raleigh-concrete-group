@@ -7,12 +7,25 @@ import type { ScheduleState } from "./types";
 
 // Retry on a text that failed (owner only). Asks first, since it texts a customer or the crew again; the server
 // re-checks every rule (retryRefusal) before anything is sent.
-export function RetryFailedText({ quoteId, messageId, to }: { quoteId: string; messageId: string; to: string }) {
+export function RetryFailedText({
+  quoteId,
+  messageId,
+  to,
+  what,
+  preview,
+}: {
+  quoteId: string;
+  messageId: string;
+  to: string;
+  // The kind of text and its opening words, so a stale one is not resent blind.
+  what: string;
+  preview: string;
+}) {
   const [state, action, pending] = useActionState<ScheduleState, FormData>(retryFailedText, { ok: false });
   if (state.ok) return <p className="msg-now-ok">{state.message ?? "Sent again."}</p>;
 
   const submit = (fd: FormData) => {
-    if (!window.confirm(`Send this text to ${to} again?`)) return;
+    if (!window.confirm(`Send this ${what} text to ${to} again?\n\n"${preview}"`)) return;
     fd.set("id", quoteId);
     fd.set("messageId", messageId);
     action(fd);

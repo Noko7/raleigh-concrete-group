@@ -95,6 +95,11 @@ export async function retryFailedText(_prev: ScheduleState, formData: FormData):
 
   const role = m.role === "customer" || m.role === "crew" || m.role === "owner" ? m.role : "customer";
   const r = await sendSmsResult(m.to_phone!, m.body!, { quoteId: id, kind: m.kind, role });
+  // The duplicate guard matched (the same text to the same number in the last moments, the failed try included):
+  // nothing was sent, so say so rather than "Sent again".
+  if (r.duplicate) {
+    return { ok: false, error: "This was just tried a moment ago, so nothing was sent. Wait a minute and try again." };
+  }
   await addEvent(session, id, "message_retried", { kind: m.kind, role: m.role, delivered: r.ok, held: Boolean(r.held) });
 
   revalidatePath(`/crm/quotes/${id}`);
