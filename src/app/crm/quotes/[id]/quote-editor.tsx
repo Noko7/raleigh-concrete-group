@@ -61,6 +61,8 @@ type Props = {
   // Texted, no answer yet. The owner can still resend ("I never got it"), as a
   // deliberate second send.
   awaitingReply: boolean;
+  // The signed-in person's "simple quote form" setting (owners default to the regular form).
+  simple?: boolean;
   initial: {
     quote_amount: number | null;
     quote_summary: string | null;
@@ -71,7 +73,7 @@ type Props = {
   } & Partial<Record<QuoteSectionField, string | null>>;
 };
 
-export function QuoteEditor({ id, options, packages, customerName, service, previewUrl, awaitingReply, initial }: Props) {
+export function QuoteEditor({ id, options, packages, customerName, service, previewUrl, awaitingReply, simple = false, initial }: Props) {
   const router = useRouter();
   const owner = dict("en");
   const optionLabels = owner.quoteOptions;
@@ -246,6 +248,17 @@ export function QuoteEditor({ id, options, packages, customerName, service, prev
     }
   }
 
+  const breakdown = (
+    <OptionBuilder
+      rows={rows}
+      onChange={changeRows}
+      labels={optionLabels}
+      mode="breakdown"
+      target={awaitingReply ? Number(initial.quote_amount ?? 0) || null : null}
+      choiceActive={choice}
+    />
+  );
+
   return (
     <form ref={formRef} action={formAction} className="crm-card crm-editor crm-paper" id="quote">
       <input type="hidden" name="id" value={id} />
@@ -294,17 +307,16 @@ export function QuoteEditor({ id, options, packages, customerName, service, prev
         </>
       ) : (
         <>
-          {/* As on the crew's form: one price by default; breakdown, extras and A/B prices in one fold that opens
-              itself when the quote uses any of them. One rows array behind both, so total and save see one list. */}
-          <MoreWaysToPrice labels={optionLabels} startOpen={rows.length > 0 || filledPackages(pkgRows).length > 0}>
-            <OptionBuilder
-              rows={rows}
-              onChange={changeRows}
-              labels={optionLabels}
-              mode="breakdown"
-              target={awaitingReply ? Number(initial.quote_amount ?? 0) || null : null}
-              choiceActive={choice}
-            />
+          {/* As on the crew's form: regular has the breakdown open and the rest folded; simple folds the breakdown
+              too. The fold opens itself when the quote uses anything in it. One rows array behind both, so total and
+              save see one list. */}
+          {!simple && breakdown}
+          <MoreWaysToPrice
+            labels={optionLabels}
+            simple={simple}
+            startOpen={(simple && rows.length > 0) || rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
+          >
+            {simple && breakdown}
             <OptionBuilder rows={rows} onChange={changeRows} labels={optionLabels} mode="extras" />
             {/* Extras meant as pick-ONE add up to every price at once; suggested
                 here, where the mistake is made. */}

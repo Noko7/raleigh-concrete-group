@@ -399,18 +399,21 @@ export function OptionBuilder({
 export function MoreWaysToPrice({
   labels,
   startOpen,
+  simple = false,
   children,
 }: {
   labels: OptionLabels;
   startOpen: boolean;
+  // Simple quote form (per contractor): the breakdown is in here too, so the fold says so.
+  simple?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(startOpen);
   return (
     <details className="qo-more" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>
-        <span className="qo-more-title">{labels.moreTitle}</span>
-        <span className="qo-more-hint">{labels.moreHint}</span>
+        <span className="qo-more-title">{simple ? labels.moreTitleSimple : labels.moreTitle}</span>
+        <span className="qo-more-hint">{simple ? labels.moreHintSimple : labels.moreHint}</span>
       </summary>
       <div className="qo-more-body">{children}</div>
     </details>

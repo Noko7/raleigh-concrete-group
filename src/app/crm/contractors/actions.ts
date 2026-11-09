@@ -316,6 +316,23 @@ export async function setContractorActive(formData: FormData): Promise<void> {
   revalidatePath("/crm/contractors");
 }
 
+// Simple quote form: one price and the sections, with the breakdown folded away with extras and A/B prices.
+export async function setContractorSimpleForm(formData: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session || session.staff.role !== "owner") return;
+
+  const id = String(formData.get("id") ?? "");
+  const on = String(formData.get("simple") ?? "") === "true";
+  if (!id) return;
+
+  await pgAdmin(`staff?id=eq.${id}&role=eq.contractor`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ simple_quote_form: on }),
+  });
+  revalidatePath("/crm/contractors");
+}
+
 // Spanish mode: their CRM screens read in Spanish. Customer pages and texts stay English.
 export async function setContractorLocale(formData: FormData): Promise<void> {
   const session = await getSession();

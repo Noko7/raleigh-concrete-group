@@ -11,7 +11,7 @@ import { EditContact } from "./edit-contact";
 import { StripePayee } from "./stripe-payee";
 import { InviteContractor } from "./invite-contractor";
 import { ResetPassword } from "./reset-password";
-import { revokeContractorInvite, setContractorActive, setContractorLocale } from "./actions";
+import { revokeContractorInvite, setContractorActive, setContractorLocale, setContractorSimpleForm } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -158,6 +158,7 @@ export default async function ContractorsPage() {
                   <th>Job types</th>
                   <th>Status</th>
                   <th>Spanish</th>
+                  <th>Simple quotes</th>
                   <th>Gets paid</th>
                   <th>Agreement</th>
                   <th></th>
@@ -196,6 +197,25 @@ export default async function ContractorsPage() {
                           title={c.locale === "es" ? "Spanish is on. Tap to switch them to English." : "Tap to show their CRM in Spanish."}
                         >
                           {c.locale === "es" ? "On" : "Off"}
+                        </button>
+                      </form>
+                    </td>
+                    <td>
+                      {/* One price and the sections; breakdown, extras and A/B prices folded away. */}
+                      <form action={setContractorSimpleForm} className="crm-lang-toggle">
+                        <input type="hidden" name="id" value={c.id} />
+                        <input type="hidden" name="simple" value={c.simple_quote_form ? "false" : "true"} />
+                        <button
+                          type="submit"
+                          className={`crm-btn crm-btn-ghost${c.simple_quote_form ? " crm-lang-on" : ""}`}
+                          aria-pressed={c.simple_quote_form === true}
+                          title={
+                            c.simple_quote_form
+                              ? "Simple quote form is on: one price and the sections, the rest folded. Tap to give them the full form."
+                              : "Tap to give them the simple quote form: one price and the sections, the breakdown folded away."
+                          }
+                        >
+                          {c.simple_quote_form ? "On" : "Off"}
                         </button>
                       </form>
                     </td>

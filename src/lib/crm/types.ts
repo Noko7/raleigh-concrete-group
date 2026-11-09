@@ -21,6 +21,8 @@ export type Staff = {
   // Null or empty = no restriction.
   service_types: string[] | null;
   locale: string;
+  // The quote form folds the price breakdown away with extras and A/B prices (per contractor; off by default).
+  simple_quote_form?: boolean;
   // Both are slot START hours, so 8..16 is 8:00 AM to 4:00 PM. work_days is 0=Sunday..6=Saturday.
   // Nullable on old rows: always read through readWorkHours().
   work_start_hour: number | null;

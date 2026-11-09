@@ -494,6 +494,7 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
 
           <QuoteEditor
             id={quote.id}
+            simple={session.staff.simple_quote_form === true}
             options={options.map((o) => ({
               id: o.id,
               title: o.title,

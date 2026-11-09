@@ -385,8 +385,11 @@ const en = {
     extrasTitle: "Optional extras",
     extrasHint: "Add-ons the customer can say yes or no to. Each yes is added to their total.",
     extrasTotal: "If they take every extra",
-    moreTitle: "Breakdown, extras or two prices",
-    moreHint: "Most quotes don't need this: one price and the sections above are enough.",
+    moreTitle: "Extras or two prices",
+    moreHint: "Add-ons the customer can say yes or no to, or the same job priced two ways.",
+    // The simple quote form (a per-contractor setting) folds the breakdown in here as well.
+    moreTitleSimple: "Breakdown, extras or two prices",
+    moreHintSimple: "Most quotes don't need this: one price and the sections above are enough.",
     // One-tap breakdown lines. Spanish ones are translated with the rest at "Translate and review".
     presets: ["Materials", "Labor", "Equipment", "Permits", "Hauling & disposal"],
     acceptedTotal: "What they approved",
