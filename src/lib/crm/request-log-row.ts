@@ -11,7 +11,8 @@ import { cleanIp, cleanPath, probeReason, safeText } from "./request-logs.ts";
 export const API_ROUTES = new Set([
   "/api/address", "/api/availability", "/api/change-response", "/api/confirm-job", "/api/contractor-join",
   "/api/cron/drain", "/api/cron/reminders", "/api/cron/visit-reminders", "/api/docuseal/webhook", "/api/funnel",
-  "/api/logs/vercel", "/api/quote", "/api/quote-response", "/api/quote/draft", "/api/stripe/webhook",
+  "/api/logs/vercel", "/api/mcp", "/api/mcp/oauth/register", "/api/mcp/oauth/revoke", "/api/mcp/oauth/token",
+  "/api/quote", "/api/quote-response", "/api/quote/draft", "/api/stripe/webhook",
   "/api/track-view", "/api/upload-url",
   "/crm/api/agreement", "/crm/api/agreement-upload", "/crm/api/file", "/crm/api/google/callback",
   "/crm/api/google/connect", "/crm/api/login", "/crm/api/logout", "/crm/api/quote-pdf",

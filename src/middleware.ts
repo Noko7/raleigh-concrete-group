@@ -211,7 +211,13 @@ async function handle(request: NextRequest): Promise<NextResponse> {
   if (!hasSession && !isLogin && !isAuthApi) {
     const url = request.nextUrl.clone();
     url.pathname = isCrmHost ? "/login" : "/crm/login";
-    url.search = isJobPath ? `?next=${encodeURIComponent(pathname)}` : "";
+    // The Claude connector's approval screen keeps its whole request, so the owner lands back on it after signing in.
+    const isConnect = normalized === "/connect";
+    url.search = isJobPath
+      ? `?next=${encodeURIComponent(pathname)}`
+      : isConnect
+        ? `?next=${encodeURIComponent(pathname + request.nextUrl.search)}`
+        : "";
     return withNoIndex(NextResponse.redirect(url));
   }
   if (hasSession && isLogin) {

@@ -12,7 +12,8 @@ export const metadata: Metadata = {
 
 // Same-site relative paths only, so this can't be an open redirect.
 function safeNext(next: string | undefined): string | undefined {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return undefined;
+  // A backslash or control character can turn "/\evil.com" into another site in browsers.
+  if (!next || !next.startsWith("/") || next.startsWith("//") || /[\\\u0000-\u001f]/.test(next)) return undefined;
   return next;
 }
 
