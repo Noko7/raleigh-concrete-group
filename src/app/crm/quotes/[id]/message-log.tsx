@@ -2,7 +2,10 @@ import { BUSINESS_TZ, clockLabel, inQuietHours } from "@/lib/crm/clock";
 import { messageLabel, roleLabel } from "@/lib/crm/messages";
 import { isCancellable, isCancelled, isHeld, type QuoteMessage } from "@/lib/crm/queries";
 
+import { retryRefusal } from "@/lib/crm/retry-text";
+
 import { CancelHeldText } from "./cancel-held-text";
+import { RetryFailedText } from "./retry-failed-text";
 import { SendHeldNow } from "./send-held-now";
 
 // Keep in step with QUOTE_TEXT_KINDS in send-actions.ts, which decides what actually happens.
@@ -26,6 +29,8 @@ export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; is
   const spaced = held.length - heldForMorning.length;
   // Cancelled is not failed: someone decided it shouldn't go.
   const failed = messages.filter((m) => !m.ok && !isHeld(m) && !isCancelled(m)).length;
+  // Retry (owner only) shows only where the rules allow one; the server checks them again.
+  const nowMs = Date.now();
 
   return (
     <div className="crm-card">
@@ -80,6 +85,17 @@ export function MessageLog({ messages, isOwner }: { messages: QuoteMessage[]; is
 
                 {/* Holds and cancellations explain themselves in the badge; this line is for real provider failures. */}
                 {m.detail && !m.ok && !isHeld(m) && !isCancelled(m) && <pre className="msg-detail">{m.detail}</pre>}
+
+                {/* Retry (owner only) on a failure that surely didn't arrive; the server re-checks retryRefusal. */}
+                {isOwner && m.quote_id && m.to_phone && retryRefusal(m, messages, nowMs) === null && (
+                  <RetryFailedText
+                    quoteId={m.quote_id}
+                    messageId={m.id}
+                    to={m.to_phone}
+                    what={messageLabel(m.kind).toLowerCase()}
+                    preview={(m.body ?? "").replace(/\s+/g, " ").slice(0, 120)}
+                  />
+                )}
 
                 {/*
                   On the row, not a menu: the queued-to-sent window is short.
