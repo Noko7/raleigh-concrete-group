@@ -48,6 +48,7 @@ import {
   SectionsEditor,
   type Sections,
 } from "@/components/quote-form-parts";
+import { EDIT_QUOTE_EVENT } from "./quote-edit-shortcut";
 
 // Same server action as the CRM, so validation, customer text and log are identical.
 // Collapsed by default: an open price form would push the day-confirming buttons off screen.
@@ -86,6 +87,22 @@ export function JobQuote({
   const [state, formAction, pending] = useActionState<SaveState, FormData>(saveQuote, { ok: false });
 
   const [open, setOpen] = useState(false);
+  // "Editar esta cotización" near the top of the page (QuoteEditShortcut) opens this form and brings it into view.
+  // The card stays put at the bottom, so its state (and a send's result line) survives the page refreshing.
+  const [scrollToForm, setScrollToForm] = useState(false);
+  useEffect(() => {
+    const openForm = () => {
+      setOpen(true);
+      setScrollToForm(true);
+    };
+    window.addEventListener(EDIT_QUOTE_EVENT, openForm);
+    return () => window.removeEventListener(EDIT_QUOTE_EVENT, openForm);
+  }, []);
+  useEffect(() => {
+    if (!scrollToForm || !open) return;
+    document.getElementById("job-quote")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setScrollToForm(false);
+  }, [scrollToForm, open]);
   const formRef = useRef<HTMLFormElement>(null);
   // Which button was pressed, for the pending label and the result line.
   const [lastIntent, setLastIntent] = useState<"send" | "save">("send");
@@ -313,7 +330,7 @@ export function JobQuote({
         })
       : null;
     return (
-      <section className="js-card jq-card jq-waiting">
+      <section id="job-quote" className="js-card jq-card jq-waiting">
         <h2 className="js-title">{t.contractorJob.quoteWaitingTitle}</h2>
         <p className="js-lead">
           {fill(t.contractorJob.quoteWaitingLead, { name: customerFirstName })}
@@ -331,7 +348,7 @@ export function JobQuote({
 
   if (!open) {
     return (
-      <section className="js-card jq-card">
+      <section id="job-quote" className="js-card jq-card">
         <h2 className="js-title">{alreadySent ? t.contractorJob.quoteResend : t.contractorJob.quoteTitle}</h2>
         <p className="js-lead">
           {alreadySent
@@ -353,7 +370,7 @@ export function JobQuote({
   }
 
   return (
-    <section className="js-card jq-card">
+    <section id="job-quote" className="js-card jq-card">
       <h2 className="js-title">{awaitingReply ? t.contractorJob.quoteFixTitle : t.contractorJob.quoteTitle}</h2>
       <p className="js-lead">
         {awaitingReply ? fill(t.contractorJob.quoteFixLead, { name: customerFirstName }) : t.contractorJob.quoteLead}

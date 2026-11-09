@@ -28,6 +28,7 @@ import { JobPayments } from "./job-payments";
 import { CrewViewBeacon } from "./crew-view-beacon";
 import { bumpCrewView } from "@/lib/crm/crew-views";
 import { JobQuote } from "./job-quote";
+import { QuoteEditShortcut } from "./quote-edit-shortcut";
 import { JobReschedule } from "./job-reschedule";
 import { JobSchedule } from "./job-schedule";
 import { JobVisit } from "./job-visit";
@@ -211,49 +212,6 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(quote.address)}`
     : null;
 
-  // The quote card. Waiting on the customer, it goes near the top with the other things to act on: a customer
-  // with questions is the common reason to change a sent quote, and a card under every photo went unfound.
-  // Not sent yet, it stays last: writing the price needs the photos, notes and address above it.
-  const awaitingReply = showQuote && Boolean(quote.quote_sent_at) && !quote.customer_response;
-  const quoteCard = showQuote ? (
-    <JobQuote
-      id={quote.id}
-      locale={locale}
-      amount={quote.quote_amount}
-      summary={quote.quote_summary}
-      options={options.map((o) => ({
-        id: o.id,
-        title: o.title,
-        description: o.description,
-        amount: Number(o.amount),
-        required: o.required,
-        customer_response: o.customer_response,
-      }))}
-      packages={packages.map((p) => ({
-        id: p.id,
-        title: p.title,
-        description: p.description,
-        amount: Number(p.amount),
-        recommended: p.recommended,
-        customer_response: p.customer_response,
-      }))}
-      initialSections={{
-        quote_scope: quote.quote_scope,
-        quote_permits: quote.quote_permits,
-        quote_prep: quote.quote_prep,
-        quote_pour: quote.quote_pour,
-        quote_cleanup: quote.quote_cleanup,
-        estimated_duration: quote.estimated_duration,
-      }}
-      alreadySent={Boolean(quote.quote_sent_at)}
-      // Sent and unanswered: the card says to wait rather than offer a resend.
-      awaitingReply={awaitingReply}
-      sentAt={quote.quote_sent_at}
-      customerFirstName={firstNameOf(quote.name, quote.name)}
-      service={quote.service}
-    />
-  ) : null;
-
   return (
     <main className="job-wrap">
       {session.staff.role !== "owner" && <CrewViewBeacon token={token} />}
@@ -351,8 +309,11 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           />
         )}
 
-        {/* A sent quote waiting on the customer: edit it here, by the verbal-yes card. */}
-        {awaitingReply && quoteCard}
+        {/* A sent quote waiting on the customer: the way in to editing it, here with the other things to act on
+            (a customer's questions are the usual reason). The quote card itself stays last, below the photos. */}
+        {showQuote && quote.quote_sent_at && !quote.customer_response && (
+          <QuoteEditShortcut locale={locale} customerFirstName={firstNameOf(quote.name, quote.name)} amount={quote.quote_amount} />
+        )}
 
         {showOfflineAccept && (
           <AcceptOffline
@@ -596,7 +557,44 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         )}
 
         {/* Pricing last: it needs the photos, notes and address above. */}
-        {!awaitingReply && quoteCard}
+        {showQuote && (
+          <JobQuote
+            id={quote.id}
+            locale={locale}
+            amount={quote.quote_amount}
+            summary={quote.quote_summary}
+            options={options.map((o) => ({
+              id: o.id,
+              title: o.title,
+              description: o.description,
+              amount: Number(o.amount),
+              required: o.required,
+              customer_response: o.customer_response,
+            }))}
+            packages={packages.map((p) => ({
+              id: p.id,
+              title: p.title,
+              description: p.description,
+              amount: Number(p.amount),
+              recommended: p.recommended,
+              customer_response: p.customer_response,
+            }))}
+            initialSections={{
+              quote_scope: quote.quote_scope,
+              quote_permits: quote.quote_permits,
+              quote_prep: quote.quote_prep,
+              quote_pour: quote.quote_pour,
+              quote_cleanup: quote.quote_cleanup,
+              estimated_duration: quote.estimated_duration,
+            }}
+            alreadySent={Boolean(quote.quote_sent_at)}
+            // Sent and unanswered: the card says to wait rather than offer a resend.
+            awaitingReply={Boolean(quote.quote_sent_at) && !quote.customer_response}
+            sentAt={quote.quote_sent_at}
+            customerFirstName={firstNameOf(quote.name, quote.name)}
+            service={quote.service}
+          />
+        )}
 
         {/* What the customer has been quoted ("which number are they looking
             at"), above the full history. */}
