@@ -4,6 +4,7 @@ import { reconcileOutstanding } from "@/lib/crm/agreement-signing";
 import { cronAuthorized } from "@/lib/crm/cron-auth";
 import { ymdInDays } from "@/lib/crm/clock";
 import { CREW_REMINDER_DAYS, STALE_LEAD_HOURS } from "@/lib/crm/constants";
+import { purgeConnectorRecords } from "@/lib/mcp/store";
 import {
   REMINDER_SPACING_MINUTES,
   flushHeldMessages,
@@ -135,6 +136,9 @@ export async function GET(request: Request) {
   // slow DocuSeal never holds up the reminders.
   const agreementsCaughtUp = await reconcileOutstanding({ force: true });
 
+  // The Claude connector's expired codes and tokens and old activity. Never fails the run.
+  const connectorPurged = (await purgeConnectorRecords().catch(() => ({ ok: false }))).ok;
+
   return NextResponse.json({
     ok: true,
     date: target,
@@ -147,5 +151,6 @@ export async function GET(request: Request) {
     spacingMinutes: REMINDER_SPACING_MINUTES,
     staleSent,
     followupSent,
+    connectorPurged,
   });
 }

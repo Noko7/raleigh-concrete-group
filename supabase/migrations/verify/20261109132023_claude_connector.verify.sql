@@ -1,4 +1,4 @@
--- Check 20261109160000_claude_connector on the real database.
+-- Check 20261109132023_claude_connector on the real database.
 --
 -- Run AFTER the migration, as the SQL editor's own role (postgres), the whole file at once. It opens its own
 -- transaction and ends in ROLLBACK, so the probe rows it writes are not kept. Output: one row per check; any
@@ -20,13 +20,6 @@ insert into _r select 'anon and authenticated have no table rights',
         or has_table_privilege('anon', 'public.' || t, 'insert') or has_table_privilege('authenticated', 'public.' || t, 'insert')
         or has_table_privilege('authenticated', 'public.' || t, 'update') or has_table_privilege('authenticated', 'public.' || t, 'delete'))
   then 'ok' else '(bad)' end;
-insert into _r select 'purge_mcp only for service_role',
-  case when has_function_privilege('service_role', 'public.purge_mcp()', 'execute')
-        and not has_function_privilege('anon', 'public.purge_mcp()', 'execute')
-        and not has_function_privilege('authenticated', 'public.purge_mcp()', 'execute') then 'ok' else '(bad)' end;
-insert into _r select 'purge job scheduled daily',
-  case when exists (select 1 from cron.job where jobname = 'purge-mcp' and command = 'select public.purge_mcp()') then 'ok' else '(bad)' end;
-
 -- A connection for the first owner, end to end.
 insert into public.mcp_clients (client_id, client_name, redirect_uris)
   values ('rcg_client_verify', 'Verify', array['https://claude.ai/api/mcp/auth_callback']);
@@ -56,10 +49,11 @@ do $$ begin
   insert into _r values ('a secret client must store a secret hash', '(bad)');
 exception when check_violation then insert into _r values ('a secret client must store a secret hash', 'ok'); end $$;
 
--- Revoking by deleting the connection takes its tokens with it.
-delete from public.mcp_grants where id = '00000000-0000-4000-8000-0000000000aa';
-insert into _r select 'tokens go with their connection',
-  case when not exists (select 1 from public.mcp_tokens where token_hash = repeat('a', 64)) then 'ok' else '(bad)' end;
+-- Revoking a connection takes its tokens and codes with it: the foreign keys cascade.
+insert into _r select 'tokens and codes cascade from their parents',
+  case when (select count(*) from pg_constraint where contype = 'f' and confdeltype = 'c' and conname in (
+    'mcp_tokens_grant_fkey', 'mcp_grants_client_fkey', 'mcp_auth_codes_client_fkey', 'mcp_grants_staff_fkey',
+    'mcp_auth_codes_staff_fkey')) = 5 then 'ok' else '(bad)' end;
 
 select * from _r;
 rollback;

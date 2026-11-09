@@ -1,5 +1,5 @@
 -- Raleigh Concrete Group - the Claude connector (MCP server at /api/mcp with its own OAuth 2.1 sign-in)
--- Undo: undo/20261109160000_claude_connector.undo.sql. Check: verify/20261109160000_claude_connector.verify.sql.
+-- Undo: undo/20261109132023_claude_connector.undo.sql. Check: verify/20261109132023_claude_connector.verify.sql.
 --
 -- An owner connects Claude to the CRM from claude.ai (or Claude Code): Claude registers itself, the owner approves
 -- on /crm/connect, and Claude gets short-lived, read-only tokens. Switched on and watched from the Security page.
@@ -9,7 +9,9 @@
 --   3. mcp_grants: a connection - one owner, one app, read-only, 90 days at most, revocable.
 --   4. mcp_tokens: access (1 hour) and refresh (30 days, single use) tokens. Only SHA-256 hashes are stored.
 --   5. mcp_activity: every call and every sign-in event, for the Security page. Kept 90 days.
---   6. purge_mcp(): clears expired codes and tokens and old activity daily (pg_cron job purge-mcp).
+--
+-- Expired codes and tokens and old activity are cleared by the app's daily cron (/api/cron/reminders,
+-- purgeConnectorRecords), not a database function: this migration deletes nothing.
 --
 -- All server only: RLS on with no policies, nothing granted to anon or authenticated. The app reads and writes
 -- them with the service role after checking the caller.
@@ -136,23 +138,3 @@ revoke all on table public.mcp_clients, public.mcp_auth_codes, public.mcp_grants
 grant select, insert, update, delete on table
   public.mcp_clients, public.mcp_auth_codes, public.mcp_grants, public.mcp_tokens, public.mcp_activity to service_role;
 revoke all on sequence public.mcp_activity_id_seq from anon, authenticated;
-
--- ── 6. Housekeeping ─────────────────────────────────────────────────────────
-create or replace function public.purge_mcp()
-returns integer
-language sql
-security definer
-set search_path = public
-as $$
-  with c as (delete from public.mcp_auth_codes where expires_at < now() - interval '1 day' returning 1),
-       t as (delete from public.mcp_tokens where expires_at < now() - interval '1 day' returning 1),
-       a as (delete from public.mcp_activity where at < now() - interval '90 days' returning 1),
-       -- Registered, never connected, a week old: a stray or abandoned registration.
-       r as (delete from public.mcp_clients k where k.created_at < now() - interval '7 days'
-               and not exists (select 1 from public.mcp_grants g where g.client_id = k.client_id) returning 1)
-  select ((select count(*) from c) + (select count(*) from t) + (select count(*) from a) + (select count(*) from r))::integer;
-$$;
-revoke all on function public.purge_mcp() from public, anon, authenticated;
-grant execute on function public.purge_mcp() to service_role;
-
-select cron.schedule('purge-mcp', '23 7 * * *', 'select public.purge_mcp()');

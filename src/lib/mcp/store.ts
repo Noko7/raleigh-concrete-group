@@ -323,3 +323,27 @@ export type ActivityRow = {
 export async function listActivity(limit = 100): Promise<ActivityRow[]> {
   return rows<ActivityRow>(`mcp_activity?select=id,at,kind,ok,staff_id,client_name,tool,detail,ip&order=at.desc&limit=${limit}`);
 }
+
+// ── Housekeeping (the daily cron) ────────────────────────────────────────────
+// Expired codes and tokens a day after they lapse, activity after 90 days, and registrations that never led to a
+// connection after a week. Done here rather than in a database function so the schema needs no DELETE of its own.
+export async function purgeConnectorRecords(): Promise<{ ok: boolean }> {
+  const dayAgo = iso(Date.now() - 24 * 60 * 60 * 1000);
+  const quarterAgo = iso(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const weekAgo = iso(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const del = (path: string) => pgAdmin(path, { method: "DELETE", headers: { Prefer: "return=minimal" } }).then((r) => r.ok);
+
+  const results = await Promise.all([
+    del(`mcp_auth_codes?expires_at=lt.${dayAgo}`),
+    del(`mcp_tokens?expires_at=lt.${dayAgo}`),
+    del(`mcp_activity?at=lt.${quarterAgo}`),
+  ]);
+  // A registration with no connection, a week old: a stray or abandoned sign-in attempt.
+  const connected = await rows<{ client_id: string }>("mcp_grants?select=client_id").catch(() => null);
+  if (connected) {
+    const keep = [...new Set(connected.map((g) => g.client_id))].filter((id) => /^rcg_client_[0-9a-f-]{36}$/.test(id));
+    const notIn = keep.length ? `&client_id=not.in.(${keep.join(",")})` : "";
+    results.push(await del(`mcp_clients?created_at=lt.${weekAgo}${notIn}`));
+  }
+  return { ok: results.every(Boolean) && connected !== null };
+}

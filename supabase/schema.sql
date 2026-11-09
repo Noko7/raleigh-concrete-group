@@ -40,8 +40,9 @@
 -- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
 -- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
 -- refusing saves while out for signature), checked against production after it was applied.
--- Updated by hand for migration 20261109160000_claude_connector (mcp_clients, mcp_auth_codes, mcp_grants,
--- mcp_tokens, mcp_activity, purge_mcp() and the purge-mcp pg_cron job). Re-check against production once applied.
+-- Updated by hand for migration 20261109132023_claude_connector (mcp_clients, mcp_auth_codes, mcp_grants,
+-- mcp_tokens, mcp_activity; their cleanup runs in the app's daily cron), checked against production after it was
+-- applied (RLS, no policies, grants, checks, cascades).
 -- Updated by hand for migration 20261101015604_request_logs (request_logs, security_traffic(), purge_request_logs()
 -- and the purge-request-logs pg_cron job). Re-check against production once applied.
 -- Updated by hand for migration 20261031191727 (quote_requests.customer_pay_methods and its check),
@@ -1492,20 +1493,6 @@ as $$
   );
 $$;
 
-create or replace function public.purge_mcp()
-returns integer
-language sql
-security definer
-set search_path = public
-as $$
-  with c as (delete from public.mcp_auth_codes where expires_at < now() - interval '1 day' returning 1),
-       t as (delete from public.mcp_tokens where expires_at < now() - interval '1 day' returning 1),
-       a as (delete from public.mcp_activity where at < now() - interval '90 days' returning 1),
-       -- Registered, never connected, a week old: a stray or abandoned registration.
-       r as (delete from public.mcp_clients k where k.created_at < now() - interval '7 days'
-               and not exists (select 1 from public.mcp_grants g where g.client_id = k.client_id) returning 1)
-  select ((select count(*) from c) + (select count(*) from t) + (select count(*) from a) + (select count(*) from r))::integer;
-$$;
 create or replace function public.purge_request_logs()
 returns integer
 language sql
@@ -1693,8 +1680,6 @@ revoke all on function public.is_owner() from public;
 grant execute on function public.is_owner() to authenticated, service_role;
 revoke all on function public.issue_payment_receipt(jsonb) from public;
 grant execute on function public.issue_payment_receipt(jsonb) to service_role;
-revoke all on function public.purge_mcp() from public;
-grant execute on function public.purge_mcp() to service_role;
 revoke all on function public.purge_request_logs() from public;
 grant execute on function public.purge_request_logs() to service_role;
 revoke all on function public.security_traffic(timestamp with time zone) from public;
@@ -1705,7 +1690,6 @@ grant execute on function public.security_traffic(timestamp with time zone) to s
 -- ════════════════════════════════════════════════════════════════════════════
 -- cron.job (pg_cron): expire-unanswered-quotes, '*/5 * * * *',
 --   'select public.expire_unanswered_quotes()'.
--- cron.job (pg_cron): purge-mcp, '23 7 * * *', 'select public.purge_mcp()'.
 -- cron.job (pg_cron): purge-request-logs, '17 7 * * *', 'select public.purge_request_logs()'.
 -- storage.buckets (private, no storage.objects policies; uploads use signed URLs):
 --   quote-uploads  file_size_limit 52428800  image/jpeg, image/png, image/webp,
