@@ -168,6 +168,8 @@ async function handle(request: NextRequest): Promise<NextResponse> {
       // Contractor onboarding: public (no login yet) but a capability link.
       pathname.startsWith("/join/") ||
       pathname.startsWith("/confirm") ||
+      // A crew job link's preview card (initials and job type only).
+      pathname.startsWith("/link-preview/") ||
       pathname.startsWith("/api/");
     return keepPrivate ? withNoIndex(NextResponse.next()) : NextResponse.next();
   }
@@ -207,6 +209,16 @@ async function handle(request: NextRequest): Promise<NextResponse> {
   // A forged or tampered token yields no identity, so it's treated as signed-out.
   const verified = accessToken ? await verifyUser(accessToken) : null;
   const hasSession = Boolean(verified);
+
+  // A signed-out crew job link (a link-preview fetcher in a text thread, or someone not signed in): the preview
+  // card, which shows only the customer's initials and the job type and sends a person on to sign in.
+  const jobToken = /^\/job\/([0-9a-f]{32})\/?$/.exec(pathname)?.[1];
+  if (!hasSession && jobToken && (request.method === "GET" || request.method === "HEAD")) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/link-preview/job/${jobToken}`;
+    url.search = "";
+    return withNoIndex(NextResponse.rewrite(url));
+  }
 
   if (!hasSession && !isLogin && !isAuthApi) {
     const url = request.nextUrl.clone();
