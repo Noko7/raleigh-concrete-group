@@ -1,5 +1,5 @@
 -- Raleigh Concrete Group - per-contractor "simple quote form"
--- Undo: undo/20261109200000_staff_simple_quote_form.undo.sql. Check: verify/20261109200000_staff_simple_quote_form.verify.sql.
+-- Undo: undo/20261109184854_staff_simple_quote_form.undo.sql. Check: verify/20261109184854_staff_simple_quote_form.verify.sql.
 --
 -- staff.simple_quote_form: when on, the quote form shows one price and the sections, with the price breakdown folded
 -- away alongside extras and A/B prices. Off by default, so new contractors (and owners) get the regular form. Set by an

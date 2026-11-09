@@ -40,7 +40,8 @@
 -- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
 -- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
 -- refusing saves while out for signature), checked against production after it was applied.
--- Updated by hand for migration 20261109200000_staff_simple_quote_form (staff.simple_quote_form).
+-- Updated by hand for migration 20261109184854_staff_simple_quote_form (staff.simple_quote_form), checked against
+-- production after it was applied.
 -- Updated by hand for migration 20261109132023_claude_connector (mcp_clients, mcp_auth_codes, mcp_grants,
 -- mcp_tokens, mcp_activity; their cleanup runs in the app's daily cron), checked against production after it was
 -- applied (RLS, no policies, grants, checks, cascades).

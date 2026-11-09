@@ -1,4 +1,4 @@
--- Check 20261109200000_staff_simple_quote_form on the real database. Read-only.
+-- Check 20261109184854_staff_simple_quote_form on the real database. Read-only.
 -- Output: one row per check; any result containing "(bad)" is a failure.
 
 select 'column exists, boolean, not null, default false' as check_name,
