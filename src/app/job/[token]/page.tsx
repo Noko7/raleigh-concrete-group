@@ -560,6 +560,7 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
         {showQuote && (
           <JobQuote
             id={quote.id}
+            simple={session.staff.simple_quote_form === true}
             locale={locale}
             amount={quote.quote_amount}
             summary={quote.quote_summary}

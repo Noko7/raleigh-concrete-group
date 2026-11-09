@@ -65,6 +65,7 @@ export function JobQuote({
   sentAt,
   customerFirstName,
   service,
+  simple = false,
 }: {
   id: string;
   locale: Locale;
@@ -79,6 +80,8 @@ export function JobQuote({
   awaitingReply: boolean;
   sentAt: string | null;
   customerFirstName: string;
+  // The viewer's "simple quote form" setting: the breakdown is folded away with extras and A/B prices.
+  simple?: boolean;
   // The job's service, to name the line the one price becomes.
   service: string | null;
 }) {
@@ -321,6 +324,17 @@ export function JobQuote({
 
   // Waiting on the customer, so no Send button (repeating the quote frustrates both sides). Editing is a real
   // button: a customer's questions are a common reason to change a sent quote, and a faint link went unfound.
+  const breakdown = (
+    <OptionBuilder
+      rows={rows}
+      onChange={changeRows}
+      labels={t.quoteOptions}
+      mode="breakdown"
+      target={alreadySent ? amount : null}
+      choiceActive={choice}
+    />
+  );
+
   if (awaitingReply && !open) {
     const when = sentAt
       ? new Date(sentAt).toLocaleString(intlLocale(locale), {
@@ -419,19 +433,18 @@ export function JobQuote({
             <SectionsEditor sections={sections} onChange={setSection} locale={locale} />
 
             {/*
-              Simple by default: one price and the sections. The breakdown, extras and A/B prices sit in one fold, which
-              opens itself when the quote already uses any of them (most quotes never do). Adding a line makes the price
-              card their sum; on a quote already sent, the gap to that price shows while typing.
+              Regular form: the breakdown is open ("what am I paying for" wins jobs), extras and A/B prices folded.
+              Simple form (a per-contractor setting): one price and the sections; the breakdown joins the fold. The fold
+              opens itself when the quote already uses anything in it. Adding a line makes the price card their sum; on
+              a quote already sent, the gap to that price shows while typing.
             */}
-            <MoreWaysToPrice labels={t.quoteOptions} startOpen={rows.length > 0 || filledPackages(pkgRows).length > 0}>
-              <OptionBuilder
-                rows={rows}
-                onChange={changeRows}
-                labels={t.quoteOptions}
-                mode="breakdown"
-                target={alreadySent ? amount : null}
-                choiceActive={choice}
-              />
+            {!simple && breakdown}
+            <MoreWaysToPrice
+              labels={t.quoteOptions}
+              simple={simple}
+              startOpen={(simple && rows.length > 0) || rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
+            >
+              {simple && breakdown}
               <OptionBuilder rows={rows} onChange={changeRows} labels={t.quoteOptions} mode="extras" />
               {/* Extras meant to be pick-one add up to every price at once; offered here, where the mistake is made. */}
               <PickOneSuggestion
