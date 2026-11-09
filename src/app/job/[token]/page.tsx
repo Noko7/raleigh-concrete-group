@@ -603,7 +603,10 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
           customerName={quote.name}
           sends={sends}
           canRetract={session.staff.role === "owner"}
-          canAddOption={showQuote && Boolean(quote.quote_sent_at)}
+          // As on the office page: sent, unanswered, and not turning a broken-down price into Option A.
+          canAddOption={
+            showQuote && Boolean(quote.quote_sent_at) && !quote.customer_response && (options.length === 0 || packages.length > 0)
+          }
           currentAmount={quote.quote_amount}
           service={quote.service}
           options={packages.map((p) => ({ id: p.id, title: p.title, amount: Number(p.amount), recommended: p.recommended }))}

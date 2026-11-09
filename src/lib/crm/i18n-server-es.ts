@@ -50,6 +50,8 @@ export const SERVER_ES: Record<string, string> = {
   "This quote is marked declined. Ask the office to reopen it before sending another option.":
     "Esta cotización está marcada como rechazada. Pide a la oficina que la reabra antes de enviar otra opción.",
   "This job is already closed out.": "Este trabajo ya está cerrado.",
+  "This quote has a price breakdown, so another option would be added on top of it and show the customer the wrong price. Edit the quote instead.":
+    "Esta cotización tiene desglose de precio, así que otra opción se sumaría encima y el cliente vería un precio equivocado. Mejor edita la cotización.",
   "Give the quote they already have a name, so they can tell the two apart.":
     "Ponle nombre a la cotización que ya tiene, para que pueda distinguir las dos.",
   "Check the price on the option they already have.": "Revisa el precio de la opción que ya tiene.",

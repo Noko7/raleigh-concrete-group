@@ -516,6 +516,17 @@ export async function addQuoteOption(_prev: SaveState, formData: FormData): Prom
     listQuoteOptions(session, id),
   ]);
 
+  // Turning a flat price into Option A on a quote with a breakdown: the price already includes the lines, and the
+  // lines are added on top of whichever option is picked, so Option A would carry them twice (about double).
+  // Adding Option C to a quote that already has options is fine: Option A isn't rebuilt from the price.
+  if (existingOptions.length > 0 && existingPackages.length === 0) {
+    return {
+      ok: false,
+      error:
+        "This quote has a price breakdown, so another option would be added on top of it and show the customer the wrong price. Edit the quote instead.",
+    };
+  }
+
   const drafts: QuotePackageDraft[] = packagesAsDrafts(existingPackages);
 
   // First time: the customer's flat price becomes Option A. Pre-filled on
