@@ -302,8 +302,8 @@ export function JobQuote({
       </p>
     ) : null;
 
-  // Waiting on the customer, so no Send button (repeating the quote frustrates both sides). The one
-  // exception is a quiet "correct it" action for a price typed wrong.
+  // Waiting on the customer, so no Send button (repeating the quote frustrates both sides). Editing is a real
+  // button: a customer's questions are a common reason to change a sent quote, and a faint link went unfound.
   if (awaitingReply && !open) {
     const when = sentAt
       ? new Date(sentAt).toLocaleString(intlLocale(locale), {
@@ -321,7 +321,7 @@ export function JobQuote({
         </p>
         {when && <p className="js-hint">{fill(t.contractorJob.quoteWaitingSent, { when })}</p>}
         <p className="js-hint">{t.contractorJob.quoteWaitingHint}</p>
-        <button type="button" className="jq-cancel jq-fix-open" onClick={() => setOpen(true)}>
+        <button type="button" className="js-confirm jq-fix-open" onClick={() => setOpen(true)}>
           {t.contractorJob.quoteFixOpen}
         </button>
         {result}
