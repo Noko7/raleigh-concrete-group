@@ -28,6 +28,7 @@ import { JobPayments } from "./job-payments";
 import { CrewViewBeacon } from "./crew-view-beacon";
 import { bumpCrewView } from "@/lib/crm/crew-views";
 import { JobQuote } from "./job-quote";
+import { QuoteEditShortcut } from "./quote-edit-shortcut";
 import { JobReschedule } from "./job-reschedule";
 import { JobSchedule } from "./job-schedule";
 import { JobVisit } from "./job-visit";
@@ -306,6 +307,12 @@ export default async function JobPage({ params }: { params: Promise<{ token: str
             minDate={minJobDate}
             locale={locale}
           />
+        )}
+
+        {/* A sent quote waiting on the customer: the way in to editing it, here with the other things to act on
+            (a customer's questions are the usual reason). The quote card itself stays last, below the photos. */}
+        {showQuote && quote.quote_sent_at && !quote.customer_response && (
+          <QuoteEditShortcut locale={locale} customerFirstName={firstNameOf(quote.name, quote.name)} amount={quote.quote_amount} />
         )}
 
         {showOfflineAccept && (

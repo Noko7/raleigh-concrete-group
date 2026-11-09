@@ -2270,10 +2270,9 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .jq-save:hover:not(:disabled) { border-color: var(--amber); color: var(--amber-dark); }
 .jq-save:disabled { opacity: 0.55; cursor: not-allowed; }
 .jq-cancel { background: none; border: none; color: #6b7280; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0.6rem 0; min-height: 44px; }
-/* Correcting a quote that's already with the customer. A text link, not a
-   button: waiting is still the right answer nearly every time this card is on
-   screen, and this is the way out of the one case where it isn't. */
-.jq-fix-open { display: block; margin-top: 0.4rem; text-align: left; }
+/* Editing a quote that's already with the customer: a real button. Crews missed
+   the old text link, and answering a customer's questions in the quote is common. */
+.jq-fix-open { display: block; margin-top: 0.6rem; }
 .jf-done { background: #f0fdf4; border-color: #86efac; }
 
 /* ── The quote form, shaped like the quote it sends ──────────────────────────
