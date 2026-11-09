@@ -68,5 +68,6 @@ export function previewHtml(i: { title: string; imageUrl: string; next: string }
 <meta property="og:image:alt" content="${esc(i.title)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta http-equiv="refresh" content="0;url=${esc(login)}">
+<script>location.replace(${JSON.stringify(login).replace(/</g, "\\u003c")});</script>
 </head><body><p><a href="${esc(login)}">Sign in to open this job</a></p></body></html>`;
 }
