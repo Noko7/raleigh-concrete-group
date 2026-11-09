@@ -516,6 +516,16 @@ export async function addQuoteOption(_prev: SaveState, formData: FormData): Prom
     listQuoteOptions(session, id),
   ]);
 
+  // A breakdown is added on top of whichever option the customer picks, and the quote's current price already
+  // includes it: Option A would carry it twice, showing the customer about double. Correct the quote instead.
+  if (existingOptions.length > 0) {
+    return {
+      ok: false,
+      error:
+        "This quote has a price breakdown, so another option would be added on top of it and show the customer the wrong price. Edit the quote instead.",
+    };
+  }
+
   const drafts: QuotePackageDraft[] = packagesAsDrafts(existingPackages);
 
   // First time: the customer's flat price becomes Option A. Pre-filled on

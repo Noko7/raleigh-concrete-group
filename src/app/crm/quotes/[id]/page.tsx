@@ -101,7 +101,9 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
   const nameMap = new Map(allStaff.map((s) => [s.id, s.full_name || s.email || "Staff"]));
   // Another option may go out only while the quote is live and unanswered;
   // other states have their own controls on this page.
+  // Not on a quote with a price breakdown: the lines would be added on top of every option (addQuoteOption refuses too).
   const canAddOption =
+    options.length === 0 &&
     Boolean(quote.quote_sent_at) &&
     !quote.customer_response &&
     quote.status !== "lost" &&
