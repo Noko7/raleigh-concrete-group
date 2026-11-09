@@ -329,7 +329,7 @@ export function OptionBuilder({
           <div className="qo-add">
             {/* Presets then a blank line; presets already used drop out. */}
             <div className="qo-presets">
-              {BREAKDOWN_PRESETS.filter((name) => !shown.some((r) => r.title.trim() === name)).map((name) => (
+              {(t.presets ?? BREAKDOWN_PRESETS).filter((name) => !shown.some((r) => r.title.trim() === name)).map((name) => (
                 <button key={name} type="button" className="qo-preset" onClick={() => add(true, name)}>
                   + {name}
                 </button>

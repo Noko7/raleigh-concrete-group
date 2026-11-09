@@ -110,24 +110,24 @@ export function AddOption({
     ...(converting
       ? [
           {
-            field: { key: "keep_title", label: fill(all.english.option, { n: 1 }), short: true },
+            field: { key: "keep_title", label: fill(all.english.option, { n: packageLetter(0) }), short: true },
             kind: "Option title" as const,
             text: keepTitle,
           },
           {
-            field: { key: "keep_desc", label: fill(all.english.optionDesc, { n: 1 }) },
+            field: { key: "keep_desc", label: fill(all.english.optionDesc, { n: packageLetter(0) }) },
             kind: "Option description" as const,
             text: keepDesc,
           },
         ]
       : []),
     {
-      field: { key: "add_title", label: fill(all.english.option, { n: newN }), short: true },
+      field: { key: "add_title", label: fill(all.english.option, { n: packageLetter(newN - 1) }), short: true },
       kind: "Option title" as const,
       text: addTitle,
     },
     {
-      field: { key: "add_desc", label: fill(all.english.optionDesc, { n: newN }) },
+      field: { key: "add_desc", label: fill(all.english.optionDesc, { n: packageLetter(newN - 1) }) },
       kind: "Option description" as const,
       text: addDesc,
     },

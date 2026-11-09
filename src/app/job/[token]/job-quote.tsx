@@ -4,7 +4,7 @@ import { startTransition, useActionState, useEffect, useMemo, useRef, useState }
 import { useRouter } from "next/navigation";
 
 import { BUSINESS_TZ } from "@/lib/crm/clock";
-import { dollars, QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm/constants";
+import { dollars, packageLetter, QUOTE_SECTION_FIELDS, type QuoteSectionField } from "@/lib/crm/constants";
 import { dict, tr, fill, intlLocale, type Locale } from "@/lib/crm/i18n";
 import { saveQuote } from "@/app/crm/quotes/[id]/save-actions";
 import {
@@ -245,12 +245,12 @@ export function JobQuote({
     ]),
     ...pkgRows.flatMap((r, i) => [
       {
-        field: { key: `p:${i}:t`, label: fill(t.english.option, { n: i + 1 }), short: true },
+        field: { key: `p:${i}:t`, label: fill(t.english.option, { n: packageLetter(i) }), short: true },
         kind: "Option title" as const,
         text: r.title,
       },
       {
-        field: { key: `p:${i}:d`, label: fill(t.english.optionDesc, { n: i + 1 }) },
+        field: { key: `p:${i}:d`, label: fill(t.english.optionDesc, { n: packageLetter(i) }) },
         kind: "Option description" as const,
         text: r.description,
       },
@@ -419,23 +419,19 @@ export function JobQuote({
             <SectionsEditor sections={sections} onChange={setSection} locale={locale} />
 
             {/*
-              Always open: "what am I paying for" wins jobs. Adding a line makes the price card their sum; on a quote
-              already sent, the gap to that price shows while typing.
+              Simple by default: one price and the sections. The breakdown, extras and A/B prices sit in one fold, which
+              opens itself when the quote already uses any of them (most quotes never do). Adding a line makes the price
+              card their sum; on a quote already sent, the gap to that price shows while typing.
             */}
-            <OptionBuilder
-              rows={rows}
-              onChange={changeRows}
-              labels={t.quoteOptions}
-              mode="breakdown"
-              target={alreadySent ? amount : null}
-              choiceActive={choice}
-            />
-
-            {/* Everything beyond a straight breakdown, folded; opens itself if the quote already uses any of it. */}
-            <MoreWaysToPrice
-              labels={t.quoteOptions}
-              startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
-            >
+            <MoreWaysToPrice labels={t.quoteOptions} startOpen={rows.length > 0 || filledPackages(pkgRows).length > 0}>
+              <OptionBuilder
+                rows={rows}
+                onChange={changeRows}
+                labels={t.quoteOptions}
+                mode="breakdown"
+                target={alreadySent ? amount : null}
+                choiceActive={choice}
+              />
               <OptionBuilder rows={rows} onChange={changeRows} labels={t.quoteOptions} mode="extras" />
               {/* Extras meant to be pick-one add up to every price at once; offered here, where the mistake is made. */}
               <PickOneSuggestion

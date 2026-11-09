@@ -294,20 +294,17 @@ export function QuoteEditor({ id, options, packages, customerName, service, prev
         </>
       ) : (
         <>
-          {/* As on the crew's form: breakdown open, the rest folded. One rows
-              array behind both, so total and save see one list. */}
-          <OptionBuilder
-            rows={rows}
-            onChange={changeRows}
-            labels={optionLabels}
-            mode="breakdown"
-            target={awaitingReply ? Number(initial.quote_amount ?? 0) || null : null}
-            choiceActive={choice}
-          />
-          <MoreWaysToPrice
-            labels={optionLabels}
-            startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
-          >
+          {/* As on the crew's form: one price by default; breakdown, extras and A/B prices in one fold that opens
+              itself when the quote uses any of them. One rows array behind both, so total and save see one list. */}
+          <MoreWaysToPrice labels={optionLabels} startOpen={rows.length > 0 || filledPackages(pkgRows).length > 0}>
+            <OptionBuilder
+              rows={rows}
+              onChange={changeRows}
+              labels={optionLabels}
+              mode="breakdown"
+              target={awaitingReply ? Number(initial.quote_amount ?? 0) || null : null}
+              choiceActive={choice}
+            />
             <OptionBuilder rows={rows} onChange={changeRows} labels={optionLabels} mode="extras" />
             {/* Extras meant as pick-ONE add up to every price at once; suggested
                 here, where the mistake is made. */}

@@ -385,8 +385,10 @@ const en = {
     extrasTitle: "Optional extras",
     extrasHint: "Add-ons the customer can say yes or no to. Each yes is added to their total.",
     extrasTotal: "If they take every extra",
-    moreTitle: "More ways to price it",
-    moreHint: "Optional extras the customer can say yes or no to, or the same job priced two ways.",
+    moreTitle: "Breakdown, extras or two prices",
+    moreHint: "Most quotes don't need this: one price and the sections above are enough.",
+    // One-tap breakdown lines. Spanish ones are translated with the rest at "Translate and review".
+    presets: ["Materials", "Labor", "Equipment", "Permits", "Hauling & disposal"],
     acceptedTotal: "What they approved",
     lockedNote: "The customer has answered, so this is the record of what they bought. It cannot be changed.",
     answerYes: "Approved",
@@ -671,7 +673,7 @@ const en = {
     quoteEditHint: "Customer asked a question, or something needs fixing? Edit the quote: they get a text that it changed.",
     quoteFixTitle: "Revise this quote",
     quoteFixLead:
-      "Change the price or the wording, or break the price into materials, labor and more. We'll text {name} that the quote was updated, and the link they already have will show the new version.",
+      "Change the price or the wording. We'll text {name} that the quote was updated, and the link they already have will show the new version.",
     quoteFixWho: "{name} gets a text saying the quote was updated, and it replaces the one they're holding.",
     quoteFixUnchanged:
       "Nothing has changed yet. Edit the price, a section or the breakdown, otherwise this is the same quote they already have.",
