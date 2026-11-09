@@ -1,7 +1,7 @@
 // The picture on a crew job link's preview card: the customer's initials in a coloured circle and the job type.
 import { ImageResponse } from "next/og";
 
-import { colourFor, initialsOf, JOB_TOKEN, serviceLabel } from "@/lib/link-preview";
+import { colourFor, initialsOf, JOB_TOKEN, serviceFontSize, serviceLabel } from "@/lib/link-preview";
 import { previewFieldsFor } from "@/lib/link-preview-data";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
@@ -50,8 +50,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
         >
           {initials}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <div style={{ fontSize: 96, fontWeight: 800, lineHeight: 1.05 }}>{service}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 18, width: 660 }}>
+          <div style={{ fontSize: serviceFontSize(service), fontWeight: 800, lineHeight: 1.05, display: "flex", flexWrap: "wrap" }}>
+            {service}
+          </div>
           <div style={{ fontSize: 36, color: "#d6c7bb" }}>Raleigh Concrete Group</div>
         </div>
       </div>

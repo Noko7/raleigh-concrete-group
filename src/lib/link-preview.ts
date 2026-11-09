@@ -26,6 +26,16 @@ export function serviceLabel(service: string | null | undefined): string {
   return s ? s.slice(0, 32) : "Job";
 }
 
+// The job type's size on the card: big when short, smaller so "Front/Back Porch" or "Retaining Wall" fits the
+// ~680px beside the circle (it may also wrap to two lines).
+export function serviceFontSize(label: string): number {
+  const n = label.length;
+  if (n <= 9) return 96;
+  if (n <= 13) return 80;
+  if (n <= 18) return 66;
+  return 54;
+}
+
 // A steady colour per job, so the same job always looks the same and neighbours differ.
 const COLOURS = ["#c2682a", "#2f6f8f", "#4f7a3a", "#8a4f9e", "#b4472f", "#3d6b6b", "#9a7b1c", "#5b5fa8"] as const;
 

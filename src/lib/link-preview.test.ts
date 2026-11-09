@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { colourFor, initialsOf, JOB_TOKEN, previewHtml, previewTitle, serviceLabel } from "./link-preview.ts";
+import { colourFor, initialsOf, JOB_TOKEN, previewHtml, previewTitle, serviceFontSize, serviceLabel } from "./link-preview.ts";
 
 test("initials: first and last word, letters only", () => {
   assert.equal(initialsOf("Martha Flanagan"), "MF");
@@ -39,4 +39,10 @@ test("the page carries only the title, escaped, and sends people to sign in", ()
   assert.match(html, /og:image" content="https:\/\/x\/i\?v=1&amp;w=2"/);
   assert.match(html, /url=\/crm\/login\?next=%2Fjob%2Fabc/);
   assert.doesNotMatch(html, /<x>/);
+});
+
+test("long job types get smaller text", () => {
+  assert.equal(serviceFontSize("Patio"), 96);
+  assert.ok(serviceFontSize("Front/Back Porch") < serviceFontSize("Driveway"));
+  assert.ok(serviceFontSize("Commercial Sidewalks & Walkways") <= 54);
 });
