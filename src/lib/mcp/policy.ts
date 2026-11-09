@@ -225,6 +225,22 @@ export function withQuery(uri: string, params: Record<string, string | null>): s
   return u.toString();
 }
 
+// ── The connector's public address ───────────────────────────────────────────
+// OAuth clients check that the issuer they're told matches the address they fetched it from, so the connector
+// must advertise the host that actually answers. The bare raleighconcrete.net permanently redirects to www, so
+// it's moved there; MCP_PUBLIC_ORIGIN overrides (e.g. for a different domain setup).
+export function connectorOrigin(siteOrigin: string, override?: string | null): string {
+  const chosen = (override || siteOrigin).trim().replace(/\/+$/, "");
+  try {
+    const u = new URL(chosen);
+    if (u.protocol !== "https:" && u.hostname !== "localhost") return chosen;
+    if (!override && u.hostname === "raleighconcrete.net") u.hostname = "www.raleighconcrete.net";
+    return u.origin;
+  } catch {
+    return chosen;
+  }
+}
+
 // ── Bearer header ────────────────────────────────────────────────────────────
 export function bearerOf(header: string | null): string | null {
   if (!header) return null;

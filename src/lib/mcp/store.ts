@@ -8,6 +8,7 @@ import { pgAdmin } from "@/lib/crm/rest";
 import {
   ACCESS_TTL_MS,
   CODE_TTL_MS,
+  connectorOrigin,
   GRANT_MAX_AGE_MS,
   hashToken,
   newToken,
@@ -18,13 +19,15 @@ import {
 } from "./policy";
 
 // ── Addresses ────────────────────────────────────────────────────────────────
-export const ISSUER = SITE_ORIGIN;
-export const MCP_URL = `${SITE_ORIGIN}/api/mcp`;
-export const AUTHORIZE_URL = `${SITE_ORIGIN}/crm/connect`;
-export const TOKEN_URL = `${SITE_ORIGIN}/api/mcp/oauth/token`;
-export const REGISTER_URL = `${SITE_ORIGIN}/api/mcp/oauth/register`;
-export const REVOKE_URL = `${SITE_ORIGIN}/api/mcp/oauth/revoke`;
-export const RESOURCE_METADATA_URL = `${SITE_ORIGIN}/.well-known/oauth-protected-resource`;
+// The host that answers without a redirect (www), not necessarily SITE_ORIGIN: see connectorOrigin.
+export const CONNECTOR_ORIGIN = connectorOrigin(SITE_ORIGIN, process.env.MCP_PUBLIC_ORIGIN);
+export const ISSUER = CONNECTOR_ORIGIN;
+export const MCP_URL = `${CONNECTOR_ORIGIN}/api/mcp`;
+export const AUTHORIZE_URL = `${CONNECTOR_ORIGIN}/crm/connect`;
+export const TOKEN_URL = `${CONNECTOR_ORIGIN}/api/mcp/oauth/token`;
+export const REGISTER_URL = `${CONNECTOR_ORIGIN}/api/mcp/oauth/register`;
+export const REVOKE_URL = `${CONNECTOR_ORIGIN}/api/mcp/oauth/revoke`;
+export const RESOURCE_METADATA_URL = `${CONNECTOR_ORIGIN}/.well-known/oauth-protected-resource`;
 
 // ── The switch (Security page) ───────────────────────────────────────────────
 // Off unless the owner turned it on, and off if the setting can't be read.

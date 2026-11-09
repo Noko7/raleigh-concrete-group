@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 
 import {
   bearerOf,
+  connectorOrigin,
   cleanText,
   hashToken,
   isAllowedRedirectUri,
@@ -127,4 +128,11 @@ test("tokens are random, typed, and stored only as a hash", () => {
   assert.equal(bearerOf(`Bearer ${a}`), a);
   assert.equal(bearerOf(`Basic ${a}`), null);
   assert.equal(bearerOf("Bearer a b"), null);
+});
+
+test("the connector advertises the host that answers without a redirect", () => {
+  assert.equal(connectorOrigin("https://raleighconcrete.net"), "https://www.raleighconcrete.net");
+  assert.equal(connectorOrigin("https://raleighconcrete.net/"), "https://www.raleighconcrete.net");
+  assert.equal(connectorOrigin("https://www.raleighconcrete.net"), "https://www.raleighconcrete.net");
+  assert.equal(connectorOrigin("https://raleighconcrete.net", "https://crm.example.com/"), "https://crm.example.com");
 });

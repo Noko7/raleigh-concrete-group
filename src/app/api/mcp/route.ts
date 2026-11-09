@@ -3,11 +3,10 @@
 // and the Security page's switch before anything is read. Read-only tools only (src/lib/mcp/tools.ts).
 import { NextResponse } from "next/server";
 
-import { SITE_ORIGIN } from "@/lib/crm/env";
 import { json, readBody, unauthorized, who } from "@/lib/mcp/http";
 import { bearerOf, tokenKindOf } from "@/lib/mcp/policy";
 import { handleRpc, type CallRecord } from "@/lib/mcp/rpc";
-import { activeOwner, connectorEnabled, grantForAccessToken, logActivity, revokeGrant, touchGrant } from "@/lib/mcp/store";
+import { activeOwner, CONNECTOR_ORIGIN, connectorEnabled, grantForAccessToken, logActivity, revokeGrant, touchGrant } from "@/lib/mcp/store";
 import { TOOLS } from "@/lib/mcp/tools";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -20,7 +19,7 @@ export async function POST(request: Request) {
 
   // DNS rebinding / browser pages: Claude's servers and Claude Code send no Origin; a browser always does.
   const origin = request.headers.get("origin");
-  if (origin && origin !== SITE_ORIGIN) return json({ error: "Origin not allowed." }, 403);
+  if (origin && origin !== CONNECTOR_ORIGIN) return json({ error: "Origin not allowed." }, 403);
 
   if (await rateLimit(`mcp-ip:${ip}`, 120, 60 * 1000)) return json({ error: "Too many requests." }, 429, { "Retry-After": "60" });
 
