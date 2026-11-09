@@ -40,6 +40,8 @@
 -- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
 -- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
 -- refusing saves while out for signature), checked against production after it was applied.
+-- Updated by hand for migration 20261109160000_claude_connector (mcp_clients, mcp_auth_codes, mcp_grants,
+-- mcp_tokens, mcp_activity, purge_mcp() and the purge-mcp pg_cron job). Re-check against production once applied.
 -- Updated by hand for migration 20261101015604_request_logs (request_logs, security_traffic(), purge_request_logs()
 -- and the purge-request-logs pg_cron job). Re-check against production once applied.
 -- Updated by hand for migration 20261031191727 (quote_requests.customer_pay_methods and its check),
@@ -246,6 +248,107 @@ create table public.login_attempts (
   user_agent text,
   constraint login_attempts_pkey PRIMARY KEY (id),
   constraint login_attempts_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE SET NULL
+);
+
+create table public.mcp_clients (
+  client_id text not null,
+  client_name text not null,
+  redirect_uris text[] not null,
+  auth_method text default 'none'::text not null,
+  secret_hash text,
+  created_at timestamp with time zone default now() not null,
+  created_ip text,
+  constraint mcp_clients_pkey PRIMARY KEY (client_id),
+  constraint mcp_clients_chk CHECK (
+    char_length(client_id) <= 100 and char_length(client_name) between 1 and 80
+    and cardinality(redirect_uris) between 1 and 5
+    and auth_method = any (array['none'::text, 'client_secret_post'::text, 'client_secret_basic'::text])
+    and ((auth_method = 'none') = (secret_hash is null))
+    and (secret_hash is null or char_length(secret_hash) = 64)
+    and (created_ip is null or char_length(created_ip) <= 64)
+  )
+);
+
+create table public.mcp_auth_codes (
+  code_hash text not null,
+  client_id text not null,
+  staff_id uuid not null,
+  redirect_uri text not null,
+  code_challenge text not null,
+  scope text not null,
+  expires_at timestamp with time zone not null,
+  used_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint mcp_auth_codes_pkey PRIMARY KEY (code_hash),
+  constraint mcp_auth_codes_client_fkey FOREIGN KEY (client_id) REFERENCES mcp_clients(client_id) ON DELETE CASCADE,
+  constraint mcp_auth_codes_staff_fkey FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE,
+  constraint mcp_auth_codes_chk CHECK (
+    char_length(code_hash) = 64 and char_length(redirect_uri) <= 300 and char_length(code_challenge) = 43
+    and scope = 'crm.read'
+  )
+);
+
+create table public.mcp_grants (
+  id uuid default gen_random_uuid() not null,
+  client_id text not null,
+  client_name text not null,
+  staff_id uuid not null,
+  scope text not null,
+  created_at timestamp with time zone default now() not null,
+  expires_at timestamp with time zone not null,
+  last_used_at timestamp with time zone,
+  last_ip text,
+  revoked_at timestamp with time zone,
+  revoked_reason text,
+  constraint mcp_grants_pkey PRIMARY KEY (id),
+  constraint mcp_grants_client_fkey FOREIGN KEY (client_id) REFERENCES mcp_clients(client_id) ON DELETE CASCADE,
+  constraint mcp_grants_staff_fkey FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE,
+  constraint mcp_grants_chk CHECK (
+    scope = 'crm.read' and char_length(client_name) between 1 and 80
+    and expires_at <= created_at + interval '90 days 1 minute'
+    and (last_ip is null or char_length(last_ip) <= 64)
+    and (revoked_reason is null or char_length(revoked_reason) <= 120)
+  )
+);
+
+create table public.mcp_tokens (
+  token_hash text not null,
+  kind text not null,
+  grant_id uuid not null,
+  expires_at timestamp with time zone not null,
+  used_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint mcp_tokens_pkey PRIMARY KEY (token_hash),
+  constraint mcp_tokens_grant_fkey FOREIGN KEY (grant_id) REFERENCES mcp_grants(id) ON DELETE CASCADE,
+  constraint mcp_tokens_chk CHECK (
+    char_length(token_hash) = 64 and kind = any (array['access'::text, 'refresh'::text])
+    and expires_at <= created_at + interval '30 days 1 minute'
+  )
+);
+
+create table public.mcp_activity (
+  id bigint generated always as identity,
+  at timestamp with time zone default now() not null,
+  kind text not null,
+  ok boolean not null,
+  grant_id uuid,
+  staff_id uuid,
+  client_name text,
+  tool text,
+  detail text,
+  ip text,
+  ua text,
+  constraint mcp_activity_pkey PRIMARY KEY (id),
+  constraint mcp_activity_grant_fkey FOREIGN KEY (grant_id) REFERENCES mcp_grants(id) ON DELETE SET NULL,
+  constraint mcp_activity_staff_fkey FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE SET NULL,
+  constraint mcp_activity_chk CHECK (
+    kind = any (array['tool'::text, 'connect'::text, 'deny'::text, 'refresh'::text, 'revoke'::text, 'register'::text, 'refused'::text])
+    and (client_name is null or char_length(client_name) <= 80)
+    and (tool is null or char_length(tool) <= 60)
+    and (detail is null or char_length(detail) <= 500)
+    and (ip is null or char_length(ip) <= 64)
+    and (ua is null or char_length(ua) <= 300)
+  )
 );
 
 create table public.payment_receipt_counter (
@@ -622,6 +725,9 @@ CREATE INDEX qp_quote_idx ON public.quote_payments USING btree (quote_id, create
 CREATE UNIQUE INDEX qp_session_idx ON public.quote_payments USING btree (checkout_session_id) WHERE (checkout_session_id IS NOT NULL);
 CREATE INDEX qr_archived_idx ON public.quote_requests USING btree (archived_at);
 CREATE INDEX qr_assigned_idx ON public.quote_requests USING btree (assigned_to);
+CREATE INDEX mcp_grants_live_idx on public.mcp_grants using btree (created_at desc) where revoked_at is null;
+CREATE INDEX mcp_tokens_grant_idx on public.mcp_tokens using btree (grant_id);
+CREATE INDEX mcp_activity_at_idx on public.mcp_activity using btree (at desc);
 CREATE UNIQUE INDEX qr_client_submission_id_key ON public.quote_requests USING btree (client_submission_id) WHERE (client_submission_id IS NOT NULL);
 CREATE INDEX qr_is_test_idx ON public.quote_requests USING btree (is_test) WHERE is_test;
 CREATE UNIQUE INDEX qr_job_token_idx ON public.quote_requests USING btree (job_token);
@@ -650,6 +756,11 @@ alter table public.contractor_invites enable row level security;
 alter table public.fee_settlements enable row level security;
 alter table public.job_staff_views enable row level security;
 alter table public.login_attempts enable row level security;
+alter table public.mcp_activity enable row level security;
+alter table public.mcp_auth_codes enable row level security;
+alter table public.mcp_clients enable row level security;
+alter table public.mcp_grants enable row level security;
+alter table public.mcp_tokens enable row level security;
 alter table public.payment_receipt_counter enable row level security;
 alter table public.payment_receipts enable row level security;
 alter table public.quote_drafts enable row level security;
@@ -665,7 +776,8 @@ alter table public.staff enable row level security;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 4. Policies (pg_policies). Tables with RLS on and no policy here are
---    service-role only: app_integrations, quote_drafts, request_logs, site_funnel_events.
+--    service-role only: app_integrations, mcp_activity, mcp_auth_codes, mcp_clients, mcp_grants,
+--    mcp_tokens, quote_drafts, request_logs, site_funnel_events.
 -- ════════════════════════════════════════════════════════════════════════════
 
 create policy "owner writes agreements" on public.agreements as permissive for all to authenticated
@@ -1380,6 +1492,20 @@ as $$
   );
 $$;
 
+create or replace function public.purge_mcp()
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  with c as (delete from public.mcp_auth_codes where expires_at < now() - interval '1 day' returning 1),
+       t as (delete from public.mcp_tokens where expires_at < now() - interval '1 day' returning 1),
+       a as (delete from public.mcp_activity where at < now() - interval '90 days' returning 1),
+       -- Registered, never connected, a week old: a stray or abandoned registration.
+       r as (delete from public.mcp_clients k where k.created_at < now() - interval '7 days'
+               and not exists (select 1 from public.mcp_grants g where g.client_id = k.client_id) returning 1)
+  select ((select count(*) from c) + (select count(*) from t) + (select count(*) from a) + (select count(*) from r))::integer;
+$$;
 create or replace function public.purge_request_logs()
 returns integer
 language sql
@@ -1521,6 +1647,12 @@ grant select, insert, update, delete, truncate, references, trigger, maintain on
 grant select, insert, update, truncate, references, trigger, maintain on public.quote_requests to authenticated;
 grant select, insert, update, truncate, references, trigger, maintain on public.quote_requests to service_role;
 
+-- mcp_*: the Claude connector, server only (nothing for anon or authenticated).
+grant select, insert, update, delete on public.mcp_activity to service_role;
+grant select, insert, update, delete on public.mcp_auth_codes to service_role;
+grant select, insert, update, delete on public.mcp_clients to service_role;
+grant select, insert, update, delete on public.mcp_grants to service_role;
+grant select, insert, update, delete on public.mcp_tokens to service_role;
 -- request_logs: the Vercel request log, server only (nothing for anon or authenticated).
 grant select, insert, update, delete, truncate, references, trigger on public.request_logs to service_role;
 -- site_funnel_events: nothing for anon or authenticated.
@@ -1561,6 +1693,8 @@ revoke all on function public.is_owner() from public;
 grant execute on function public.is_owner() to authenticated, service_role;
 revoke all on function public.issue_payment_receipt(jsonb) from public;
 grant execute on function public.issue_payment_receipt(jsonb) to service_role;
+revoke all on function public.purge_mcp() from public;
+grant execute on function public.purge_mcp() to service_role;
 revoke all on function public.purge_request_logs() from public;
 grant execute on function public.purge_request_logs() to service_role;
 revoke all on function public.security_traffic(timestamp with time zone) from public;
@@ -1571,6 +1705,7 @@ grant execute on function public.security_traffic(timestamp with time zone) to s
 -- ════════════════════════════════════════════════════════════════════════════
 -- cron.job (pg_cron): expire-unanswered-quotes, '*/5 * * * *',
 --   'select public.expire_unanswered_quotes()'.
+-- cron.job (pg_cron): purge-mcp, '23 7 * * *', 'select public.purge_mcp()'.
 -- cron.job (pg_cron): purge-request-logs, '17 7 * * *', 'select public.purge_request_logs()'.
 -- storage.buckets (private, no storage.objects policies; uploads use signed URLs):
 --   quote-uploads  file_size_limit 52428800  image/jpeg, image/png, image/webp,
