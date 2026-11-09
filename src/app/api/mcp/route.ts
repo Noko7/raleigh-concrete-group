@@ -38,7 +38,13 @@ export async function POST(request: Request) {
   if (!(await connectorEnabled())) {
     return json({ error: "The Claude connector is turned off in the CRM's Security page." }, 403);
   }
-  const owner = await activeOwner(grant.staff_id).catch(() => null);
+  // A database hiccup is a retry, not a reason to end the connection.
+  let owner;
+  try {
+    owner = await activeOwner(grant.staff_id);
+  } catch {
+    return json({ error: "The CRM is unavailable." }, 503);
+  }
   if (!owner) {
     await revokeGrant(grant.id, "owner no longer has access");
     return unauthorized("The account behind this connection no longer has CRM access.");

@@ -6,7 +6,8 @@
 //   - Claude swaps the code for a one-hour access token and a 30-day refresh token. Each refresh token works
 //     once; a second use means it was copied, and the whole connection is revoked.
 //   - Every token is random, stored only as a SHA-256 hash, and dies with its connection (revoked from the
-//     Security page, the owner losing access, the connector switched off, or 90 days passing).
+//     Security page, the owner losing access, or 90 days passing). Switching the connector off suspends every
+//     connection; switching it back on resumes the ones still within their 90 days.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 // ── Lifetimes ────────────────────────────────────────────────────────────────

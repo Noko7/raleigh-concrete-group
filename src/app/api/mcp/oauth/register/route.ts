@@ -14,9 +14,6 @@ export async function POST(request: Request) {
   if (await rateLimit(`mcp-register:${ip}`, 10, 60 * 60 * 1000)) {
     return oauthError("temporarily_unavailable", "Too many registrations. Try again later.", 429);
   }
-  if (await rateLimit("mcp-register:all", 60, 24 * 60 * 60 * 1000)) {
-    return oauthError("temporarily_unavailable", "Registration is paused for today.", 429);
-  }
   if (!(await connectorEnabled())) {
     return oauthError("access_denied", "The Claude connector is turned off. An owner can turn it on in the CRM's Security page.", 403);
   }
@@ -34,6 +31,11 @@ export async function POST(request: Request) {
     await logActivity({ kind: "register", ok: false, detail: parsed.error, ip, ua });
     const code = parsed.error.includes("callback") ? "invalid_redirect_uri" : "invalid_client_metadata";
     return oauthError(code, parsed.error);
+  }
+
+  // Counted only for valid requests while the connector is on, so junk can't use up the owner's day.
+  if (await rateLimit("mcp-register:all", 60, 24 * 60 * 60 * 1000)) {
+    return oauthError("temporarily_unavailable", "Registration is paused for today.", 429);
   }
 
   try {

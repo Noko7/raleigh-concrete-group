@@ -28,7 +28,9 @@ test("ordinary text is untouched", () => {
 
 test("search text can't carry filter syntax", () => {
   assert.equal(searchTerm("Tushar"), "Tushar");
-  assert.equal(searchTerm("a),status.eq.paid,(name.ilike.*"), "a status eq paid name ilike");
+  assert.equal(searchTerm("a),status.eq.paid,(name.ilike.*"), "a status.eq.paid name.ilike.");
+  assert.equal(searchTerm('x" ,name.eq.y\\'), "x name.eq.y");
+  assert.equal(searchTerm("jane.doe@gmail.com"), "jane.doe@gmail.com");
   assert.equal(searchTerm('x"*:'), null);
   assert.equal(searchTerm("1909 Oak St #2"), "1909 Oak St #2");
   assert.equal(searchTerm(" "), null);

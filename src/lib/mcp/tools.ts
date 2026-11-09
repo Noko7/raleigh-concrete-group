@@ -73,7 +73,8 @@ const searchJobs: ToolDef = {
     const term = searchTerm(args.query as string | undefined);
     if (args.query !== undefined && !term) throw new ToolError("Search for at least two letters or digits.");
     if (term) {
-      const like = `*${term}*`;
+      // Quoted, so the dots in an email or "N. Main St." are part of the value, not filter syntax.
+      const like = `"*${term}*"`;
       const ors = ["name", "email", "address", "city", "service", "phone"].map((c) => `${c}.ilike.${like}`);
       const digits = phoneDigits(term);
       if (digits && digits.length >= 7) {

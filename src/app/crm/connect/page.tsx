@@ -84,6 +84,7 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
       <p className="crm-muted crm-sm">It will be able to read:</p>
       <ul className="crm-sm">
         <li>Jobs and quotes: customer name, phone, email, address, what they asked for, price, sections and status</li>
+        <li>Internal notes, how the customer plans to pay, and any pending change order</li>
         <li>Each job&apos;s history and the texts the CRM sent (private links masked)</li>
         <li>The crew list and their open jobs</li>
       </ul>

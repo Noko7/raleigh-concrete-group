@@ -13,13 +13,14 @@ export function redactLinks(text: string | null | undefined): string | null {
   return text.replace(LINK_TOKEN, "$1[link]").replace(QUERY_SECRET, "$1[redacted]");
 }
 
-// Search text goes into a PostgREST or=() filter, whose own syntax uses , ( ) . : * and quotes. Only letters,
-// digits and a few name/address characters survive, so a query can't add a filter of its own.
+// Search text goes into a PostgREST or=() filter as a double-quoted value. Only letters, digits and a few
+// name/address/email characters survive (no quotes, backslashes, commas, parentheses, * or %), so a query can't
+// close the quote or add a filter of its own.
 export function searchTerm(raw: string | undefined): string | null {
   if (!raw) return null;
   const cleaned = raw
     .normalize("NFKC")
-    .replace(/[^\p{L}\p{N} @'#+-]/gu, " ")
+    .replace(/[^\p{L}\p{N} @'#+.-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 80);
