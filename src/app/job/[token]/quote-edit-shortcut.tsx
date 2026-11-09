@@ -17,6 +17,7 @@ export function QuoteEditShortcut({ locale, customerFirstName, amount }: { local
         {fill(t.contractorJob.quoteWaitingLead, { name: customerFirstName })}
         {amount != null ? ` - ${dollars(amount)}` : ""}
       </p>
+      <p className="js-hint">{t.contractorJob.quoteEditHint}</p>
       <button type="button" className="js-confirm jq-fix-open" onClick={() => window.dispatchEvent(new Event(EDIT_QUOTE_EVENT))}>
         {t.contractorJob.quoteFixOpen}
       </button>

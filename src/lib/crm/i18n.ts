@@ -668,6 +668,7 @@ const en = {
     quoteWaitingHint:
       "It won't send twice - a second copy would just be the same text again. You'll get a message the moment they approve or decline. If they say it never arrived, ask the office to send it again. Customer asked a question, or something needs fixing? Edit the quote: they get a text that it changed.",
     quoteFixOpen: "Edit this quote",
+    quoteEditHint: "Customer asked a question, or something needs fixing? Edit the quote: they get a text that it changed.",
     quoteFixTitle: "Revise this quote",
     quoteFixLead:
       "Change the price or the wording, or break the price into materials, labor and more. We'll text {name} that the quote was updated, and the link they already have will show the new version.",
