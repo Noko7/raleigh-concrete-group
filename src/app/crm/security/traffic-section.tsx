@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BUSINESS_TZ } from "@/lib/crm/clock";
 import { anomalyReasons, formatBytes, WINDOWS, type WindowKey } from "@/lib/crm/request-logs";
 import type { IpStat, Traffic } from "@/lib/crm/security-traffic";
+import { Fold } from "./fold";
 
 // The website's traffic, from Vercel's request logs: how much went out and to whom, who is hammering the site,
 // and who is poking at paths that don't exist. Server-rendered; the window is a link (?window=24h|7d|30d).
@@ -210,17 +211,15 @@ export function TrafficSection({ traffic, range, base }: { traffic: Traffic | nu
             </div>
           </div>
 
-          <div className="crm-card">
-            <h3 className="sec-h3">Data out by IP</h3>
+          <Fold title="Data out by IP" level={3} count={t.by_bytes.length} alert={flagged.length > 0 ? `${flagged.length} flagged` : null}>
             <p className="crm-muted crm-sm">
               The 20 addresses the site sent the most data to. Flagged: over 1 GB, over 10 times a typical visitor
               ({formatBytes(median)}), or more than half of everything sent.
             </p>
             <IpTable rows={t.by_bytes} show="bytes" total={total} median={median} />
-          </div>
+          </Fold>
 
-          <div className="crm-card">
-            <h3 className="sec-h3">Probing and arbitrary requests</h3>
+          <Fold title="Probing and arbitrary requests" level={3} count={t.probes.length}>
             <p className="crm-muted crm-sm">Requests for things this site doesn&apos;t have: WordPress pages, .env files, admin panels, injection attempts, made-up API routes.</p>
             {t.probes.length === 0 ? (
               <p className="crm-muted crm-sm">None in this window.</p>
@@ -252,10 +251,9 @@ export function TrafficSection({ traffic, range, base }: { traffic: Traffic | nu
                 </table>
               </div>
             )}
-          </div>
+          </Fold>
 
-          <div className="crm-card">
-            <h3 className="sec-h3">Noisiest IPs</h3>
+          <Fold title="Noisiest IPs" level={3}>
             <p className="crm-muted crm-sm">Most requests</p>
             <IpTable rows={t.by_requests} show="requests" total={total} median={median} />
             <p className="crm-muted crm-sm sec-sub">
@@ -264,10 +262,9 @@ export function TrafficSection({ traffic, range, base }: { traffic: Traffic | nu
             <IpTable rows={t.by_errors} show="errors" total={total} median={median} />
             <p className="crm-muted crm-sm sec-sub">Most different paths (crawlers and scanners)</p>
             <IpTable rows={t.by_paths} show="paths" total={total} median={median} />
-          </div>
+          </Fold>
 
-          <div className="crm-card">
-            <h3 className="sec-h3">Where the data went</h3>
+          <Fold title="Where the data went" level={3} count={t.routes.length}>
             <p className="crm-muted crm-sm">By part of the site. Customer data leaves through /api, /crm, /q, /pay, /r and /sign, so watch those.</p>
             <div className="crm-table-wrap">
               <table className="crm-table sec-traffic-table">
@@ -323,7 +320,7 @@ export function TrafficSection({ traffic, range, base }: { traffic: Traffic | nu
                 </tbody>
               </table>
             </div>
-          </div>
+          </Fold>
         </>
       )}
 

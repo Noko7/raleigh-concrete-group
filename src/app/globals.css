@@ -1641,6 +1641,22 @@ textarea.qm-input { min-height: 0; resize: vertical; }
 .jb-fold > summary:hover { background: rgba(255, 255, 255, 0.04); }
 .jb-count { font-size: 0.75rem; font-weight: 800; color: var(--crm-muted); background: rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 0.1rem 0.5rem; }
 .jb-fold-body { padding: 0 1.15rem 1.1rem; }
+
+/* Security page: every table folds (native <details>), closed by default, so the page reads as a list of
+   headings with counts and opens only what's worth a look. */
+.sec-fold { padding: 0; }
+.sec-fold > summary {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; min-height: 52px; padding: 0.6rem 1.25rem;
+  cursor: pointer; list-style: none; border-radius: 0.9rem;
+}
+.sec-fold > summary::-webkit-details-marker { display: none; }
+.sec-fold > summary > h2, .sec-fold > summary > h3 { margin: 0; }
+.sec-fold > summary::after { content: "+"; margin-left: auto; font-size: 1.2rem; color: var(--crm-muted); }
+.sec-fold[open] > summary::after { content: "\2212"; }
+.sec-fold > summary:hover { background: rgba(255, 255, 255, 0.04); }
+.sec-fold > summary:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+.sec-fold-body { padding: 0 1.25rem 1.25rem; }
+.sec-fold-action { margin-bottom: 0.6rem; }
 /* A component that brings its own card, flattened into the fold. */
 .jb-fold-flat .crm-card { background: none; border: none; padding: 0; margin: 0; }
 .jb-fold-flat .crm-card-title { display: none; }

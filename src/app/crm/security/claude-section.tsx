@@ -1,6 +1,7 @@
 import { BUSINESS_TZ } from "@/lib/crm/clock";
 import type { ActivityRow, ConnectionRow } from "@/lib/mcp/store";
 import { disconnectAllClaude, disconnectClaude, setClaudeConnector } from "./claude-actions";
+import { Fold } from "./fold";
 
 const KIND_LABELS: Record<string, string> = {
   tool: "Read",
@@ -81,17 +82,14 @@ export function ClaudeSection({
         </div>
       </div>
 
-      <div className="crm-card">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
-          <h2 className="crm-card-title">Connections ({connections.length})</h2>
-          {live.length > 0 && (
-            <form action={disconnectAllClaude}>
-              <button type="submit" className="crm-btn crm-btn-danger">
-                Disconnect all
-              </button>
-            </form>
-          )}
-        </div>
+      <Fold title="Connections" count={connections.length} note={live.length > 0 ? `${live.length} active` : null}>
+        {live.length > 0 && (
+          <form action={disconnectAllClaude} className="sec-fold-action">
+            <button type="submit" className="crm-btn crm-btn-danger">
+              Disconnect all
+            </button>
+          </form>
+        )}
         <p className="crm-muted crm-sm">
           One row per approval. Each lasts up to 90 days, and ends at once if it&apos;s disconnected here, the owner loses
           CRM access, or a stolen sign-in is detected.
@@ -143,10 +141,9 @@ export function ClaudeSection({
             </table>
           </div>
         )}
-      </div>
+      </Fold>
 
-      <div className="crm-card">
-        <h2 className="crm-card-title">Connector activity ({activity.length})</h2>
+      <Fold title="Connector activity" count={activity.length} alert={refused > 0 ? `${refused} refused` : null}>
         <p className="crm-muted crm-sm">Every read Claude made and every sign-in event, newest first. Kept 90 days.</p>
         {activity.length === 0 ? (
           <p className="crm-muted">Nothing yet.</p>
@@ -188,7 +185,7 @@ export function ClaudeSection({
             </table>
           </div>
         )}
-      </div>
+      </Fold>
     </section>
   );
 }

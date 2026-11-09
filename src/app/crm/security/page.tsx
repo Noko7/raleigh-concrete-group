@@ -11,6 +11,7 @@ import { loadTraffic } from "@/lib/crm/security-traffic";
 import { TrafficSection } from "./traffic-section";
 import { connectorEnabled, listActivity, listConnections, MCP_URL } from "@/lib/mcp/store";
 import { ClaudeSection } from "./claude-section";
+import { Fold } from "./fold";
 
 export const dynamic = "force-dynamic";
 
@@ -178,8 +179,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
         </div>
       )}
 
-      <div className="crm-card">
-        <h2 className="crm-card-title">Who signed in ({people.length})</h2>
+      <Fold title="Who signed in" count={people.length}>
         <p className="crm-muted crm-sm">
           One row per account. Failed attempts are matched on the email typed at the login screen, so a stranger
           guessing a contractor&apos;s password shows up on their row.
@@ -227,10 +227,9 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
             </tbody>
           </table>
         </div>
-      </div>
+      </Fold>
 
-      <div className="crm-card">
-        <h2 className="crm-card-title">Team activity ({staffActivity.length})</h2>
+      <Fold title="Team activity" count={staffActivity.length}>
         <p className="crm-muted crm-sm">
           Everything your crew changed in the CRM, newest first. Customer-driven and automatic events are left out;
           those show on each job&apos;s own timeline.
@@ -267,10 +266,13 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
             </table>
           </div>
         )}
-      </div>
+      </Fold>
 
-      <div className="crm-card">
-        <h2 className="crm-card-title">Every sign-in attempt ({attempts.length})</h2>
+      <Fold
+        title="Every sign-in attempt"
+        count={attempts.length}
+        alert={failed24h.length > 0 ? `${failed24h.length} failed in 24h` : null}
+      >
         {attempts.length === 0 ? (
           <p className="crm-muted">No login attempts recorded in the last {WINDOW_DAYS} days.</p>
         ) : (
@@ -305,7 +307,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
             </table>
           </div>
         )}
-      </div>
+      </Fold>
     </main>
   );
 }
