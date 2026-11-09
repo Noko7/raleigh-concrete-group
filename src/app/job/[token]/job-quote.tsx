@@ -419,23 +419,19 @@ export function JobQuote({
             <SectionsEditor sections={sections} onChange={setSection} locale={locale} />
 
             {/*
-              Always open: "what am I paying for" wins jobs. Adding a line makes the price card their sum; on a quote
-              already sent, the gap to that price shows while typing.
+              Simple by default: one price and the sections. The breakdown, extras and A/B prices sit in one fold, which
+              opens itself when the quote already uses any of them (most quotes never do). Adding a line makes the price
+              card their sum; on a quote already sent, the gap to that price shows while typing.
             */}
-            <OptionBuilder
-              rows={rows}
-              onChange={changeRows}
-              labels={t.quoteOptions}
-              mode="breakdown"
-              target={alreadySent ? amount : null}
-              choiceActive={choice}
-            />
-
-            {/* Everything beyond a straight breakdown, folded; opens itself if the quote already uses any of it. */}
-            <MoreWaysToPrice
-              labels={t.quoteOptions}
-              startOpen={rows.some((r) => !r.required) || filledPackages(pkgRows).length > 0}
-            >
+            <MoreWaysToPrice labels={t.quoteOptions} startOpen={rows.length > 0 || filledPackages(pkgRows).length > 0}>
+              <OptionBuilder
+                rows={rows}
+                onChange={changeRows}
+                labels={t.quoteOptions}
+                mode="breakdown"
+                target={alreadySent ? amount : null}
+                choiceActive={choice}
+              />
               <OptionBuilder rows={rows} onChange={changeRows} labels={t.quoteOptions} mode="extras" />
               {/* Extras meant to be pick-one add up to every price at once; offered here, where the mistake is made. */}
               <PickOneSuggestion
