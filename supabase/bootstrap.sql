@@ -26,7 +26,7 @@
 --   * No migration history: supabase_migrations.schema_migrations stays empty.
 --     If you later use `supabase db push`, mark the existing migrations as
 --     applied first, since this file already contains them:
---       supabase migration repair --status applied 20261017221826 20261017222017 20261030221241 20261030221338 20261031130207 20261031130427 20261031172234 20261031174615 20261031180311 20261031191727 20261101015604 20261101015827
+--       supabase migration repair --status applied 20261017221826 20261017222017 20261030221241 20261030221338 20261031130207 20261031130427 20261031172234 20261031174615 20261031180311 20261031191727 20261101015604 20261101015827 20261109132023 20261109184854 20261111150000
 --
 -- When the schema changes, update this file along with supabase/schema.sql.
 
@@ -65,6 +65,7 @@ create table public.staff (
   business_address text,
   license_number text,
   payment_methods text[] default '{zelle,venmo,check,cash}'::text[] not null,
+  simple_quote_form boolean default false not null,
   constraint staff_pkey PRIMARY KEY (id),
   constraint staff_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE,
   constraint staff_locale_chk CHECK ((locale = ANY (ARRAY['en'::text, 'es'::text]))),
@@ -146,6 +147,7 @@ create table public.quote_requests (
   deposit_target_cents integer,
   fee_waived_cents integer default 0 not null,
   fee_waived_note text,
+  cc_phone text,
   constraint quote_requests_pkey PRIMARY KEY (id),
   constraint quote_requests_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.staff(id) ON DELETE SET NULL,
   constraint quote_requests_change_requested_by_fkey FOREIGN KEY (change_requested_by) REFERENCES public.staff(id) ON DELETE SET NULL,
@@ -154,6 +156,7 @@ create table public.quote_requests (
   constraint qr_customer_response_chk CHECK (((customer_response IS NULL) OR (customer_response = ANY (ARRAY['accepted'::text, 'declined'::text])))),
   constraint qr_sections_chk CHECK ((((quote_scope IS NULL) OR (char_length(quote_scope) <= 2000)) AND ((quote_permits IS NULL) OR (char_length(quote_permits) <= 2000)) AND ((quote_prep IS NULL) OR (char_length(quote_prep) <= 2000)) AND ((quote_pour IS NULL) OR (char_length(quote_pour) <= 2000)) AND ((quote_cleanup IS NULL) OR (char_length(quote_cleanup) <= 2000)))),
   constraint qr_estimated_duration_chk CHECK (((estimated_duration IS NULL) OR (char_length(estimated_duration) <= 200))),
+  constraint qr_cc_phone_chk CHECK (((cc_phone IS NULL) OR ((char_length(cc_phone) >= 7) AND (char_length(cc_phone) <= 32)))),
   constraint qr_customer_pay_methods_chk CHECK (((customer_pay_methods IS NULL) OR (((cardinality(customer_pay_methods) >= 1) AND (cardinality(customer_pay_methods) <= 5)) AND (customer_pay_methods <@ '{zelle,venmo,check,cash,card}'::text[])))),
   constraint qr_status_chk CHECK ((status = ANY (ARRAY['new'::text, 'quoted'::text, 'approved'::text, 'scheduled'::text, 'completed'::text, 'paid'::text, 'lost'::text]))),
   constraint quote_requests_change_amount_sane CHECK (((change_amount IS NULL) OR ((change_amount >= (0)::numeric) AND (change_amount <= (99999999)::numeric)))),
@@ -354,6 +357,109 @@ create table public.login_attempts (
   user_agent text,
   constraint login_attempts_pkey PRIMARY KEY (id),
   constraint login_attempts_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE SET NULL
+);
+
+-- The Claude connector (MCP server at /api/mcp with its own OAuth sign-in). Server only: RLS on, no policies,
+-- nothing for anon or authenticated. Expired codes and tokens and old activity are cleared by the app's daily cron.
+create table public.mcp_clients (
+  client_id text not null,
+  client_name text not null,
+  redirect_uris text[] not null,
+  auth_method text default 'none'::text not null,
+  secret_hash text,
+  created_at timestamp with time zone default now() not null,
+  created_ip text,
+  constraint mcp_clients_pkey PRIMARY KEY (client_id),
+  constraint mcp_clients_chk CHECK (
+    char_length(client_id) <= 100 and char_length(client_name) between 1 and 80
+    and cardinality(redirect_uris) between 1 and 5
+    and auth_method = any (array['none'::text, 'client_secret_post'::text, 'client_secret_basic'::text])
+    and ((auth_method = 'none') = (secret_hash is null))
+    and (secret_hash is null or char_length(secret_hash) = 64)
+    and (created_ip is null or char_length(created_ip) <= 64)
+  )
+);
+
+create table public.mcp_auth_codes (
+  code_hash text not null,
+  client_id text not null,
+  staff_id uuid not null,
+  redirect_uri text not null,
+  code_challenge text not null,
+  scope text not null,
+  expires_at timestamp with time zone not null,
+  used_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint mcp_auth_codes_pkey PRIMARY KEY (code_hash),
+  constraint mcp_auth_codes_client_fkey FOREIGN KEY (client_id) REFERENCES public.mcp_clients(client_id) ON DELETE CASCADE,
+  constraint mcp_auth_codes_staff_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE CASCADE,
+  constraint mcp_auth_codes_chk CHECK (
+    char_length(code_hash) = 64 and char_length(redirect_uri) <= 300 and char_length(code_challenge) = 43
+    and scope = 'crm.read'
+  )
+);
+
+create table public.mcp_grants (
+  id uuid default gen_random_uuid() not null,
+  client_id text not null,
+  client_name text not null,
+  staff_id uuid not null,
+  scope text not null,
+  created_at timestamp with time zone default now() not null,
+  expires_at timestamp with time zone not null,
+  last_used_at timestamp with time zone,
+  last_ip text,
+  revoked_at timestamp with time zone,
+  revoked_reason text,
+  constraint mcp_grants_pkey PRIMARY KEY (id),
+  constraint mcp_grants_client_fkey FOREIGN KEY (client_id) REFERENCES public.mcp_clients(client_id) ON DELETE CASCADE,
+  constraint mcp_grants_staff_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE CASCADE,
+  constraint mcp_grants_chk CHECK (
+    scope = 'crm.read' and char_length(client_name) between 1 and 80
+    and expires_at <= created_at + interval '90 days 1 minute'
+    and (last_ip is null or char_length(last_ip) <= 64)
+    and (revoked_reason is null or char_length(revoked_reason) <= 120)
+  )
+);
+
+create table public.mcp_tokens (
+  token_hash text not null,
+  kind text not null,
+  grant_id uuid not null,
+  expires_at timestamp with time zone not null,
+  used_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint mcp_tokens_pkey PRIMARY KEY (token_hash),
+  constraint mcp_tokens_grant_fkey FOREIGN KEY (grant_id) REFERENCES public.mcp_grants(id) ON DELETE CASCADE,
+  constraint mcp_tokens_chk CHECK (
+    char_length(token_hash) = 64 and kind = any (array['access'::text, 'refresh'::text])
+    and expires_at <= created_at + interval '30 days 1 minute'
+  )
+);
+
+create table public.mcp_activity (
+  id bigint generated always as identity,
+  at timestamp with time zone default now() not null,
+  kind text not null,
+  ok boolean not null,
+  grant_id uuid,
+  staff_id uuid,
+  client_name text,
+  tool text,
+  detail text,
+  ip text,
+  ua text,
+  constraint mcp_activity_pkey PRIMARY KEY (id),
+  constraint mcp_activity_grant_fkey FOREIGN KEY (grant_id) REFERENCES public.mcp_grants(id) ON DELETE SET NULL,
+  constraint mcp_activity_staff_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE SET NULL,
+  constraint mcp_activity_chk CHECK (
+    kind = any (array['tool'::text, 'connect'::text, 'deny'::text, 'refresh'::text, 'revoke'::text, 'register'::text, 'refused'::text])
+    and (client_name is null or char_length(client_name) <= 80)
+    and (tool is null or char_length(tool) <= 60)
+    and (detail is null or char_length(detail) <= 500)
+    and (ip is null or char_length(ip) <= 64)
+    and (ua is null or char_length(ua) <= 300)
+  )
 );
 
 create table public.payment_receipt_counter (
@@ -590,6 +696,9 @@ CREATE INDEX fs_staff_idx ON public.fee_settlements USING btree (staff_id, creat
 CREATE INDEX la_created_idx ON public.login_attempts USING btree (created_at DESC);
 CREATE INDEX la_email_idx ON public.login_attempts USING btree (email);
 CREATE INDEX la_ip_idx ON public.login_attempts USING btree (ip);
+CREATE INDEX mcp_activity_at_idx ON public.mcp_activity USING btree (at DESC);
+CREATE INDEX mcp_grants_live_idx ON public.mcp_grants USING btree (created_at DESC) WHERE (revoked_at IS NULL);
+CREATE INDEX mcp_tokens_grant_idx ON public.mcp_tokens USING btree (grant_id);
 CREATE INDEX payment_receipts_issued_idx ON public.payment_receipts USING btree (issued_at);
 CREATE UNIQUE INDEX payment_receipts_live_payment_idx ON public.payment_receipts USING btree (payment_id) WHERE (voided_at IS NULL);
 CREATE INDEX payment_receipts_paid_to_idx ON public.payment_receipts USING btree (paid_to_staff_id, issued_at);
@@ -967,6 +1076,24 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.guard_quote_cc_phone()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  if auth.uid() is null or public.is_owner() then
+    return new;
+  end if;
+  if new.cc_phone is distinct from old.cc_phone then
+    raise exception 'the customer''s second number is changed by the office' using errcode = '42501';
+  end if;
+  return new;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.handle_new_user()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -1223,7 +1350,8 @@ $function$
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 4. Row level security and policies. Tables with RLS on and no policy are
---    service-role only: app_integrations, quote_drafts, request_logs, site_funnel_events.
+--    service-role only: app_integrations, mcp_activity, mcp_auth_codes, mcp_clients, mcp_grants,
+--    mcp_tokens, quote_drafts, request_logs, site_funnel_events.
 -- ════════════════════════════════════════════════════════════════════════════
 
 alter table public.agreements enable row level security;
@@ -1237,6 +1365,11 @@ alter table public.contractor_invites enable row level security;
 alter table public.fee_settlements enable row level security;
 alter table public.job_staff_views enable row level security;
 alter table public.login_attempts enable row level security;
+alter table public.mcp_activity enable row level security;
+alter table public.mcp_auth_codes enable row level security;
+alter table public.mcp_clients enable row level security;
+alter table public.mcp_grants enable row level security;
+alter table public.mcp_tokens enable row level security;
 alter table public.payment_receipt_counter enable row level security;
 alter table public.payment_receipts enable row level security;
 alter table public.quote_drafts enable row level security;
@@ -1411,6 +1544,7 @@ CREATE TRIGGER qo_touch_updated_at BEFORE UPDATE ON public.quote_options FOR EAC
 CREATE TRIGGER qp_guard_line_prices BEFORE INSERT OR DELETE OR UPDATE ON public.quote_packages FOR EACH ROW EXECUTE FUNCTION public.guard_quote_line_prices();
 CREATE TRIGGER qp_touch_updated_at BEFORE UPDATE ON public.quote_packages FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 CREATE TRIGGER qp_guard_over_total BEFORE INSERT ON public.quote_payments FOR EACH ROW EXECUTE FUNCTION public.guard_payment_not_over_total();
+CREATE TRIGGER qr_guard_cc_phone BEFORE UPDATE OF cc_phone ON public.quote_requests FOR EACH ROW EXECUTE FUNCTION public.guard_quote_cc_phone();
 CREATE TRIGGER qr_guard_money_columns BEFORE UPDATE ON public.quote_requests FOR EACH ROW EXECUTE FUNCTION public.guard_quote_money_columns();
 CREATE TRIGGER qr_touch_updated_at BEFORE UPDATE ON public.quote_requests FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 
@@ -1499,6 +1633,12 @@ grant select, insert, update, delete, truncate, references, trigger, maintain on
 grant select, insert, update, truncate, references, trigger, maintain on public.quote_requests to authenticated;
 grant select, insert, update, truncate, references, trigger, maintain on public.quote_requests to service_role;
 
+-- mcp_*: the Claude connector, server only (nothing for anon or authenticated).
+grant select, insert, update, delete on public.mcp_activity to service_role;
+grant select, insert, update, delete on public.mcp_auth_codes to service_role;
+grant select, insert, update, delete on public.mcp_clients to service_role;
+grant select, insert, update, delete on public.mcp_grants to service_role;
+grant select, insert, update, delete on public.mcp_tokens to service_role;
 -- request_logs: the Vercel request log, server only (nothing for anon or authenticated).
 grant select, insert, update, delete, truncate, references, trigger on public.request_logs to service_role;
 -- site_funnel_events: nothing for anon or authenticated.
@@ -1534,6 +1674,7 @@ revoke all on function public.number_template_version() from public;            
 revoke all on function public.point_template_at_version() from public;                    -- postgres only (trigger)
 revoke all on function public.guard_quote_line_prices() from public;                        -- postgres only
 revoke all on function public.guard_quote_money_columns() from public;                      -- postgres only
+revoke all on function public.guard_quote_cc_phone() from public;                           -- postgres only (trigger)
 revoke all on function public.handle_new_user() from public;                                -- postgres only
 revoke all on function public.is_owner() from public;
 grant execute on function public.is_owner() to authenticated, service_role;
