@@ -42,7 +42,7 @@ const OFFICE_ONLY = [
   "paid_at",
   "deposit_target_cents",
 ];
-const CONTACT = ["phone", "email"];
+const CONTACT = ["phone", "email", "cc_phone"];
 const PRICE = ["quote_amount", "discount_accepted"];
 const ANSWER = ["customer_response", "customer_responded_at"];
 const CHANGE = [
@@ -122,6 +122,7 @@ function anotherValue(column: string, job: JobForPermissions): unknown {
   if (column.endsWith("_note")) return "something else";
   if (column === "phone") return "9195550199";
   if (column === "email") return "someone@example.com";
+  if (column === "cc_phone") return now ? null : "+19195550188";
   if (column === "fee_rate") return 0;
   return typeof now === "number" ? now + 1 : 100;
 }
@@ -234,8 +235,13 @@ for (const column of [...OFFICE_ONLY, ...CONTACT]) {
 test("the phone and email refusal says who changes them", () => {
   assert.equal(
     jobPatchRefusal(CREW, approved, { email: "new@example.com" }),
-    "Only the office can change the customer's phone or email.",
+    "Only the office can change the customer's phone numbers or email.",
   );
+  // The second number decides who gets the customer's texts, so it's the office's too: adding, changing, clearing.
+  assert.ok(jobPatchRefusal(CREW, open, { cc_phone: "+19195550188" }));
+  assert.ok(jobPatchRefusal(CREW, { ...approved, cc_phone: "+19195550188" }, { cc_phone: null }));
+  assert.equal(jobPatchRefusal(CREW, { ...open, cc_phone: "+19195550188" }, { cc_phone: "+19195550188" }), null);
+  assert.equal(jobPatchRefusal(OWNER, open, { cc_phone: "+19195550188" }), null);
   assert.ok(jobPatchRefusal(CREW, open, { email: null }));
   // Written back as they are is not a change.
   assert.equal(jobPatchRefusal(CREW, approved, { phone: "9195550142", email: "dave@example.com" }), null);

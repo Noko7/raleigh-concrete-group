@@ -306,6 +306,10 @@ export function eventText(e: QuoteEvent, names: Map<string, string>): string {
     }
     case "name_changed":
       return `Customer name corrected to ${String(m.to ?? "")}`;
+    case "cc_phone_set":
+      return "Second number set: it gets a copy of the customer's texts";
+    case "cc_phone_cleared":
+      return "Second number removed";
     case "custom_message_sent":
       if (m.delivered) return "Custom text sent to the customer";
       if (m.held_until) return `Custom text queued (quiet hours, goes out ${heldWhen(m.held_until)})`;

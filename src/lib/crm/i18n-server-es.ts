@@ -186,7 +186,7 @@ export const SERVER_ES: Record<string, string> = {
   "This job is marked paid, so only the office can move it. Give them a call if it needs changing.":
     "Este trabajo está marcado como pagado, así que solo la oficina lo puede mover. Llámales si hay que cambiarlo.",
   "Only the office can change that on a job.": "Solo la oficina puede cambiar eso en un trabajo.",
-  "Only the office can change the customer's phone or email.": "Solo la oficina puede cambiar el teléfono o el correo del cliente.",
+  "Only the office can change the customer's phone numbers or email.": "Solo la oficina puede cambiar los teléfonos o el correo del cliente.",
   "Owners only.": "Solo para dueños.",
 
   // Payments
