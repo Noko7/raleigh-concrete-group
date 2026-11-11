@@ -556,6 +556,15 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
                   <a href={`tel:${phoneDigits}`}>{quote.phone}</a>
                 </dd>
               </div>
+              {quote.cc_phone && (
+                <div>
+                  <dt>{t.job.ccPhone}</dt>
+                  <dd>
+                    <a href={`tel:${quote.cc_phone}`}>{quote.cc_phone}</a>
+                    <span className="crm-muted crm-sm"> ({t.job.ccPhoneHint})</span>
+                  </dd>
+                </div>
+              )}
               {quote.email && (
                 <div>
                   <dt>{t.job.email}</dt>
@@ -645,12 +654,14 @@ export default async function QuoteDetail({ params }: { params: Promise<{ id: st
 
           <JobSettings
             id={quote.id}
+            isOwner={isOwner}
             contractors={contractors.map((c) => ({ id: c.id, label: c.full_name || c.email || "Contractor" }))}
             initial={{
               name: quote.name,
               status: quote.status,
               assigned_to: quote.assigned_to,
               internal_notes: quote.internal_notes,
+              cc_phone: quote.cc_phone ?? null,
             }}
           />
 

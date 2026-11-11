@@ -107,6 +107,8 @@ const en = {
     backToAll: "← All quotes",
     customer: "Customer",
     phone: "Phone",
+    ccPhone: "Second number",
+    ccPhoneHint: "gets a copy of every text",
     email: "Email",
     service: "Service",
     type: "Type",

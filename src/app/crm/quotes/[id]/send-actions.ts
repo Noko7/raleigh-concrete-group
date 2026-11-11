@@ -94,7 +94,9 @@ export async function retryFailedText(_prev: ScheduleState, formData: FormData):
   if (refusal) return { ok: false, error: refusal };
 
   const role = m.role === "customer" || m.role === "crew" || m.role === "owner" ? m.role : "customer";
-  const r = await sendSmsResult(m.to_phone!, m.body!, { quoteId: id, kind: m.kind, role });
+  // This row's number only: a failed copy to the second number is retried on its own row, and retrying the
+  // customer's row must not text the second number a second time.
+  const r = await sendSmsResult(m.to_phone!, m.body!, { quoteId: id, kind: m.kind, role }, { noCc: true });
   // The duplicate guard matched (the same text to the same number in the last moments, the failed try included):
   // nothing was sent, so say so rather than "Sent again".
   if (r.duplicate) {

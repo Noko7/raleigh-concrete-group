@@ -51,6 +51,7 @@ import {
   updateQuote,
 } from "@/lib/crm/queries";
 import { jobPatchRefusal } from "@/lib/crm/permissions";
+import { parseCcPhone } from "@/lib/crm/phone";
 import type { Quote } from "@/lib/crm/types";
 import type { QuoteOptionDraft, QuotePackageDraft } from "@/lib/crm/constants";
 import type { SaveState } from "./types";
@@ -212,6 +213,17 @@ export async function saveQuote(_prev: SaveState, formData: FormData): Promise<S
     if (v !== current.name) {
       patch.name = v;
       events.push({ type: "name_changed", meta: { from: current.name, to: v } });
+    }
+  }
+
+  // The second number, which gets a copy of every customer text. Office only (jobPatchRefusal and the database
+  // both refuse a contractor). The event records that it changed, not the numbers.
+  if (formData.has("cc_phone")) {
+    const parsed = parseCcPhone(String(formData.get("cc_phone") ?? "").slice(0, 32), current.phone);
+    if ("error" in parsed) return { ok: false, error: parsed.error };
+    if (parsed.value !== (current.cc_phone ?? null)) {
+      patch.cc_phone = parsed.value;
+      events.push({ type: parsed.value ? "cc_phone_set" : "cc_phone_cleared" });
     }
   }
 

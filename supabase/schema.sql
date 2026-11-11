@@ -40,6 +40,8 @@
 -- Updated by hand for migration 20261031130427 (agreement_signing: the signing columns and
 -- statuses on agreements, agreement_signing, document_events, and number_agreement_version()
 -- refusing saves while out for signature), checked against production after it was applied.
+-- Updated by hand for migration 20261111150000_customer_cc_phone (quote_requests.cc_phone, qr_cc_phone_chk,
+-- guard_quote_cc_phone() and the qr_guard_cc_phone trigger). Re-check against production once applied.
 -- Updated by hand for migration 20261109184854_staff_simple_quote_form (staff.simple_quote_form), checked against
 -- production after it was applied.
 -- Updated by hand for migration 20261109132023_claude_connector (mcp_clients, mcp_auth_codes, mcp_grants,
@@ -592,6 +594,7 @@ create table public.quote_requests (
   deposit_target_cents integer,
   fee_waived_cents integer default 0 not null,
   fee_waived_note text,
+  cc_phone text,
   constraint quote_requests_pkey PRIMARY KEY (id),
   constraint quote_requests_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES staff(id) ON DELETE SET NULL,
   constraint quote_requests_change_requested_by_fkey FOREIGN KEY (change_requested_by) REFERENCES staff(id) ON DELETE SET NULL,
@@ -600,6 +603,7 @@ create table public.quote_requests (
   constraint qr_customer_response_chk CHECK (((customer_response IS NULL) OR (customer_response = ANY (ARRAY['accepted'::text, 'declined'::text])))),
   constraint qr_sections_chk CHECK ((((quote_scope IS NULL) OR (char_length(quote_scope) <= 2000)) AND ((quote_permits IS NULL) OR (char_length(quote_permits) <= 2000)) AND ((quote_prep IS NULL) OR (char_length(quote_prep) <= 2000)) AND ((quote_pour IS NULL) OR (char_length(quote_pour) <= 2000)) AND ((quote_cleanup IS NULL) OR (char_length(quote_cleanup) <= 2000)))),
   constraint qr_estimated_duration_chk CHECK (((estimated_duration IS NULL) OR (char_length(estimated_duration) <= 200))),
+  constraint qr_cc_phone_chk CHECK (((cc_phone IS NULL) OR ((char_length(cc_phone) >= 7) AND (char_length(cc_phone) <= 32)))),
   constraint qr_customer_pay_methods_chk CHECK (((customer_pay_methods IS NULL) OR (((cardinality(customer_pay_methods) >= 1) AND (cardinality(customer_pay_methods) <= 5)) AND (customer_pay_methods <@ '{zelle,venmo,check,cash,card}'::text[])))),
   constraint qr_status_chk CHECK ((status = ANY (ARRAY['new'::text, 'quoted'::text, 'approved'::text, 'scheduled'::text, 'completed'::text, 'paid'::text, 'lost'::text]))),
   constraint quote_requests_change_amount_sane CHECK (((change_amount IS NULL) OR ((change_amount >= (0)::numeric) AND (change_amount <= (99999999)::numeric)))),
@@ -1273,6 +1277,24 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.guard_quote_cc_phone()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  if auth.uid() is null or public.is_owner() then
+    return new;
+  end if;
+  if new.cc_phone is distinct from old.cc_phone then
+    raise exception 'the customer''s second number is changed by the office' using errcode = '42501';
+  end if;
+  return new;
+end;
+$function$
+;
+
 -- Stored with CRLF line endings.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
  RETURNS trigger
@@ -1550,6 +1572,7 @@ CREATE TRIGGER qo_touch_updated_at BEFORE UPDATE ON public.quote_options FOR EAC
 CREATE TRIGGER qp_guard_line_prices BEFORE INSERT OR DELETE OR UPDATE ON public.quote_packages FOR EACH ROW EXECUTE FUNCTION guard_quote_line_prices();
 CREATE TRIGGER qp_touch_updated_at BEFORE UPDATE ON public.quote_packages FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 CREATE TRIGGER qp_guard_over_total BEFORE INSERT ON public.quote_payments FOR EACH ROW EXECUTE FUNCTION guard_payment_not_over_total();
+CREATE TRIGGER qr_guard_cc_phone BEFORE UPDATE OF cc_phone ON public.quote_requests FOR EACH ROW EXECUTE FUNCTION guard_quote_cc_phone();
 CREATE TRIGGER qr_guard_money_columns BEFORE UPDATE ON public.quote_requests FOR EACH ROW EXECUTE FUNCTION guard_quote_money_columns();
 CREATE TRIGGER qr_touch_updated_at BEFORE UPDATE ON public.quote_requests FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
@@ -1678,6 +1701,7 @@ revoke all on function public.number_template_version() from public;            
 revoke all on function public.point_template_at_version() from public;                    -- postgres only (trigger)
 revoke all on function public.guard_quote_line_prices() from public;                        -- postgres only
 revoke all on function public.guard_quote_money_columns() from public;                      -- postgres only
+revoke all on function public.guard_quote_cc_phone() from public;                           -- postgres only (trigger)
 revoke all on function public.handle_new_user() from public;                                -- postgres only
 revoke all on function public.is_owner() from public;
 grant execute on function public.is_owner() to authenticated, service_role;

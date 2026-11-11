@@ -92,6 +92,8 @@ export const es: Dict = {
     backToAll: "← Todas las cotizaciones",
     customer: "Cliente",
     phone: "Teléfono",
+    ccPhone: "Segundo número",
+    ccPhoneHint: "recibe una copia de cada mensaje",
     email: "Correo electrónico",
     service: "Servicio",
     type: "Tipo",

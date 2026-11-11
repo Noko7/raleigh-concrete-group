@@ -43,6 +43,22 @@ export async function getQuote(session: Session, id: string): Promise<Quote | nu
   return rows[0] ?? null;
 }
 
+/**
+ * The customer's second number on this job, which gets a copy of every text sent to the customer. Read as the
+ * server, since sends run from crons and webhooks with no session. Null when there isn't one, or the read failed:
+ * a missing copy must never stop the customer's own text.
+ */
+export async function getCcPhone(quoteId: string): Promise<string | null> {
+  try {
+    const res = await pgAdmin(`quote_requests?id=eq.${encodeURIComponent(quoteId)}&select=cc_phone&limit=1`);
+    if (!res.ok) return null;
+    const rows = (await res.json()) as { cc_phone?: string | null }[];
+    return rows[0]?.cc_phone?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 // Like updateQuote, but says why it failed.
 export async function updateQuoteResult(
   session: Session,

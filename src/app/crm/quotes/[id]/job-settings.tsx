@@ -14,12 +14,20 @@ type ContractorOption = { id: string; label: string };
 // rewrites the quote and the quote editor never moves the status.
 export function JobSettings({
   id,
+  isOwner,
   contractors,
   initial,
 }: {
   id: string;
+  isOwner: boolean;
   contractors: ContractorOption[];
-  initial: { name: string; status: string; assigned_to: string | null; internal_notes: string | null };
+  initial: {
+    name: string;
+    status: string;
+    assigned_to: string | null;
+    internal_notes: string | null;
+    cc_phone: string | null;
+  };
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<SaveState, FormData>(saveQuote, { ok: false });
@@ -27,14 +35,16 @@ export function JobSettings({
   const [status, setStatus] = useState(initial.status);
   const [assigned, setAssigned] = useState(initial.assigned_to ?? "");
   const [notes, setNotes] = useState(initial.internal_notes ?? "");
+  const [cc, setCc] = useState(initial.cc_phone ?? "");
 
   // Follow the saved values when they change underneath (a send moves the status, the customer approves).
-  const sig = [initial.name, initial.status, initial.assigned_to ?? "", initial.internal_notes ?? ""].join("|");
+  const sig = [initial.name, initial.status, initial.assigned_to ?? "", initial.internal_notes ?? "", initial.cc_phone ?? ""].join("|");
   useEffect(() => {
     setName(initial.name);
     setStatus(initial.status);
     setAssigned(initial.assigned_to ?? "");
     setNotes(initial.internal_notes ?? "");
+    setCc(initial.cc_phone ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig]);
 
@@ -46,7 +56,8 @@ export function JobSettings({
     name !== initial.name ||
     status !== initial.status ||
     assigned !== (initial.assigned_to ?? "") ||
-    notes !== (initial.internal_notes ?? "");
+    notes !== (initial.internal_notes ?? "") ||
+    (isOwner && cc !== (initial.cc_phone ?? ""));
 
   return (
     <form action={formAction} className="crm-card jb-settings">
@@ -83,6 +94,27 @@ export function JobSettings({
         <span>Customer name</span>
         <input name="name" value={name} onChange={(e) => setName(e.target.value)} className="crm-input" maxLength={120} />
       </label>
+
+      {/* A partner or parent who wants the job's texts too. Office only, like the customer's own number. */}
+      {isOwner && (
+        <label className="crm-field">
+          <span>Second number (optional)</span>
+          <input
+            name="cc_phone"
+            type="tel"
+            inputMode="tel"
+            value={cc}
+            onChange={(e) => setCc(e.target.value)}
+            className="crm-input"
+            maxLength={32}
+            placeholder="919-555-0142"
+          />
+          <small className="crm-muted crm-sm">
+            Gets a copy of every text we send the customer about this job (not the agreement signing link). Leave
+            blank for none.
+          </small>
+        </label>
+      )}
 
       <label className="crm-field">
         <span>Private notes (staff only)</span>

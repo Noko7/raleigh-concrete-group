@@ -59,8 +59,8 @@ export const OFFICE_ONLY_COLUMNS = [
   "deposit_target_cents",
 ] as const;
 
-/** Who every text and receipt about the job goes to. */
-export const CONTACT_COLUMNS = ["phone", "email"] as const;
+/** Who every text and receipt about the job goes to, including the second number that gets copies. */
+export const CONTACT_COLUMNS = ["phone", "email", "cc_phone"] as const;
 
 /** The agreed price. Frozen for the crew once the customer has answered. */
 export const PRICE_COLUMNS = ["quote_amount", "discount_accepted"] as const;
@@ -144,7 +144,7 @@ export function jobPatchRefusal(
   }
 
   if (CONTACT_COLUMNS.some((c) => changes(job, patch, c))) {
-    return "Only the office can change the customer's phone or email.";
+    return "Only the office can change the customer's phone numbers or email.";
   }
 
   if (customerHasAnswered(job)) {

@@ -119,6 +119,8 @@ export type Quote = {
   // How the customer plans to pay the contractor: the boxes they ticked when signing the agreement. Not money:
   // the ledger is. Null until a signed agreement says.
   customer_pay_methods?: string[] | null;
+  // A second number (partner, parent) that gets a copy of every customer text. E.164; office-only, like `phone`.
+  cc_phone?: string | null;
   scheduled_date: string | null;
   // Display copy like "9:00 AM".
   scheduled_time: string | null;

@@ -3,9 +3,11 @@
 import { clockLabel, hourLabel, inQuietHours, nextSendableAt, now, QUIET_FROM_HOUR, QUIET_UNTIL_HOUR } from "../clock";
 import { noEmDash } from "../constants";
 import { getPhoneLines, sendingLine } from "../phone-lines";
+import { ccCopyTo, toE164 } from "../phone";
 import {
   claimMessage,
   finishMessage,
+  getCcPhone,
   getOwnerContacts,
   getOwnerPhones,
   listDueMessages,
@@ -53,17 +55,7 @@ export function samePhone(a?: string | null, b?: string | null): boolean {
   return Boolean(x && y && x === y);
 }
 
-export function toE164(raw: string): string | null {
-  const trimmed = (raw || "").trim();
-  if (trimmed.startsWith("+")) {
-    const cleaned = "+" + trimmed.slice(1).replace(/\D/g, "");
-    return cleaned.length >= 11 && cleaned.length <= 16 ? cleaned : null;
-  }
-  const d = trimmed.replace(/\D/g, "");
-  if (d.length === 10) return `+1${d}`;
-  if (d.length === 11 && d.startsWith("1")) return `+${d}`;
-  return null;
-}
+export { toE164 };
 
 async function sendQuo(to: string, message: string, line: string | null = null): Promise<SendResult> {
   const key = process.env.QUO_API_KEY || "";
@@ -171,6 +163,30 @@ async function deliver(
   return sendTwilio(to, message);
 }
 
+type SendOpts = {
+  force?: boolean;
+  delayMinutes?: number;
+  // A resend of one logged row (Retry): goes to that row's number only, never copied to the second number again.
+  noCc?: boolean;
+};
+
+/**
+ * Send to one number, and copy a customer text to the job's second number (phone.ts: ccCopyTo). The result is the
+ * customer's: the copy is logged as its own row and its outcome never changes what the caller is told.
+ */
+export async function sendSmsResult(toRaw: string, messageRaw: string, log?: SmsLog, opts?: SendOpts): Promise<SendResult> {
+  const r = await sendOne(toRaw, messageRaw, log, opts);
+  if (log?.role === "customer" && log.quoteId && !opts?.noCc) {
+    try {
+      const cc = ccCopyTo({ ...log, noCc: opts?.noCc, customerTo: toRaw, cc: await getCcPhone(log.quoteId) });
+      if (cc) await sendOne(cc, messageRaw, log, opts);
+    } catch (e) {
+      console.error("[sms] copy to the second number failed", { quoteId: log.quoteId, kind: log.kind, e: String(e) });
+    }
+  }
+  return r;
+}
+
 /**
  * Send now, or hold until morning.
  *
@@ -184,13 +200,13 @@ async function deliver(
  * `force` is only for a customer text answering something they just did (the
  * quote-request receipt, notifyCustomerReceived). Nothing unsolicited.
  */
-export async function sendSmsResult(
+async function sendOne(
   toRaw: string,
   messageRaw: string,
   log?: SmsLog,
   // `delayMinutes` parks a text in the same queue, due that many minutes out,
   // so one cron run doesn't fire six texts at one contractor at once (spacer()).
-  opts?: { force?: boolean; delayMinutes?: number },
+  opts?: SendOpts,
 ): Promise<SendResult> {
   // Dash guard on every text, including owner-typed content. Applied before
   // logging so the log shows what was sent.
@@ -296,12 +312,7 @@ export async function sendSmsResult(
   }
 }
 
-export async function sendSms(
-  toRaw: string,
-  message: string,
-  log?: SmsLog,
-  opts?: { force?: boolean; delayMinutes?: number },
-): Promise<boolean> {
+export async function sendSms(toRaw: string, message: string, log?: SmsLog, opts?: SendOpts): Promise<boolean> {
   return (await sendSmsResult(toRaw, message, log, opts)).ok;
 }
 
