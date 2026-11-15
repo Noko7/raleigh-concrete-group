@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -93,6 +94,23 @@ export function ServicePage({ service }: { service: Service }) {
             </div>
           </div>
         </section>
+
+        {service.slug === "stamped-decorative-concrete" && (
+          <section className="mx-auto w-full max-w-6xl px-4 pb-6 md:px-8">
+            <Link
+              href="/styles"
+              className="group flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-accent/30 bg-amber-accent/5 p-6 transition hover:border-amber-accent/60 hover:bg-amber-accent/10"
+            >
+              <div>
+                <h2 className="font-headline text-3xl text-ivory">Browse Stamp Patterns &amp; Textures</h2>
+                <p className="mt-1 text-slate-300">Slate, stone, brick, wood plank, borders and more. Pick the style you like.</p>
+              </div>
+              <span className="text-2xl text-amber-accent opacity-70 transition group-hover:opacity-100" aria-hidden="true">
+                →
+              </span>
+            </Link>
+          </section>
+        )}
 
         {isCommercial && (
           <section className="mx-auto w-full max-w-6xl px-4 pb-6 md:px-8">

@@ -129,6 +129,9 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
           <Link href="/gallery" className="nav-link">
             Gallery
           </Link>
+          <Link href="/styles" className="nav-link">
+            Styles
+          </Link>
           <Link href="/about" className="nav-link">
             About
           </Link>
@@ -163,6 +166,9 @@ export function SiteHeader({ activeService }: SiteHeaderProps) {
             <MobileGroup label="Commercial Services" items={commercialNav} onNavigate={close} />
             <Link href="/gallery" className="mobile-nav-link" onClick={close}>
               Gallery
+            </Link>
+            <Link href="/styles" className="mobile-nav-link" onClick={close}>
+              Styles
             </Link>
             <Link href="/about" className="mobile-nav-link" onClick={close}>
               About
