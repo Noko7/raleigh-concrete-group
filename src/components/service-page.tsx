@@ -1,5 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
 
 import { BeforeAfterSlider } from "@/components/before-after-slider";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -19,6 +18,7 @@ import {
   links,
   type Service,
   serviceSingular,
+  stampPatternGuideUrl,
 } from "@/lib/site-data";
 
 export function ServicePage({ service }: { service: Service }) {
@@ -97,18 +97,24 @@ export function ServicePage({ service }: { service: Service }) {
 
         {service.slug === "stamped-decorative-concrete" && (
           <section className="mx-auto w-full max-w-6xl px-4 pb-6 md:px-8">
-            <Link
-              href="/styles"
-              className="group flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-accent/30 bg-amber-accent/5 p-6 transition hover:border-amber-accent/60 hover:bg-amber-accent/10"
+            <a
+              href={stampPatternGuideUrl}
+              target="_blank"
+              rel="noopener"
+              className="group flex items-center justify-between gap-4 rounded-2xl border border-amber-accent/30 bg-amber-accent/5 p-6 transition hover:border-amber-accent/60 hover:bg-amber-accent/10"
             >
               <div>
-                <h2 className="font-headline text-3xl text-ivory">Browse Stamp Patterns &amp; Textures</h2>
-                <p className="mt-1 text-slate-300">Slate, stone, brick, wood plank, borders and more. Pick the style you like.</p>
+                <h2 className="font-headline text-3xl text-ivory">Browse Stamp Patterns &amp; Colors</h2>
+                <p className="mt-1 text-slate-300">
+                  Photos of finished patios, walkways and driveways from our supplier, Sika, each labeled with its
+                  pattern and colors. Note the ones you like and mention them when you ask for your quote.
+                </p>
+                <p className="mt-2 text-sm text-slate-400">Opens Sika&apos;s pattern guide (PDF, 19 MB)</p>
               </div>
               <span className="text-2xl text-amber-accent opacity-70 transition group-hover:opacity-100" aria-hidden="true">
-                →
+                ↗
               </span>
-            </Link>
+            </a>
           </section>
         )}
 
