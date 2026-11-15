@@ -104,12 +104,10 @@ export function ServicePage({ service }: { service: Service }) {
               className="group flex items-center justify-between gap-4 rounded-2xl border border-amber-accent/30 bg-amber-accent/5 p-6 transition hover:border-amber-accent/60 hover:bg-amber-accent/10"
             >
               <div>
-                <h2 className="font-headline text-3xl text-ivory">Browse Stamp Patterns &amp; Colors</h2>
+                <h2 className="font-headline text-3xl text-ivory">View Patterns &amp; Colors</h2>
                 <p className="mt-1 text-slate-300">
-                  Photos of finished patios, walkways and driveways from our supplier, Sika, each labeled with its
-                  pattern and colors. Note the ones you like and mention them when you ask for your quote.
+                  See the options from our supplier. Like one? Just mention it when you ask for a quote.
                 </p>
-                <p className="mt-2 text-sm text-slate-400">Opens Sika&apos;s pattern guide (PDF, 19 MB)</p>
               </div>
               <span className="text-2xl text-amber-accent opacity-70 transition group-hover:opacity-100" aria-hidden="true">
                 ↗
