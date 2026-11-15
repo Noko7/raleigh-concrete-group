@@ -1220,6 +1220,11 @@ export const galleryImages: GalleryImage[] = [
   { src: "/images/driveway_close_up_detailed_8k.png", alt: "Broom-finished concrete driveway close-up" },
 ];
 
+// Our supplier's stamp pattern guide (photos of finished jobs, each labelled with its pattern and colors), on Sika's
+// own site. Sika serves it to open in the browser, not download. If Sika moves it, the link is on their
+// Patterns & Textures page: usa.sika.com/en/construction/concrete/decorative-concrete/patterns-textures.html
+export const stampPatternGuideUrl = "https://usa.sika.com/dam/dms/us01/l/sikastamp-pattern-selection-guide.pdf";
+
 export const links = {
   call: phoneHref,
   text: textHref,
